@@ -1,0 +1,753 @@
+//
+//  PPUserMessagesViewController.m
+//  PurePetsPro
+//
+
+#import "PPUserMessagesViewController.h"
+#import "ChatThreadModel.h"
+#import "Language.h"
+#import "Styling.h"
+#import "UserModel.h"
+#import "PPChatInputBar.h"
+#import <FirebaseFirestore/FirebaseFirestore.h>
+#import <FirebaseAuth/FirebaseAuth.h>
+
+static NSString *PPMessageTrimmedString(id value)
+{
+    if (![value isKindOfClass:NSString.class]) return @"";
+    return [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+}
+
+static NSDate *PPMessageDateFromValue(id value)
+{
+    if ([value isKindOfClass:NSDate.class]) return (NSDate *)value;
+    if ([value isKindOfClass:FIRTimestamp.class]) return [(FIRTimestamp *)value dateValue];
+    if ([value isKindOfClass:NSNumber.class]) return [NSDate dateWithTimeIntervalSince1970:[(NSNumber *)value doubleValue]];
+    return nil;
+}
+
+static UIColor *PPMessageBackgroundColor(void)
+{
+    if (@available(iOS 13.0, *)) return UIColor.systemBackgroundColor;
+    return AppBackgroundClr ?: UIColor.whiteColor;
+}
+
+static UIColor *PPMessageSurfaceColor(void)
+{
+    return AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+}
+
+static UIColor *PPMessageMatteColor(void)
+{
+    if (@available(iOS 13.0, *)) return UIColor.secondarySystemGroupedBackgroundColor;
+    return [UIColor colorWithWhite:0.96 alpha:1.0];
+}
+
+static UIColor *PPMessagePrimaryTextColor(void)
+{
+    return PrimaryTextClr ?: UIColor.labelColor;
+}
+
+static UIColor *PPMessageSecondaryTextColor(void)
+{
+    return SeconderyTextClr ?: UIColor.secondaryLabelColor;
+}
+
+@interface PPUserMessageCell : UITableViewCell
+@property (nonatomic, strong) UIView *bubbleView;
+@property (nonatomic, strong) UILabel *messageLabel;
+@property (nonatomic, strong) UILabel *timeLabel;
+@property (nonatomic, strong) NSLayoutConstraint *bubbleLeadingConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *bubbleTrailingConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *bubbleMaxWidthConstraint;
+- (void)configureWithMessage:(NSDictionary *)message currentUserID:(NSString *)currentUserID formatter:(NSDateFormatter *)formatter;
+@end
+
+@implementation PPUserMessageCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier
+{
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        [self pp_setup];
+    }
+    return self;
+}
+
+- (void)pp_setup
+{
+    self.selectionStyle = UITableViewCellSelectionStyleNone;
+    self.backgroundColor = UIColor.clearColor;
+    self.contentView.backgroundColor = UIColor.clearColor;
+    self.contentView.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+
+    self.bubbleView = [[UIView alloc] init];
+    self.bubbleView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.bubbleView.layer.cornerRadius = 24.0;
+    self.bubbleView.layer.cornerCurve = kCACornerCurveContinuous;
+    self.bubbleView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    [self.contentView addSubview:self.bubbleView];
+
+    self.messageLabel = [[UILabel alloc] init];
+    self.messageLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.messageLabel.font = [Styling fontMedium:16.0];
+    self.messageLabel.numberOfLines = 0;
+    self.messageLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [self.bubbleView addSubview:self.messageLabel];
+
+    self.timeLabel = [[UILabel alloc] init];
+    self.timeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.timeLabel.font = [Styling fontMedium:11.0];
+    self.timeLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [self.bubbleView addSubview:self.timeLabel];
+
+    self.bubbleLeadingConstraint = [self.bubbleView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:22.0];
+    self.bubbleTrailingConstraint = [self.bubbleView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-22.0];
+    self.bubbleMaxWidthConstraint = [self.bubbleView.widthAnchor constraintLessThanOrEqualToAnchor:self.contentView.widthAnchor multiplier:0.78];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.bubbleView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:5.0],
+        [self.bubbleView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-5.0],
+        self.bubbleMaxWidthConstraint,
+
+        [self.messageLabel.topAnchor constraintEqualToAnchor:self.bubbleView.topAnchor constant:12.0],
+        [self.messageLabel.leadingAnchor constraintEqualToAnchor:self.bubbleView.leadingAnchor constant:14.0],
+        [self.messageLabel.trailingAnchor constraintEqualToAnchor:self.bubbleView.trailingAnchor constant:-14.0],
+
+        [self.timeLabel.topAnchor constraintEqualToAnchor:self.messageLabel.bottomAnchor constant:7.0],
+        [self.timeLabel.leadingAnchor constraintEqualToAnchor:self.messageLabel.leadingAnchor],
+        [self.timeLabel.trailingAnchor constraintEqualToAnchor:self.messageLabel.trailingAnchor],
+        [self.timeLabel.bottomAnchor constraintEqualToAnchor:self.bubbleView.bottomAnchor constant:-10.0],
+    ]];
+}
+
+- (void)prepareForReuse
+{
+    [super prepareForReuse];
+    self.contentView.alpha = 1.0;
+    self.contentView.transform = CGAffineTransformIdentity;
+}
+
+- (void)configureWithMessage:(NSDictionary *)message currentUserID:(NSString *)currentUserID formatter:(NSDateFormatter *)formatter
+{
+    NSString *text = PPMessageTrimmedString(message[@"text"]);
+    NSString *senderID = PPMessageTrimmedString(message[@"senderID"]);
+    BOOL isOutgoing = senderID.length > 0 && [senderID isEqualToString:currentUserID];
+
+    self.messageLabel.text = text;
+    NSDate *date = PPMessageDateFromValue(message[@"timestamp"]);
+    self.timeLabel.text = date ? [formatter stringFromDate:date] : @"";
+
+    self.bubbleLeadingConstraint.active = !isOutgoing;
+    self.bubbleTrailingConstraint.active = isOutgoing;
+
+    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
+    if (isOutgoing) {
+        self.bubbleView.backgroundColor = PPMessagePrimaryTextColor();
+        self.bubbleView.layer.borderColor = [PPMessagePrimaryTextColor() colorWithAlphaComponent:0.04].CGColor;
+        self.messageLabel.textColor = UIColor.whiteColor;
+        self.timeLabel.textColor = [UIColor.whiteColor colorWithAlphaComponent:0.70];
+    } else {
+        self.bubbleView.backgroundColor = PPMessageSurfaceColor();
+        self.bubbleView.layer.borderColor = [accent colorWithAlphaComponent:0.10].CGColor;
+        self.messageLabel.textColor = PPMessagePrimaryTextColor();
+        self.timeLabel.textColor = PPMessageSecondaryTextColor();
+    }
+}
+
+@end
+
+@interface PPUserMessagesViewController () <PPChatInputBarDelegate>
+@property (nonatomic, strong) ChatThreadModel *chatThread;
+@property (nonatomic, strong) UITableView *tableView;
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *messages;
+@property (nonatomic, strong) id<FIRListenerRegistration> messagesListener;
+@property (nonatomic, strong) PPChatInputBar *chatInputBar;
+@property (nonatomic, strong) UILabel *emptyLabel;
+@property (nonatomic, strong) UIView *ambientTopGlowView;
+@property (nonatomic, strong) UIView *ambientBottomGlowView;
+@property (nonatomic, strong) NSDateFormatter *dateFormatter;
+@property (nonatomic, strong) NSLayoutConstraint *inputBottomConstraint;
+@property (nonatomic, assign) BOOL didAnimateMessages;
+@property (nonatomic, assign) BOOL ambientMotionRunning;
+@property (nonatomic, assign) BOOL isSendingMessage;
+@end
+
+@implementation PPUserMessagesViewController
+
+#pragma mark - Lifecycle
+
+- (instancetype)initWithChatThread:(ChatThreadModel *)thread
+{
+    self = [super init];
+    if (!self) return nil;
+    _chatThread = thread;
+    _messages = [NSMutableArray array];
+    return self;
+}
+
+- (void)viewDidLoad
+{
+    [super viewDidLoad];
+    self.dateFormatter = [[NSDateFormatter alloc] init];
+    self.dateFormatter.dateStyle = NSDateFormatterNoStyle;
+    self.dateFormatter.timeStyle = NSDateFormatterShortStyle;
+    [self pp_configureAppearance];
+    [self pp_buildAmbientBackgroundIfNeeded];
+    [self pp_configureTableView];
+    [self pp_configureInput];
+    [self pp_registerKeyboardNotifications];
+    [self pp_startObservingMessages];
+    [self pp_updateSendButtonState];
+    [self pp_updateEmptyState];
+}
+
+- (void)viewDidAppear:(BOOL)animated
+{
+    [super viewDidAppear:animated];
+    [self pp_startAmbientMotionIfNeeded];
+    [self pp_runEntranceAnimationIfNeeded];
+}
+
+- (void)viewDidDisappear:(BOOL)animated
+{
+    [super viewDidDisappear:animated];
+    [self pp_stopAmbientMotion];
+    [self.messagesListener remove];
+    self.messagesListener = nil;
+}
+
+- (void)dealloc
+{
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [self.messagesListener remove];
+}
+
+#pragma mark - Setup
+
+- (void)pp_configureAppearance
+{
+    self.view.backgroundColor = PPMessageBackgroundColor();
+    NSString *name = PPMessageTrimmedString(self.chatThread.otherUser.PPBestDisplayName);
+    if (name.length == 0) name = kLang(@"ch_provider_customer_fallback");
+    [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto
+                       button:nil
+                        title:name
+                     showBack:YES];
+}
+
+- (void)pp_buildAmbientBackgroundIfNeeded
+{
+    if (self.ambientTopGlowView) return;
+
+    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
+    UIView *topGlow = [[UIView alloc] init];
+    topGlow.translatesAutoresizingMaskIntoConstraints = NO;
+    topGlow.userInteractionEnabled = NO;
+    topGlow.backgroundColor = [accent colorWithAlphaComponent:0.08];
+    topGlow.layer.cornerRadius = 140.0;
+    topGlow.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.view insertSubview:topGlow atIndex:0];
+    self.ambientTopGlowView = topGlow;
+
+    UIView *bottomGlow = [[UIView alloc] init];
+    bottomGlow.translatesAutoresizingMaskIntoConstraints = NO;
+    bottomGlow.userInteractionEnabled = NO;
+    bottomGlow.backgroundColor = [PPMessagePrimaryTextColor() colorWithAlphaComponent:0.035];
+    bottomGlow.layer.cornerRadius = 175.0;
+    bottomGlow.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.view insertSubview:bottomGlow atIndex:0];
+    self.ambientBottomGlowView = bottomGlow;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [topGlow.widthAnchor constraintEqualToConstant:280.0],
+        [topGlow.heightAnchor constraintEqualToConstant:280.0],
+        [topGlow.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:-96.0],
+        [topGlow.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:70.0],
+
+        [bottomGlow.widthAnchor constraintEqualToConstant:350.0],
+        [bottomGlow.heightAnchor constraintEqualToConstant:350.0],
+        [bottomGlow.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:132.0],
+        [bottomGlow.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:-124.0],
+    ]];
+}
+
+- (void)pp_configureTableView
+{
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.tableView.delegate = self;
+    self.tableView.dataSource = self;
+    self.tableView.backgroundColor = UIColor.clearColor;
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    self.tableView.rowHeight = UITableViewAutomaticDimension;
+    self.tableView.estimatedRowHeight = 74.0;
+    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    self.tableView.showsVerticalScrollIndicator = NO;
+    self.tableView.contentInset = UIEdgeInsetsMake(14.0, 0.0, 18.0, 0.0);
+    [self.tableView registerClass:PPUserMessageCell.class forCellReuseIdentifier:@"PPUserMessageCell"];
+    [self.view addSubview:self.tableView];
+
+    UIView *header = [self pp_makeConversationHeaderView];
+    self.tableView.tableHeaderView = header;
+    header.frame = CGRectMake(0.0, 0.0, UIScreen.mainScreen.bounds.size.width, 124.0);
+
+    self.emptyLabel = [[UILabel alloc] init];
+    self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.emptyLabel.font = [Styling fontMedium:15.0];
+    self.emptyLabel.textColor = PPMessageSecondaryTextColor();
+    self.emptyLabel.textAlignment = NSTextAlignmentCenter;
+    self.emptyLabel.numberOfLines = 2;
+    self.emptyLabel.text = kLang(@"ch_provider_no_messages");
+    [self.view addSubview:self.emptyLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.tableView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+
+        [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:-22.0],
+        [self.emptyLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:34.0],
+        [self.emptyLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-34.0],
+    ]];
+}
+
+- (UIView *)pp_makeConversationHeaderView
+{
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0.0, 0.0, UIScreen.mainScreen.bounds.size.width, 124.0)];
+    container.backgroundColor = UIColor.clearColor;
+
+    UIView *surface = [[UIView alloc] init];
+    surface.translatesAutoresizingMaskIntoConstraints = NO;
+    surface.backgroundColor = [PPMessageSurfaceColor() colorWithAlphaComponent:0.74];
+    surface.layer.cornerRadius = 28.0;
+    surface.layer.cornerCurve = kCACornerCurveContinuous;
+    surface.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    surface.layer.borderColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.14].CGColor;
+    surface.layer.shadowColor = UIColor.blackColor.CGColor;
+    surface.layer.shadowOffset = CGSizeMake(0.0, 14.0);
+    surface.layer.shadowRadius = 26.0;
+    surface.layer.shadowOpacity = 0.06;
+    [container addSubview:surface];
+
+    if (@available(iOS 13.0, *)) {
+        UIVisualEffectView *blur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial]];
+        blur.translatesAutoresizingMaskIntoConstraints = NO;
+        blur.userInteractionEnabled = NO;
+        blur.clipsToBounds = YES;
+        blur.layer.cornerRadius = 28.0;
+        blur.layer.cornerCurve = kCACornerCurveContinuous;
+        [surface addSubview:blur];
+        [NSLayoutConstraint activateConstraints:@[
+            [blur.topAnchor constraintEqualToAnchor:surface.topAnchor],
+            [blur.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor],
+            [blur.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor],
+            [blur.bottomAnchor constraintEqualToAnchor:surface.bottomAnchor],
+        ]];
+    }
+
+    UILabel *eyebrow = [[UILabel alloc] init];
+    eyebrow.translatesAutoresizingMaskIntoConstraints = NO;
+    eyebrow.font = [Styling fontBold:11.0];
+    eyebrow.textColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    eyebrow.textAlignment = Language.alignmentForCurrentLanguage;
+    eyebrow.text = kLang(@"ch_provider_support_eyebrow");
+    [surface addSubview:eyebrow];
+
+    UILabel *title = [[UILabel alloc] init];
+    title.translatesAutoresizingMaskIntoConstraints = NO;
+    title.font = [Styling fontBold:24.0];
+    title.textColor = PPMessagePrimaryTextColor();
+    title.textAlignment = Language.alignmentForCurrentLanguage;
+    title.numberOfLines = 1;
+    NSString *name = PPMessageTrimmedString(self.chatThread.otherUser.PPBestDisplayName);
+    if (name.length == 0) name = kLang(@"ch_provider_customer_fallback");
+    title.text = name;
+    [surface addSubview:title];
+
+    UILabel *subtitle = [[UILabel alloc] init];
+    subtitle.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitle.font = [Styling fontMedium:12.5];
+    subtitle.textColor = [PPMessageSecondaryTextColor() colorWithAlphaComponent:0.82];
+    subtitle.textAlignment = Language.alignmentForCurrentLanguage;
+    subtitle.numberOfLines = 1;
+    subtitle.text = kLang(@"ch_provider_reply_hint");
+    [surface addSubview:subtitle];
+
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightSemibold];
+    UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"message.fill" withConfiguration:config]];
+    icon.translatesAutoresizingMaskIntoConstraints = NO;
+    icon.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    [surface addSubview:icon];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [surface.topAnchor constraintEqualToAnchor:container.topAnchor constant:14.0],
+        [surface.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:18.0],
+        [surface.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-18.0],
+        [surface.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-10.0],
+
+        [icon.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor constant:-20.0],
+        [icon.centerYAnchor constraintEqualToAnchor:surface.centerYAnchor],
+        [icon.widthAnchor constraintEqualToConstant:28.0],
+        [icon.heightAnchor constraintEqualToConstant:28.0],
+
+        [eyebrow.topAnchor constraintEqualToAnchor:surface.topAnchor constant:18.0],
+        [eyebrow.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor constant:20.0],
+        [eyebrow.trailingAnchor constraintLessThanOrEqualToAnchor:icon.leadingAnchor constant:-14.0],
+
+        [title.topAnchor constraintEqualToAnchor:eyebrow.bottomAnchor constant:5.0],
+        [title.leadingAnchor constraintEqualToAnchor:eyebrow.leadingAnchor],
+        [title.trailingAnchor constraintEqualToAnchor:icon.leadingAnchor constant:-14.0],
+
+        [subtitle.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:5.0],
+        [subtitle.leadingAnchor constraintEqualToAnchor:eyebrow.leadingAnchor],
+        [subtitle.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor constant:-20.0],
+    ]];
+
+    return container;
+}
+
+- (void)pp_configureInput
+{
+    self.inputContainer = [[UIView alloc] init];
+    self.inputContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inputContainer.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.inputContainer];
+
+    self.inputSurfaceView = [[UIView alloc] init];
+    self.inputSurfaceView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inputSurfaceView.backgroundColor = [PPMessageSurfaceColor() colorWithAlphaComponent:0.78];
+    self.inputSurfaceView.layer.cornerRadius = 28.0;
+    self.inputSurfaceView.layer.cornerCurve = kCACornerCurveContinuous;
+    self.inputSurfaceView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    self.inputSurfaceView.layer.borderColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.14].CGColor;
+    self.inputSurfaceView.layer.shadowColor = UIColor.blackColor.CGColor;
+    self.inputSurfaceView.layer.shadowOffset = CGSizeMake(0.0, 10.0);
+    self.inputSurfaceView.layer.shadowRadius = 24.0;
+    self.inputSurfaceView.layer.shadowOpacity = 0.07;
+    [self.inputContainer addSubview:self.inputSurfaceView];
+
+    if (@available(iOS 13.0, *)) {
+        UIVisualEffectView *inputBlur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial]];
+        inputBlur.translatesAutoresizingMaskIntoConstraints = NO;
+        inputBlur.userInteractionEnabled = NO;
+        inputBlur.clipsToBounds = YES;
+        inputBlur.layer.cornerRadius = 28.0;
+        inputBlur.layer.cornerCurve = kCACornerCurveContinuous;
+        [self.inputSurfaceView insertSubview:inputBlur atIndex:0];
+        [NSLayoutConstraint activateConstraints:@[
+            [inputBlur.topAnchor constraintEqualToAnchor:self.inputSurfaceView.topAnchor],
+            [inputBlur.leadingAnchor constraintEqualToAnchor:self.inputSurfaceView.leadingAnchor],
+            [inputBlur.trailingAnchor constraintEqualToAnchor:self.inputSurfaceView.trailingAnchor],
+            [inputBlur.bottomAnchor constraintEqualToAnchor:self.inputSurfaceView.bottomAnchor],
+        ]];
+    }
+
+    self.messageField = [[UITextField alloc] init];
+    self.messageField.translatesAutoresizingMaskIntoConstraints = NO;
+    self.messageField.placeholder = kLang(@"ch_provider_reply_hint");
+    if (self.messageField.placeholder.length == 0 || [self.messageField.placeholder isEqualToString:@"ch_provider_reply_hint"]) {
+        self.messageField.placeholder = kLang(@"ch_provider_reply");
+    }
+    self.messageField.font = [Styling fontMedium:15.0];
+    self.messageField.textColor = PPMessagePrimaryTextColor();
+    self.messageField.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.messageField.borderStyle = UITextBorderStyleNone;
+    self.messageField.returnKeyType = UIReturnKeySend;
+    self.messageField.delegate = self;
+    self.messageField.textAlignment = Language.alignmentForCurrentLanguage;
+    self.messageField.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.messageField addTarget:self action:@selector(pp_messageFieldDidChange:) forControlEvents:UIControlEventEditingChanged];
+    [self.inputSurfaceView addSubview:self.messageField];
+
+    self.sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.sendButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sendButton.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.sendButton.backgroundColor = [PPMessageMatteColor() colorWithAlphaComponent:0.92];
+    self.sendButton.layer.cornerRadius = 20.0;
+    self.sendButton.layer.cornerCurve = kCACornerCurveContinuous;
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightBold];
+    UIImage *sendIcon = [UIImage systemImageNamed:Language.isRTL ? @"paperplane.fill" : @"paperplane.fill" withConfiguration:config];
+    [self.sendButton setImage:sendIcon forState:UIControlStateNormal];
+    [self.sendButton addTarget:self action:@selector(pp_sendMessage) forControlEvents:UIControlEventTouchUpInside];
+    [self.inputSurfaceView addSubview:self.sendButton];
+
+    self.inputBottomConstraint = [self.inputContainer.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10.0];
+    self.inputHeightConstraint = [self.inputContainer.heightAnchor constraintEqualToConstant:72.0];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.inputContainer.topAnchor constant:-8.0],
+
+        [self.inputContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.inputContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        self.inputBottomConstraint,
+        self.inputHeightConstraint,
+
+        [self.inputSurfaceView.topAnchor constraintEqualToAnchor:self.inputContainer.topAnchor constant:8.0],
+        [self.inputSurfaceView.leadingAnchor constraintEqualToAnchor:self.inputContainer.leadingAnchor constant:14.0],
+        [self.inputSurfaceView.trailingAnchor constraintEqualToAnchor:self.inputContainer.trailingAnchor constant:-14.0],
+        [self.inputSurfaceView.bottomAnchor constraintEqualToAnchor:self.inputContainer.bottomAnchor constant:-8.0],
+        [self.inputSurfaceView.heightAnchor constraintGreaterThanOrEqualToConstant:54.0],
+
+        [self.messageField.leadingAnchor constraintEqualToAnchor:self.inputSurfaceView.leadingAnchor constant:16.0],
+        [self.messageField.trailingAnchor constraintEqualToAnchor:self.sendButton.leadingAnchor constant:-10.0],
+        [self.messageField.centerYAnchor constraintEqualToAnchor:self.inputSurfaceView.centerYAnchor],
+        [self.messageField.heightAnchor constraintEqualToConstant:42.0],
+
+        [self.sendButton.trailingAnchor constraintEqualToAnchor:self.inputSurfaceView.trailingAnchor constant:-7.0],
+        [self.sendButton.centerYAnchor constraintEqualToAnchor:self.inputSurfaceView.centerYAnchor],
+        [self.sendButton.widthAnchor constraintEqualToConstant:40.0],
+        [self.sendButton.heightAnchor constraintEqualToConstant:40.0],
+    ]];
+}
+
+#pragma mark - Messaging
+
+- (void)pp_startObservingMessages
+{
+    if (self.messagesListener || self.chatThread.ID.length == 0) return;
+
+    FIRCollectionReference *messagesRef =
+    [[[[FIRFirestore firestore] collectionWithPath:@"Chats"]
+      documentWithPath:self.chatThread.ID]
+     collectionWithPath:@"Messages"];
+
+    FIRQuery *query = [messagesRef queryOrderedByField:@"timestamp"];
+
+    __weak typeof(self) weakSelf = self;
+    self.messagesListener = [query addSnapshotListener:^(FIRQuerySnapshot *snapshot, NSError *error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                [strongSelf pp_updateEmptyState];
+                return;
+            }
+
+            strongSelf.messages = [NSMutableArray array];
+            for (FIRDocumentSnapshot *doc in snapshot.documents) {
+                if (!doc.exists) continue;
+                NSDictionary *data = doc.data ?: @{};
+                [strongSelf.messages addObject:data];
+            }
+            [strongSelf.tableView reloadData];
+            [strongSelf pp_updateEmptyState];
+            [strongSelf pp_scrollToBottomAnimated:strongSelf.didAnimateMessages];
+            [strongSelf pp_animateVisibleMessagesIfNeeded];
+        });
+    }];
+}
+
+- (NSString *)pp_receiverIDForCurrentSender:(NSString *)senderID
+{
+    NSString *receiverID = PPMessageTrimmedString(self.chatThread.otherUser.ID);
+    if (receiverID.length > 0) return receiverID;
+
+    for (NSString *memberID in self.chatThread.memberIDs) {
+        NSString *candidate = PPMessageTrimmedString(memberID);
+        if (candidate.length > 0 && ![candidate isEqualToString:senderID]) {
+            return candidate;
+        }
+    }
+    return @"";
+}
+
+- (void)pp_sendMessage
+{
+    NSString *text = PPMessageTrimmedString(self.messageField.text);
+    if (text.length == 0) return;
+
+    NSString *senderID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *receiverID = [self pp_receiverIDForCurrentSender:senderID];
+    if (senderID.length == 0 || receiverID.length == 0 || self.chatThread.ID.length == 0) return;
+
+    [self pp_setSendInFlight:YES];
+
+    FIRCollectionReference *messagesRef =
+    [[[[FIRFirestore firestore] collectionWithPath:@"Chats"]
+      documentWithPath:self.chatThread.ID]
+     collectionWithPath:@"Messages"];
+
+    NSString *messageID = [[NSUUID UUID] UUIDString];
+    NSDictionary *payload = @{
+        @"text": text,
+        @"senderID": senderID,
+        @"receiverID": receiverID,
+        @"status": @"sent",
+        @"timestamp": [FIRTimestamp timestamp]
+    };
+
+    __weak typeof(self) weakSelf = self;
+    [[messagesRef documentWithPath:messageID] setData:payload completion:^(NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf pp_setSendInFlight:NO];
+            if (error) return;
+            strongSelf.messageField.text = @"";
+            [strongSelf pp_updateSendButtonState];
+        });
+    }];
+}
+
+- (void)pp_scrollToBottomAnimated:(BOOL)animated
+{
+    if (self.messages.count == 0) return;
+    NSIndexPath *last = [NSIndexPath indexPathForRow:self.messages.count - 1 inSection:0];
+    [self.tableView scrollToRowAtIndexPath:last atScrollPosition:UITableViewScrollPositionBottom animated:animated];
+}
+
+#pragma mark - State
+
+- (void)pp_updateEmptyState
+{
+    BOOL isEmpty = self.messages.count == 0;
+    self.emptyLabel.hidden = !isEmpty;
+    self.tableView.hidden = NO;
+}
+
+- (void)pp_messageFieldDidChange:(UITextField *)field
+{
+    [self pp_updateSendButtonState];
+}
+
+- (void)pp_updateSendButtonState
+{
+    BOOL enabled = PPMessageTrimmedString(self.messageField.text).length > 0;
+    self.sendButton.enabled = enabled;
+    void (^updates)(void) = ^{
+        self.sendButton.alpha = enabled ? 1.0 : 0.45;
+        self.sendButton.transform = enabled ? CGAffineTransformIdentity : CGAffineTransformMakeScale(0.92, 0.92);
+    };
+    if (!UIAccessibilityIsReduceMotionEnabled()) {
+        [UIView animateWithDuration:0.18 delay:0.0 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction animations:updates completion:nil];
+    } else {
+        updates();
+    }
+}
+
+- (void)pp_setSendInFlight:(BOOL)inFlight
+{
+    self.sendButton.enabled = !inFlight;
+    self.messageField.enabled = !inFlight;
+    if (!UIAccessibilityIsReduceMotionEnabled()) {
+        [UIView animateWithDuration:0.18 animations:^{
+            self.sendButton.transform = inFlight ? CGAffineTransformMakeScale(0.88, 0.88) : CGAffineTransformIdentity;
+        }];
+    }
+}
+
+#pragma mark - Keyboard
+
+- (void)pp_registerKeyboardNotifications
+{
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(pp_keyboardWillChange:) name:UIKeyboardWillChangeFrameNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(pp_keyboardWillChange:) name:UIKeyboardWillHideNotification object:nil];
+}
+
+- (void)pp_keyboardWillChange:(NSNotification *)notification
+{
+    NSDictionary *userInfo = notification.userInfo;
+    CGRect keyboardFrame = [userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    CGRect keyboardInView = [self.view convertRect:keyboardFrame fromView:nil];
+    CGFloat overlap = MAX(0.0, CGRectGetMaxY(self.view.bounds) - CGRectGetMinY(keyboardInView) - self.view.safeAreaInsets.bottom);
+    BOOL isHide = [notification.name isEqualToString:UIKeyboardWillHideNotification];
+    self.inputBottomConstraint.constant = isHide ? -10.0 : -(overlap + 10.0);
+
+    NSTimeInterval duration = [userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    UIViewAnimationOptions options = ([userInfo[UIKeyboardAnimationCurveUserInfoKey] integerValue] << 16);
+    [UIView animateWithDuration:duration delay:0.0 options:options animations:^{
+        [self.view layoutIfNeeded];
+        [self pp_scrollToBottomAnimated:NO];
+    } completion:nil];
+}
+
+#pragma mark - Motion
+
+- (void)pp_startAmbientMotionIfNeeded
+{
+    if (self.ambientMotionRunning || UIAccessibilityIsReduceMotionEnabled()) return;
+    self.ambientMotionRunning = YES;
+    [self.ambientTopGlowView.layer removeAllAnimations];
+    [self.ambientBottomGlowView.layer removeAllAnimations];
+
+    [UIView animateWithDuration:6.0
+                          delay:0.0
+                        options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionAutoreverse | UIViewAnimationOptionRepeat | UIViewAnimationOptionAllowUserInteraction
+                     animations:^{
+        self.ambientTopGlowView.transform = CGAffineTransformConcat(CGAffineTransformMakeTranslation(-12.0, 16.0), CGAffineTransformMakeScale(1.06, 1.06));
+        self.ambientTopGlowView.alpha = 0.52;
+    } completion:nil];
+
+    [UIView animateWithDuration:7.2
+                          delay:0.3
+                        options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionAutoreverse | UIViewAnimationOptionRepeat | UIViewAnimationOptionAllowUserInteraction
+                     animations:^{
+        self.ambientBottomGlowView.transform = CGAffineTransformConcat(CGAffineTransformMakeTranslation(16.0, -12.0), CGAffineTransformMakeScale(1.05, 1.05));
+        self.ambientBottomGlowView.alpha = 0.60;
+    } completion:nil];
+}
+
+- (void)pp_stopAmbientMotion
+{
+    self.ambientMotionRunning = NO;
+    [self.ambientTopGlowView.layer removeAllAnimations];
+    [self.ambientBottomGlowView.layer removeAllAnimations];
+    self.ambientTopGlowView.transform = CGAffineTransformIdentity;
+    self.ambientBottomGlowView.transform = CGAffineTransformIdentity;
+}
+
+- (void)pp_runEntranceAnimationIfNeeded
+{
+    if (UIAccessibilityIsReduceMotionEnabled()) return;
+    self.inputSurfaceView.alpha = 0.0;
+    self.inputSurfaceView.transform = CGAffineTransformMakeTranslation(0.0, 18.0);
+    [UIView animateWithDuration:0.44 delay:0.04 usingSpringWithDamping:0.86 initialSpringVelocity:0.28 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        self.inputSurfaceView.alpha = 1.0;
+        self.inputSurfaceView.transform = CGAffineTransformIdentity;
+    } completion:nil];
+    [self pp_animateVisibleMessagesIfNeeded];
+}
+
+- (void)pp_animateVisibleMessagesIfNeeded
+{
+    if (self.didAnimateMessages || UIAccessibilityIsReduceMotionEnabled()) return;
+    self.didAnimateMessages = YES;
+    NSArray<UITableViewCell *> *cells = self.tableView.visibleCells;
+    [cells enumerateObjectsUsingBlock:^(UITableViewCell *cell, NSUInteger idx, __unused BOOL *stop) {
+        cell.contentView.alpha = 0.0;
+        cell.contentView.transform = CGAffineTransformMakeTranslation(0.0, 14.0);
+        [UIView animateWithDuration:0.38 delay:MIN(idx, 8) * 0.03 usingSpringWithDamping:0.88 initialSpringVelocity:0.24 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+            cell.contentView.alpha = 1.0;
+            cell.contentView.transform = CGAffineTransformIdentity;
+        } completion:nil];
+    }];
+}
+
+#pragma mark - UITableViewDataSource
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
+{
+    return self.messages.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
+{
+    PPUserMessageCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PPUserMessageCell" forIndexPath:indexPath];
+    [cell configureWithMessage:self.messages[indexPath.row]
+                 currentUserID:[FIRAuth auth].currentUser.uid ?: @""
+                     formatter:self.dateFormatter];
+    return cell;
+}
+
+#pragma mark - UITextFieldDelegate
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField
+{
+    [self pp_sendMessage];
+    return NO;
+}
+
+@end

@@ -1,0 +1,2588 @@
+/* ===================== Admin Login ===================== */
+"AdminLoginTitle"              = "تسجيل دخول المشرف";
+"Email"                        = "البريد الإلكتروني";
+"EmailPlaceholder"             = "أدخل البريد الإلكتروني";
+"Password"                     = "كلمة المرور";
+"PasswordPlaceholder"          = "أدخل كلمة المرور";
+"Login"                        = "تسجيل الدخول";
+"StatusEnterBoth"              = "الرجاء إدخال البريد الإلكتروني وكلمة المرور";
+"StatusLoggingIn"              = "جاري تسجيل الدخول...";
+"StatusWelcomeAdmin"           = "✅ مرحباً أيها المشرف!";
+"StatusNoAccess"               = "❌ لا تملك صلاحية الدخول";
+"StatusFetchClaims"            = "فشل في جلب الصلاحيات";
+"Error_Title"                  = "خطأ";
+"Success_Title"                = "نجاح";
+"OK_Title"                     = "موافق";
+
+/* ===================== Dashboard ===================== */
+"AdminDashboard"               = "لوحة التحكم";
+"Welcome"                      = "مرحباً";
+"Admin"                        = "المشرف";
+"Dashboard_Greeting_Morning"   = "صباح الخير";
+"Dashboard_Greeting_Afternoon" = "مساء الخير";
+"Dashboard_Greeting_Evening"   = "مساء الخير";
+"Dashboard_Greeting_Name_Format" = "%@، %@";
+
+
+
+/* ===================== Store Section ===================== */
+"ChangeOrderStatus"            = "تغيير حالة الطلب";
+"ChangeOrderStatusSubtitle"    = "إدارة دورة حياة الطلب";
+
+
+/* ===================== Banner Section ===================== */
+"Offer"                     = "عرض";
+"OtherControls"                = "خيارات أخرى";
+"OtherControlsSubtitle"        = "إدارة إعدادات إضافية";
+
+/* ===================== Food Section ===================== */
+"EditFood"                      = "تعديل طعام";
+"ManageFood"                   = "إزالة طعام";
+"RemoveFoodSubtitle"           = "حذف طعام من المتجر";
+"MarkFoodFinished"             = "وضع كمنتهي";
+"MarkFoodFinishedSubtitle"     = "تعيين كغير متاح";
+
+/* ===================== Add User ===================== */
+"AddUser_Title"                = "إضافة مستخدم";
+"InfoSectionTitle"             = "معلومات المستخدم";
+"UsernameTitle"                = "اسم المستخدم";
+"UsernamePlaceholder"          = "أدخل اسم المستخدم";
+"PhoneTitle"                   = "الهاتف";
+"PhonePlaceholder"             = "أدخل رقم الهاتف";
+"Role_Title"                   = "مجموعة المستخدم"; // = "الدور";
+"Permissions_Title"            = "الصلاحيات";
+"SetAsAdmin_Title"             = "منح صلاحية المشرف";
+"SaveUser_Title"               = "حفظ المستخدم";
+"Error_FillAllFields"          = "الرجاء تعبئة جميع الحقول المطلوبة.";
+"UserAdded"                    = "تمت إضافة المستخدم بنجاح.";
+
+/* ===================== Roles ===================== */
+"Role_User"                    = "مستخدم";
+"Role_User_Desc"               = "مستخدم عادي.";
+"Role_Owner"                   = "مالك";
+"Role_Owner_Desc"              = "يمكنه إدارة الحيوانات والإعلانات.";
+"Role_Vet"                     = "طبيب بيطري";
+"Role_Vet_Desc"                = "دور الطبيب البيطري.";
+"Role_Moderator"               = "مشرف محتوى";
+"Role_Moderator_Desc"          = "يمكنه الإشراف على المحتوى.";
+"Role_Admin"                   = "مشرف";
+"Role_Admin_Desc"              = "تحكم كامل في التطبيق.";
+
+/* ===================== Permissions ===================== */
+"Perm_SellNew"                 = "بيع منتجات جديدة";
+"Perm_SellNew_Desc"            = "السماح ببيع المنتجات الجديدة.";
+"Perm_Moderation"              = "الإشراف";
+"Perm_Moderation_Desc"         = "السماح بالإشراف على الإعلانات والتعليقات والمستخدمين.";
+"Perm_AdminAll"                = "كامل صلاحيات المشرف";
+"Perm_AdminAll_Desc"           = "منح جميع الصلاحيات الإدارية.";
+
+/* ===================== Notifications ===================== */
+"Notifications"                = "الإشعارات";
+"NoNewNotifications"           = "لا توجد إشعارات جديدة";
+"TappedOption"                 = "لقد نقرت على %@";
+
+/// تغيير اللغة
+"LanguageChanged_Title" = "تم تغيير اللغة";
+"LanguageChanged_Message" = "سيتم إغلاق التطبيق الآن لتطبيق اللغة الجديدة. يرجى إعادة فتحه.";
+"LanguageChanged_OK" = "حسناً";
+
+"BlockUser_Title" = "حظر مستخدم";
+"BlockUser_User" = "البريد الإلكتروني أو رقم المستخدم";
+"BlockUser_User_Placeholder" = "أدخل البريد أو معرف المستخدم";
+"BlockUser_Reason" = "السبب";
+"BlockUser_Reason_Placeholder" = "أدخل السبب (اختياري)";
+"BlockUser_Duration" = "المدة";
+"BlockUser_Permanent" = "دائم";
+"BlockUser_7Days" = "٧ أيام";
+"BlockUser_30Days" = "٣٠ يومًا";
+"BlockUser_Action" = "حظر المستخدم";
+"BlockUser_Error_UserRequired" = "الرجاء إدخال البريد الإلكتروني أو المعرف.";
+"BlockUser_Success" = "تم حظر المستخدم بنجاح.";
+
+/// Admin Accessories
+"Manage Accessories" = "إدارة الإكسسوارات";
+"Add Accessory" = "إضافة إكسسوار";
+"Edit Accessory" = "تعديل الإكسسوار";
+
+/// Form Fields
+"Name" = "الاسم";
+"Enter name" = "أدخل الاسم";
+"Description" = "الوصف";
+"Enter description" = "أدخل الوصف";
+"Price" = "السعر";
+"0.00" = "٠٫٠٠";
+"Quantity" = "الكمية";
+"Enter quantity" = "أدخل الكمية";
+"Condition" = "الحالة";
+"New" = "جديد";
+"Used" = "مستعمل";
+"MainStore" = "المتجر الرئيسي";
+"MyStore" = "متجري";
+"DiscountPercent" = "نسبة الخصم %";
+"DiscountPercentPlaceholder" = "٠ - ١٠٠";
+"DiscountAmount" = "مبلغ الخصم";
+"FinalPrice" = "السعر النهائي";
+"Store" = "المتجر";
+"Kind" = "النوع";
+"Accessory" = "إكسسوار";
+"Food" = "طعام";
+"Images" = "الصور";
+
+/// Actions
+"Save" = "حفظ";
+"Delete" = "حذف";
+"Cancel" = "إلغاء";
+"Confirm Delete" = "تأكيد الحذف";
+"Are you sure you want to delete this accessory?" = "هل أنت متأكد أنك تريد حذف هذا الإكسسوار؟";
+
+/// Errors
+"Error" = "خطأ";
+"OK" = "موافق";
+"Name and price are required" = "الاسم والسعر مطلوبان";
+
+/// Info
+"Qty" = "الكمية";
+"EGP" = "جنيه";
+
+"OK" = "موافق";
+"Cancel" = "إلغاء";
+"Confirm" = "تأكيد";
+"Loading" = "جارٍ التحميل...";
+"Please wait" = "يرجى الانتظار";
+"Saved" = "تم الحفظ";
+"Your changes were saved successfully." = "تم حفظ التغييرات بنجاح.";
+"Error" = "خطأ";
+"Something went wrong." = "حدث خطأ ما.";
+"Warning" = "تحذير";
+"Are you sure you want to continue?" = "هل أنت متأكد أنك تريد المتابعة؟";
+"Info" = "معلومة";
+
+// Species (MainKinds)
+"Species" = "النوع";
+"SpeciesPlaceholder" = "اختر النوع";
+"SpeciesRequired" = "النوع مطلوب";
+
+// Breeds (SubKinds)
+"Breed" = "السلالة";
+"BreedPlaceholder" = "اختر السلالة (اختياري)";
+"BreedOptional" = "السلالة اختيارية";
+
+"Add Accessory" = "إضافة ملحق";
+"Edit Accessory" = "تعديل ملحق";
+"Name" = "الاسم";
+"Enter name" = "أدخل الاسم";
+"Description" = "الوصف";
+"Enter description" = "أدخل الوصف";
+"Species" = "النوع";
+"SpeciesPlaceholder" = "اختر النوع";
+"Breed" = "السلالة";
+"BreedPlaceholder" = "اختر السلالة (اختياري)";
+"Price" = "السعر";
+"0.00" = "٠٫٠٠";
+"Quantity" = "الكمية";
+"Enter quantity" = "أدخل الكمية";
+"Condition" = "الحالة";
+"New" = "جديد";
+"Used" = "مستعمل";
+"Images" = "الصور";
+"Post Ad" = "نشر الإعلان";
+"Uploading" = "جاري الرفع...";
+"PleaseWait" = "يرجى الانتظار أثناء رفع الصور.";
+"Error" = "خطأ";
+"NamePriceRequired" = "الاسم والسعر مطلوبان";
+"Something went wrong." = "حدث خطأ ما.";
+"Saved" = "تم الحفظ";
+"AccessoryPosted" = "تم نشر الملحق بنجاح.";
+
+"LoginWithFaceID" = "تسجيل الدخول باستخدام Face ID";
+"UseFaceIDTitle"  = "هل تريد استخدام Face ID لتسجيل الدخول السريع؟";
+"UseFaceIDMsg"    = "يمكنك استخدام Face ID في المرة القادمة بدلًا من كتابة كلمة المرور.";
+"Enable"          = "تفعيل";
+"NotNow"          = "ليس الآن";
+"AuthenticateToLogin" = "التحقق لتسجيل الدخول";
+"BiometricNotAvailable" = "Face ID / Touch ID غير متوفر";
+"BiometricFailed" = "فشل التحقق";
+"NoSavedCredentials" = "لا توجد بيانات اعتماد محفوظة";
+"FaceID enabled"  = "تم تفعيل Face ID";
+
+"Confirm_AdminAll_Title" = "منح وصول كامل كمسؤول؟";
+"Confirm_AdminAll_Msg"   = "سيمنح هذا المستخدم جميع صلاحيات الإدارة الكاملة.";
+"Confirm"                = "تأكيد";
+"Cancel"                 = "إلغاء";
+
+"Confirm_LanguageChange_Title" = "تغيير اللغة";
+"Confirm_LanguageChange_Msg"   = "هل أنت متأكد أنك تريد تغيير اللغة؟";
+"Confirm"                      = "تأكيد";
+"Cancel"                       = "إلغاء";
+
+"Logout"                  = "تسجيل الخروج";
+"Logout_Confirm_Title"    = "تسجيل الخروج";
+"Logout_Confirm_Message"  = "هل أنت متأكد أنك تريد تسجيل الخروج؟";
+"Logout_Success_Title"    = "نجاح";
+"Logout_Success_Message"  = "تم تسجيل الخروج بنجاح";
+"Confirm"                 = "تأكيد";
+"Cancel"                  = "إلغاء";
+
+"Select User" = "اختر مستخدم";
+"SearchHere"                  = "...إبحث هنا";
+
+"NotificationsSection"               = "الإشعارات";
+"SendPushNotification"               = "إرسال إشعار فوري";
+"SendPushNotificationSubtitle"       = "إرسال إشعارات للمستخدمين أو المسؤولين";
+"ManageTopics"                       = "إدارة المواضيع";
+"ManageTopicsSubtitle"               = "التحكم في مواضيع FCM/APNs للمستخدمين والإداريين";
+"ScheduleNotification"               = "جدولة الإشعار";
+"ScheduleNotificationSubtitle"       = "تخطيط إرسال الإشعارات لاحقاً";
+"EnableAdminNotifications" = "تفعيل الإشعارات (تطبيق المسؤول)";
+"EnableAdminNotifications" = "تفعيل الإشعارات (تطبيق المسؤول)";
+"Notifications" = "الإشعارات";
+"NotificationsEnabled" = "تم تفعيل الإشعارات.";
+"NotificationsDisabled" = "تم إيقاف الإشعارات.";
+
+"Error" = "خطأ";
+"OK" = "حسنًا";
+"TryAgain" = "أعد المحاولة";
+"Dismiss" = "إغلاق";
+
+"MissingUserId_Title"   = "معرّف المستخدم مفقود";
+"MissingUserId_Message" = "تعذّر إكمال العملية لأن معرّف المستخدم غير موجود.";
+
+"NoSignedInUser_Title"   = "غير مسجّل الدخول";
+"NoSignedInUser_Message" = "يرجى تسجيل الدخول للمتابعة.";
+
+"WriteFailed_Title"   = "تعذّر حفظ البيانات";
+"WriteFailed_Message" = "حدث خطأ أثناء الحفظ. (%@)";
+
+"Inbox" = "الوارد";
+"User"  = "المستخدم";
+
+/* Legacy exact-phrase keys */
+"Missing user id"   = "معرّف المستخدم مفقود";
+"No signed-in user" = "لا يوجد مستخدم مسجّل دخول";
+
+/* Navigation / Titles */
+"SendPushNotification" = "إرسال إشعار فوري";
+"Compose Notification" = "إنشاء إشعار";
+
+/* Form rows */
+"Title" = "العنوان";
+"Body" = "المحتوى";
+"Type" = "النوع";
+
+/* Type options */
+"General" = "عام";
+"Order" = "طلب";
+"Ad Review" = "مراجعة إعلان";
+"Warning" = "تحذير";
+
+/* Target section */
+"Target" = "الوجهة";
+"User ID (optional)" = "معرّف المستخدم (اختياري)";
+"BlockUser_User_Placeholder" = "أدخل البريد الإلكتروني أو معرّف المستخدم";
+
+/* Alerts / Info */
+"Error" = "خطأ";
+"Info" = "معلومة";
+"NoUsersFound" = "لا يوجد مستخدمون";
+"Select User" = "اختر مستخدمًا";
+
+/* Send result messages */
+"Failed" = "فشل";
+"Sent" = "تم الإرسال";
+"Delivered to user inbox." = "تم التسليم إلى صندوق وارد المستخدم.";
+"Queued" = "قيد الانتظار";
+"Broadcast queued." = "تمت إضافة البث إلى قائمة الانتظار.";
+
+/* (Shared) Validation & Common */
+"FillRequiredFields" = "الرجاء إكمال الحقول المطلوبة.";
+"OK" = "حسنًا";
+"Cancel" = "إلغاء";
+"Done" = "تم";
+"Retry" = "إعادة المحاولة";
+
+/* (Shared) Network / Loading */
+"Loading" = "جارٍ التحميل...";
+"TryAgainLater" = "يرجى المحاولة لاحقًا.";
+
+"Check your notification target" = "تحقق من الجهة المستهدفة للإشعار";
+"Default" = "افتراضي";
+"Default_Subtitle" = "استخدم حقل المستخدم أدناه (اختياري).";
+"Supervisors" = "المشرفون";
+"Supervisors_Subtitle" = "المشرفون والمديرون.";
+"App Users" = "مستخدمو التطبيق";
+"AppUsers_Subtitle" = "جميع المستخدمين المسجلين.";
+"All Users" = "جميع المستخدمين";
+"AllUsers_Subtitle" = "الجميع.";
+"Specific Users" = "مستخدمون محددون";
+"SpecificUsers_Subtitle" = "اختر مستخدمًا واحدًا أو أكثر.";
+"Add users to this message" = "أضف مستخدمين إلى هذه الرسالة";
+"Add User" = "إضافة مستخدم";
+"User" = "مستخدم";
+"Please add at least one user." = "يرجى إضافة مستخدم واحد على الأقل.";
+
+"Nobody" = "لا أحد";
+"Nobody_Subtitle" = "لا يتم إرسال الإشعار إلى أي شخص (الوضع الآمن).";
+
+/* Notifications screen */
+"NotificationsTitle" = "الإشعارات";
+"NoNotifications" = "لا توجد إشعارات بعد.";
+"FetchError" = "فشل في تحميل الإشعارات.";
+"NotificationsLoaded" = "تم تحميل الإشعارات";
+"PullToRefresh" = "اسحب للتحديث";
+"Loading" = "جارٍ التحميل…";
+"Retry" = "أعد المحاولة";
+
+/* PPS / Search */
+
+"PPS_Filter" = "تصفية";
+"PPS_Scan" = "مسح";
+// In Localizable.strings (Arabic)
+"Select User" = "اختر المستخدم";
+"SetPermissions_Title" = "تعيين صلاحيات المستخدم";
+"SetPermissions_Users_Section" = "المستخدمون";
+"SetPermissions_Search_Placeholder" = "ابحث باسم المستخدم أو البريد أو الهاتف";
+"SetPermissions_Filter_NotImplemented" = "الفلاتر قريبًا";
+
+"SetPermissions_Edit_Title" = "تعديل الصلاحيات";
+"SetPermissions_Edit_SubtitleFmt" = "تغيير صلاحيات \"%@\"؟";
+"SetPermissions_MakeAdmin" = "منح مشرف";
+"SetPermissions_AdminUpdated" = "تم تحديث الصلاحيات.";
+
+// Localizable.strings (Arabic)
+"AdminBadge" = "مشرف";
+
+// in Localizable.strings (Arabic)
+"SetPermissions_AdminGranted" = "تم منح صلاحية المدير";
+"SetPermissions_AdminRevoked" = "تم إلغاء صلاحية المدير";
+
+"SetPermissions_AdminGranted" = "تم منح صلاحية المدير";
+"SetPermissions_AdminRevoked" = "تم إلغاء صلاحية المدير";
+"SetPermissions_MakeAdmin"    = "منح صلاحية المدير";
+"SetPermissions_RevokeAdmin"  = "إلغاء صلاحية المدير";
+
+"perm_roles_title"     = "الأذونات و الأدوار";
+
+"permissions_section"  = "الأذونات";
+"roles_section"        = "الدور";
+
+"perm_post_ads"        = "نشر الإعلانات";
+"perm_sell_new"        = "بيع جديد";
+"perm_sell_used"       = "بيع مستعمل";
+"perm_adoption"        = "التبني";
+"perm_manage_store"    = "إدارة المتجر";
+"perm_moderation"      = "الإشراف";
+"perm_admin_all"       = "مدير (كامل)";
+
+"role_user"            = "مستخدم";
+"role_owner"           = "مالك";
+"role_vet"             = "طبيب بيطري";
+"role_moderator"       = "مشرف";
+"role_admin"           = "مدير";
+
+/* ===================== Permissions & Roles VC ===================== */
+"PermRoles_Title"          = "الأذونات والأدوار";
+
+/* ===================== Account Section ===================== */
+"Account_Section"          = "الحساب";
+"Username_Placeholder"     = "أدخل اسم المستخدم";
+"Email_Placeholder"        = "أدخل البريد الإلكتروني";
+"Phone_Placeholder"        = "أدخل رقم الهاتف";
+"Password_Placeholder"     = "أدخل كلمة مرور جديدة";
+
+/* ===================== Permissions Section ===================== */
+"Permissions_Section"      = "الأذونات";
+"UserAppPermissions_Section" = "أذونات تطبيق المستخدم";
+"AdminAppPermissions_Section" = "أذونات تطبيق الإدارة";
+"Perm_PostAds"             = "نشر إعلانات";
+"Perm_SellNew"             = "بيع جديد";
+"Perm_SellUsed"            = "بيع مستعمل";
+"Perm_Adoption"            = "التبني";
+"Perm_Moderation"          = "الإشراف";
+"Perm_AdminAll"            = "مدير (كامل)";
+
+/* ===================== Roles Section ===================== */
+"Roles_Section"            = "الدور";
+"Role_User"                = "مستخدم";
+"Role_Owner"               = "مالك";
+"Role_Vet"                 = "طبيب بيطري";
+"Role_Moderator"           = "مشرف";
+"Role_Admin"               = "مدير";
+
+/* ===================== Alerts / Errors ===================== */
+"Error_Title"              = "خطأ";
+"Success_Title"            = "نجاح";
+"OK_Title"                 = "موافق";
+"Error_SaveFailed"         = "فشل في حفظ التغييرات. حاول مرة أخرى.";
+"Success_AccountSaved"     = "تم حفظ بيانات الحساب بنجاح.";
+"Error_InvalidPassword"    = "يجب أن تكون كلمة المرور 6 أحرف على الأقل.";
+"Success_PasswordReset"    = "تمت إعادة تعيين كلمة المرور بنجاح.";
+
+// In Localizable.strings (ar)
+
+// Identity
+"pp_me_guest"            = "ضيف";
+
+// Roles
+"pp_role_admin"          = "المشرف";
+"pp_role_moderator"      = "المراقب";
+"pp_role_owner"          = "المالك";
+"pp_role_vet"            = "الطبيب البيطري";
+"pp_role_user"           = "المستخدم";
+
+// Stats titles
+"pp_stat_accessories"    = "الإكسسوارات";
+"pp_stat_orders"         = "الطلبات";
+"pp_stat_ads"            = "الإعلانات";
+
+
+
+// (اختياري) إمكانية الوصول / تلميحات
+"pp_a11y_notifications"  = "الإشعارات";
+"pp_a11y_avatar"         = "الصورة الشخصية";
+"pp_a11y_trailing_action"= "زر سريع";
+
+// ar.strings
+"pp_stats_ads"          = "الإعلانات";
+
+// 🔐 Authentication / Flow
+"Login"                    = "تسجيل الدخول";
+"Email"                    = "البريد الإلكتروني";
+"EmailPlaceholder"          = "أدخل بريدك الإلكتروني";
+"Password"                  = "كلمة المرور";
+"PasswordPlaceholder"        = "أدخل كلمة المرور";
+"StatusEnterBoth"            = "من فضلك أدخل البريد وكلمة المرور معًا";
+"StatusLoggingIn"            = "جارٍ تسجيل الدخول...";
+"StatusLoginFailed"          = "فشل تسجيل الدخول. تحقق من البيانات وحاول مرة أخرى.";
+"StatusAppCheckInvalid"      = "فشل التحقق من أمان التطبيق. حدّث التطبيق أو تواصل مع الدعم.";
+"StatusFetchClaims"          = "تعذر التحقق من صلاحيات الوصول.";
+"StatusNoAccess"             = "ليس لديك صلاحيات المسؤول.";
+"StatusAccountBlocked"       = "تم حظر حسابك.";
+"StatusUserDocError"         = "حدث خطأ أثناء تحميل ملف المستخدم.";
+"Login successful"           = "تم تسجيل الدخول بنجاح";
+"Logout_Confirm_Title"       = "تأكيد تسجيل الخروج";
+"Logout_Confirm_Message"     = "هل أنت متأكد أنك تريد تسجيل الخروج؟";
+"Logged out successfully"    = "تم تسجيل الخروج بنجاح";
+"Error"                      = "خطأ";
+"Success"                    = "نجاح";
+"Warning"                    = "تحذير";
+"Please wait"                = "الرجاء الانتظار";
+
+// 🌐 Language Switching
+"Confirm_LanguageChange_Title"  = "تغيير اللغة";
+"Confirm_LanguageChange_Msg"    = "هل تريد تغيير لغة التطبيق؟";
+"Language changed successfully" = "تم تغيير اللغة بنجاح";
+
+// 📊 Dashboard / Root
+"AdminDashboard"           = "لوحة تحكم المسؤول";
+"NotificationsSection"     = "الإشعارات";
+
+// ⚙️ General
+"Confirm"                  = "تأكيد";
+"Cancel"                   = "إلغاء";
+
+"EditName"      = "تعديل الاسم";
+"EnterYourName" = "أدخل اسمك";
+"Saved"         = "تم الحفظ";
+
+
+/// Arabic
+"RememberMe" = "تذكرني";
+"ForgotPassword" = "هل نسيت كلمة المرور؟";
+"EnterEmailFirst" = "من فضلك أدخل بريدك الإلكتروني أولاً.";
+"PasswordResetEmailSent" = "تم إرسال رابط إعادة التعيين إلى بريدك الإلكتروني.";
+
+// In Arabic
+"UserRoleUser"          = "مستخدم";
+"UserRoleOwner"         = "مالك";
+"UserRoleVet"           = "طبيب بيطري";
+"UserRoleModerator"     = "مشرف";
+"UserRoleAdmin"         = "مسؤول";
+"UserRoleStoreManager"  = "مدير المتجر";
+"UserRoleFoodManager"   = "مدير الأغذية";
+
+/// Arabic
+"PermPostAds"      = "نشر إعلانات";
+"PermSellNew"      = "بيع اكسسوارات جديدة";
+"PermSellUsed"     = "بيع اكسسوارات مستعملة";
+"PermAdoption"     = "التبني";
+
+"PermManageStore"  = "إدارة المتجر";
+"PermManageFood"   = "إدارة الطعام";
+"PermSellFood"     = "بيع الطعام";
+
+"PermModeration"   = "إشراف";
+"PermAdminAll"     = "إدارة كاملة";
+
+// فتح قائمة المستخدمين → اختر مستخدمًا → تحرير الأدوار والأذونات
+"EditRolePermsDirect_Title"      = "تعديل الأدوار والأذونات";
+"EditRolePermsDirect_Subtitle"   = "اختر مستخدمًا وحدّث صلاحياته";
+
+// فتح قائمة المستخدمين → اختر مستخدمًا → شاشة معلومات الحساب فقط
+"EditMyAccount_Title"            = "حسابي (الملف الشخصي)";
+"EditMyAccount_Subtitle"         = "الاسم والبريد والهاتف للمستخدم المحدد";
+
+// صف يفتح قائمة “المستخدمون” مخصص للعمل على الأدوار والأذونات
+
+// صف لقائمة تبديل المشرف
+
+// إدخال عام لقائمة المستخدمين
+"SetPermissions"                 = "المستخدمون (قائمة)";
+"SetPermissionsSubtitle"         = "بحث وعرض وإدارة المستخدمين";
+
+// —— إضافات اختيارية ——
+
+"EditUsersRolePerms_List_Title"  = "المستخدمون: الأدوار والأذونات";
+"EditUsersRolePerms_List_Subtitle" = "تعيين الأدوار وضبط الصلاحيات";
+
+/* Pick / upload flow */
+"Please login first" = "يرجى تسجيل الدخول أولاً";
+"Preparing…" = "جارٍ التحضير…";
+"Downloading from iCloud…" = "جارٍ التنزيل من iCloud…";
+"Uploading…" = "جاري الرفع…";
+"Please wait..." = "يرجى الانتظار…";
+"Upload failed" = "فشل الرفع";
+"Image load failed" = "فشل تحميل الصورة";
+"Saved" = "تم الحفظ";
+"Done" = "تم";
+"Failed" = "فشل";
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* Header avatar + picker */
+"Add Photo" = "إضافة صورة";
+"Add profile photo" = "إضافة صورة للملف";
+
+/* Generic/status */
+"Saving" = "جارٍ الحفظ";
+"Please wait..." = "يرجى الانتظار…";
+"Preparing…" = "جارٍ التحضير…";
+"Uploading…" = "جارٍ الرفع…";
+"Downloading from iCloud…" = "جارٍ التنزيل من iCloud…";
+"Done" = "تم";
+"Failed" = "فشل";
+"Saved" = "تم الحفظ";
+"Upload failed" = "فشل الرفع";
+"Image load failed" = "فشل تحميل الصورة";
+"Please login first" = "يرجى تسجيل الدخول أولاً";
+
+/* Alerts common */
+"Confirm" = "تأكيد";
+"Cancel" = "إلغاء";
+"Error_Title" = "خطأ";
+"Success_Title" = "نجاح";
+"Success" = "تم بنجاح";
+"StatusSaveFailed" = "فشل الحفظ";
+
+/* AddUser nav/title + result */
+"UserAdded" = "تم إنشاء المستخدم بنجاح";
+
+/* Section titles & fields */
+"InfoSectionTitle" = "المعلومات الأساسية";
+"UsernamePlaceholder" = "الاسم";
+"EmailPlaceholder" = "البريد الإلكتروني";
+"PhonePlaceholder" = "الهاتف";
+"PasswordPlaceholder" = "كلمة المرور";
+
+/* Permissions */
+"Permissions_Title" = "الصلاحيات";
+"Perm_PostAds" = "نشر الإعلانات";
+"Perm_PostAds_Desc" = "إنشاء وإدارة الإعلانات العامة.";
+"Perm_SellNew" = "بيع جديد";
+"Perm_SellNew_Desc" = "إضافة وبيع المنتجات الجديدة";
+"Perm_SellUsed" = "بيع مستعمل";
+"Perm_SellUsed_Desc" = "إنشاء وإدارة إعلانات المنتجات المستعملة.";
+"Perm_Adoption" = "التبنّي";
+"Perm_Adoption_Desc" = "إنشاء وإدارة منشورات التبنّي.";
+"Perm_Moderation" = "الإشراف";
+"Perm_Moderation_Desc" = "مراجعة البلاغات والمحتوى";
+"Perm_ManageServices" = "إدارة الخدمات";
+"Perm_ManageServices_Desc" = "إنشاء وإدارة عروض الخدمات والأطباء البيطريين.";
+"Perm_Production" = "الإنتاج";
+"Perm_Production_Desc" = "الوصول إلى أدوات التشغيل الخاصة بالإنتاج.";
+"Perm_AdminAll" = "مدير: صلاحيات كاملة";
+
+/* AdminAll confirmation */
+"Confirm_AdminAll_Title" = "تفعيل صلاحيات المدير الكاملة؟";
+"Confirm_AdminAll_Msg" = "سيحصل المستخدم على جميع الصلاحيات. هل أنت متأكد؟";
+
+/* Misc used elsewhere */
+"pp_me_guest" = "ضيف";
+"EditName" = "تعديل الاسم";
+"EnterYourName" = "أدخل اسمك";
+
+/* Quick actions & stats (dashboard) */
+"pp_q_new_ad" = "إعلان جديد";
+"pp_stats_ads" = "إعلانات";
+
+
+// Quick actions
+"pp_q_orders"            = "الطلبات";
+"SetStatusUnBlocked"="إلغاء الحظر";
+
+
+/* Role selection */
+"Role_Title" = "الدور";
+
+/* User */
+"Role_User" = "مستخدم";
+"Role_User_Desc" = "يمكنه التصفح واستخدام الميزات الأساسية";
+
+/* Owner */
+"Role_Owner" = "مالك";
+"Role_Owner_Desc" = "يمكنه البيع وإدارة عناصره";
+
+/* Vet */
+"Role_Vet" = "طبيب بيطري";
+"Role_Vet_Desc" = "يدير خدمات العيادة البيطرية";
+
+/* Moderator */
+"Role_Moderator" = "مشرف";
+"Role_Moderator_Desc" = "مراجعة المحتوى والإبلاغات";
+
+/* Admin */
+"Role_Admin" = "مسؤول";
+"Role_Admin_Desc" = "تحكم كامل في التطبيق";
+
+/* Store Manager */
+"Role_StoreManager" = "مدير المتجر";
+"Role_StoreManager_Desc" = "إدارة الإكسسوارات والمخزون";
+
+/* Food Manager */
+"Role_FoodManager" = "مدير الطعام";
+"Role_FoodManager_Desc" = "إدارة منتجات الطعام";
+
+/* Super Admin */
+"Role_SuperAdmin" = "مشرف عام";
+"Role_SuperAdmin_Desc" = "صلاحيات كاملة بما في ذلك إدارة المسؤولين";
+"Update" = "تحديث";
+
+// Arabic
+
+
+// Arabic
+"ItemType"       = "نوع العنصر";
+"Accessory"      = "إكسسوار";
+"Food"           = "طعام";
+"AddAccessory"   = "إضافة إكسسوار";
+"EditAccessory"  = "تعديل الإكسسوار";
+"EditFood"       = "تعديل الطعام";
+
+
+/* قائمة البنرات: عناوين وإجراءات ورسائل */
+
+
+
+/* حالة فارغة */
+
+/* شارات/وسوم اختيارية */
+
+/* عام */
+"Common_Error"                    = "خطأ";
+"Common_Success"                  = "تم بنجاح";
+"Common_Cancel"                   = "إلغاء";
+"Common_Delete"                   = "حذف";
+"Common_OK"                       = "حسنًا";
+
+
+/* ar.lproj/Localizable.strings */
+
+/* Titles / Nav */
+"Manage Banners"                          = "إدارة البنرات";
+
+/* Search / Filter */
+"Search banners, IDs, child titles…"      = "ابحث في البنرات، المعرّفات، وعناوين العناصر الفرعية…";
+"Filter coming soon"                      = "ميزة التصفية قيد الإضافة قريبًا.";
+
+/* Row labels */
+"Visible"                                 = "ظاهر";
+"Hidden"                                  = "مخفي";
+"child"                                   = "عنصر فرعي";
+
+/* Swipe actions */
+"Update"                                  = "تعديل";
+"Offer"                                   = "عرض";
+"Delete"                                  = "حذف";
+
+/* Alerts / HUD */
+"Error"                                   = "خطأ";
+"Updated"                                 = "تم التحديث";
+"Visibility changed"                      = "تم تغيير حالة الظهور";
+"Confirm Delete"                          = "تأكيد الحذف";
+"Delete this banner view and its children?"= "هل تريد حذف مجموعة البنرات هذه وجميع العناصر الفرعية؟";
+"Cancel"                                  = "إلغاء";
+"Deleting"                                = "جارٍ الحذف";
+"Deleted"                                 = "تم الحذف";
+"Banner removed"                          = "تم حذف البنر";
+
+/* Holders */
+"Main"                                    = "الرئيسية";
+"Accessories"                             = "الإكسسوارات";
+"Ads"                                     = "الإعلانات";
+"Food"                                    = "الطعام";
+"Vets"                                    = "الأطباء البيطريون";
+
+
+
+"Edit Banner" = "تعديل البنر";
+"Edit Banner Group" = "تعديل مجموعة البنرات";
+"Add Banner Group" = "إضافة مجموعة لافتات";
+"Group Settings" = "إعدادات المجموعة";
+"Banner Group ID" = "معرّف مجموعة البنرات";
+"Auto if empty" = "تلقائي إذا كان فارغًا";
+"Visible" = "مرئي";
+"Holder" = "شاشة العرض";
+"Main" = "الرئيسية";
+"Accessories" = "الإكسسوارات";
+"Ads" = "الإعلانات";
+"Food" = "الأغذية";
+"Vets" = "العيادات البيطرية";
+"Position" = "الموضع";
+"Top" = "أعلى";
+"Center" = "الوسط";
+"Bottom" = "أسفل";
+"Transition" = "الانتقال";
+"Scroll" = "تمرير";
+"Fade" = "تلاشي";
+"Replace" = "استبدال";
+"Banner Content" = "محتوى البنر";
+"Title (EN)" = "العنوان (إنجليزي)";
+"Enter English title" = "أدخل العنوان باللغة الإنجليزية";
+"Title (AR)" = "العنوان (عربي)";
+"Enter Arabic title" = "أدخل العنوان باللغة العربية";
+"Description (EN)" = "الوصف (إنجليزي)";
+"Enter English description" = "أدخل الوصف باللغة الإنجليزية";
+"Description (AR)" = "الوصف (عربي)";
+"Enter Arabic description" = "أدخل الوصف باللغة العربية";
+"Post Date" = "تاريخ النشر";
+"Text Color" = "لون النص";
+"White" = "أبيض";
+"Black" = "أسود";
+"On Tap Action" = "إجراء عند النقر";
+"View Accessory" = "عرض الإكسسوار";
+"View Ad" = "عرض الإعلان";
+"Open URL" = "فتح رابط";
+"Call" = "اتصال";
+"WhatsApp" = "واتساب";
+"On Tap Value" = "قيمة الإجراء";
+"ID / URL / Phone" = "معرّف / رابط / هاتف";
+"Validity (optional)" = "المدة (اختياري)";
+"Days" = "الأيام";
+"Hours" = "الساعات";
+"Minutes" = "الدقائق";
+"Expire At" = "ينتهي في";
+"Images" = "الصور";
+"Background" = "الخلفية";
+"Sample" = "العينة";
+"Badge" = "الشارة";
+"Error" = "خطأ";
+"Title required" = "العنوان مطلوب";
+"Uploading" = "جاري الرفع";
+"PleaseWait" = "يرجى الانتظار";
+"Saved" = "تم الحفظ";
+"Banner saved" = "تم حفظ البنر";
+
+
+"filter.normal" = "عادي";
+"filter.mono" = "أحادي";
+"filter.noir" = "داكن";
+"filter.fade" = "باهت";
+"filter.chrome" = "معدني";
+"filter.instant" = "فوري";
+"filter.process" = "معالج";
+"filter.transfer" = "منقول";
+
+
+// Arabic
+"editor.rotate" = "تدوير 90°";
+"editor.flip"   = "عكس";
+"editor.crop"   = "قص";
+"editor.processing" = "جارٍ المعالجة...";
+"editor.done" = "تم";
+"editor.reset" = "إعادة ضبط";
+
+"BecomeProviderTitle" = "انضم كمزود";
+"BecomeProviderEyebrow" = "الانضمام كشريك";
+"BecomeProviderHeadline" = "افتح مساحة الشريك الخاصة بك.";
+"BecomeProviderSubtitle" = "اختر مسار الشريك المناسب لنشاطك، سواء كنت طبيباً بيطرياً أو صيدلية أو تبيع منتجات السوق أو تدير أسطول توصيل أو شريك بيور بيتس، ثم حدّد الباقة المناسبة وأرسل طلبك للمراجعة.";
+"ProviderTypeSectionTitle" = "نوع الشريك";
+"ProviderTypeDeliveryTitle" = "مقدم اشتراكات التوصيل";
+"ProviderTypeDeliverySubtitle" = "إدارة اشتراكات التوصيل المتكررة.";
+"ProviderTypeVetTitle" = "طبيب بيطري";
+"ProviderTypeVetSubtitle" = "تقديم الخدمات والرعاية البيطرية المتخصصة.";
+"ProviderTypePharmacyTitle" = "صيدلية";
+"ProviderTypePharmacySubtitle" = "بيع الأدوية والمستلزمات الطبية للحيوانات الأليفة.";
+"ProviderTypeServiceTitle" = "مزود خدمات الحيوانات";
+"ProviderTypeServiceSubtitle" = "تزيين، تدريب، تنظيف، إيواء، رعاية الحيوانات.";
+"ProviderTypeSelect" = "اختر النوع";
+"ProviderTypeSelectSubtitle" = "اختر نوع مقدم الخدمة للتقدم";
+"ProviderPlanSectionTitle" = "الباقة";
+"ProviderPlanRecommended" = "موصى بها";
+"ProviderPlanRequired" = "اختر باقة قبل إرسال الطلب.";
+"ProviderTypeRequired" = "اختر نوع مقدم الخدمة قبل إرسال الطلب.";
+"ProviderPlansLoading" = "جارٍ تحميل الباقات المتاحة…";
+"ProviderPlansLoadFailed" = "تعذر تحميل الباقات الآن.";
+"ProviderPlansSessionFailed" = "تعذر التحقق من جلستك. حاول مرة أخرى.";
+"ProviderPlansEmpty" = "لا توجد باقات متاحة لهذا النوع حالياً.";
+"ProviderPlansReady" = "تم اختيار الباقة ويمكنك المتابعة.";
+"ProviderPlansSelectPrompt" = "اختر باقة واحدة للمتابعة.";
+"ProviderDuplicateApplicationTitle" = "يوجد طلب سابق";
+"ProviderDuplicateApplicationMessageFormat" = "لديك بالفعل طلب بحالة %@ لهذا النوع وهذه الباقة. اختر مساراً متاحاً آخر أو انتظر اكتمال المراجعة الحالية.";
+"ProviderPlanIntervalMonthly" = "شهري";
+"ProviderPlanIntervalYearly" = "سنوي";
+"ProviderPlanIntervalOneTime" = "مرة واحدة";
+"ProviderPlanPercentageBasisItem" = "لكل عنصر";
+"ProviderPlanPercentageBasisProduct" = "لكل منتج";
+"ProviderPlanPercentageBasisService" = "لكل خدمة";
+"ProviderPlanPercentageBasisMedicine" = "لكل دواء";
+"ProviderPlanPercentageBasisSubscription" = "لكل اشتراك";
+"ProviderApplicationDetailsTitle" = "تفاصيل الطلب";
+"ProviderApplicationDetailsSubtitle" = "أضف البيانات التي يحتاجها فريق المراجعة لاعتماد هذا المسار.";
+"ProviderFullNameField" = "الاسم الكامل";
+"ProviderFullNamePlaceholder" = "أدخل اسمك الكامل";
+"ProviderFullNameRequired" = "الاسم الكامل مطلوب.";
+"ProviderPhoneField" = "رقم الجوال";
+"ProviderPhonePlaceholder" = "أدخل رقم الجوال";
+"ProviderPhoneRequired" = "رقم الهاتف مطلوب.";
+"ProviderCountryCodeField" = "رمز الدولة";
+"ProviderCountryPickerTitle" = "رمز الدولة";
+"ProviderCountryPickerSubtitle" = "اختر رمز الدولة من قائمة دول المنصة.";
+"ProviderCountriesLoading" = "جارٍ تحميل قائمة الدول…";
+"ProviderCountriesUnavailable" = "قائمة الدول غير متاحة حالياً. يرجى المحاولة مرة أخرى.";
+"ProviderCountryQatar" = "قطر";
+"ProviderCountrySaudiArabia" = "السعودية";
+"ProviderCountryUAE" = "الإمارات";
+"ProviderCountryKuwait" = "الكويت";
+"ProviderCountryBahrain" = "البحرين";
+"ProviderCountryOman" = "عُمان";
+"ProviderEmailField" = "البريد الإلكتروني";
+"ProviderEmailPlaceholder" = "أدخل بريدك الإلكتروني";
+"ProviderBusinessNameField" = "اسم النشاط";
+"ProviderBusinessNamePlaceholder" = "أدخل اسم النشاط";
+"ProviderBusinessNameRequired" = "اسم النشاط مطلوب للشركاء.";
+"ProviderCompanyNameField" = "اسم الشركة";
+"ProviderCompanyNamePlaceholder" = "أدخل اسم الشركة";
+"ProviderCompanyNameRequired" = "اسم الشركة مطلوب.";
+"ProviderLegalNameField" = "الاسم القانوني";
+"ProviderLegalNamePlaceholder" = "أدخل الاسم القانوني للشركة";
+"ProviderLegalNameRequired" = "الاسم القانوني للشركة مطلوب.";
+"ProviderAddressField" = "العنوان";
+"ProviderAddressPlaceholder" = "أدخل عنوان الشركة";
+"ProviderAddressRequired" = "عنوان الشركة مطلوب.";
+"ProviderLicenseNumberField" = "رقم الترخيص";
+"ProviderLicenseNumberPlaceholder" = "أدخل رقم الترخيص إن وجد";
+"ProviderCommercialRegistrationField" = "السجل التجاري";
+"ProviderCommercialRegistrationPlaceholder" = "أدخل رقم السجل إن وجد";
+"ProviderCityField" = "المدينة";
+"ProviderCityPlaceholder" = "اختر المدينة";
+"ProviderCityRequired" = "المدينة مطلوبة.";
+"ProviderCityPickerTitle" = "اختر المدينة";
+"ProviderCityPickerSubtitle" = "اختر مدينة أو بلدية قطرية واحدة لهذا الطلب.";
+"ProviderCityPickerRowSubtitle" = "مدينة تغطية داخل قطر";
+"ProviderCoverageAreasField" = "مناطق التغطية";
+"ProviderCoverageAreasPlaceholder" = "اختر مناطق التغطية";
+"ProviderCoveragePickerTitle" = "مناطق التغطية";
+"ProviderCoveragePickerSubtitleFormat" = "اختر المناطق التي تغطيها في %@.";
+"ProviderCoverageSelectCityFirst" = "اختر المدينة أولاً لعرض مناطق التغطية المناسبة.";
+"ProviderPickerClear" = "مسح";
+"ProviderNotesField" = "ملاحظات";
+"ProviderQatarCityDoha" = "الدوحة";
+"ProviderQatarCityAlRayyan" = "الريان";
+"ProviderQatarCityAlWakrah" = "الوكرة";
+"ProviderQatarCityAlKhor" = "الخور";
+"ProviderQatarCityAlShamal" = "الشمال";
+"ProviderQatarCityUmmSalal" = "أم صلال";
+"ProviderQatarCityAlDaayen" = "الضعاين";
+"ProviderQatarCityAlShahaniya" = "الشحانية";
+"ProviderQatarAreaDohaAll" = "كل الدوحة";
+"ProviderQatarAreaMsheireb" = "مشيرب";
+"ProviderQatarAreaWestBay" = "الخليج الغربي";
+"ProviderQatarAreaAlDafna" = "الدفنة";
+"ProviderQatarAreaAlSadd" = "السد";
+"ProviderQatarAreaBinMahmoud" = "بن محمود";
+"ProviderQatarAreaNajma" = "نجمة";
+"ProviderQatarAreaAlMansoura" = "المنصورة";
+"ProviderQatarAreaOldAirport" = "المطار القديم";
+"ProviderQatarAreaThePearl" = "اللؤلؤة";
+"ProviderQatarAreaAlRayyanAll" = "كل الريان";
+"ProviderQatarAreaEducationCity" = "المدينة التعليمية";
+"ProviderQatarAreaAlWaab" = "الوعب";
+"ProviderQatarAreaMuaither" = "معيذر";
+"ProviderQatarAreaAlGharrafa" = "الغرافة";
+"ProviderQatarAreaAlLuqta" = "اللقطة";
+"ProviderQatarAreaAlAziziya" = "العزيزية";
+"ProviderQatarAreaAinKhaled" = "عين خالد";
+"ProviderQatarAreaAbuSidra" = "أبو سدرة";
+"ProviderQatarAreaRawdatEgdaim" = "روضة القديم";
+"ProviderQatarAreaAlWakrahAll" = "كل الوكرة";
+"ProviderQatarAreaAlWakrahCity" = "مدينة الوكرة";
+"ProviderQatarAreaAlWukair" = "الوكير";
+"ProviderQatarAreaMesaieed" = "مسيعيد";
+"ProviderQatarAreaEzdanOasis" = "إزدان أواسيس";
+"ProviderQatarAreaAlMashaf" = "المشاف";
+"ProviderQatarAreaBarwaVillage" = "قرية بروة";
+"ProviderQatarAreaRasAbuFontas" = "رأس أبو فنطاس";
+"ProviderQatarAreaAlKhorAll" = "كل الخور";
+"ProviderQatarAreaAlKhorCity" = "مدينة الخور";
+"ProviderQatarAreaAlThakhira" = "الذخيرة";
+"ProviderQatarAreaRasLaffan" = "رأس لفان";
+"ProviderQatarAreaAlGhuwairiya" = "الغويرية";
+"ProviderQatarAreaUmmBirka" = "أم بركة";
+"ProviderQatarAreaAlShamalAll" = "كل الشمال";
+"ProviderQatarAreaMadinatAlShamal" = "مدينة الشمال";
+"ProviderQatarAreaArRuays" = "الرويس";
+"ProviderQatarAreaAbuDhalouf" = "أبو ظلوف";
+"ProviderQatarAreaFuwayrit" = "فويرط";
+"ProviderQatarAreaAlZubarah" = "الزبارة";
+"ProviderQatarAreaUmmSalalAll" = "كل أم صلال";
+"ProviderQatarAreaUmmSalalAli" = "أم صلال علي";
+"ProviderQatarAreaUmmSalalMohammed" = "أم صلال محمد";
+"ProviderQatarAreaUmmAlAmad" = "أم العمد";
+"ProviderQatarAreaIzghawa" = "إزغوى";
+"ProviderQatarAreaAlKharaitiyat" = "الخريطيات";
+"ProviderQatarAreaAlDaayenAll" = "كل الضعاين";
+"ProviderQatarAreaLusail" = "لوسيل";
+"ProviderQatarAreaUmmQarn" = "أم قرن";
+"ProviderQatarAreaRawdatAlHamama" = "روضة الحمامة";
+"ProviderQatarAreaAlEbb" = "العِب";
+"ProviderQatarAreaLeabaib" = "لعبيب";
+"ProviderQatarAreaWadiAlBanat" = "وادي البنات";
+"ProviderQatarAreaJeryanJenaihat" = "جريان جنيحات";
+"ProviderQatarAreaAlShahaniyaAll" = "كل الشحانية";
+"ProviderQatarAreaAlShahaniyaCity" = "مدينة الشحانية";
+"ProviderQatarAreaDukhan" = "دخان";
+"ProviderQatarAreaUmmBab" = "أم باب";
+"ProviderQatarAreaRawdatRashed" = "روضة راشد";
+"ProviderQatarAreaAlNasraniya" = "النصرانية";
+"ProviderQatarAreaAlJemailiya" = "الجميلية";
+"ProviderSubmitButton" = "إرسال الطلب";
+"ProviderContinueAnotherTime" = "المتابعة في وقت لاحق";
+"ProviderSubmittingTitle" = "جارٍ إرسال الطلب";
+"ProviderSubmittingSubtitle" = "نرسل الآن طلبك كشريك للمراجعة.";
+"ProviderSubmitFailed" = "تعذر إرسال الطلب.";
+"ProviderSubmitSessionFailed" = "يرجى تسجيل الدخول مرة أخرى قبل إرسال الطلب.";
+"ProviderSubmitPermissionFailed" = "لا يمكن لهذا الحساب إرسال هذا الطلب حالياً.";
+"ProviderSubmitBlocked" = "لا يمكن لهذا الحساب إرسال طلبات مزودين. يرجى التواصل مع الدعم.";
+"ProviderSubmitDuplicate" = "يوجد طلب مزود سابق لهذا النوع.";
+"ProviderApplicationSubmitted" = "تم إرسال طلب الشريك بنجاح.";
+"ProviderStatusNavTitle" = "حالة الشريك";
+"ProviderStatusEyebrow" = "مراجعة الشريك";
+"ProviderStatusPending" = "قيد الانتظار";
+"ProviderStatusUnderReview" = "قيد المراجعة";
+"ProviderStatusApproved" = "تمت الموافقة";
+"ProviderStatusRejected" = "يحتاج تحديث";
+"ProviderStatusArchived" = "مؤرشف";
+"ProviderStatusActive" = "نشط";
+
+"ProviderStatusNotApplied" = "لم يتم التقديم";
+"ProviderStateLoadingTitle" = "جارٍ تجهيز مساحتك";
+"ProviderStateLoadingSubtitle" = "نراجع أهلية حسابك وحالة طلب الشريك.";
+"ProviderStateErrorTitle" = "تعذر تحميل حالة الشريك";
+"ProviderStateErrorSubtitle" = "يرجى المحاولة مرة أخرى بعد قليل.";
+"ProviderStateRetryHint" = "حسابك ما زال مسجلاً. يمكنك إعادة المحاولة بأمان.";
+"ProviderStateBlockedTitle" = "التقديم غير متاح لهذا الحساب";
+"ProviderStateBlockedSubtitle" = "هذا الحساب مقيّد حالياً من التقديم كشريك.";
+"ProviderStateBlockedFootnote" = "تواصل مع دعم بيور بيتس إذا كنت تعتقد أن ذلك بالخطأ.";
+"ProviderStateReadyTitle" = "قدّم طلبك كمزود";
+"ProviderStateReadySubtitle" = "اختر نوع الشريك، حدّد الباقة، ثم أرسل طلبك للمراجعة.";
+"ProviderStateEligibleFootnote" = "يبقى الطلب قيد الانتظار إلى أن تتم الموافقة عليه من Pure Pets Console.";
+"ProviderStateReviewTitle" = "طلبك قيد المراجعة";
+"ProviderStateReviewSubtitle" = "فريق Pure Pets يراجع الآن طلب الشريك الخاص بك.";
+"ProviderStateNoActionFootnote" = "سنقوم بإشعارك فور صدور القرار.";
+"ProviderStateRejectedTitle" = "طلبك يحتاج إلى تحديث";
+"ProviderStateRejectedSubtitle" = "راجع الملاحظات أدناه ثم أرسل طلباً جديداً عندما تصبح جاهزاً.";
+"ProviderStateRejectedFootnote" = "يمكنك التقديم مرة أخرى بعد تحديث بياناتك.";
+"ProviderStateCompleteFootnote" = "لا يلزم أي إجراء إضافي حالياً.";
+"ProviderHeroLoadingBadge" = "جارٍ التحقق من الحساب";
+"ProviderHeroErrorBadge" = "مشكلة في الاتصال";
+"ProviderHeroBlockedBadge" = "غير متاح";
+"ProviderHeroReviewBadge" = "قيد المراجعة";
+"ProviderHeroRejectedBadge" = "يحتاج إلى تعديل";
+"ProviderHeroReadyBadge" = "جاهز للتقديم";
+"ProviderApplyGenericButton" = "ابدأ طلب الشريك";
+"ProviderApplySingleTypeButtonFormat" = "قدّم كـ %@";
+"ProviderRefreshButton" = "تحديث";
+"ProviderRetryButton" = "إعادة المحاولة";
+"ProviderIdentityCardTitle" = "الحساب";
+"ProviderIdentitySignedInBadge" = "تم تسجيل الدخول";
+"ProviderIdentitySignedInTitle" = "حساب Pure Pets Pro المسجل";
+"ProviderIdentitySignedInSubtitle" = "سنستخدم هذه البيانات لطلب الشريك وتحديثات المراجعة.";
+"ProviderIdentityLoading" = "جارٍ تحميل بيانات الحساب…";
+"ProviderIdentityName" = "الاسم";
+"ProviderIdentityEmail" = "البريد الإلكتروني";
+"ProviderIdentityPhone" = "الهاتف";
+"ProviderApplicationsSectionTitle" = "الطلبات";
+"ProviderSubscriptionCardEyebrow" = "الاشتراك";
+"ProviderSubscriptionCardTitle" = "الباقة والطلبات";
+"ProviderSubscriptionCardReadyTitle" = "اختر باقة المزود";
+"ProviderSubscriptionCardReviewTitle" = "طلب قيد المراجعة";
+"ProviderSubscriptionCardBlockedTitle" = "الاشتراك غير متاح";
+"ProviderSubscriptionCardStatusCaption" = "الحالة";
+"ProviderSubscriptionCardRenewCaption" = "التجديد";
+"ProviderSubscriptionCardPendingCaption" = "الطلبات";
+"ProviderSubscriptionCardLoadingSubtitle" = "جارٍ فحص باقة المزود، حالة التجديد، ومسارات الطلبات.";
+"ProviderSubscriptionCardActiveSubtitle" = "أدر طلبات المزود وراجع تغييرات الباقة المتاحة من مركز الحالة.";
+"ProviderSubscriptionCardReadySubtitle" = "ابدأ طلب مزود مؤهل، اختر الباقة، وتابع الموافقة من مكان واحد.";
+"ProviderSubscriptionCardReviewSubtitle" = "وجدنا طلباً بانتظار المراجعة. يمكنك أيضاً فحص مسارات مزود أخرى متاحة.";
+"ProviderSubscriptionCardBlockedSubtitle" = "لا يمكن لهذا الحساب إدارة اشتراكات المزود حالياً.";
+"ProviderSubscriptionCardCompleteSubtitle" = "إعداد المزود المتاح لهذا الحساب نشط بالفعل. افتح المركز لمراجعة التفاصيل.";
+"ProviderSubscriptionCardChecking" = "جارٍ الفحص";
+"ProviderSubscriptionCardDash" = "—";
+"ProviderSubscriptionCardManagedByConsole" = "تدار من النظام";
+"ProviderSubscriptionCardAfterApproval" = "بعد الموافقة";
+"ProviderSubscriptionCardActivePlanFallback" = "باقة مزود نشطة";
+"ProviderSubscriptionCardNoPending" = "لا يوجد";
+"ProviderSubscriptionCardPendingCountFormat" = "%lu قيد الانتظار";
+"ProviderSubscriptionCardEligibleCountFormat" = "%lu متاح";
+"ProviderStartCardEyebrow" = "الخطوة التالية";
+"ProviderStartCardAvailableTypes" = "المسارات المتاحة";
+"ProviderStartCardReadyTitle" = "ابدأ طلب الشريك";
+"ProviderStartCardReadySubtitle" = "اختر المسار المناسب لعملك، حدّد الباقة المناسبة، ثم أرسل طلباً واحداً مرتباً للمراجعة.";
+"ProviderStartCardReviewTitle" = "تم استلام الطلب";
+"ProviderStartCardReviewSubtitle" = "حسابك المسجّل دخوله قيد المراجعة الآن. سنفتح مساحة الشريك فور اكتمال المواققة.";
+"ProviderStartCardReviewMultiSubtitle" = "يوجد طلب قيد المراجعة بالفعل. يمكنك اختيار مسار شريك متاح آخر وإرساله كطلب منفصل.";
+"ProviderStartCardRejectedTitle" = "حدّث وأعد الإرسال";
+"ProviderStartCardRejectedSubtitle" = "قم بتحسين بياناتك أو باقتك، ثم أرسل طلب شريك جديداً عندما تكون جاهزاً.";
+"ProviderStartCardBlockedTitle" = "الطلبات غير متاحة حالياً";
+"ProviderStartCardBlockedSubtitle" = "لا يمكن لهذا الحساب المسجّل دخوله بدء طلب شريك الآن.";
+"ProviderStartCardCompleteTitle" = "إعداد الشريك مكتمل";
+"ProviderStartCardCompleteSubtitle" = "هذا الحساب لا يحتاج إلى أي خطوات إضافية للانضمام كشريك حالياً.";
+"ProviderCardPlanLabel" = "الباقة";
+"ProviderCardNotesLabel" = "ملاحظات المراجعة";
+"ProviderActivatedToast" = "تم تفعيل صلاحية الشريك.";
+
+"StatusAccessDenied" = "تم رفض الدخول";
+"StatusNoPartnerAccess" = "لا تملك صلاحيات الشريك مفعلة في لوحة التحكم.\n\nيرجى التواصل مع دعم بيور بيتس للمساعدة.";
+
+
+
+/* No comment provided by engineer. */
+"CLAdjustmentTool_DefaultTitle" = "توضيح";
+
+/* No comment provided by engineer. */
+"CLBloomEffect_DefaultTitle" = "تفتيح";
+
+/* No comment provided by engineer. */
+"CLBlurEffect_DefaultTitle" = "ضبابي و تركيز";
+
+/* No comment provided by engineer. */
+"CLBlurEffect_MenuItemBand" = "شريط";
+
+/* No comment provided by engineer. */
+"CLBlurEffect_MenuItemCircle" = "دائرة";
+
+/* No comment provided by engineer. */
+"CLBlurEffect_MenuItemNormal" = "طبيعي";
+
+/* No comment provided by engineer. */
+"CLClippingTool_DefaultTitle" = "قص";
+
+/* No comment provided by engineer. */
+"CLClippingTool_ItemMenuCustom" = "مخصص";
+
+/* No comment provided by engineer. */
+"CLDefaultChromeFilter_DefaultTitle" = "كروم";
+
+/* No comment provided by engineer. */
+"CLDefaultCurveFilter_DefaultTitle" = "منحني";
+
+/* No comment provided by engineer. */
+"CLDefaultEmptyFilter_DefaultTitle" = "لا شئ";
+
+/* No comment provided by engineer. */
+"CLDefaultFadeFilter_DefaultTitle" = "باهت";
+
+/* No comment provided by engineer. */
+"CLDefaultInstantFilter_DefaultTitle" = "فوري";
+
+/* No comment provided by engineer. */
+"CLDefaultInvertFilter_DefaultTitle" = "عكس";
+
+/* No comment provided by engineer. */
+"CLDefaultLinearFilter_DefaultTitle" = "خطي";
+
+/* No comment provided by engineer. */
+"CLDefaultMonoFilter_DefaultTitle" = "احادي";
+
+/* No comment provided by engineer. */
+"CLDefaultNoirFilter_DefaultTitle" = "Noir";
+
+/* No comment provided by engineer. */
+"CLDefaultProcessFilter_DefaultTitle" = "عملية";
+
+/* No comment provided by engineer. */
+"CLDefaultSepiaFilter_DefaultTitle" = "بني غامق";
+
+/* No comment provided by engineer. */
+"CLDefaultTonalFilter_DefaultTitle" = "Tonal";
+
+/* No comment provided by engineer. */
+"CLDefaultTransferFilter_DefaultTitle" = "تحويل";
+
+/* No comment provided by engineer. */
+"CLDefaultVignetteFilter_DefaultTitle" = "مصغر";
+
+/* No comment provided by engineer. */
+"CLDrawTool_DefaultTitle" = "Draw";
+"Draw" = "رسم";
+/* No comment provided by engineer. */
+"CLEffectBase_DefaultTitle" = "لا شئ";
+
+/* No comment provided by engineer. */
+"CLEffectTool_DefaultTitle" = "تأثير";
+
+/* No comment provided by engineer. */
+"CLFilterTool_DefaultTitle" = "فلتر";
+
+/* No comment provided by engineer. */
+"CLGloomEffect_DefaultTitle" = "ظلام";
+
+/* No comment provided by engineer. */
+"CLHighlightSadowEffect_DefaultTitle" = "توضيح";
+
+/* No comment provided by engineer. */
+"CLHueEffect_DefaultTitle" = "تعدد اللون";
+
+/* No comment provided by engineer. */
+"CLImageEditor_BackBtnTitle" = "رجوع";
+
+/* No comment provided by engineer. */
+"CLImageEditor_DefaultTitle" = "تعديل";
+
+/* No comment provided by engineer. */
+"CLImageEditor_OKBtnTitle" = "موافق";
+
+/* No comment provided by engineer. */
+"CLPixellateEffect_DefaultTitle" = "تقطيع";
+
+/* No comment provided by engineer. */
+"CLPosterizeEffect_DefaultTitle" = "Posterize";
+
+/* No comment provided by engineer. */
+"CLResizeTool_DefaultTitle" = "تغير حجم";
+
+/* No comment provided by engineer. */
+"CLResizeTool_InfoPanelTextNewSize" = "حجم الصورة الجديدة:";
+
+/* No comment provided by engineer. */
+"CLResizeTool_InfoPanelTextOriginalSize" = "حجم الصورة الافتراضية:";
+
+/* No comment provided by engineer. */
+"CLRotateTool_DefaultTitle" = "تدوير";
+
+/* No comment provided by engineer. */
+"CLRotateTool_MenuItemFlipTitle1" = " ";
+
+/* No comment provided by engineer. */
+"CLRotateTool_MenuItemFlipTitle2" = " ";
+
+/* No comment provided by engineer. */
+"CLRotateTool_MenuItemRotateTitle" = " ";
+
+/* No comment provided by engineer. */
+"CLSplashTool_DefaultTitle" = "Splash";
+
+/* No comment provided by engineer. */
+"CLSpotEffect_DefaultTitle" = "مركز";
+
+/* No comment provided by engineer. */
+"CLStickerTool_DefaultTitle" = "ملصقات";
+
+/* No comment provided by engineer. */
+"CLEmoticonTool_DefaultTitle" = "ابتسامات";
+
+/* No comment provided by engineer. */
+"CLTextTool_DefaultTitle" = "نص";
+
+/* No comment provided by engineer. */
+"CLTextTool_EmptyText" = "نص";
+
+/* No comment provided by engineer. */
+"CLTextTool_MenuItemAlignCenter" = " ";
+
+/* No comment provided by engineer. */
+"CLTextTool_MenuItemAlignLeft" = " ";
+
+/* No comment provided by engineer. */
+"CLTextTool_MenuItemAlignRight" = " ";
+
+/* No comment provided by engineer. */
+"CLTextTool_MenuItemColor" = "لون";
+
+/* No comment provided by engineer. */
+"CLTextTool_MenuItemFont" = "خط";
+
+/* No comment provided by engineer. */
+"CLTextTool_MenuItemNew" = "جديد";
+
+/* No comment provided by engineer. */
+"CLTextTool_MenuItemText" = "نص";
+
+/* No comment provided by engineer. */
+"CLToneCurveTool_DefaultTitle" = "منحني";
+
+/* Arabic Translation By : @iMokhles . */
+"CLImageEditor_DoneBtnTitle" = "تم";
+
+
+"Photo Library Access Denied" = "تم رفض الوصول لمكتبة الصور";
+"Please enable photo library access in Settings to select photos." = "يرجى تفعيل الوصول لمكتبة الصور من الإعدادات لاختيار الصور.";
+"Settings" = "الإعدادات";
+"Cancel" = "إلغاء";
+
+"screen" = "شاشة العرض";
+
+"Edit Banner Group" = "تعديل مجموعة البنرات";
+"Delete" = "حذف";
+"Confirm Delete" = "تأكيد الحذف";
+"Delete this entire banner group?" = "هل تريد حذف مجموعة البانر بالكامل؟";
+"Cancel" = "إلغاء";
+"Deleting" = "جاري الحذف…";
+"Error" = "خطأ";
+"Deleted" = "تم الحذف";
+"Group removed" = "تمت إزالة المجموعة";
+"Toggle Visibility" = "تبديل حالة الظهور";
+"Updated" = "تم التحديث";
+"Group hidden" = "المجموعة مخفية";
+"Group visible" = "المجموعة ظاهرة";
+"Updating" = "جاري الحذف…";
+"GrouphiddenActionHide" = "إخفاء مجموعة البنرات";
+"GrouphiddenActionShow" = "إظهار مجموعة البنرات";
+"Add banner to group" = "إضافة بنر جديد للمجموعة";
+"IncreaseQty" = "+1 كمية";
+"DecreaseQty" = "-1 كمية";
+"StockUpdated" = "تم تحديث كمية المخزون";
+"Accessory removed" = "تمت إزالة الإكسسوار";
+"Perm_ManageUsers" = "إدارة المستخدمين";
+"Perm_ManageUsers_Desc" = "السماح بإضافة وحظر وإدارة المستخدمين.";
+"Perm_ManageNotificatiuons" = "إدارة الإشعارات";
+"Perm_ManageNotificatiuons_Desc" = "السماح بإرسال الإشعارات وإدارة المواضيع.";
+
+/* ===================== Payment Management ===================== */
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ===================== قسم الأطباء البيطريين ===================== */
+"Vet_Section_Title"              = "الأطباء البيطريون";
+"Vet_Manage_Title"               = "إدارة الأطباء البيطريين";
+"Vet_Manage_Subtitle"            = "عرض وتعديل والتحكم بجميع الأطباء";
+"Vet_Add_Title"                  = "إضافة طبيب بيطري";
+"Vet_Add_Subtitle"               = "تسجيل طبيب بيطري جديد";
+"Vet_Edit_Title"                 = "تعديل طبيب بيطري";
+"Vet_Edit_Subtitle"              = "حدّث البيانات ووسائل التواصل ومعلومات التوفر.";
+"Vet_Detail_Title"               = "تفاصيل الطبيب البيطري";
+"Vet_Search_Placeholder"         = "بحث عن أطباء بيطريين...";
+"Vet_Empty_List"                 = "لا يوجد أطباء بيطريون.\nاضغط + لإضافة واحد.";
+
+/* ── الفلاتر ── */
+"Vet_Filter_All"                 = "الكل";
+"Vet_Filter_Active"              = "نشط";
+"Vet_Filter_Disabled"            = "معطّل";
+
+/* ── الحقول ── */
+"Vet_Field_Name"                 = "الاسم";
+"Vet_Field_Type"                 = "النوع";
+"Vet_Field_Type_Hint"            = "اختر ما إذا كان هذا الملف لطبيب فردي أو لعيادة.";
+"Vet_Field_Phone"                = "الهاتف";
+"Vet_Field_Whatsapp"             = "واتساب";
+"Vet_Field_Description"          = "الوصف";
+"Vet_Field_Description_Hint"     = "اشرح التخصصات وطريقة الرعاية وما ينبغي أن يعرفه العملاء.";
+"Vet_Field_Cost"                 = "تكلفة الاستشارة";
+"Vet_Field_AvailableDate"        = "تاريخ التوفر";
+"Vet_Field_PetKindID"            = "معرّف نوع الحيوان";
+"Vet_Field_Status"               = "الحالة";
+"Vet_Field_CreatedAt"            = "تاريخ الإنشاء";
+"Vet_Section_Info"               = "أساسيات الملف";
+"Vet_Section_Info_Hint"          = "اسم الطبيب ونوع الملف.";
+"Vet_Section_Contact"            = "التواصل";
+"Vet_Section_Contact_Hint"       = "أضف أسرع طرق التواصل مع مقدم الخدمة.";
+"Vet_Section_Details"            = "التوفر والتسعير";
+"Vet_Section_Details_Hint"       = "رسوم الاستشارة والجدول ونوع الحيوان المدعوم.";
+"Pharmacy_Section_Title"         = "الصيدلية";
+"Pharmacy_Manage_Title"          = "إدارة الأدوية";
+"Pharmacy_Manage_Subtitle"       = "أنشئ وأدر أدوية الصيدلية الخاصة بك مع ملكية خاصة بالمزوّد فقط.";
+"Pharmacy_Empty_List"            = "لا توجد أدوية بعد.\nاضغط + لإضافة أول دواء.";
+"Pharmacy_Empty_Title"           = "لا توجد أدوية";
+"Pharmacy_Search_Placeholder"    = "البحث عن الأدوية...";
+"Pharmacy_Add_Title"             = "إضافة دواء";
+"Pharmacy_Edit_Title"            = "تعديل دواء";
+"Pharmacy_Field_Title"           = "اسم الدواء";
+"Pharmacy_Field_Description"     = "الوصف";
+"Pharmacy_Field_Category"        = "الفئة";
+"Pharmacy_Field_Price"           = "السعر";
+"Pharmacy_Field_Quantity"        = "الكمية المتوفرة";
+"Pharmacy_Field_AnimalTypes"     = "أنواع الحيوانات";
+"Pharmacy_Field_AnimalTypes_Hint" = "اختر كل أنواع الحيوانات المناسبة لهذا الدواء.";
+"Pharmacy_Field_Availability"    = "التوفر";
+"Pharmacy_Field_Published"       = "ظاهر للعملاء";
+"Pharmacy_Field_Description_Hint" = "قدّم معلومات مفصلة عن الاستخدام والسلامة.";
+"Pharmacy_Category_Select"       = "اختر الفئة";
+"Pharmacy_Category_Other_Name"   = "أدخل اسم الفئة";
+"Pharmacy_Category_Other"        = "أخرى";
+"Pharmacy_Category_Antibiotics"  = "مضادات حيوية";
+"Pharmacy_Category_Deworming"    = "طارد ديدان";
+"Pharmacy_Category_FleaTick"     = "براغيث وقراد";
+"Pharmacy_Category_PainRelief"   = "مسكنات";
+"Pharmacy_Category_SkinCoat"     = "جلد وفراء";
+"Pharmacy_Category_EyeEar"       = "عين وأذن";
+"Pharmacy_Category_Digestive"    = "عناية هضمية";
+"Pharmacy_Category_Vitamins"     = "فيتامينات";
+"Pharmacy_Category_Vaccines"     = "لقاحات";
+"Pharmacy_Category_FirstAid"     = "إسعافات أولية";
+"Pharmacy_Category_DentalCare"   = "عناية الأسنان";
+"Pharmacy_Animal_Cats"           = "قطط";
+"Pharmacy_Animal_Dogs"           = "كلاب";
+"Pharmacy_Animal_Birds"          = "طيور";
+"Pharmacy_Animal_Rabbits"        = "أرانب";
+"Pharmacy_Animal_Horses"         = "خيول";
+"Pharmacy_Animal_Camels"         = "جمال";
+"Pharmacy_Animal_Sheep"          = "أغنام";
+"Pharmacy_Animal_Falcons"        = "صقور";
+"Pharmacy_Status_Published"      = "منشور";
+"Pharmacy_Status_Draft"          = "مسودة";
+"Pharmacy_Status_Available"      = "متاح";
+"Pharmacy_Status_NotAvailable"   = "غير متاح";
+"Pharmacy_Section_Basic"         = "المعلومات الأساسية";
+"Pharmacy_Section_Basic_Hint"    = "التفاصيل العامة للدواء";
+"Pharmacy_Section_Pricing"       = "التسعير والمخزون";
+"Pharmacy_Section_Pricing_Hint"  = "إدارة التكاليف ومستويات المخزون";
+"Pharmacy_Section_Options"       = "الظهور والتوفر";
+"Pharmacy_Section_Options_Hint"  = "تحكم في ظهور هذا الدواء للعملاء وما إذا كان متاحاً الآن.";
+"Pharmacy_Save_Title"            = "حفظ الدواء";
+"Pharmacy_Save_Subtitle"         = "راجع تفاصيل الدواء قبل الحفظ.";
+"Pharmacy_Save"                  = "حفظ";
+"Pharmacy_Delete_Confirm_Title"  = "حذف الدواء";
+"Pharmacy_Delete_Confirm_Msg"    = "سيتم حذف هذا الدواء من كتالوج الصيدلية الخاص بك.";
+"Pharmacy_Added_Success"         = "تمت إضافة الدواء بنجاح.";
+"Pharmacy_Updated_Success"       = "تم تحديث الدواء بنجاح.";
+"Pharmacy_Deleted_Success"       = "تم حذف الدواء بنجاح.";
+"Pharmacy_Validation_TitleRequired" = "اسم الدواء مطلوب.";
+"Pharmacy_Validation_PriceRequired" = "أدخل سعراً صحيحاً.";
+"Pharmacy_Validation_QuantityRequired" = "أدخل كمية صحيحة.";
+"Pharmacy_Validation_CategoryRequired" = "أدخل اسم الفئة.";
+"Photo library unavailable" = "مكتبة الصور غير متاحة.";
+
+/* ── الأنواع ── */
+"Vet_Type_Personal"              = "شخصي";
+"Vet_Type_Company"               = "شركة";
+
+/* ── الحالة ── */
+"Vet_Status_Active"              = "نشط";
+"Vet_Status_Disabled"            = "معطّل";
+
+/* ── الإجراءات ── */
+"Vet_Action_Save"                = "حفظ";
+"Vet_Action_Enable"              = "تفعيل";
+"Vet_Action_Disable"             = "تعطيل";
+"Vet_Subscription"               = "الاشتراك";
+"Vet_Saving"                     = "جارٍ الحفظ...";
+"Vet_Updating"                   = "جارٍ التحديث...";
+
+/* ── التأكيدات ── */
+"Vet_Confirm_Disable_Title"      = "تعطيل الطبيب البيطري؟";
+"Vet_Confirm_Disable_Msg"        = "سيتم إخفاء هذا الطبيب البيطري عن المستخدمين.";
+"Vet_Confirm_Enable_Title"       = "تفعيل الطبيب البيطري؟";
+"Vet_Confirm_Enable_Msg"         = "سيظهر هذا الطبيب البيطري للمستخدمين مرة أخرى.";
+"Vet_Confirm_Delete_Title"       = "حذف الطبيب البيطري؟";
+"Vet_Confirm_Delete_Msg"         = "لا يمكن التراجع عن هذا الإجراء. ستتم إزالة جميع البيانات نهائيًا.";
+
+/* ── النجاح ── */
+"Vet_Added_Success"              = "تمت إضافة الطبيب البيطري بنجاح.";
+"Vet_Updated_Success"            = "تم تحديث الطبيب البيطري بنجاح.";
+"Vet_Deleted_Success"            = "تم حذف الطبيب البيطري بنجاح.";
+"Vet_Disabled_Success"           = "تم تعطيل الطبيب البيطري.";
+"Vet_Enabled_Success"            = "تم تفعيل الطبيب البيطري.";
+
+/* ── الأخطاء ── */
+"Vet_No_Phone"                   = "لا يوجد رقم هاتف متاح.";
+
+/* ── الاشتراك ── */
+"Vet_Sub_Management"             = "إدارة الاشتراك";
+"Vet_Sub_Tier_Section"           = "مستوى الاشتراك";
+"Vet_Sub_Tier"                   = "المستوى";
+"Vet_Sub_Free"                   = "مجاني";
+"Vet_Sub_Basic"                  = "أساسي";
+"Vet_Sub_Premium"                = "متميّز";
+"Vet_Sub_Status_Section"         = "حالة الاشتراك";
+"Vet_Sub_Active_Toggle"          = "الاشتراك نشط";
+"Vet_Sub_Active_Label"           = "اشتراك نشط";
+"Vet_Sub_Inactive"               = "الاشتراك غير نشط";
+"Vet_Sub_Expired"                = "منتهي";
+"Vet_Sub_Dates_Section"          = "فترة الاشتراك";
+"Vet_Sub_StartDate"              = "تاريخ البدء";
+"Vet_Sub_EndDate"                = "تاريخ الانتهاء";
+"Vet_Sub_Quick_Section"          = "مدة سريعة";
+"Vet_Sub_1Month"                 = "شهر واحد";
+"Vet_Sub_3Months"                = "3 أشهر";
+"Vet_Sub_6Months"                = "6 أشهر";
+"Vet_Sub_1Year"                  = "سنة واحدة";
+"Vet_Sub_Save"                   = "حفظ الاشتراك";
+"Vet_Sub_Updated_Success"        = "تم تحديث الاشتراك بنجاح.";
+"Vet_Sub_Error_DateOrder"        = "يجب أن يكون تاريخ الانتهاء بعد تاريخ البدء.";
+
+/* ── الخدمات ── */
+"typeGrooming" = "عناية";
+"typeTraining" = "تدريب";
+"statusActive" = "نشط";
+"statusDisabled" = "معطل";
+"statusBlocked" = "محظور";
+"verifVerified" = "موثق";
+"verifPending" = "قيد المراجعة";
+"verifRejected" = "مرفوض";
+"verifNotSet" = "غير محدد";
+"ManageServices" = "إدارة الخدمات";
+"AddService" = "إضافة خدمة";
+"EditService" = "تعديل الخدمة";
+"ServiceDetail" = "تفاصيل الخدمة";
+"ServiceSaved" = "تم حفظ الخدمة بنجاح";
+"ServiceDeleted" = "تم حذف الخدمة بنجاح";
+"ServiceStatusUpdated" = "تم تحديث حالة الخدمة";
+"ConfirmDeleteService" = "هل أنت متأكد أنك تريد حذف هذه الخدمة؟";
+"SearchServices" = "بحث عن خدمات...";
+"NoServices" = "لم يتم العثور على خدمات.";
+
+
+
+
+
+
+
+
+
+
+
+
+
+"AdminWebApp_Section_Title"            = "تطبيق الويب";
+"AdminWebApp_Row_Title"                = "فتح تطبيق الويب";
+"AdminWebApp_Row_Subtitle"             = "عرض لوحة Pure Pets الحية داخل التطبيق";
+"AdminWebApp_Title"                    = "تطبيق الويب";
+"AdminWebApp_Error_Title"              = "تعذر تحميل تطبيق الويب";
+"AdminWebApp_Error_Message"            = "تحقق من الاتصال وحاول مرة أخرى.";
+"AdminWebApp_Retry"                    = "إعادة المحاولة";
+
+/* ===================== تسجيل الدخول Pro (حديث) ===================== */
+"ProLoginTitle"                = "بيور بيتس برو";
+"ProLoginEyebrow"              = "مساحة عمل بيور بتس برو";
+"ProLoginSubtitle"             = "مساحة الشركاء";
+"ProLoginAccessPill"           = "دخول موثّق";
+"ProLoginPhoneSectionTitle"    = "رقم الجوال";
+"ProLoginAuthHeading"          = "الدخول برقم الجوال";
+"ProLoginAuthHint"             = "استخدم حساب بيور بيتس المسجل.";
+"ProLoginFormSubtitle"         = "استخدم حساب بيور بيتس المسجل. سنتحقق من صلاحية الشريك بعد الدخول.";
+"ProLoginPhonePlaceholder"     = "أدخل رقم الجوال";
+"ProLoginCountryCode"          = "رمز الدولة";
+"ProLoginContinuePhone"        = "المتابعة برقم الجوال";
+"ProLoginOr"                   = "أو";
+"ProLoginSignInWithApple"      = "تسجيل الدخول بـ Apple";
+"ProLoginSignInWithGoogle"     = "تسجيل الدخول بـ Google";
+"ProLoginStatusNote"           = "يتم التحقق بعد الدخول.";
+"ProLoginAccessTitle"          = "صلاحية الشريك";
+"ProLoginAccessSummary"        = "نتحقق منها بعد تسجيل الدخول.";
+"ProLoginSupportChip"          = "مساعدة";
+"ProLoginSupportTitle"         = "الدعم";
+"ProLoginSupportSummary"       = "تحتاج مساعدة؟ تواصل مع بيور بيتس.";
+"ProLoginSupportMessage"       = "استخدم نفس حساب بيور بيتس المرتبط بملف الشريك. إذا تمت إزالة الصلاحية، تواصل مع فريق بيور بيتس.";
+"ProLoginFooter"               = "متاح للمزودين المعتمدين في بيور بتس فقط.\nسجّل الدخول بالحساب المسجّل في بيور بتس.";
+"ProLoginSendingCode"          = "جاري إرسال رمز التحقق…";
+"ProLoginEnterCode"            = "رمز التحقق";
+"ProLoginCodeSentTo"           = "تم الإرسال إلى";
+"ProLoginVerify"               = "تحقق";
+"ProLoginPhoneRequired"        = "الرجاء إدخال رقم جوال صحيح.";
+"ProLoginCodeSendFailed"       = "فشل إرسال رمز التحقق. يرجى المحاولة مرة أخرى.";
+"ProLoginCodeTooShort"         = "الرجاء إدخال رمز التحقق كاملاً.";
+"ProLoginCodeExpired"          = "انتهت صلاحية رمز التحقق. يرجى طلب رمز جديد.";
+"ProLoginSMSCooldown"          = "يرجى الانتظار قبل طلب رمز آخر.";
+"ProLoginResendingCode"        = "جاري إعادة إرسال رمز التحقق…";
+"ProLoginResendCode"           = "إعادة إرسال الرمز";
+"ProLoginVerifyingCode"        = "جاري التحقق من الرمز…";
+"ProLoginTooManyRequests"      = "محاولات كثيرة جداً. يرجى الانتظار بضع دقائق والمحاولة مرة أخرى.";
+"ProLoginInvalidPhone"         = "رقم الهاتف المُدخل غير صالح. يرجى التحقق والمحاولة مرة أخرى.";
+"ProLoginCaptchaFailed"        = "فشل التحقق الأمني. يرجى المحاولة مرة أخرى.";
+"ProLoginAppleRequires13"      = "تسجيل الدخول بـ Apple يتطلب iOS 13 أو أحدث.";
+"ProLoginAppleTokenMissing"    = "رمز Apple غير متاح. يرجى المحاولة مرة أخرى.";
+"ProLoginAppleFailed"          = "فشل تسجيل الدخول بـ Apple. يرجى المحاولة مرة أخرى.";
+"ProLoginAppleSigningIn"       = "جاري تسجيل الدخول بـ Apple…";
+"ProLoginAppleAuthFailed"      = "فشل تسجيل الدخول بـ Apple. يرجى التحقق من إعدادات Apple ID والمحاولة مرة أخرى.";
+"ProLoginAppleNotHandled"      = "لم تتم معالجة تسجيل الدخول بـ Apple. يرجى المحاولة مرة أخرى.";
+"ProLoginAccountDisabled"      = "تم تعطيل هذا الحساب. يرجى التواصل مع الدعم.";
+"ProLoginWrongCredentials"     = "بيانات الدخول غير صحيحة. يرجى المحاولة مرة أخرى.";
+"ProLoginNetworkError"         = "خطأ في الشبكة. يرجى التحقق من الاتصال والمحاولة مرة أخرى.";
+"ProLoginInvalidCode"          = "رمز التحقق الذي أدخلته غير صحيح. ��رجى المحاولة مرة أخرى.";
+"ProLoginGoogleConnecting"     = "جاري الاتصال بـ Google…";
+"ProLoginGoogleConfigMissing"  = "تسجيل الدخول بـ Google غير مُهيَّأ. يرجى التواصل مع الدعم.";
+"ProLoginGoogleTokenMissing"   = "بيانا�� حساب Google غير متاحة. يرجى المحاولة مرة أخرى.";
+"ProLoginNoServiceAccess"      = "لا يملك هذا الحساب صلاحية الشريك.\nفعّل ميزات الشريك الخاصة بك من Pure Pets Console للمتابعة.";
+
+/* Provider Application Card (Login Screen) */
+"ProLoginProviderEyebrow"      = "شريك جديد";
+"ProLoginProviderHeadline"     = "انضم كمزود";
+"ProLoginProviderSubtitle"     = "سجّل الدخول، اختر مسار الشريك، ثم أرسل طلبك للمراجعة.";
+"ProLoginProviderBadge"        = "مسارات الشركاء";
+"ProLoginProviderSecondBadge"  = "مراجعة";
+"ProLoginProviderCTA"          = "سجّل للتقديم";
+"ProLoginProviderNote"         = "تراجع بيور بيتس الطلب قبل تفعيل صلاحية الشريك.";
+"Cancel"                       = "إلغاء";
+
+/* ===================== قسم التوصيل ===================== */
+"DeliverySection"              = "التوصيل";
+"DeliveryManagement"           = "إدارة التوصيل";
+"DeliveryManagementSubtitle"   = "إدارة عمليات التوصيل وحالة الطلبات";
+"ReadyForPickup"               = "جاهز";
+"InTransit"                    = "في الطريق";
+"Delivered"                    = "تم التوصيل";
+"AllOrders"                    = "الكل";
+"PickUpFromStore"              = "استلام من المتجر";
+"MarkAsDelivered"              = "تأكيد التوصيل";
+"CollectCashPayment"           = "تحصيل الدفع النقدي";
+"ReportIssue"                  = "الإبلاغ عن مشكلة";
+"DeliveryNotes"                = "ملاحظات التوصيل";
+"DeliveryNotesPlaceholder"     = "أضف ملاحظات التوصيل...";
+"OrderNumber"                  = "طلب #%@";
+"Branch" = "الفرع";
+"Items_Count" = "%ld عناصر";
+"CashPayment"                  = "نقدي";
+"OnlinePayment"                = "إلكتروني";
+"CustomerPhone"                = "هاتف العميل";
+"DeliveryAddress"              = "عنوان التوصيل";
+"OpenInMaps"                   = "فتح في الخريطة";
+"CallCustomer"                 = "اتصال بالعميل";
+"OrderDetails"                 = "تفاصيل الطلب";
+"OrderItems"                   = "عناصر الطلب";
+"PaymentInfo"                  = "معلومات الدفع";
+"TotalAmount"                  = "المبلغ الإجمالي";
+"PaymentMethod"                = "طريقة الدفع";
+"PaymentStatus"                = "حالة الدفع";
+"OrderTimeline"                = "مسار الطلب";
+"StatusPending"                = "قيد الانتظار";
+"StatusProcessing"             = "قيد المعالجة";
+"StatusShipped"                = "تم الشحن";
+"StatusDelivered"              = "تم التوصيل";
+"StatusCashCollected"          = "تم تحصيل المبلغ";
+"StatusCancelled"              = "ملغي";
+"ConfirmPickup"                = "تأكيد الاستلام";
+"ConfirmPickupMessage"         = "هل أنت متأكد من استلام هذا الطلب من المتجر؟";
+"ConfirmDelivery"              = "تأكيد التوصيل";
+"ConfirmDeliveryMessage"       = "هل أنت متأكد من توصيل هذا الطلب للعميل؟";
+"ConfirmCashCollection"        = "تأكيد تحصيل المبلغ";
+"ConfirmCashCollectionMessage"  = "تأكيد تحصيل %@ من العميل؟";
+"DeliverySuccess"              = "تم تحديث الحالة بنجاح";
+"NoOrdersFound"                = "لا توجد طلبات";
+"NoOrdersMessage"              = "لا توجد طلبات مطابقة لهذا الفلتر.";
+"PendingCollection"            = "بانتظار التحصيل";
+"Paid"                         = "مدفوع";
+"ProofOfDelivery"              = "إثبات التوصيل";
+"TakePhoto"                    = "التقاط صورة";
+"IssueNote"                    = "وصف المشكلة";
+"SubmitIssue"                  = "إرسال";
+"Error"                        = "خطأ";
+
+/* ───── Delivery Section — Modern UI Keys ───── */
+"Deliv_TotalOrders"             = "إجمالي الطلبات";
+"Deliv_LiveBoard"               = "لوحة التوصيل المباشرة";
+"Deliv_VisibleOrdersCount"      = "%ld نشط";
+"ProfileSettings"               = "إعدادات الملف الشخصي";
+"ProfileSettingsSubtitle"       = "إدارة الصورة والاسم وبيانات الحساب داخل تطبيق برو.";
+"AppearanceSettings"            = "إعدادات المظهر";
+"AppearanceSettingsSubtitle"    = "التحكم في السمة ووضوح الواجهة والتفضيلات البصرية.";
+"NotificationSettings"          = "إعدادات الإشعارات";
+"NotificationSettingsSubtitle"  = "التحكم في تنبيهات الوارد وتفضيلات فئات الإشعارات.";
+"ProfileDisplayName"            = "اسم العرض";
+"ProfileEmail"                  = "البريد الإلكتروني";
+"ProfilePhone"                  = "رقم الجوال";
+"ProfileRole"                   = "الدور";
+"ProfileUpdated"                = "تم تحديث الملف الشخصي بنجاح.";
+"ProfileEditNameSubtitle"       = "تحديث الاسم الظاهر في جميع أجزاء تطبيق برو.";
+"ThemeSystem"                   = "افتراضي النظام";
+"ThemeLight"                    = "فاتح";
+"ThemeDark"                     = "داكن";
+"ThemeSystemSubtitle"           = "اتبع مظهر الآيفون تلقائياً.";
+"ThemeLightSubtitle"            = "استخدام واجهة فاتحة في تطبيق برو.";
+"ThemeDarkSubtitle"             = "استخدام واجهة داكنة لتقليل الوهج.";
+"ThemeUpdated"                  = "تم تحديث المظهر بنجاح.";
+"Deliv_ReadyCount"              = "جاهزة";
+"Deliv_InTransitCount"          = "قيد التوصيل";
+"Deliv_DeliveredCount"          = "تم التوصيل";
+"Deliv_SearchOrders"            = "بحث في الطلبات...";
+"Deliv_FilterAll"               = "الكل";
+"Deliv_FilterReady"             = "جاهزة";
+"Deliv_FilterPendingPickup"     = "بانتظار الاستلام";
+"Deliv_FilterInTransit"         = "قيد التوصيل";
+"Deliv_FilterDelivered"         = "تم التوصيل";
+"Deliv_FilterCancelled"         = "ملغاة";
+"Deliv_EmptyTitle"              = "لا توجد توصيلات بعد";
+"Deliv_EmptySubtitle"           = "ستظهر الطلبات الجاهزة للتوصيل هنا";
+"Deliv_CustomerInfo"            = "معلومات العميل";
+"Deliv_OrderSummary"            = "ملخص الطلب";
+"Deliv_PaymentDetails"          = "تفاصيل الدفع";
+"Deliv_Timeline"                = "مسار التوصيل";
+"Deliv_NotesSection"            = "ملاحظات التوصيل";
+"Deliv_DeliveryOrder"           = "توصيل";
+"Deliv_PickupOrder"             = "استلام";
+"Deliv_EstimatedTime"           = "الوقت المتوقع للتوصيل";
+"Deliv_CashOnDelivery"          = "دفع عند الاستلام";
+"Deliv_OnlinePayment"           = "مدفوع إلكترونياً";
+"Deliv_PaymentPending"          = "بانتظار الدفع";
+"Deliv_PaymentCollected"        = "تم تحصيل المبلغ";
+"Deliv_PaymentCompleted"        = "تم الدفع";
+"Deliv_ItemsInOrder"            = "%ld عنصر في هذا الطلب";
+"Deliv_OrderTotal"              = "إجمالي الطلب";
+"Deliv_ConfirmCashCollectionMessage" = "تأكيد تحصيل مبلغ %@ من العميل؟";
+"Deliv_IssueReported"           = "تم الإبلاغ عن المشكلة بنجاح";
+"Deliv_UpdatingStatus"          = "جاري تحديث حالة الطلب...";
+"Deliv_StepPending"             = "تم الطلب";
+"Deliv_StepProcessing"          = "قيد التحضير";
+"Deliv_StepShipped"             = "في الطريق";
+"Deliv_StepDelivered"           = "تم التوصيل";
+"Deliv_StepCashCollected"       = "تم تحصيل المبلغ";
+"Deliv_StatusOrderPlaced"       = "تم إنشاء الطلب";
+"Deliv_StatusPreparing"         = "قيد التجهيز للشحن";
+"Deliv_StatusRequested"         = "بانتظار قبول التوصيل";
+"Deliv_StatusAssigned"          = "تم تعيين مندوب";
+"Deliv_StatusAwaitingHandover"  = "بانتظار تسليم الشحنة";
+"Deliv_StatusPickedUp"          = "تم استلام الشحنة";
+"Deliv_StatusInTransit"         = "في الطريق";
+"Deliv_StatusDelivered"         = "تم التوصيل";
+"Deliv_StatusPaymentPending"    = "بانتظار تأكيد الدفع";
+"Deliv_StatusPaymentConfirmed"  = "تم تأكيد الدفع";
+"Deliv_StatusCompleted"         = "مكتمل";
+"Deliv_StatusCancelled"         = "تم إلغاء التوصيل";
+"Deliv_StatusFailed"            = "تعذر التوصيل";
+"Deliv_StatusReturned"          = "أعيد إلى المتجر";
+"Deliv_AddressHidden"           = "سيظهر العنوان بعد تعيين المندوب";
+"Deliv_BranchPickupSource"      = "ستستلم الشحنة من: %@";
+"Deliv_PackagePickupLocation"   = "موقع استلام الشحنة";
+"Deliv_DeliveryArea"            = "منطقة التوصيل";
+"Deliv_DeliveryAreaPending"     = "منطقة التوصيل قيد التحديد";
+"Deliv_ExactCustomerLocation"   = "وجهة التوصيل الدقيقة";
+"Deliv_ExactLocationAfterAccepting" = "تظهر منطقة التوصيل فقط قبل القبول، وتظهر نقطة الوجهة الدقيقة بعد قبول طلب التوصيل.";
+"Deliv_CustomerPhoneAfterAccepting" = "يظهر رقم جوال العميل بعد قبول طلب التوصيل.";
+"Deliv_ProviderTakeBackSource"  = "مزوّد السوق: %@";
+"Deliv_BranchPendingAssignment" = "الفرع لم يُحدَّد بعد";
+"Deliv_StartTransit"            = "بدء التوصيل";
+"Deliv_StartTransitMessage"     = "أكد أن الشحنة أصبحت الآن في الطريق إلى العميل.";
+"Deliv_CompleteOrder"           = "إغلاق الطلب";
+"Deliv_CompleteOrderMessage"    = "أكد أن دورة التوصيل انتهت بالكامل.";
+"Deliv_CustomerLocation"        = "موقع العميل";
+"Deliv_StartNavigation"         = "ابدأ التوجيه";
+"Deliv_ShowRoute"               = "اعرض المسار";
+"Deliv_CalculateDistance"       = "المسافة";
+"Deliv_DistancePending"         = "جارٍ حساب المسافة…";
+"Deliv_DistanceUnavailable"     = "تعذر حساب المسافة الآن";
+"Deliv_DistanceMeters"          = "المسافة: %ld م";
+"Deliv_DistanceKilometers"      = "المسافة: %@ كم";
+"Deliv_MarketplaceProvider"     = "مزوّد السوق";
+"Deliv_ProviderMarketplaceOwner"= "مالك عنصر السوق";
+"Deliv_MarketplaceItems"        = "%ld عنصر من هذا المزوّد";
+"Deliv_ChatProvider"            = "محادثة";
+"Deliv_ChatWithCustomer"        = "محادثة العميل";
+"Deliv_CallProvider"            = "اتصال";
+"Deliv_CannotChatProvider"      = "تعذرت فتح المحادثة مع هذا المزوّد.";
+"Deliv_NoProviderPhone"         = "رقم المزوّد غير متاح.";
+
+/* ===================== Service Management — Form & UI ===================== */
+"Serv_Section_Info"            = "معلومات الخدمة";
+"Serv_Section_Info_Hint"       = "اسم الخدمة ووصفها وسعرها.";
+"Serv_Section_Classification"  = "التصنيف";
+"Serv_Section_Classification_Hint" = "تحديد نوع الخدمة وفئتها.";
+"Serv_Section_Media"           = "الوسائط";
+"Serv_Section_Media_Hint"      = "أضف صورة واضحة واحدة لهذه الخدمة.";
+"Serv_Add_Subtitle"            = "أنشئ عرض خدمة واضحاً للعملاء.";
+"Serv_Edit_Subtitle"           = "عدّل عرض الخدمة بدون تغيير الملكية.";
+"Serv_Field_Title"             = "العنوان";
+"Serv_Field_Description"       = "الوصف";
+"Serv_Field_Price"             = "السعر";
+"Serv_Field_Type"              = "النوع";
+"Serv_Field_Category"          = "الفئة";
+"Serv_Field_Image"             = "صورة الخدمة";
+"Serv_Field_PetKind"           = "معرّف نوع الحيوان";
+"Serv_Field_Status"            = "الحالة";
+"Serv_Field_Verification"      = "التحقق";
+"Serv_Field_CreatedAt"         = "تاريخ الإنشاء";
+"Serv_Field_UpdatedAt"         = "تاريخ التحديث";
+"Serv_Action_Edit"             = "تعديل";
+"Serv_Action_Subscription"     = "الاشتراك";
+"Serv_Action_Save"             = "حفظ الخدمة";
+"Serv_Filter_All"              = "الكل";
+"Serv_Filter_Active"           = "نشط";
+"Serv_Filter_Disabled"         = "معطل";
+"Serv_Search_Placeholder"      = "بحث عن خدمات…";
+"Serv_Currency"                = "ر.ق";
+"Serv_Empty_Title"             = "لا توجد خدمات بعد";
+"Serv_Empty_Subtitle"          = "اضغط + لإضافة أول عرض خدمة.";
+"Serv_Manage_Subtitle"         = "إدارة عروض الخدمات والتوفر وظهور مقدمي الخدمة.";
+"Serv_Detail_Subtitle"         = "راجع التفاصيل المعروضة للعملاء والحالة والخطة الحالية لهذه الخدمة.";
+"Serv_Stats_Total"             = "الإجمالي";
+"Serv_Stats_Active"            = "نشط";
+"Serv_Stats_Disabled"          = "معطل";
+"Serv_No_Permission"           = "صلاحية مطلوبة";
+"Serv_No_Permission_Msg"       = "ليس لديك صلاحية لإدارة الخدمات. تواصل مع المسؤول.";
+"Serv_Not_Authenticated"       = "يرجى تسجيل الدخول للمتابعة.";
+"Serv_Ownership_Error"         = "يمكنك تعديل خدماتك الخاصة فقط.";
+"Serv_Saving"                  = "جارٍ الحفظ…";
+"Serv_Deleting"                = "جارٍ الحذف…";
+"Serv_Confirm_Disable_Title"   = "تعطيل الخدمة؟";
+"Serv_Confirm_Disable_Msg"     = "ستكون هذه الخدمة مخفية عن المستخدمين.";
+"Serv_Confirm_Enable_Title"    = "تفعيل الخدمة؟";
+"Serv_Confirm_Enable_Msg"      = "ستكون هذه الخدمة مرئية للمستخدمين مرة أخرى.";
+
+// ── توفر الخدمة (إعادة هيكلة مقدم الخدمة) ──
+"Serv_Available"                = "متاح";
+"Serv_Unavailable"              = "غير متاح";
+"Serv_Filter_Available"         = "متاح";
+"Serv_Filter_Unavailable"       = "غير متاح";
+"Serv_Stats_Available"          = "متاح";
+"Serv_Stats_Unavailable"        = "غير متاح";
+"Serv_Confirm_Available_Title"  = "تعيين كمتاح؟";
+"Serv_Confirm_Available_Msg"    = "ستظهر هذه الخدمة للمستخدمين.";
+"Serv_Confirm_Unavailable_Title" = "تعيين كغير متاح؟";
+"Serv_Confirm_Unavailable_Msg"  = "ستكون هذه الخدمة مخفية مؤقتاً.";
+"Serv_Section_Availability"     = "التوفر";
+"Serv_Section_Availability_Hint" = "تحكم في ظهور هذه الخدمة للعملاء.";
+"Serv_Section_Overview"         = "نظرة عامة";
+"Serv_Section_Overview_Hint"    = "تفاصيل الخدمة الأساسية التي يراها العميل أولاً.";
+"Serv_Section_Status"           = "الحالة والخطة";
+"Serv_Section_Status_Hint"      = "التوفر والتحقق والتغطية الحالية للاشتراك.";
+"Serv_Section_Timeline"         = "الجدول الزمني";
+"Serv_Section_Timeline_Hint"    = "تاريخ الإنشاء وفترات الاشتراك.";
+"Serv_Field_Available"          = "متاح";
+"Serv_Field_Availability"       = "التوفر";
+
+// ── الاشتراك (عرض مقدم الخدمة) ──
+"Serv_Sub_MyPlan"               = "خطتي";
+"Serv_Sub_Plan"                 = "الخطة الحالية";
+"Serv_Sub_Active"               = "نشط";
+"Serv_Sub_Inactive"             = "غير نشط";
+"Serv_Sub_StartDate"            = "تاريخ البدء";
+"Serv_Sub_EndDate"              = "تاريخ الانتهاء";
+"Serv_Sub_Upgrade"              = "طلب ترقية";
+"Serv_Sub_Upgrade_Title"        = "ترقية الخطة";
+"Serv_Sub_Upgrade_Msg"          = "لترقية خطتك، يرجى التواصل مع فريق PurePets. سنساعدك في اختيار الخيار الأفضل لخدماتك.";
+
+/* التوصيل — قبول */
+"AcceptDelivery"                = "قبول التوصيل";
+"AcceptDeliveryMessage"         = "هل أنت متأكد من قبول هذا التوصيل؟ بمجرد القبول، ستكون مسؤولاً عن استلام وتوصيل هذا الطلب.";
+
+/* طلبات التنفيذ */
+"Fulfillment_Title"              = "طلبات التنفيذ";
+"Fulfillment_DetailTitle"        = "تفاصيل التنفيذ";
+"Fulfillment_Items"              = "العناصر";
+"Fulfillment_OrderID"            = "الطلب";
+"Fulfillment_CustomerID"         = "العميل";
+"Fulfillment_OwnerID"            = "المالك";
+"Fulfillment_CreatedAt"          = "تاريخ الإنشاء";
+"Fulfillment_UpdatedAt"          = "تاريخ التحديث";
+"Fulfillment_AdminOverride"      = "تجاوز إداري";
+"Fulfillment_Subtotal"           = "المجموع الفرعي";
+"Fulfillment_PlatformCommission" = "عمولة المنصة";
+"Fulfillment_ProviderNet"        = "صافي المزود";
+"Fulfillment_Events"             = "سجل الأحداث";
+"Fulfillment_Loading"            = "جارٍ التحميل…";
+"Fulfillment_NoEvents"           = "لا توجد أحداث مسجلة.";
+"Fulfillment_At"                 = "بسعر";
+"Fulfillment_EmptyTitle"         = "لا توجد طلبات تنفيذ";
+"Fulfillment_EmptySubtitle"      = "ستظهر طلبات التنفيذ هنا عندما يقدم العملاء طلبات لمنتجاتك.";
+"Fulfillment_LoadError"          = "فشل تحميل طلبات التنفيذ.";
+"Fulfillment_Updating"           = "جارٍ التحديث…";
+"Fulfillment_ConfirmAction"      = "لا يمكن التراجع عن هذا الإجراء.";
+"Fulfillment_NoteOptional"       = "أضف ملاحظة (اختياري)";
+"Fulfillment_ActionSuccess"      = "تم تحديث التنفيذ بنجاح.";
+"Fulfillment_ListEyebrow"        = "تنفيذ الشركاء";
+"Fulfillment_ListHeadline"       = "جهّز ما أصبح جاهزاً للحركة.";
+"Fulfillment_ListSubtitle"       = "تابع الطلبات النشطة والتسليمات وصافي المزود من قائمة هادئة واحدة.";
+"Fulfillment_Active"             = "النشطة";
+"Fulfillment_NetDue"             = "الصافي المستحق";
+"Fulfillment_Reference"          = "المرجع";
+"Fulfillment_DetailEyebrow"      = "طلب تنفيذ";
+"Fulfillment_OrderContext"       = "سياق الطلب";
+"Fulfillment_NoItems"            = "لا توجد عناصر مرتبطة بهذا التنفيذ.";
+"Fulfillment_Item"               = "عنصر";
+
+/* إجراءات التنفيذ */
+"Fulfillment_Accept"             = "قبول";
+"Fulfillment_Reject"             = "رفض";
+"Fulfillment_StartPreparing"     = "بدء التحضير";
+"Fulfillment_MarkReady"          = "تحديد كجاهز";
+"Fulfillment_RequestDelivery"    = "طلب توصيل";
+"Fulfillment_ConfirmHandover"    = "تأكيد التسليم";
+"Fulfillment_CancelRequest"      = "إلغاء";
+
+/* حالات التنفيذ */
+"Fulfillment_Status_NewRequest"        = "طلب جديد";
+"Fulfillment_Status_Accepted"          = "مقبول";
+"Fulfillment_Status_Rejected"          = "مرفوض";
+"Fulfillment_Status_Preparing"         = "قيد التجهيز";
+"Fulfillment_Status_ReadyForPickup"    = "جاهز للاستلام";
+"Fulfillment_Status_DeliveryRequested" = "تم طلب التوصيل";
+"Fulfillment_Status_DeliveryAssigned"  = "تم تعيين مندوب توصيل";
+"Fulfillment_Status_AwaitingHandover"  = "بانتظار التسليم";
+"Fulfillment_Status_HandedOver"        = "تم التسليم";
+"Fulfillment_Status_Completed"         = "مكتمل";
+"Fulfillment_Status_Cancelled"         = "ملغى";
+"Fulfillment_Status_Failed"            = "فشل";
+"Fulfillment_Status_Returned"          = "مرتجع";
+
+/* بطاقات لوحة التحكم السريعة (المرحلة 19E) */
+"DeliveryManagement" = "طلبات التوصيل";
+"DeliveryManagementSubtitle" = "إدارة طلبات التوصيل النشطة والمكتملة.";
+"ManageServices" = "طلبات الخدمة";
+"Fulfillment_Title" = "الطلبات";
+"Fulfillment_EmptySubtitle" = "إدارة الطلبات التي تحتاج إلى تجهيز وتسليم.";
+"Vet_Manage_Title" = "الخدمات البيطرية";
+"Vet_Manage_Subtitle" = "إدارة المواعيد والسجلات البيطرية الخاصة بك.";
+"Pharmacy_Manage_Title" = "الصيدلية";
+"Pharmacy_Manage_Subtitle" = "إدارة الأدوية والمستلزمات الطبية للحيوانات الأليفة.";
+
+/* إدارة السوق (المرحلة 18E) */
+"Market_Title" = "منتجاتي";
+"Market_HeaderSubtitle" = "أدر العناصر الحية والمخزون والعروض من مساحة واحدة هادئة.";
+"Market_EmptyTitle" = "لا توجد منتجات سوق بعد";
+"Market_EmptySubtitle" = "ستظهر هنا منتجاتك المعتمدة في السوق.";
+"Market_Food" = "طعام";
+"Market_Accessory" = "إكسسوار";
+"Market_InStock" = "متوفر:";
+"Market_OutOfStock" = "غير متوفر";
+"Market_Hidden" = "مخفي";
+"Market_Archive" = "أرشفة";
+"Market_ArchiveTitle" = "أرشفة المنتج؟";
+"Market_ArchiveConfirm" = "سيؤدي هذا إلى إخفاء المنتج من السوق. يمكنك إعادة عرضه لاحقًا.";
+"Market_Archiving" = "جارٍ الأرشفة…";
+"Market_Archived" = "تمت الأرشفة";
+"Market_Refresh" = "تحديث";
+"Market_LoadError" = "فشل تحميل منتجات السوق.";
+
+/* محرر منتجات السوق (المرحلة 18E2) */
+"Market_AddTitle" = "إضافة منتج للسوق";
+"Market_EditTitle" = "تعديل المنتج";
+"Market_FormSubtitle" = "حافظ على دقة السجل. هذه التفاصيل تغذي عنصر السوق المباشر.";
+"Market_SectionIdentity" = "الأسماء";
+"Market_SectionCommerce" = "السعر والمخزون";
+"Market_SectionDescription" = "الوصف";
+"Market_SectionClassification" = "نوع العنصر والفئة";
+"Market_SectionImages" = "الصور";
+"Market_SectionPromotion" = "العرض";
+"Market_DescriptionHint" = "اشرح المنتج، الاستخدام، المقاسات، وأي تفاصيل مهمة للعميل.";
+"Market_ImagesHint" = "أضف صورًا واضحة للمنتج. يمكنك رفع أكثر من صورة.";
+"Market_NameReq" = "الاسم *";
+"Market_NameEn" = "الاسم بالإنجليزية";
+"Market_PriceReq" = "السعر *";
+"Market_QuantityReq" = "الكمية";
+"Market_CategoryReq" = "معرف الفئة *";
+"Market_Subcategory" = "معرف الفئة الفرعية";
+"Market_CategoryPickerEyebrow" = "كتالوج السوق";
+"Market_CategoryPickerSubtitle" = "اختر عائلة المنتج والفئة الفرعية الأنسب لهذا العنصر.";
+"Market_CategoryPickerTapFamily" = "اختر عائلة للمتابعة";
+"Market_CategoryPickerSelectedFormat" = "المحدد: %@";
+"Market_CategoryPickerSubcategoryCount" = "%ld فئات فرعية";
+"Market_CategoryPickerMainOnly" = "فئة رئيسية فقط";
+"Market_CategoryPickerSelected" = "محدد";
+"Market_CategoryPickerChooseSubcategory" = "اضغط للاختيار";
+"Market_CategoryPickerEmptyTitle" = "لا توجد فئات متاحة";
+"Market_CategoryPickerEmptySubtitle" = "ستظهر الفئات هنا بعد مزامنة الكتالوج.";
+"Market_DiscountPct" = "نسبة الخصم";
+"Market_DiscountAmt" = "قيمة الخصم";
+"Market_Edit" = "تعديل";
+"Market_Stock" = "المخزون";
+"Market_Offer" = "العرض";
+"Market_SetOffer" = "تعيين العرض";
+"Market_RemoveOffer" = "إزالة العرض";
+"Market_UpdatingStock" = "جارٍ تحديث المخزون…";
+"Market_UpdatingOffer" = "جارٍ تحديث العرض…";
+"Market_StockUpdated" = "تم تحديث المخزون";
+"Market_OfferUpdated" = "تم تحديث العرض";
+"Market_OfferRemoved" = "تم إزالة العرض";
+"Market_ItemCreated" = "تم إنشاء المنتج";
+"Market_ItemSaved" = "تم حفظ المنتج";
+"Market_NameRequired" = "اسم المنتج مطلوب.";
+"Market_PriceInvalid" = "يرجى إدخال سعر صالح.";
+"Market_CategoryRequired" = "معرف الفئة مطلوب.";
+
+/* نوع مزود الوصول إلى السوق (المرحلة 19D) */
+"ProviderTypeMarketplaceTitle" = "الوصول إلى السوق";
+"ProviderTypeMarketplaceSubtitle" = "بيع مستلزمات وطعام الحيوانات داخل سوق بيور بتس.";
+"ProviderTypeDeliveryCompanyTitle" = "شركة توصيل";
+"ProviderTypeDeliveryCompanySubtitle" = "إطلاق وإدارة شركة أسطول بأدوار المالك والمشغّل والسائق والمشاهد.";
+"Market_UploadingImages" = "جارٍ رفع الصور…";
+"Market_HideFromMarket" = "إخفاء من السوق";
+"Market_ShowInMarket" = "عرض في السوق";
+"Market_HideConfirm" = "سيؤدي هذا إلى إخفاء المنتج من السوق. يمكنك إعادة نشره لاحقًا.";
+"Market_UpdatingVisibility" = "جارٍ تحديث الظهور…";
+"Market_ItemHidden" = "تم إخفاء المنتج";
+"Market_ItemShown" = "تم نشر المنتج";
+"Market_ItemsCount" = "منتج";
+"PPBottomSearch_Accessibility" = "البحث";
+"PPBottomSearch_Clear" = "مسح البحث";
+"PPBottomSearch_Results_Format" = "%ld من %ld";
+"Market_BottomSearch_Placeholder" = "ابحث عن منتج أو مخزون أو فئة";
+"Market_SearchEmptyTitle" = "لا توجد منتجات مطابقة";
+"Market_SearchEmptySubtitle" = "جرّب اسم منتج أو فئة أو قيمة مخزون مختلفة، أو امسح البحث.";
+"Fulfillment_BottomSearch_Placeholder" = "ابحث عن طلب أو حالة أو عنصر";
+"Fulfillment_SearchEmptyTitle" = "لا توجد طلبات مطابقة";
+"Fulfillment_SearchEmptySubtitle" = "جرّب رقم طلب أو حالة أو اسم عنصر، أو امسح البحث.";
+
+/* ===================== Fulfillment Status ===================== */
+"fulfillment_status_delivery_assigned" = "تم تعيين مندوب";
+
+/* واجهة إشعارات برو */
+"NotificationsSupportChatsSection" = "الإشعارات ودردشات الدعم";
+"notifications_inbox_category_chat" = "الدردشة";
+"notifications_inbox_category_orders" = "الطلبات";
+"notifications_inbox_category_delivery" = "التوصيل";
+"notifications_inbox_category_updates" = "التحديثات";
+"NotificationsDashboardSubtitle" = "راجع تنبيهات المزود وتحديثات الفريق ورسائل الحساب.";
+"NotificationsInboxSubtitle" = "تنبيهات المزود وتحديثات الفريق ورسائل الحساب في وارد هادئ واحد.";
+"NotificationsUnreadFormat" = "%lu غير مقروءة";
+"NotificationsAllRead" = "كل شيء مقروء";
+"NotificationsNoSearchResults" = "لا توجد إشعارات مطابقة";
+"NotificationsNoSearchSubtitle" = "جرّب كلمة مختلفة أو امسح البحث للعودة إلى الوارد الكامل.";
+"NotificationsEmptySubtitle" = "ستظهر هنا تنبيهات المزود وتحديثات الحساب الجديدة.";
+"Notification" = "إشعار";
+"Read" = "مقروء";
+"Unread" = "غير مقروء";
+"Notification_RequestSummaryTitle" = "ملخص الطلب";
+"Notification_RequestSummarySubtitle" = "موقع الاستلام ومنطقة التوصيل وحالة الطلب الحالية.";
+"Notification_RequestSummaryOrder" = "الطلب";
+"Notification_RequestSummaryLoading" = "جارٍ تحميل تفاصيل الطلب…";
+"Notification_RequestSummaryUnavailable" = "تفاصيل الطلب غير متاحة";
+"Notification_RequestSummaryExactAvailable" = "أصبحت نقطة التوصيل الدقيقة متاحة الآن بعد قبول طلب التوصيل.";
+"Notification_CTA_OpenFulfillment" = "فتح طلب التنفيذ";
+"Notification_CTA_OpenDelivery" = "فتح تفاصيل التوصيل";
+"Notification_CTA_OpenChat" = "فتح المحادثة";
+"Notification_CTA_OpenDeliveryRequest" = "فتح طلب التوصيل";
+"pp_pro_notification_new_delivery_request_title" = "طلب توصيل جديد";
+"pp_pro_notification_new_delivery_request_body" = "يوجد طلب جديد جاهز للاستلام. راجع التفاصيل واقبل طلب التوصيل.";
+"pp_pro_notification_delivery_request_closed_title" = "تم إغلاق طلب التوصيل";
+"pp_pro_notification_delivery_request_closed_body" = "لم يعد طلب التوصيل هذا متاحًا.";
+"pp_pro_notification_new_order_title" = "طلب جديد";
+"pp_pro_notification_new_order_title_format" = "طلب جديد %@";
+"pp_pro_notification_order_items_total_format" = "%@ عنصر • %@ %@";
+"notifications_inbox_empty_title" = "لا توجد إشعارات بعد";
+"notifications_inbox_empty_subtitle" = "ستظهر تحديثات الطلبات والتحذيرات هنا.";
+"pp_pro_notification_accessibility_hint" = "انقر لعرض التفاصيل";
+
+/* ===================== الدردشة الداعمة للمزود ===================== */
+"ch_provider_support_chats_title" = "دردشات الدعم للعملاء";
+"ch_provider_support_chats_subtitle" = "عرض ورد على رسائل العملاء";
+"ch_provider_support_empty" = "لا توجد دردشات دعم للعملاء بعد.";
+"ch_provider_support_error" = "تعذر تحميل الدردشات.";
+"ch_provider_last_message" = "آخر رسالة";
+"ch_provider_unread" = "غير مقروءة";
+"ch_provider_reply" = "رد";
+"ch_provider_support_dashboard_eyebrow" = "مكتب الدعم";
+"ch_provider_support_eyebrow" = "مكتب الدعم";
+"ch_provider_support_premium_subtitle" = "مساحة هادئة للرد على محادثات العملاء بوضوح وسرعة.";
+"ch_provider_support_loading" = "جاري تحميل المحادثات";
+"ch_provider_support_loading_subtitle" = "نجهز أحدث رسائل العملاء.";
+"ch_provider_support_empty_subtitle" = "ستظهر محادثات العملاء هنا عند تواصلهم مع ملف مزودك.";
+"ch_provider_support_error_subtitle" = "تحقق من الاتصال ثم حاول مرة أخرى.";
+"ch_provider_customer_fallback" = "عميل";
+"ch_identity_user" = "مستخدم";
+"ch_identity_provider" = "مزود خدمة";
+"ch_identity_console" = "فريق المنصة";
+"ch_provider_no_messages" = "لا توجد رسائل بعد";
+"ch_provider_reply_hint" = "اكتب رداً...";
+"ch_provider_typing_hint" = "يكتب الآن...";
+"ch_provider_attachment_title" = "المرفقات";
+"ch_provider_attachment_message" = "ميزة المرفقات غير متاحة حالياً";
+"ch_provider_attachment_accessibility" = "خيارات المرفقات";
+"ch_provider_record_accessibility" = "تسجيل رسالة صوتية";
+"ch_provider_record_cancel_accessibility" = "إلغاء التسجيل";
+"ch_provider_record_finish_accessibility" = "إرسال الرسالة الصوتية";
+"ch_provider_recording_hint" = "اضغط إرسال عند الانتهاء";
+"ch_provider_record_cancelled" = "تم إلغاء التسجيل";
+"ch_provider_record_permission_title" = "يلزم السماح بالميكروفون";
+"ch_provider_record_permission_message" = "اسمح بالوصول إلى الميكروفون لإرسال ردود صوتية.";
+"ch_provider_record_failed" = "تعذر بدء التسجيل. حاول مرة أخرى.";
+"ch_provider_record_too_short" = "التسجيل قصير جداً.";
+"ch_provider_send_accessibility" = "إرسال الرسالة";
+"ch_provider_voice_message" = "رسالة صوتية";
+"ch_provider_voice_send_error" = "تعذر إرسال الرسالة الصوتية. حاول مرة أخرى.";
+"ch_provider_voice_play_error" = "تعذر تشغيل الرسالة الصوتية.";
+"ch_provider_voice_play_accessibility" = "تشغيل الرسالة الصوتية";
+"ch_provider_voice_pause_accessibility" = "إيقاف الرسالة الصوتية مؤقتاً";
+"ch_provider_message_sending" = "جارٍ الإرسال";
+"ch_provider_message_sent" = "تم الإرسال";
+"ch_provider_message_delivered" = "تم التسليم";
+"ch_provider_message_read" = "تمت القراءة";
+"ch_provider_message_failed" = "فشل";
+
+/* ===================== واجهة التبني في تطبيق برو ===================== */
+"AdoptPetsSection" = "التبنّي";
+"AdoptPetsTitle" = "إدارة التبني";
+"AdoptPetsSubtitle" = "راجع قوائم التبني المنشورة والمتبناة والمخفية.";
+"AdoptPro_NavTitle" = "مكتب التبني";
+"AdoptPro_ListEyebrow" = "قوائم التبني";
+"AdoptPro_ListTitle" = "إدارة قوائم التبني";
+"AdoptPro_ListSubtitle" = "راجع القوائم المنشورة والمتبناة والمخفية من مساحة هادئة واحدة.";
+"AdoptPro_Total" = "الإجمالي";
+"AdoptPro_Available" = "متاح";
+"AdoptPro_Filter_All" = "الكل";
+"AdoptPro_Filter_Available" = "منشور";
+"AdoptPro_Filter_Adopted" = "تم التبني";
+"AdoptPro_Filter_Hidden" = "مخفي";
+"AdoptPro_Loading" = "جاري تحميل قوائم التبني…";
+"AdoptPro_EmptyTitle" = "لا توجد قوائم تبني بعد";
+"AdoptPro_EmptySubtitle" = "أنشئ أول قائمة باسم واضح وقصة قصيرة وحالة تبني محدثة.";
+"AdoptPro_FilterEmptyTitle" = "لا توجد قوائم في هذا العرض";
+"AdoptPro_FilterEmptySubtitle" = "غيّر الفلتر أو أنشئ قائمة تبني جديدة.";
+"AdoptPro_AddListing" = "إضافة قائمة";
+"AdoptPro_Error_Loading" = "تعذر تحميل قوائم التبني.";
+"AdoptPro_Untitled" = "قائمة تبني بدون عنوان";
+"AdoptPro_NoDescription" = "لم تتم إضافة ملاحظة تبني بعد.";
+"AdoptPro_AgeMonths_Format" = "%ld شهر";
+"AdoptPro_OwnerUnknown" = "المالك غير محدد";
+"AdoptPro_Owner_Format" = "المالك %@";
+"AdoptPro_Status_Available" = "منشور";
+"AdoptPro_Status_Adopted" = "تم التبني";
+"AdoptPro_Status_Hidden" = "مخفي";
+"AdoptPro_Status_Blocked" = "محظور";
+"AdoptPro_Status_Deleted" = "محذوف";
+"Adopted_By_Format" = "تم التبني بواسطة %@";
+"AdoptPro_DetailNavTitle" = "تفاصيل التبني";
+"AdoptPro_DetailEyebrow" = "تفاصيل القائمة";
+"AdoptPro_Field_Status" = "الحالة";
+"AdoptPro_Field_Owner" = "المالك";
+"AdoptPro_Field_Age" = "العمر";
+"AdoptPro_Field_Gender" = "الجنس";
+"AdoptPro_Field_Kind" = "معرف النوع";
+"AdoptPro_Field_Breed" = "معرف السلالة";
+"AdoptPro_Field_Created" = "تاريخ الإنشاء";
+"AdoptPro_Field_Adopter" = "المتبني";
+"AdoptPro_Field_AdopterContact" = "تواصل المتبني";
+"AdoptPro_Field_AdopterID" = "معرف المتبني";
+"AdoptPro_Section_Details" = "تفاصيل القائمة";
+"AdoptPro_Section_Details_Subtitle" = "حقول تشغيلية يستخدمها Firebase وبطاقات التبني في تطبيق العملاء.";
+"AdoptPro_Section_Adopter" = "نتيجة التبني";
+"AdoptPro_Section_Adopter_Subtitle" = "بيانات اختيارية لتتبع المتبني بعد نجاح عملية التبني.";
+"AdoptPro_Action_MarkAdopted" = "تحديد كمتبنى";
+"AdoptPro_Action_MarkAvailable" = "نشر من جديد";
+"AdoptPro_Edit" = "تعديل";
+"AdoptPro_Updating" = "جارٍ التحديث…";
+"AdoptPro_Error_Update" = "تعذر تحديث قائمة التبني.";
+"AdoptPro_StatusUpdated" = "تم تحديث حالة التبني.";
+"AdoptPro_DeleteConfirmTitle" = "حذف قائمة التبني؟";
+"AdoptPro_DeleteConfirmMessage" = "سيتم حذف القائمة من Firestore ولا يمكن التراجع عن هذا الإجراء.";
+"AdoptPro_Error_Delete" = "تعذر حذف قائمة التبني.";
+"AdoptPro_DeletedSuccess" = "تم حذف قائمة التبني.";
+"AdoptPro_AddNavTitle" = "إضافة تبني";
+"AdoptPro_EditNavTitle" = "تعديل التبني";
+"AdoptPro_FormEyebrow" = "رعاية التبني";
+"AdoptPro_FormAddTitle" = "أنشئ منشور تبني واضح";
+"AdoptPro_FormEditTitle" = "عدّل تفاصيل التبني";
+"AdoptPro_FormAddSubtitle" = "استخدم تفاصيل مختصرة حتى يظهر المنشور بثقة في تطبيق العملاء.";
+"AdoptPro_FormEditSubtitle" = "حدّث القائمة بدون تغيير الملكية أو حقول الإشراف.";
+"AdoptPro_Section_Listing" = "قصة الحيوان";
+"AdoptPro_Section_Listing_Subtitle" = "يتم حفظها في حقلي name و details داخل adopt_pets.";
+"AdoptPro_Field_Title" = "عنوان القائمة";
+"AdoptPro_Field_Title_Placeholder" = "مثال: قط هادئ للتبني";
+"AdoptPro_Field_Description" = "ملاحظة التبني";
+"AdoptPro_Field_Description_Placeholder" = "أضف الطباع واحتياجات الرعاية وأي ملاحظات مهمة.";
+"AdoptPro_Section_Status" = "الظهور";
+"AdoptPro_Section_Status_Subtitle" = "القوائم المنشورة قد تظهر للعامة؛ المخفية لا تظهر في البحث العام.";
+"AdoptPro_Field_Adopter_Placeholder" = "اسم المتبني";
+"AdoptPro_Field_AdopterContact_Placeholder" = "رقم الهاتف أو ملاحظة تواصل";
+"AdoptPro_SaveChanges" = "حفظ التغييرات";
+"AdoptPro_CreateListing" = "إنشاء القائمة";
+"AdoptPro_Validation_TitleRequired" = "عنوان القائمة مطلوب.";
+"AdoptPro_Validation_DescriptionRequired" = "أضف ملاحظة تبني قصيرة قبل الحفظ.";
+"AdoptPro_Saving" = "جارٍ حفظ قائمة التبني…";
+"AdoptPro_Error_Save" = "تعذر حفظ قائمة التبني.";
+"AdoptPro_UpdatedSuccess" = "تم تحديث قائمة التبني.";
+"AdoptPro_CreatedSuccess" = "تم إنشاء قائمة التبني.";
+"AdoptPro_Error_MissingListing" = "قائمة التبني غير موجودة.";
+
+/* Pro Dashboard Live Hero */
+"DashboardHero_Status_Live" = "مباشر الآن";
+"DashboardHero_Status_Action" = "يحتاج إجراء";
+"DashboardHero_Status_MultiWorkspace" = "مساحات العمل نشطة";
+"DashboardHero_Command_AllClear" = "كل شيء هادئ الآن";
+"DashboardHero_Command_Action" = "طلبات تحتاج إجراء";
+"DashboardHero_Command_WorkspacesAction" = "أعمال تحتاج إجراء";
+"DashboardHero_Command_MultiWorkspace" = "مساحاتك جاهزة";
+"DashboardHero_Command_Subtitle_Format" = "%ld تجهيز • %ld توصيل";
+"DashboardHero_Command_ActionSummary_Format" = "%@ تحتاج انتباهك الآن.";
+"DashboardHero_Command_WorkspaceSummary_Format" = "مساحات العمل المتاحة: %@";
+"DashboardHero_Command_AllClear_Subtitle" = "لا توجد طلبات تحتاج إجراء الآن.";
+"DashboardHero_Metric_Fulfillment" = "التجهيز";
+"DashboardHero_Metric_Delivery" = "التوصيل";
+"DashboardHero_Metric_Workspaces" = "المساحات";
+"DashboardHero_Metric_Actions" = "الإجراءات";
+"DashboardHero_ActionPart_Fulfillment_Format" = "%ld تجهيز";
+"DashboardHero_ActionPart_Delivery_Format" = "%ld توصيل";
+"DashboardHero_ActionPart_Fleet_Format" = "%ld أسطول";
+"DashboardHero_CTA_Fulfillment" = "فتح التجهيز";
+"DashboardHero_CTA_Delivery" = "فتح التوصيل";
+"DashboardHero_CTA_Marketplace" = "فتح السوق";
+"DashboardHero_CTA_Pharmacy" = "فتح الصيدلية";
+"DashboardHero_CTA_Services" = "إدارة الخدمات";
+"DashboardHero_CTA_Vets" = "فتح الأطباء";
+"DashboardHero_CTA_DeliveryCompany" = "فتح الأسطول";
+"DashboardHero_CTA_Adoption" = "فتح التبني";
+"DashboardHero_CTA_Notifications" = "مراجعة الإشعارات";
+"DashboardHero_Live_Accessibility_Format" = "الطلبات التي تحتاج إجراء: %ld";
+"DashboardHero_Workspace_Accessibility_Format" = "%ld إجراء، %ld مساحة عمل نشطة";
+
+/* ===================== شركة التوصيل / شريك الأسطول ===================== */
+"DeliveryCompany_Section" = "شريك الأسطول";
+"DeliveryCompany_Title" = "توصيلات الشركة";
+"DeliveryCompany_SetupEntry_Title" = "ربط شركة توصيل";
+"DeliveryCompany_SetupEntry_Subtitle" = "تحقق من معرّف الشركة لفتح مساحة إدارة الأسطول.";
+"DeliveryCompany_DashboardEntry_Subtitle_Format" = "%@ • %@";
+"DeliveryCompany_NavTitle" = "توصيلات الشركة";
+"DeliveryCompany_Setup_NavTitle" = "إعداد الشركة";
+"DeliveryCompany_Setup_Eyebrow" = "مساحة الأسطول";
+"DeliveryCompany_Setup_Title" = "اربط شركة التوصيل";
+"DeliveryCompany_Setup_Subtitle" = "نبحث أولاً عن عضويات الأسطول النشطة المرتبطة بحسابك. إذا كانت هناك أكثر من شركة فعالة، يمكنك اختيار واحدة أو إدخال معرّف الشركة يدوياً.";
+"DeliveryCompany_Setup_FormTitle" = "وصول شركة الأسطول";
+"DeliveryCompany_Setup_FormSubtitle" = "يتم اكتشاف العضويات النشطة عبر وظائف Firebase القابلة للاستدعاء، مع الإبقاء على إدخال معرّف الشركة يدوياً للحالات المدعوة أو التشخيصية.";
+"DeliveryCompany_Setup_CompanyID" = "معرّف الشركة";
+"DeliveryCompany_Setup_CompanyIDPlaceholder" = "أدخل معرّف الشركة";
+"DeliveryCompany_Setup_CompanyIDRequired" = "أدخل معرّف الشركة قبل المتابعة.";
+"DeliveryCompany_Setup_Connect" = "تحقق واربط";
+"DeliveryCompany_Setup_ChooseCompany" = "اختر الشركة";
+"DeliveryCompany_Setup_ChooseCompanyTitle" = "اختر شركة نشطة";
+"DeliveryCompany_Setup_ChooseCompanySubtitle" = "هذا الحساب مرتبط بأكثر من شركة أسطول نشطة.";
+"DeliveryCompany_Setup_MultipleCompanies_Format" = "تم العثور على %ld شركات نشطة لهذا الحساب. اختر واحدة للمتابعة أو أدخل معرّف الشركة يدوياً.";
+"DeliveryCompany_Setup_DiscoveryLoading" = "جارٍ التحقق من عضويات الأسطول النشطة…";
+"DeliveryCompany_Setup_OpenDashboard" = "فتح لوحة الشركة";
+"DeliveryCompany_Setup_Disconnect" = "إلغاء الربط";
+"DeliveryCompany_Setup_DisconnectTitle" = "إلغاء ربط هذه الشركة؟";
+"DeliveryCompany_Setup_DisconnectSubtitle" = "سيتم حذف إعداد الشركة المحلي فقط، ولن تتغير عضويتك في الخادم.";
+"DeliveryCompany_Setup_Connected" = "تم ربط الشركة";
+"DeliveryCompany_Setup_ConnectedSubtitle" = "تم التحقق من عضويتك النشطة في الشركة.";
+"DeliveryCompany_Setup_Connected_Format" = "متصل بـ %@ بصلاحية %@";
+"DeliveryCompany_Setup_UnableToConnect" = "تعذر الربط";
+"DeliveryCompany_Setup_VerificationRequired" = "تحقق من معرّف الشركة قبل فتح هذه المساحة.";
+"DeliveryCompany_Setup_Configure" = "إعداد الشركة";
+"DeliveryCompany_Error_InvalidProfile" = "استجابة ملف الشركة غير مكتملة.";
+"DeliveryCompany_Error_Title" = "تعذر تحميل توصيلات الشركة";
+"DeliveryCompany_Error_Generic" = "حدث خطأ. تحقق من الاتصال وحاول مرة أخرى.";
+"DeliveryCompany_NotAvailable" = "غير متاح";
+
+"DeliveryCompany_Dashboard_Eyebrow" = "عمليات الأسطول المباشرة";
+"DeliveryCompany_Dashboard_Requests" = "الطلبات";
+"DeliveryCompany_Dashboard_Subtitle_Format" = "صلاحية %@ • عمليات الشركة بالكامل";
+"DeliveryCompany_Dashboard_DriverSubtitle_Format" = "صلاحية %@ • توصيلاتي المعيّنة فقط";
+"DeliveryCompany_Dashboard_MembersShortcutSubtitle" = "افتح قائمة الفريق وتفاصيل الأعضاء وأدوات المالك.";
+"DeliveryCompany_DashboardShell_MyAssigned" = "توصيلاتي المعيّنة";
+"DeliveryCompany_DashboardShell_MyAssignedSubtitle" = "افتح مسارك الخاص وحدّث كل توصيل مكلّف به.";
+"DeliveryCompany_DashboardShell_OpenCompany" = "فتح توصيلات الشركة";
+"DeliveryCompany_DashboardShell_OpenCompanySubtitle" = "راجع الطلبات المباشرة والتعيينات وتقدّم التوصيل.";
+"DeliveryCompany_DashboardShell_ContinueActive" = "متابعة التوصيل النشط";
+"DeliveryCompany_DashboardShell_ContinueActiveSubtitle" = "ارجع مباشرة إلى الخطوة التالية في مسارك الحالي.";
+"DeliveryCompany_DashboardShell_Metric_Pickups" = "بانتظار الاستلام";
+"DeliveryCompany_DashboardShell_Metric_InTransit" = "في الطريق";
+"DeliveryCompany_DashboardShell_Metric_Assigned" = "مُعيّنة";
+"DeliveryCompany_DashboardShell_Metric_Active" = "نشطة";
+"DeliveryCompany_DashboardShell_Status_Driver" = "مساحة السائق";
+"DeliveryCompany_DashboardShell_Status_Operations" = "عمليات الأسطول";
+"DeliveryCompany_DashboardShell_Status_ReadOnly" = "وصول للقراءة فقط";
+"DeliveryCompany_DashboardShell_DriverTitle" = "التوصيلات النشطة";
+"DeliveryCompany_DashboardShell_OperationsTitle" = "الطلبات الجديدة";
+"DeliveryCompany_DashboardShell_ViewerTitle" = "نظرة عامة على الأسطول";
+"DeliveryCompany_DashboardShell_DriverSummary" = "مساحتك الخاصة للتوصيلات والتعيينات وإعدادات الحساب.";
+"DeliveryCompany_DashboardShell_CompanySummary" = "طلبات الشركة والتعيينات وتقدّم الأسطول وإعدادات الحساب.";
+"DeliveryCompany_DashboardShell_DriverSummary_Format" = "%@ بانتظار الاستلام • %@ في الطريق • %@ مكتملة اليوم";
+"DeliveryCompany_DashboardShell_CompanySummary_Format" = "%@ مقبولة • %@ تم توصيلها وتنتظر الإكمال";
+"DeliveryCompany_DashboardShell_DriverAccess" = "التوصيلات المعيّنة فقط";
+"DeliveryCompany_DashboardShell_OperationsAccess" = "عمليات الشركة";
+"DeliveryCompany_DashboardShell_ViewerAccess" = "عرض الشركة للقراءة فقط";
+"DeliveryCompany_DashboardShell_Access_Format" = "%@ • %@ • %@";
+"DeliveryCompany_DashboardShell_Accessibility_Format" = "%@ عناصر، %@";
+"DeliveryCompany_Tab_New" = "طلبات جديدة";
+"DeliveryCompany_Tab_Accepted" = "مقبولة";
+"DeliveryCompany_Tab_Assigned" = "مُعيّنة";
+"DeliveryCompany_Tab_InProgress" = "قيد التنفيذ";
+"DeliveryCompany_Tab_Delivered" = "تم التوصيل";
+"DeliveryCompany_Tab_Completed" = "مكتملة";
+"DeliveryCompany_Tab_Closed" = "ملغاة / مرفوضة";
+"DeliveryCompany_Tab_Members" = "السائقون / الأعضاء";
+"DeliveryCompany_Empty_Title" = "لا توجد توصيلات في هذا العرض";
+"DeliveryCompany_Empty_Subtitle" = "اسحب للتحديث أو اختر حالة أخرى.";
+
+"DeliveryCompany_Order_Format" = "الطلب %@";
+"DeliveryCompany_Pickup" = "الاستلام";
+"DeliveryCompany_Dropoff" = "التسليم";
+"DeliveryCompany_Pickup_Format" = "الاستلام • %@";
+"DeliveryCompany_Dropoff_Format" = "التسليم • %@";
+"DeliveryCompany_Driver_Format" = "السائق • %@";
+"DeliveryCompany_Unassigned" = "غير معيّن";
+"DeliveryCompany_Fee_Format" = "%.2f ر.ق";
+"DeliveryCompany_Fee_Unavailable" = "رسوم التوصيل غير متاحة";
+"DeliveryCompany_Updated_Format" = "آخر تحديث %@";
+"DeliveryCompany_Dates_Format" = "الإنشاء %@ • التحديث %@";
+
+"DeliveryCompany_Detail_NavTitle" = "تفاصيل التوصيل";
+"DeliveryCompany_Detail_Updated_Format" = "آخر تحديث %@";
+"DeliveryCompany_Detail_Route" = "المسار";
+"DeliveryCompany_Detail_Assignment" = "التعيين";
+"DeliveryCompany_Detail_AssignedDriver" = "سائق الشركة المعيّن";
+"DeliveryCompany_Detail_AssignmentPending" = "بانتظار تعيين سائق";
+"DeliveryCompany_Detail_Information" = "معلومات الطلب";
+"DeliveryCompany_Detail_RequestID" = "معرّف الطلب";
+"DeliveryCompany_Detail_Fee" = "رسوم التوصيل";
+"DeliveryCompany_Detail_Created" = "تاريخ الإنشاء";
+"DeliveryCompany_Detail_Updated" = "آخر تحديث";
+"DeliveryCompany_Detail_Note" = "ملاحظة التوصيل";
+"DeliveryCompany_Detail_Timeline" = "الخط الزمني";
+"DeliveryCompany_Detail_NoEvents" = "لا توجد أحداث في الخط الزمني حتى الآن.";
+"DeliveryCompany_Detail_Actions" = "الإجراءات المتاحة";
+"DeliveryCompany_Event_Meta_Format" = "%@ • %@";
+
+"DeliveryCompany_Action_Accept" = "قبول الطلب";
+"DeliveryCompany_Action_Reject" = "رفض الطلب";
+"DeliveryCompany_Action_Assign" = "تعيين سائق";
+"DeliveryCompany_Action_Reassign" = "إعادة تعيين السائق";
+"DeliveryCompany_Action_Complete" = "إكمال الطلب";
+"DeliveryCompany_Action_Cancel" = "إلغاء الطلب";
+"DeliveryCompany_Action_PickedUp" = "تأكيد الاستلام";
+"DeliveryCompany_Action_InTransit" = "بدء التوصيل";
+"DeliveryCompany_Action_Delivered" = "تأكيد التسليم";
+"DeliveryCompany_Action_Update" = "تحديث الحالة";
+"DeliveryCompany_Action_Success" = "تم تحديث طلب التوصيل.";
+"DeliveryCompany_Confirm_Accept_Title" = "قبول هذا الطلب؟";
+"DeliveryCompany_Confirm_Accept_Message" = "سينتقل الطلب إلى قائمة الشركة ويمكن بعدها تعيينه لسائق.";
+"DeliveryCompany_Confirm_Reject_Title" = "رفض هذا الطلب؟";
+"DeliveryCompany_Confirm_Complete_Title" = "إكمال هذا التوصيل؟";
+"DeliveryCompany_Confirm_Complete_Message" = "استخدم هذا الإجراء فقط بعد أن يحدد السائق الطلب كمُسلّم.";
+"DeliveryCompany_Confirm_Cancel_Title" = "إلغاء هذا الطلب؟";
+"DeliveryCompany_Confirm_Status_Message" = "أكد مرحلة التوصيل التالية، وسيقوم الخادم بالتحقق من صحة الانتقال.";
+"DeliveryCompany_Confirm_Delivered_Title" = "تأكيد التسليم";
+"DeliveryCompany_Confirm_Delivered_Message" = "أضف اسم المستلم عند توفره ثم أكد التسليم.";
+"DeliveryCompany_ReceiverName_Placeholder" = "اسم المستلم (اختياري)";
+"DeliveryCompany_Reason_Subtitle" = "أضف سببًا تشغيليًا مختصرًا. يسجل الخادم الإجراء في سجل التدقيق.";
+"DeliveryCompany_Reason_Placeholder" = "السبب";
+"DeliveryCompany_SelectDriver" = "اختر سائقًا نشطًا ومتاحًا.";
+"DeliveryCompany_DriverChoice_Format" = "%@ • %ld توصيل نشط";
+"DeliveryCompany_NoDrivers_Title" = "لا يوجد سائقون متاحون";
+"DeliveryCompany_NoDrivers_Subtitle" = "يلزم وجود سائق نشط ومتاح لاستقبال التعيينات.";
+
+"DeliveryCompany_Role_Owner" = "مالك";
+"DeliveryCompany_Role_Dispatcher" = "منسق";
+"DeliveryCompany_Role_Driver" = "سائق";
+"DeliveryCompany_Role_Viewer" = "مشاهد";
+"DeliveryCompany_Role_Customer" = "عميل";
+"DeliveryCompany_Status_Offered" = "طلب جديد";
+"DeliveryCompany_Status_Accepted" = "مقبول";
+"DeliveryCompany_Status_Assigned" = "مُعيّن";
+"DeliveryCompany_Status_PickedUp" = "تم الاستلام";
+"DeliveryCompany_Status_InTransit" = "في الطريق";
+"DeliveryCompany_Status_Delivered" = "تم التسليم";
+"DeliveryCompany_Status_Completed" = "مكتمل";
+"DeliveryCompany_Status_Rejected" = "مرفوض";
+"DeliveryCompany_Status_Cancelled" = "ملغى";
+"DeliveryCompany_Status_Failed" = "فشل";
+"DeliveryCompany_Status_Expired" = "منتهي";
+"DeliveryCompany_Status_Reassigned" = "تمت إعادة تعيين السائق";
+
+"DeliveryCompany_Members_NavTitle" = "السائقون والأعضاء";
+"DeliveryCompany_Members_Eyebrow" = "صلاحيات الشركة";
+"DeliveryCompany_Members_Title" = "السائقون والأعضاء";
+"DeliveryCompany_Members_Subtitle" = "راجع الأدوار والتوفر وحجم التوصيلات النشطة.";
+"DeliveryCompany_Members_Phone_Format" = "الهاتف • %@";
+"DeliveryCompany_Members_Email_Format" = "البريد الإلكتروني • %@";
+"DeliveryCompany_Members_PhoneUnavailable" = "الهاتف غير متاح من واجهة API الحالية";
+"DeliveryCompany_Members_Available" = "متاح";
+"DeliveryCompany_Members_Unavailable" = "غير متاح";
+"DeliveryCompany_Members_Disabled" = "معطل";
+"DeliveryCompany_Members_ActiveCount_Format" = "%ld توصيل نشط";
+"DeliveryCompany_Members_Summary_Format" = "%ld سائقين نشطين • %ld أعضاء متاحين الآن";
+"DeliveryCompany_Members_EmptyTitle" = "لا يوجد أعضاء في الشركة";
+"DeliveryCompany_Members_EmptySubtitle" = "سيظهر الأعضاء هنا بعد إضافتهم إلى الشركة.";
+"DeliveryCompany_Members_Disable" = "تعطيل";
+"DeliveryCompany_Members_DisableTitle" = "تعطيل هذا العضو؟";
+"DeliveryCompany_Members_DisableMessage_Format" = "سيفقد %@ صلاحية الشركة وإمكانية استقبال التعيينات.";
+"DeliveryCompany_Members_DisabledSuccess" = "تم تعطيل العضو.";
+"DeliveryCompany_Members_InviteTitle" = "دعوة عضو للشركة";
+"DeliveryCompany_Members_InviteSubtitle" = "أدخل UID أو البريد الإلكتروني أو رقم الجوال لمستخدم Pure Pets. سيتحقق الخادم من هوية المستخدم قبل إضافته.";
+"DeliveryCompany_Members_InviteHero" = "دعوة عضو";
+"DeliveryCompany_Members_UIDPlaceholder" = "UID المستخدم";
+"DeliveryCompany_Members_IdentifierPlaceholder" = "UID أو البريد الإلكتروني أو رقم الجوال";
+"DeliveryCompany_Members_SelectRole" = "اختر دور العضو";
+"DeliveryCompany_Members_InviteSuccess" = "تمت إضافة عضو الشركة.";
+"DeliveryCompany_Members_InviteSheet_Eyebrow" = "وصول أعضاء آمن";
+"DeliveryCompany_Members_InviteSheet_Title" = "تحقق من هوية العضو";
+"DeliveryCompany_Members_InviteSheet_Subtitle" = "أدخل معرفًا واحدًا أو أكثر موثوقًا. سيحسم Pure Pets الحساب النهائي من الخادم قبل منح أي صلاحية.";
+"DeliveryCompany_Members_InviteSheet_IdentityTitle" = "بيانات الهوية";
+"DeliveryCompany_Members_InviteSheet_IdentitySubtitle" = "الـ UID هو الأسرع. يبقى البريد الإلكتروني والجوال خيارين احتياطيين عندما لا يتوفر UID لدى العضو.";
+"DeliveryCompany_Members_InviteSheet_UIDTitle" = "UID في Pure Pets";
+"DeliveryCompany_Members_InviteSheet_UIDPlaceholder" = "ألصق UID العضو";
+"DeliveryCompany_Members_InviteSheet_EmailTitle" = "بريد الحساب";
+"DeliveryCompany_Members_InviteSheet_EmailPlaceholder" = "name@example.com";
+"DeliveryCompany_Members_InviteSheet_MobileTitle" = "رقم الجوال";
+"DeliveryCompany_Members_InviteSheet_MobilePlaceholder" = "+974 5555 0000";
+"DeliveryCompany_Members_InviteSheet_UIDHint" = "استخدم UID حساب Pure Pets عندما يكون متاحًا.";
+"DeliveryCompany_Members_InviteSheet_UIDValid" = "تنسيق UID جاهز للبحث الآمن.";
+"DeliveryCompany_Members_InviteSheet_UIDInvalid" = "أدخل UID صحيحًا باستخدام أحرف أو أرقام أو شرطة سفلية أو شرطة أو نقطة.";
+"DeliveryCompany_Members_InviteSheet_EmailHint" = "خيار احتياطي لحسم الحساب.";
+"DeliveryCompany_Members_InviteSheet_EmailValid" = "تنسيق البريد جاهز للتحقق من الخادم.";
+"DeliveryCompany_Members_InviteSheet_EmailInvalid" = "أدخل بريدًا إلكترونيًا صحيحًا.";
+"DeliveryCompany_Members_InviteSheet_MobileHint" = "خيار احتياطي عندما يشارك العضو رقم الجوال.";
+"DeliveryCompany_Members_InviteSheet_MobileValid" = "تنسيق الجوال جاهز للتحقق من الخادم.";
+"DeliveryCompany_Members_InviteSheet_MobileInvalid" = "أدخل رقم جوال صحيحًا بعدد أرقام كافٍ.";
+"DeliveryCompany_Members_InviteSheet_RoleTitle" = "دور العضو";
+"DeliveryCompany_Members_InviteSheet_RoleLocked" = "أكمل معرفًا صحيحًا أولًا لفتح خيارات الدور.";
+"DeliveryCompany_Members_InviteSheet_RoleUnlocked" = "اختر مستوى الصلاحية الذي سيفتح بعد نجاح التحقق من الخادم.";
+"DeliveryCompany_Members_InviteSheet_RoleSubtitle_Driver" = "يستقبل التعيينات ويتابع خطوات التوصيل.";
+"DeliveryCompany_Members_InviteSheet_RoleSubtitle_Dispatcher" = "يشرف على التوجيه والتعيينات وتنسيق الأسطول.";
+"DeliveryCompany_Members_InviteSheet_RoleSubtitle_Viewer" = "اطلاع فقط على نشاط الشركة وحالة الأعضاء.";
+"DeliveryCompany_Members_InviteSheet_RoleSubtitle_Owner" = "صلاحية كاملة على الشركة وإدارة الأعضاء والتحكم في الدعوات.";
+"DeliveryCompany_Members_InviteSheet_StatusIdleTitle" = "بانتظار بيانات العضو";
+"DeliveryCompany_Members_InviteSheet_StatusIdleSubtitle" = "ابدأ بـ UID أو البريد الإلكتروني أو رقم الجوال لتجهيز خطوة التحقق الآمن.";
+"DeliveryCompany_Members_InviteSheet_StatusNeedsAttentionTitle" = "المعرف يحتاج ضبطًا";
+"DeliveryCompany_Members_InviteSheet_StatusNeedsAttentionSubtitle" = "صحح الحقل المميز حتى نتمكن من تجهيز خطوة التحقق الآمن.";
+"DeliveryCompany_Members_InviteSheet_StatusReadyTitle" = "جاهز للتحقق الآمن";
+"DeliveryCompany_Members_InviteSheet_StatusReadySubtitle_Format" = "سيتم إرسال %@ إلى الخادم للتحقق باستخدام %@.";
+"DeliveryCompany_Members_InviteSheet_MethodUID" = "UID العضو";
+"DeliveryCompany_Members_InviteSheet_MethodEmail" = "بريد الحساب";
+"DeliveryCompany_Members_InviteSheet_MethodMobile" = "رقم الجوال";
+"DeliveryCompany_Members_InviteSheet_StatusSubmittingTitle" = "جار التحقق من وصول العضو";
+"DeliveryCompany_Members_InviteSheet_StatusSubmittingSubtitle" = "نقوم الآن بحسم الحساب وتجهيز دور الشركة المحدد.";
+"DeliveryCompany_Members_InviteSheet_StatusSuccessTitle" = "وصول العضو جاهز";
+"DeliveryCompany_Members_InviteSheet_StatusSuccessSubtitle" = "تم التحقق من العضو وإضافته إلى الشركة بنجاح.";
+"DeliveryCompany_Members_InviteSheet_StatusFailureTitle" = "تعذر إكمال التحقق";
+"DeliveryCompany_Members_InviteSheet_StatusFailureSubtitle" = "راجع المعرّف أو جرّب وسيلة تواصل موثوقة أخرى.";
+"DeliveryCompany_Members_InviteSheet_Submit" = "تحقق وأرسل الدعوة";
+"DeliveryCompany_Members_InviteSheet_Submitting" = "جار التحقق…";
+"DeliveryCompany_Members_InviteSheet_SuccessButton" = "تمت إضافة العضو";
+"DeliveryCompany_Members_InviteSheet_Footnote" = "التحقق من الخادم هو الذي يحدد الحساب النهائي. هذه الشاشة لا تمنح أي صلاحية حتى تنجح خطوة الدعوة الآمنة.";
+"DeliveryCompany_Members_Sheet_DriverEyebrow" = "تفاصيل السائق";
+"DeliveryCompany_Members_Sheet_MemberEyebrow" = "تفاصيل العضو";
+"DeliveryCompany_Members_Sheet_Subtitle_Format" = "صلاحية %@ ضمن مساحة الأسطول";
+"DeliveryCompany_Members_Sheet_ActiveDeliveries" = "التوصيلات النشطة";
+"DeliveryCompany_Members_Sheet_AssignmentState" = "حالة التعيين";
+"DeliveryCompany_Members_Sheet_AssignmentsOn" = "يستقبل";
+"DeliveryCompany_Members_Sheet_AssignmentsOff" = "متوقف";
+"DeliveryCompany_Members_Sheet_ContactSection" = "التواصل والهوية";
+"DeliveryCompany_Members_Sheet_ActionsSection" = "إجراءات سريعة";
+"DeliveryCompany_Members_Sheet_UID" = "UID المستخدم";
+"DeliveryCompany_Members_Sheet_Phone" = "الهاتف";
+"DeliveryCompany_Members_Sheet_Email" = "البريد الإلكتروني";
+"DeliveryCompany_Members_Sheet_LastSeen" = "آخر ظهور";
+"DeliveryCompany_Members_Sheet_OnlineNow" = "متصل الآن";
+"DeliveryCompany_Members_Sheet_Call" = "اتصال";
+"DeliveryCompany_Members_Sheet_Chat" = "دردشة داخل التطبيق";
+"DeliveryCompany_Members_Sheet_Footnote" = "تفتح الدردشة محادثة مباشرة داخل Pro باستخدام قناة الرسائل الحالية.";
+"DeliveryCompany_Members_Sheet_CallUnavailable" = "رقم الهاتف غير متاح لهذا العضو.";
+"DeliveryCompany_Members_Sheet_ChatUnavailable" = "تعذر فتح الدردشة لهذا العضو الآن.";
+"Next" = "التالي";
+
+/* Provider Document Attachment */
+"ProviderAttachmentAddTitle" = "إرفاق مستند";
+"ProviderAttachmentAddSubtitle" = "استخدم الكاميرا أو الصور أو الملفات أو المسح.";
+"ProviderAttachmentReplaceSubtitle" = "اضغط لاستبدال المستند.";
+"ProviderAttachDocumentHint" = "إضافة مستند";
+"ProviderUploadingDocument" = "جاري الرفع…";
+"ProviderDocumentAttached" = "تم إرفاق المستند";
+"ProviderDocumentUploaded" = "تم رفع المستند";
+"ProviderUploadFailed" = "فشل الرفع";
+"ProviderRemoveDocument" = "إزالة المستند";
+"ProviderAttachCamera" = "كاميرا";
+"ProviderAttachPhotoLibrary" = "مكتبة الصور";
+"ProviderAttachFiles" = "الملفات";
+"ProviderAttachScan" = "مسح مستند";
+"ProviderCameraUnavailable" = "الكاميرا غير متاحة";
+"ProviderUnsupportedFile" = "صيغة ملف غير مدعومة";
+"ProviderScanFailed" = "فشل المسح";
+
+/* الملف المميز وفروع استلام طلبات السوق */
+"ProfileSettings_Eyebrow" = "حساب بيور بتس برو";
+"ProfileSettings_EditAction" = "تعديل الملف";
+"ProfileSettings_IdentitySection" = "هوية الحساب";
+"ProfileSettings_IdentitySubtitle" = "البيانات الموثقة المستخدمة في مساحة عمل برو.";
+"ProfileSettings_ControlsSubtitle" = "البيانات الشخصية وتفضيلات الإشعارات.";
+"ProfileSettings_NoContact" = "لا توجد بيانات تواصل متاحة";
+"ProfileSettings_LogoutSubtitle" = "إنهاء جلسة برو بأمان.";
+"MarketplaceBranches_Title" = "فروع استلام الطرود";
+"MarketplaceBranches_Eyebrow" = "مصدر الطرد";
+"MarketplaceBranches_Hero" = "شبكة نقاط الاستلام";
+"MarketplaceBranches_Subtitle" = "أضف مواقع المتاجر التي تستلم منها شركات التوصيل طرود السوق.";
+"MarketplaceBranches_ProfileSubtitle" = "إدارة مواقع الاستلام المتاحة عند طلب التوصيل.";
+"MarketplaceBranches_ProfileRowSubtitle" = "أضف الفروع وعدّلها وحدد موقع الاستلام الافتراضي.";
+"MarketplaceBranches_Manage" = "إدارة فروع الاستلام";
+"MarketplaceBranches_Add" = "إضافة فرع";
+"MarketplaceBranches_Edit" = "تعديل الفرع";
+"MarketplaceBranches_Activate" = "تفعيل";
+"MarketplaceBranches_Deactivate" = "تعطيل";
+"MarketplaceBranches_Default" = "افتراضي";
+"MarketplaceBranches_DefaultLabel" = "استخدامه كفرع الاستلام الافتراضي";
+"MarketplaceBranches_EmptyTitle" = "لا توجد فروع استلام بعد";
+"MarketplaceBranches_EmptySubtitle" = "أضف أول موقع متجر قبل إرسال طرد إلى شركة توصيل.";
+"MarketplaceBranches_LoadUnavailableTitle" = "فروع الاستلام غير متاحة";
+"MarketplaceBranches_LoadUnavailableSubtitle" = "خدمة الفروع غير متاحة لهذا الحساب حالياً. أعد المحاولة بعد تحديث صلاحية السوق.";
+"MarketplaceBranches_EditorEyebrow" = "موقع الاستلام";
+"MarketplaceBranches_EditorTitle" = "تفاصيل الفرع";
+"MarketplaceBranches_EditorSubtitle" = "استخدم اسماً واضحاً وعنوان استلام دقيقاً يسهل على السائق التعرف عليه.";
+"MarketplaceBranches_NameAr" = "اسم الفرع بالعربية";
+"MarketplaceBranches_NameEn" = "اسم الفرع بالإنجليزية";
+"MarketplaceBranches_Address" = "عنوان الاستلام الدقيق";
+"MarketplaceBranches_Phone" = "رقم هاتف الفرع";
+"MarketplaceBranches_Required" = "أضف اسم الفرع وعنوان الاستلام قبل الحفظ.";
+"MarketplaceBranches_Saved" = "تم حفظ فرع الاستلام.";
+"MarketplaceBranches_SelectTitle" = "اختر فرع الاستلام";
+"MarketplaceBranches_SelectHero" = "أين ينتظر هذا الطرد؟";
+"MarketplaceBranches_SelectSubtitle" = "يظهر الفرع المحدد وعنوان الاستلام لشركات التوصيل قبل قبول الطلب.";
+"MarketplaceBranches_ConfirmPickup" = "استخدام فرع الاستلام";
+"New notification" = "إشعار جديد";
+
+/* إعدادات إشعارات برو المميزة */
+"NotificationSettings_Eyebrow" = "تحكم تنبيهات برو";
+"NotificationSettings_HeroTitle" = "مركز قيادة الإشعارات";
+"NotificationSettings_HeroSubtitle" = "تحكم في تنبيهات الواجهة والصوت وفئات برو التي تستحق انتباهك.";
+"NotificationSettings_CheckingStatus" = "جارٍ فحص صلاحية الإشعارات";
+"NotificationSettings_CheckingStatusSubtitle" = "يقوم Pure Pets Pro بقراءة حالة إشعارات iOS الحالية على هذا الجهاز.";
+"NotificationSettings_StatusNotDeterminedTitle" = "الصلاحية تحتاج مراجعة";
+"NotificationSettings_StatusNotDeterminedBody" = "اسمح بإشعارات iOS حتى يتمكن برو من تسجيل هذا الجهاز لتحديثات المزود والتوصيل.";
+"NotificationSettings_StatusEnabledTitle" = "إشعارات iOS مفعلة";
+"NotificationSettings_StatusEnabledBody" = "يمكن لهذا الجهاز استقبال تنبيهات برو. المفاتيح بالأسفل تضبط تجربة برو أثناء فتح التطبيق.";
+"NotificationSettings_StatusDeniedTitle" = "متوقفة من إعدادات iOS";
+"NotificationSettings_StatusDeniedBody" = "تم حظر التنبيهات من iOS. افتح الإعدادات لتفعيل الإشعارات لتطبيق Pure Pets Pro.";
+"NotificationSettings_StatusQuietTitle" = "تصل بهدوء";
+"NotificationSettings_StatusQuietBody" = "يسمح iOS بوصول هادئ. افتح الإعدادات لتعديل البانرات والصوت وشاشة القفل.";
+"NotificationSettings_AllowNotifications" = "السماح بالإشعارات";
+"NotificationSettings_OpenIOSSettings" = "إعدادات iOS";
+"NotificationSettings_MasterTitle" = "تنبيهات برو داخل التطبيق";
+"NotificationSettings_MasterSubtitle" = "إظهار بانرات برو المميزة أثناء فتح تطبيق Pure Pets Pro.";
+"NotificationSettings_SoundTitle" = "صوت الإشعار";
+"NotificationSettings_SoundSubtitle" = "تشغيل نغمة برو فقط عندما تكون تنبيهات الواجهة مسموحة.";
+"NotificationSettings_CategoriesTitle" = "فئات التنبيه";
+"NotificationSettings_CategoryOrdersTitle" = "الطلبات والتنفيذ";
+"NotificationSettings_CategoryOrdersSubtitle" = "الطلبات الجديدة والمدفوعات وتغييرات حالة التنفيذ.";
+"NotificationSettings_CategoryDeliveryTitle" = "التوصيل والأسطول";
+"NotificationSettings_CategoryDeliverySubtitle" = "طلبات السائقين وتسليم الشركة وحركة التوصيل النشطة.";
+"NotificationSettings_CategoryReviewTitle" = "الإعلانات والمراجعة";
+"NotificationSettings_CategoryReviewSubtitle" = "مراجعة الإعلانات والكتالوج وتحديثات إدارة السوق.";
+"NotificationSettings_CategoryWarningTitle" = "حماية الحساب";
+"NotificationSettings_CategoryWarningSubtitle" = "الأمان والصلاحيات والإيقاف والتنبيهات المهمة للحساب.";
+"NotificationSettings_CategoryGeneralTitle" = "تحديثات عامة";
+"NotificationSettings_CategoryGeneralSubtitle" = "رسائل الفريق وتحديثات المنتج وأخبار الحساب الأقل أولوية.";
+"NotificationSettings_Footnote" = "يتم الحفظ فوراً على هذا الجهاز. ما زالت إعدادات iOS تتحكم في إمكانية وصول الإشعارات عندما يكون التطبيق مغلقاً.";
+"NotificationSettings_SavedToast" = "تم حفظ تفضيل الإشعارات.";
+"NotificationSettings_PermissionEnabledToast" = "تم تفعيل الإشعارات لهذا الجهاز.";
+"NotificationSettings_PermissionErrorToast" = "تعذر تحديث صلاحية الإشعارات.";
+"LogOut" = "تسجيل الخروج";
+"LogOutConfirmation" = "هل تريد تسجيل الخروج من بيور بتس برو؟";
+"ProfileSettings_CoverImageSection" = "صور الغلاف";
+"ProfileSettings_CoverImageSubtitle" = "إضافة أو تغيير صور غلاف الملف الشخصي";
+"ProfileSettings_CoverImageSaved" = "تم حفظ صور الغلاف";
+"ProfileSettings_CoverImageEmpty" = "لا توجد صور غلاف بعد";
+"ProfileSettings_NameRequired" = "اسم العرض مطلوب";
+"ProfileSettings_PersonalSectionTitle" = "البيانات الشخصية";
+"ProfileSettings_PersonalSectionSubtitle" = "حدّث بيانات الحساب المعتمدة عبر جلسة برو وهوية المزود.";
+"ProfileSettings_SaveHint" = "احفظ التعديلات من الشريط العلوي. هذا القسم مخصص لهوية الحساب فقط.";
+"ProfileSettings_ProviderPreviewTitle" = "معاينة ملف المزود";
+"ProfileSettings_ProviderPreviewSubtitle" = "هذه هي الهوية العامة التي يمكن للعملاء التعرّف عليها داخل تطبيق المستخدم.";
+"ProfileSettings_ProviderPreviewShownInUsersApp" = "ما يظهر في تطبيق المستخدم";
+"ProfileSettings_ProviderPreviewEmpty" = "لا توجد مساحة مزود عامة جاهزة بعد. أكمل الإعداد لإظهار ملفك العام.";
+"ProfileSettings_ProviderPreviewCoverTitle" = "صور الغلاف";
+"ProfileSettings_ProviderPreviewCoverCountFormat" = "%lu صورة غلاف";
+"ProfileSettings_ProviderPreviewWorkspaceFormat" = "مساحة العمل الأساسية: %@";
+"ProfileSettings_ProviderPreviewPlanFormat" = "مسار المزود الحالي: %@";
+"ProfileSettings_ProviderPreviewWorkspaceHint" = "افتح مساحة المزود لتعديل التفاصيل العامة التي يراها العملاء.";
+"ProfileSettings_ProviderPreviewStatusReady" = "جاهز";
+"ProfileSettings_ProviderPreviewStatusUnavailable" = "غير متاح";
+"ProfileSettings_EditProviderProfile" = "تعديل ملف المزود";
+"ProfileSettings_MoreMenuTitle" = "إجراءات إضافية";
+"ProfileSettings_MoreMenuMessage" = "تبقى الإعدادات الثانوية متاحة هنا بدون أن تشتت تجربة تعديل الملف الرئيسي.";
+"DashboardQuickActions_Title" = "الإجراءات السريعة";
+"DashboardQuickActions_Subtitle" = "أدر الأساسيات بشكل أسرع";
+"DashboardQuickActions_ViewAll" = "عرض الكل";
+"DashboardQuickActions_CompanyProfileTitle" = "ملف الشركة";
+"DashboardQuickActions_CompanyProfileSubtitle" = "معاينة بطاقة الشركة العامة ووسائل التواصل الحالية.";
+"DashboardQuickActions_EditProfileSubtitle" = "حدّث الشعار والغلاف والنبذة ووسائل التواصل وساعات العمل.";
+"DashboardQuickActions_OrdersSubtitle" = "افتح الطلبات النشطة والطلبات الجديدة وتقدّم التوصيل.";
+"DashboardQuickActions_InventorySubtitle" = "أدر العناصر والمخزون والأسعار وحالة الظهور.";
+"DashboardQuickActions_DeliverySettingsSubtitle" = "اضبط التغطية ورسوم التوصيل وتدفّق الإرسال النشط.";
+"DashboardQuickActions_TeamSubtitle" = "أدر أعضاء الفريق والأدوار والصلاحيات.";
+"DashboardQuickActions_SupportTitle" = "الدعم / الدردشة";
+"DashboardQuickActions_SupportSubtitle" = "افتح محادثات دعم المزود وتابع الردود.";
+"ProfileSettings_HeroSubtitle" = "واجهة حساب أهدأ وأنظف للبيانات التي تثبت حضورك كمزود.";
+"ProfileSettings_SettingsSectionTitle" = "الإعدادات";
+"ProfileSettings_SettingsSectionSubtitle" = "افتح عناصر التحكم التي تضبط تجربة برو بدون أن تزحم واجهة الملف.";
+"ProfileSettings_SettingsRowTitle" = "تفضيلات التطبيق";
+"ProfileSettings_SettingsRowSubtitle" = "الإشعارات والمظهر واللغة والتحكم في الجلسة داخل مكان واحد.";
+"ProfileSettings_SheetTitle" = "إعدادات التطبيق";
+"ProfileSettings_SheetSubtitle" = "اختر الإعداد الذي تريد تعديله الآن.";
+"ProfileSettings_LanguageTitle" = "اللغة";
+"ProfileSettings_LanguageSubtitleFormat" = "لغة التطبيق الحالية: %@";
+"ProfileSettings_LanguageEnglish" = "الإنجليزية";
+"ProfileSettings_LanguageArabic" = "العربية";
+"ProfileSettings_LanguageSheetSubtitle" = "اختر اللغة المستخدمة عبر تطبيق Pure Pets Pro.";
+"ProviderProfileEditor_Title" = "ملف المزود";
+"ProviderProfileEditor_HeroSubtitle" = "صقل التفاصيل العامة التي يتعرّف عليها العملاء أولاً عبر حضورك كمزود.";
+"ProviderProfileEditor_IdentitySection" = "الهوية";
+"ProviderProfileEditor_IdentitySubtitle" = "حافظ على الأساسيات نظيفة وموثوقة وجاهزة للملف العام.";
+"ProviderProfileEditor_LocationSection" = "المدينة";
+"ProviderProfileEditor_LocationSubtitle" = "اختر المدينة المرتبطة بهوية المزود داخل Pure Pets Pro.";
+"ProviderProfileEditor_MediaSection" = "الوسائط";
+"ProviderProfileEditor_MediaSubtitle" = "حدّث الصورة الشخصية وصور الغلاف بدون توسيع بقية سطح الملف.";
+"ProviderProfileEditor_DisplayNameTitle" = "اسم العرض";
+"ProviderProfileEditor_DisplayNamePlaceholder" = "اسم عرض المزود";
+"ProviderProfileEditor_PhoneTitle" = "رقم الجوال";
+"ProviderProfileEditor_PhonePlaceholder" = "رقم جوال المزود";
+"ProviderProfileEditor_CityTitle" = "المدينة";
+"ProviderProfileEditor_CityPlaceholder" = "اختر المدينة";
+"ProviderProfileEditor_CoversTitle" = "صور الغلاف";
+"ProviderProfileEditor_AddCover" = "إضافة صور غلاف";
+"ProviderProfileEditor_ChangeAvatar" = "تعديل";
+"ProviderProfileEditor_SaveHint" = "احفظ فقط عندما تبدو تفاصيل المزود العامة بالشكل الصحيح.";
+"ProviderProfileEditor_UnsavedHint" = "هناك تغييرات غير محفوظة جاهزة للنشر في ملف المزود.";
+"ProviderProfileEditor_UploadingHint" = "ما زالت بعض الرفعيات جارية. سيتفعّل الحفظ عندما تكتمل.";
+"ProviderProfileEditor_SavingHint" = "جارٍ حفظ تغييرات ملف المزود الآن.";
+"ProviderProfileEditor_SavedHint" = "تمت مزامنة ملف المزود مع آخر تعديلاتك.";
+"ProviderProfileEditor_RetryHint" = "بعض تغييرات الوسائط لم تكتمل. راجعها ثم أعد المحاولة.";
+"ProviderProfileEditor_LoadFailed" = "تعذر تحميل ملف المزود حالياً.";
+"ProviderProfileEditor_NoProfile" = "لا يوجد ملف مزود نشط جاهز للتعديل حتى الآن.";
+"ProviderProfileEditor_ProfileReadyFormat" = "تعديل ملف %@";
+"ProviderProfileEditor_ProfileTypePending" = "ملف المزود";
+"ProviderProfileEditor_CitySheetTitle" = "اختر المدينة";
+"ProviderProfileEditor_CitySheetSubtitle" = "حدد المدينة التي يجب أن تظهر مع بطاقة المزود داخل تطبيق المستخدم.";
+"ProviderProfileEditor_Selected" = "محدد";
+"ProviderProfileEditor_Saving" = "جارٍ حفظ ملف المزود";
+"ProviderProfileEditor_Saved" = "تم حفظ ملف المزود";
+"ProviderProfileEditor_SaveFailed" = "تعذر حفظ ملف المزود.";
+"ProviderProfileEditor_PermissionDenied" = "ليست لديك صلاحية لتعديل ملف المزود هذا.";
+"ProviderProfileEditor_PhoneRequired" = "رقم الجوال مطلوب.";
+"ProviderProfileEditor_CityRequired" = "المدينة مطلوبة.";
+"ProviderProfileEditor_ImageLoadFailed" = "تعذر تحميل الصورة المحددة.";
+"ProviderProfileEditor_UploadingAvatar" = "جارٍ رفع الصورة الشخصية";
+"ProviderProfileEditor_AvatarUploaded" = "تم تحديث الصورة الشخصية";
+"ProviderProfileEditor_AvatarUploadFailed" = "فشل رفع الصورة الشخصية";
+"ProviderProfileEditor_UploadingCovers" = "جارٍ رفع صور الغلاف";
+"ProviderProfileEditor_CoverUploaded" = "تم تحديث صور الغلاف";
+"ProviderProfileEditor_CoverUploadFailed" = "فشل رفع صورة الغلاف";
+"ProviderProfileEditor_SessionExpired" = "انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى للمتابعة.";

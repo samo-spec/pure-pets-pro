@@ -1,5 +1,13 @@
 import UIKit
 
+/// Controls how `PPHero` participates in the visual hierarchy.
+/// Content surfaces carry a restrained brand atmosphere; action docks stay
+/// quieter so the primary button remains the visual focus.
+@objc public enum PPHeroVisualRole: Int {
+    case content = 0
+    case actionDock = 1
+}
+
 /// A reusable, Objective-C-compatible flagship hero surface.
 /// Content remains owned by the embedding controller; this view owns material,
 /// ambient depth, interaction response, and its complete motion lifecycle.
@@ -7,12 +15,27 @@ import UIKit
 public final class PPHero: UIView, UIGestureRecognizerDelegate {
     private enum Metrics {
         static let cornerRadius: CGFloat = 32.0
-        static let particleCount = 14
-        static let maxTouchTilt: CGFloat = 0.018
+        static let particleCount = 5
+        static let maxTouchTilt: CGFloat = 0.009
     }
 
-    @objc public var accentColor: UIColor = .systemTeal {
+    /// Pure Pets raspberry. Override this if a different brand accent is needed.
+    @objc public var accentColor: UIColor = UIColor(
+        displayP3Red: 0.773,
+        green: 0.114,
+        blue: 0.353,
+        alpha: 1
+    ) {
         didSet { applyPalette() }
+    }
+
+    @objc public var visualRole: PPHeroVisualRole = .content {
+        didSet {
+            guard visualRole != oldValue else { return }
+            applyPalette()
+            configureParallax()
+            refreshMotionState()
+        }
     }
 
     private let materialView = UIVisualEffectView()
@@ -30,6 +53,7 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
     private var particles: [CAShapeLayer] = []
 
     private var motionRunning = false
+    private var parallaxEffect: UIMotionEffectGroup?
     private lazy var depthGesture: UIPanGestureRecognizer = {
         let gesture = UIPanGestureRecognizer(target: self, action: #selector(handleDepthGesture(_:)))
         gesture.cancelsTouchesInView = false
@@ -73,12 +97,14 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
 
         [auroraA, auroraB, auroraC].forEach {
             $0.type = .radial
-            $0.locations = [0, 0.48, 1]
+            // Compact falloff keeps each light source local instead of tinting
+            // the entire card.
+            $0.locations = [0, 0.30, 1]
         }
-        surfaceGradient.locations = [0, 0.42, 1]
+        surfaceGradient.locations = [0, 0.54, 1]
         vignetteLayer.type = .radial
-        vignetteLayer.locations = [0, 0.66, 1]
-        specularLayer.locations = [0, 0.22, 0.55, 1]
+        vignetteLayer.locations = [0, 0.74, 1]
+        specularLayer.locations = [0, 0.14, 0.38, 1]
         particleLayer.masksToBounds = true
 
         highlightView.isUserInteractionEnabled = false
@@ -102,24 +128,22 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
 
     private func buildParticles() {
         let points: [CGPoint] = [
-            .init(x: 0.08, y: 0.21), .init(x: 0.17, y: 0.72),
-            .init(x: 0.26, y: 0.43), .init(x: 0.36, y: 0.15),
-            .init(x: 0.43, y: 0.82), .init(x: 0.51, y: 0.34),
-            .init(x: 0.59, y: 0.63), .init(x: 0.67, y: 0.19),
-            .init(x: 0.74, y: 0.76), .init(x: 0.82, y: 0.42),
-            .init(x: 0.91, y: 0.14), .init(x: 0.94, y: 0.69),
-            .init(x: 0.31, y: 0.61), .init(x: 0.71, y: 0.48)
+            .init(x: 0.16, y: 0.22),
+            .init(x: 0.38, y: 0.76),
+            .init(x: 0.63, y: 0.28),
+            .init(x: 0.79, y: 0.68),
+            .init(x: 0.91, y: 0.18)
         ]
 
         particles = points.prefix(Metrics.particleCount).enumerated().map { index, point in
-            let size: CGFloat = index.isMultiple(of: 4) ? 2.6 : (index.isMultiple(of: 3) ? 1.8 : 1.25)
+            let size: CGFloat = index == 0 ? 1.6 : 1.0
             let particle = CAShapeLayer()
             particle.name = "pp.hero.particle.\(index)"
             particle.bounds = CGRect(x: 0, y: 0, width: size, height: size)
             particle.path = UIBezierPath(ovalIn: particle.bounds).cgPath
             particle.setValue(point.x, forKey: "normalizedX")
             particle.setValue(point.y, forKey: "normalizedY")
-            particle.opacity = index.isMultiple(of: 4) ? 0.64 : 0.34
+            particle.opacity = 0
             particleLayer.addSublayer(particle)
             return particle
         }
@@ -134,6 +158,7 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
     }
 
     @objc private func handleReduceMotionChange() {
+        configureParallax()
         refreshMotionState()
     }
 
@@ -185,6 +210,7 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
         if previousTraitCollection == nil ||
             traitCollection.hasDifferentColorAppearance(comparedTo: previousTraitCollection) {
             applyPalette()
+            refreshMotionState()
         }
     }
 
@@ -193,52 +219,163 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
     }
 
     private func applyPalette() {
-        let dark = traitCollection.userInterfaceStyle == .dark
-        let highContrast = traitCollection.accessibilityContrast == .high
-        let base = dark ? UIColor(red: 0.035, green: 0.043, blue: 0.052, alpha: 1) :
-            UIColor(red: 0.975, green: 0.978, blue: 0.972, alpha: 1)
-        let tail = dark ? UIColor(red: 0.065, green: 0.073, blue: 0.086, alpha: 1) :
-            UIColor(red: 0.925, green: 0.942, blue: 0.938, alpha: 1)
-        let warm = dark ? UIColor(red: 0.13, green: 0.10, blue: 0.16, alpha: 1) :
-            UIColor(red: 1.0, green: 0.91, blue: 0.78, alpha: 1)
-        let cool = dark ? UIColor(red: 0.04, green: 0.18, blue: 0.20, alpha: 1) :
-            UIColor(red: 0.63, green: 0.87, blue: 0.88, alpha: 1)
-        let accent = accentColor.resolvedColor(with: traitCollection)
+        let traits = traitCollection
+        let isDark = traits.userInterfaceStyle == .dark
+        let isHighContrast = traits.accessibilityContrast == .high
+        let isActionDock = visualRole == .actionDock
+        depthGesture.isEnabled = !isActionDock
 
-        materialView.effect = UIBlurEffect(style: dark ? .systemUltraThinMaterialDark : .systemUltraThinMaterialLight)
-        surfaceGradient.colors = [base.cgColor, base.mixed(with: tail, amount: 0.36).cgColor, tail.cgColor]
-        surfaceGradient.startPoint = CGPoint(x: 0.04, y: 0)
-        surfaceGradient.endPoint = CGPoint(x: 0.96, y: 1)
+        func p3(_ red: CGFloat,
+                _ green: CGFloat,
+                _ blue: CGFloat,
+                _ alpha: CGFloat = 1) -> UIColor {
+            UIColor(
+                displayP3Red: red,
+                green: green,
+                blue: blue,
+                alpha: alpha
+            )
+        }
 
-        configureAurora(auroraA, color: accent, opacity: dark ? 0.16 : 0.11,
-                        start: CGPoint(x: 0.12, y: 0.16), end: CGPoint(x: 0.66, y: 0.74))
-        configureAurora(auroraB, color: cool, opacity: dark ? 0.16 : 0.13,
-                        start: CGPoint(x: 0.82, y: 0.20), end: CGPoint(x: 0.34, y: 0.86))
-        configureAurora(auroraC, color: warm, opacity: dark ? 0.10 : 0.12,
-                        start: CGPoint(x: 0.58, y: 0.88), end: CGPoint(x: 0.18, y: 0.30))
+        let brand = accentColor.resolvedColor(with: traits)
 
-        vignetteLayer.colors = [UIColor.clear.cgColor,
-                                UIColor.clear.cgColor,
-                                UIColor.black.withAlphaComponent(dark ? 0.22 : 0.07).cgColor]
-        vignetteLayer.startPoint = CGPoint(x: 0.48, y: 0.40)
-        vignetteLayer.endPoint = CGPoint(x: 1.12, y: 1.04)
+        // MARK: - Studio master palette
+
+        let canvasTop: UIColor
+        let canvasMiddle: UIColor
+        let canvasBottom: UIColor
+
+        let auroraBrand: UIColor
+        let auroraCool: UIColor
+        let auroraWarm: UIColor
+
+        if isDark {
+            // Ink, graphite and a trace of black cherry. Alpha is deliberate:
+            // the system material must remain visible beneath the color wash.
+            canvasTop = p3(0.052, 0.056, 0.068, isActionDock ? 0.76 : 0.88)
+            canvasMiddle = p3(0.036, 0.040, 0.052, isActionDock ? 0.72 : 0.84)
+            canvasBottom = p3(0.024, 0.027, 0.036, isActionDock ? 0.74 : 0.86)
+
+            auroraBrand = brand
+            auroraCool = p3(0.18, 0.70, 0.69)
+            auroraWarm = p3(0.96, 0.58, 0.31)
+        } else {
+            // Porcelain and mineral white. There is no gray endpoint, which is
+            // what previously made the lower half look dirty.
+            canvasTop = p3(1.000, 0.997, 0.989, isActionDock ? 0.74 : 0.88)
+            canvasMiddle = p3(0.982, 0.990, 0.986, isActionDock ? 0.70 : 0.84)
+            canvasBottom = p3(0.958, 0.976, 0.971, isActionDock ? 0.72 : 0.82)
+
+            auroraBrand = brand
+            auroraCool = p3(0.20, 0.79, 0.76)
+            auroraWarm = p3(1.00, 0.73, 0.40)
+        }
+
+        // MARK: - Material
+
+        materialView.effect = UIBlurEffect(
+            style: isDark
+                ? .systemThinMaterialDark
+                : .systemThinMaterialLight
+        )
+
+        // MARK: - Main surface
+
+        surfaceGradient.colors = [
+            canvasTop.cgColor,
+            canvasMiddle.cgColor,
+            canvasBottom.cgColor
+        ]
+
+        surfaceGradient.locations = [0.0, 0.54, 1.0]
+        surfaceGradient.startPoint = CGPoint(x: 0.04, y: 0.0)
+        surfaceGradient.endPoint = CGPoint(x: 0.96, y: 1.0)
+
+        // MARK: - Aurora lighting
+
+        configureAurora(
+            auroraA,
+            color: auroraBrand,
+            opacity: isActionDock ? (isDark ? 0.040 : 0.018) : (isDark ? 0.120 : 0.045),
+            start: CGPoint(x: 0.08, y: 0.10),
+            end: CGPoint(x: 0.34, y: 0.38)
+        )
+
+        configureAurora(
+            auroraB,
+            color: auroraCool,
+            opacity: isActionDock ? (isDark ? 0.025 : 0.014) : (isDark ? 0.085 : 0.060),
+            start: CGPoint(x: 0.92, y: 0.06),
+            end: CGPoint(x: 0.60, y: 0.38)
+        )
+
+        configureAurora(
+            auroraC,
+            color: auroraWarm,
+            opacity: isActionDock ? 0.0 : (isDark ? 0.035 : 0.018),
+            start: CGPoint(x: 0.82, y: 0.96),
+            end: CGPoint(x: 0.58, y: 0.72)
+        )
+
+        // MARK: - Cinematic depth
+
+        vignetteLayer.colors = [
+            UIColor.clear.cgColor,
+            UIColor.clear.cgColor,
+            UIColor.black.withAlphaComponent(0.18).cgColor
+        ]
+
+        vignetteLayer.locations = [0.0, 0.78, 1.0]
+        vignetteLayer.startPoint = CGPoint(x: 0.50, y: 0.44)
+        vignetteLayer.endPoint = CGPoint(x: 1.04, y: 1.04)
+        vignetteLayer.opacity = isDark && !isActionDock ? 1 : 0
+
+        // MARK: - Glass specular reflection
 
         specularLayer.colors = [
-            UIColor.white.withAlphaComponent(dark ? 0.12 : 0.50).cgColor,
-            UIColor.white.withAlphaComponent(dark ? 0.035 : 0.15).cgColor,
+            UIColor.white.withAlphaComponent(
+                isDark ? 0.12 : (isActionDock ? 0.24 : 0.34)
+            ).cgColor,
+            UIColor.white.withAlphaComponent(
+                isDark ? 0.025 : (isActionDock ? 0.045 : 0.075)
+            ).cgColor,
             UIColor.clear.cgColor,
-            UIColor.white.withAlphaComponent(dark ? 0.018 : 0.08).cgColor
+            UIColor.clear.cgColor
         ]
-        specularLayer.startPoint = CGPoint(x: 0, y: 0)
-        specularLayer.endPoint = CGPoint(x: 1, y: 1)
 
-        highlightView.layer.borderColor = UIColor.white.withAlphaComponent(highContrast ? 0.54 : (dark ? 0.16 : 0.70)).cgColor
-        edgeView.layer.borderColor = accent.withAlphaComponent(highContrast ? 0.26 : (dark ? 0.10 : 0.055)).cgColor
-        particles.forEach { particle in
-            particle.fillColor = UIColor.white.withAlphaComponent(dark ? 0.58 : 0.74).cgColor
-            particle.shadowColor = accent.cgColor
-            particle.shadowOpacity = dark ? 0.24 : 0.12
-            particle.shadowRadius = 2.5
+        specularLayer.locations = [0.0, 0.12, 0.36, 1.0]
+        specularLayer.startPoint = CGPoint(x: 0.0, y: 0.0)
+        specularLayer.endPoint = CGPoint(x: 0.82, y: 0.74)
+
+        // MARK: - Precision edges
+
+        let highlightAlpha: CGFloat = isHighContrast
+            ? 0.82
+            : (isDark ? 0.14 : 0.80)
+
+        let edgeAlpha: CGFloat = isHighContrast
+            ? (isDark ? 0.34 : 0.30)
+            : (isDark ? 0.12 : 0.15)
+
+        highlightView.layer.borderColor =
+            UIColor.white.withAlphaComponent(highlightAlpha).cgColor
+
+        edgeView.layer.borderColor = isDark
+            ? UIColor.white.withAlphaComponent(edgeAlpha).cgColor
+            : p3(0.42, 0.52, 0.50, edgeAlpha).cgColor
+
+        // MARK: - Premium particles
+
+        particleLayer.isHidden = isActionDock || !isDark
+
+        particles.enumerated().forEach { index, particle in
+            particle.fillColor = UIColor.white.cgColor
+            particle.opacity = (!isActionDock && isDark)
+                ? (index == 0 ? 0.10 : 0.045)
+                : 0
+            particle.shadowColor = UIColor.white.cgColor
+            particle.shadowOpacity = (!isActionDock && isDark) ? 0.10 : 0
+            particle.shadowRadius = 1.5
             particle.shadowOffset = .zero
         }
     }
@@ -254,7 +391,8 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
     }
 
     private var shouldAnimate: Bool {
-        window != nil && UIApplication.shared.applicationState == .active &&
+        visualRole == .content && window != nil &&
+            UIApplication.shared.applicationState == .active &&
             !UIAccessibility.isReduceMotionEnabled && !ProcessInfo.processInfo.isLowPowerModeEnabled
     }
 
@@ -264,20 +402,22 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
             return
         }
         motionRunning = true
-        animateAurora(auroraA, key: "pp.hero.aurora.a", duration: 16.0,
-                      translation: CGPoint(x: 18, y: 10), scale: 1.08)
-        animateAurora(auroraB, key: "pp.hero.aurora.b", duration: 19.0,
-                      translation: CGPoint(x: -14, y: 16), scale: 1.06)
-        animateAurora(auroraC, key: "pp.hero.aurora.c", duration: 22.0,
-                      translation: CGPoint(x: 12, y: -10), scale: 1.10)
+        animateAurora(auroraA, key: "pp.hero.aurora.a", duration: 24.0,
+                      translation: CGPoint(x: 5, y: 3), scale: 1.025)
+        animateAurora(auroraB, key: "pp.hero.aurora.b", duration: 28.0,
+                      translation: CGPoint(x: -4, y: 5), scale: 1.020)
+        animateAurora(auroraC, key: "pp.hero.aurora.c", duration: 32.0,
+                      translation: CGPoint(x: 3, y: -3), scale: 1.025)
+
+        guard !particleLayer.isHidden else { return }
 
         particles.enumerated().forEach { index, particle in
             let animation = CAKeyframeAnimation(keyPath: "transform.translation")
-            let dx: CGFloat = index.isMultiple(of: 2) ? 4.5 : -3.5
-            let dy: CGFloat = index.isMultiple(of: 3) ? -4 : 3
+            let dx: CGFloat = index.isMultiple(of: 2) ? 1.5 : -1.2
+            let dy: CGFloat = index.isMultiple(of: 3) ? -1.4 : 1.0
             animation.values = [NSValue(cgPoint: .zero), NSValue(cgPoint: CGPoint(x: dx, y: dy)), NSValue(cgPoint: .zero)]
             animation.keyTimes = [0, 0.52, 1]
-            animation.duration = 8.5 + Double(index % 5) * 1.35
+            animation.duration = 14.0 + Double(index % 5) * 1.8
             animation.beginTime = CACurrentMediaTime() + Double(index) * 0.16
             animation.repeatCount = .infinity
             animation.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -285,8 +425,8 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
 
             let opacity = CABasicAnimation(keyPath: "opacity")
             opacity.fromValue = particle.opacity * 0.58
-            opacity.toValue = min(0.78, particle.opacity + 0.14)
-            opacity.duration = 4.8 + Double(index % 4)
+            opacity.toValue = min(0.14, particle.opacity + 0.025)
+            opacity.duration = 7.0 + Double(index % 4)
             opacity.autoreverses = true
             opacity.repeatCount = .infinity
             opacity.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
@@ -329,20 +469,29 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
     }
 
     private func configureParallax() {
-        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        if let currentParallaxEffect = parallaxEffect {
+            atmosphereView.removeMotionEffect(currentParallaxEffect)
+            self.parallaxEffect = nil
+        }
+
+        guard visualRole == .content,
+              !UIAccessibility.isReduceMotionEnabled else { return }
+
         let horizontal = UIInterpolatingMotionEffect(keyPath: "center.x", type: .tiltAlongHorizontalAxis)
-        horizontal.minimumRelativeValue = -4
-        horizontal.maximumRelativeValue = 4
+        horizontal.minimumRelativeValue = -1.5
+        horizontal.maximumRelativeValue = 1.5
         let vertical = UIInterpolatingMotionEffect(keyPath: "center.y", type: .tiltAlongVerticalAxis)
-        vertical.minimumRelativeValue = -3
-        vertical.maximumRelativeValue = 3
+        vertical.minimumRelativeValue = -1.0
+        vertical.maximumRelativeValue = 1.0
         let group = UIMotionEffectGroup()
         group.motionEffects = [horizontal, vertical]
         atmosphereView.addMotionEffect(group)
+        parallaxEffect = group
     }
 
     @objc private func handleDepthGesture(_ gesture: UIPanGestureRecognizer) {
-        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        guard visualRole == .content,
+              !UIAccessibility.isReduceMotionEnabled else { return }
         switch gesture.state {
         case .began, .changed:
             let location = gesture.location(in: self)
@@ -355,7 +504,7 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
             transform = CATransform3DRotate(transform, x * Metrics.maxTouchTilt, 0, 1, 0)
             transform = CATransform3DScale(transform, 0.997, 0.997, 1)
             layer.transform = transform
-            atmosphereView.transform = CGAffineTransform(translationX: x * 3.5, y: y * 2.5)
+            atmosphereView.transform = CGAffineTransform(translationX: x * 1.4, y: y * 1.0)
         case .ended, .cancelled, .failed:
             resetDepth(animated: true)
         default:
@@ -376,19 +525,5 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
     public func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
                                   shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
         true
-    }
-}
-
-private extension UIColor {
-    func mixed(with color: UIColor, amount: CGFloat) -> UIColor {
-        let amount = min(1, max(0, amount))
-        var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
-        var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
-        guard getRed(&r1, green: &g1, blue: &b1, alpha: &a1),
-              color.getRed(&r2, green: &g2, blue: &b2, alpha: &a2) else { return self }
-        return UIColor(red: r1 + (r2 - r1) * amount,
-                       green: g1 + (g2 - g1) * amount,
-                       blue: b1 + (b2 - b1) * amount,
-                       alpha: a1 + (a2 - a1) * amount)
     }
 }

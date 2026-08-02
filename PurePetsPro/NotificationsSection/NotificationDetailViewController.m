@@ -324,7 +324,7 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
         [iconView.heightAnchor constraintEqualToConstant:24.0],
 
         [statusPill.topAnchor constraintEqualToAnchor:self.heroSurfaceView.topAnchor constant:58.0],
-        [statusPill.leadingAnchor constraintEqualToAnchor:accentLine.leadingAnchor],
+        [statusPill.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor constant:16.0],
         [statusPill.heightAnchor constraintEqualToConstant:30.0],
         [statusPill.widthAnchor constraintGreaterThanOrEqualToConstant:76.0],
 

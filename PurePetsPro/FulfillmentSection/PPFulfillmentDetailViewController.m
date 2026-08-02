@@ -1252,22 +1252,11 @@
 }
 
 - (void)startHeroAmbientMotion {
-    if (UIAccessibilityIsReduceMotionEnabled() || !self.heroSheenLayer) return;
-    if ([self.heroSheenLayer animationForKey:@"pp_hero_sheen"]) return;
-
-    CABasicAnimation *sheen = [CABasicAnimation animationWithKeyPath:@"transform.translation.x"];
-    sheen.fromValue = @0;
-    sheen.toValue = @(self.heroSurfaceView.bounds.size.width * 2.05);
-    sheen.duration = 6.8;
-    sheen.beginTime = CACurrentMediaTime() + 0.9;
-    sheen.repeatCount = HUGE_VALF;
-    sheen.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-    [self.heroSheenLayer addAnimation:sheen forKey:@"pp_hero_sheen"];
+    
 }
 
 - (void)stopHeroAmbientMotion {
-    [self.heroSheenLayer removeAnimationForKey:@"pp_hero_sheen"];
-}
+ }
 
 - (void)startLiveBackgroundMotion {
     if (UIAccessibilityIsReduceMotionEnabled() || !self.liveBackgroundView) {

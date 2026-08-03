@@ -1601,6 +1601,8 @@
 "ConfirmCashCollection"        = "تأكيد تحصيل المبلغ";
 "ConfirmCashCollectionMessage"  = "تأكيد تحصيل %@ من العميل؟";
 "DeliverySuccess"              = "تم تحديث الحالة بنجاح";
+"DeliveryOrderUnavailable"     = "طلب التوصيل هذا غير متاح حالياً.";
+"DeliveryDefaultActionNote"    = "تم تنفيذ إجراء التوصيل من تطبيق المحترفين";
 "NoOrdersFound"                = "لا توجد طلبات";
 "NoOrdersMessage"              = "لا توجد طلبات مطابقة لهذا الفلتر.";
 "PendingCollection"            = "بانتظار التحصيل";
@@ -1855,6 +1857,7 @@
 "Fulfillment_Status_Cancelled"         = "ملغى";
 "Fulfillment_Status_Failed"            = "فشل";
 "Fulfillment_Status_Returned"          = "مرتجع";
+"Fulfillment_Status_Unknown"           = "حالة غير معروفة";
 
 /* بطاقات لوحة التحكم السريعة (المرحلة 19E) */
 "DeliveryManagement" = "طلبات التوصيل";

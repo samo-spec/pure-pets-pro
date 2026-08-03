@@ -80,6 +80,8 @@ typedef NS_ENUM(NSInteger, PPDeliveryFilter) {
 @property (nonatomic, copy) NSString *orderNumber;
 @property (nonatomic, copy) NSString *displayOrderNumber;
 @property (nonatomic, copy) NSString *userId;
+@property (nonatomic, assign) NSInteger fulfillmentVersion;
+@property (nonatomic, strong) NSArray<NSString *> *fulfillmentOrderIDs;
 
 // ── Customer ──
 @property (nonatomic, copy) NSString *customerName;

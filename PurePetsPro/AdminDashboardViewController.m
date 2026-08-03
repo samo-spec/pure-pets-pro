@@ -4770,7 +4770,7 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
  [[NSUserDefaults standardUserDefaults] synchronize];
 
  [PPAlertHelper showErrorIn:weakSelf title:kLang(@"Error") subtitle:kLang(@"StatusNoAccess")];
- [[FIRAuth auth] signOut:nil];
+ [UserManager.shared signOut];
  return; // do NOT re-schedule
  }
 

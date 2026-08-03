@@ -258,8 +258,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                      [weakSelf pp_hideLockOverlay];
 
                      if (PPSceneUserDocIsBlocked(userDoc ?: @{})) {
-                          NSError *signOutError = nil;
-                          [[FUManager shared] signOut:&signOutError];
+                          [UserManager.shared signOut];
                           [weakSelf setRoot:AppRootLogin animated:animated];
                           return;
                      }
@@ -643,8 +642,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                          if (!allowed) {
                               BOOL blocked = [userDoc[@"isBlocked"] boolValue] || [userDoc[@"blocked"] boolValue] || [userDoc[@"isDeleted"] boolValue];
                               if (blocked) {
-                                   NSError *signOutError = nil;
-                                   [[FUManager shared] signOut:&signOutError];
+                                   [UserManager.shared signOut];
                                    [weakSelf setRoot:AppRootLogin animated:YES];
                                    return;
                               }

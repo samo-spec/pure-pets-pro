@@ -1570,6 +1570,8 @@
 "ConfirmCashCollection"        = "Confirm Cash Collection";
 "ConfirmCashCollectionMessage"  = "Confirm you collected %@ from the customer?";
 "DeliverySuccess"              = "Status updated successfully";
+"DeliveryOrderUnavailable"     = "This delivery order is not available right now.";
+"DeliveryDefaultActionNote"    = "Delivery action performed from the Pro app";
 "NoOrdersFound"                = "No orders found";
 "NoOrdersMessage"              = "There are no orders matching this filter.";
 "PendingCollection"            = "Pending Collection";
@@ -1824,6 +1826,7 @@
 "Fulfillment_Status_Cancelled"         = "Cancelled";
 "Fulfillment_Status_Failed"            = "Failed";
 "Fulfillment_Status_Returned"          = "Returned";
+"Fulfillment_Status_Unknown"           = "Unknown status";
 
 /* Dashboard Fast Cards (Phase 19E) */
 "DeliveryManagement" = "Delivery Orders";

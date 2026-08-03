@@ -991,7 +991,7 @@
         };
     });
     NSString *key = map[status];
-    return key.length > 0 ? kLang(key) : status;
+    return key.length > 0 ? kLang(key) : kLang(@"Fulfillment_Status_Unknown");
 }
 
 - (void)actionTapped:(UIButton *)sender {

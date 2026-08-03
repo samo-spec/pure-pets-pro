@@ -15,6 +15,17 @@ static NSString * const kPPNotificationDeactivationReasonLogout = @"logout";
 static NSString * const kPPNotificationDeactivationReasonAccountSwitch = @"account_switch";
 static NSString * const kPPNotificationDeactivationReasonTokenDeleted = @"token_deleted";
 static NSString * const kPPNotificationDeactivationReasonManual = @"manual";
+static NSString * const kPPNotificationV2ProAppID = @"pro_ios";
+static NSString * const kPPNotificationV2ProBindingDefaultsKey = @"PPNotificationV2ProBindingV1";
+
+static NSString *PPNotificationV2ProEnvironment(void)
+{
+#if DEBUG
+    return @"sandbox";
+#else
+    return @"production";
+#endif
+}
 
 @implementation PPNotificationsManager
 @synthesize deviceToken = _deviceToken;
@@ -191,7 +202,7 @@ static NSString * const kPPNotificationDeactivationReasonManual = @"manual";
                                       completion:(void (^)(NSError * _Nullable))completion {
     NSString *safeUID = [PPNotificationsManager pp_trimmedString:[FIRAuth auth].currentUser.uid];
     if (safeUID.length == 0) {
-        NSLog(@"[NotificationsV2] Deactivation skipped. hasUID=no");
+        NSLog(@"PPLAB NotificationsV2 deactivation skipped | appId=%@ hasUID=no", kPPNotificationV2ProAppID);
         if (completion) completion(nil);
         return;
     }
@@ -204,56 +215,91 @@ static NSString * const kPPNotificationDeactivationReasonManual = @"manual";
         kPPNotificationDeactivationReasonManual
     ]];
     if (![allowedReasons containsObject:safeReason]) {
-        NSLog(@"[NotificationsV2] Deactivation skipped. hasUID=yes invalidReason=yes");
+        NSLog(@"PPLAB NotificationsV2 deactivation skipped | appId=%@ hasUID=yes invalidReason=yes", kPPNotificationV2ProAppID);
         if (completion) completion(nil);
         return;
     }
 
-    [[FIRInstallations installations] installationIDWithCompletion:^(NSString * _Nullable installationId, NSError * _Nullable installationError) {
+    NSDictionary *binding = [NSUserDefaults.standardUserDefaults dictionaryForKey:kPPNotificationV2ProBindingDefaultsKey];
+    NSString *bindingUID = [PPNotificationsManager pp_trimmedString:binding[@"uid"]];
+    NSString *installationId = [PPNotificationsManager pp_trimmedString:binding[@"installationId"]];
+    NSString *appId = [PPNotificationsManager pp_trimmedString:binding[@"appId"]];
+    NSString *environment = [PPNotificationsManager pp_trimmedString:binding[@"environment"]];
+    NSString *bindingGeneration = [PPNotificationsManager pp_trimmedString:binding[@"bindingGeneration"]];
+    NSString *fcmTokenHash = [PPNotificationsManager pp_trimmedString:binding[@"fcmTokenHash"]];
+    BOOL bindingMatchesSession = [bindingUID isEqualToString:safeUID] &&
+        [appId isEqualToString:kPPNotificationV2ProAppID] &&
+        [environment isEqualToString:PPNotificationV2ProEnvironment()] &&
+        installationId.length > 0 && bindingGeneration.length > 0 && fcmTokenHash.length > 0;
+    if (!bindingMatchesSession) {
+        NSLog(@"PPLAB NotificationsV2 deactivation skipped | appId=%@ reason=%@ binding_match=no",
+              kPPNotificationV2ProAppID,
+              safeReason);
+        if (completion) completion(nil);
+        return;
+    }
+
+    NSString *activeUID = [PPNotificationsManager pp_trimmedString:[FIRAuth auth].currentUser.uid];
+    if (![activeUID isEqualToString:safeUID]) {
+        NSLog(@"PPLAB NotificationsV2 deactivation cancelled | appId=%@ reason=%@ auth_changed=yes",
+              kPPNotificationV2ProAppID,
+              safeReason);
+        if (completion) completion(nil);
+        return;
+    }
+
+    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"deactivateNotificationDeviceV2"];
+    callable.timeoutInterval = 30.0;
+
+    NSDictionary *payload = @{
+        @"installationId": installationId,
+        @"reason": safeReason,
+        @"appId": @"pro_ios",
+        @"environment": environment,
+        @"bindingGeneration": bindingGeneration,
+        @"expectedFcmTokenHash": fcmTokenHash
+    };
+
+    NSLog(@"PPLAB NotificationsV2 deactivation start | appId=%@ reason=%@ hasBinding=yes",
+          kPPNotificationV2ProAppID,
+          safeReason);
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            NSString *safeInstallationId = [PPNotificationsManager pp_trimmedString:installationId];
-            if (safeInstallationId.length == 0) {
-                NSLog(@"[NotificationsV2] Deactivation skipped. hasUID=yes hasInstallation=no error=%@",
-                      installationError.localizedDescription ?: @"unknown");
-                if (completion) completion(nil);
+            if (error) {
+                NSLog(@"PPLAB NotificationsV2 deactivation failed | appId=%@ reason=%@ error=%@",
+                      kPPNotificationV2ProAppID,
+                      safeReason,
+                      error.localizedDescription ?: @"unknown");
+                if (completion) completion(error);
                 return;
             }
 
-            FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"deactivateNotificationDeviceV2"];
-            callable.timeoutInterval = 30.0;
-
-            NSDictionary *payload = @{
-                @"installationId": safeInstallationId,
-                @"reason": safeReason
-            };
-
-            NSLog(@"[NotificationsV2] Deactivation start. hasUID=yes hasInstallation=yes reason=%@", safeReason);
-
-            [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (error) {
-                        NSLog(@"[NotificationsV2] Deactivation failed. reason=%@ error=%@",
-                              safeReason,
-                              error.localizedDescription ?: @"unknown");
-                        if (completion) completion(error);
-                        return;
-                    }
-
-                    NSDictionary *response = [result.data isKindOfClass:NSDictionary.class] ? result.data : @{};
-                    BOOL missing = [response[@"missing"] respondsToSelector:@selector(boolValue)] && [response[@"missing"] boolValue];
-                    NSLog(@"[NotificationsV2] Deactivation success. reason=%@ missing=%@ isActive=%@",
-                          safeReason,
-                          missing ? @"yes" : @"no",
-                          [response[@"isActive"] respondsToSelector:@selector(boolValue)] && [response[@"isActive"] boolValue] ? @"yes" : @"no");
-                    if (completion) completion(nil);
-                });
-            }];
+            NSDictionary *response = [result.data isKindOfClass:NSDictionary.class] ? result.data : @{};
+            BOOL ok = [response[@"ok"] respondsToSelector:@selector(boolValue)] && [response[@"ok"] boolValue];
+            BOOL deactivated = [response[@"deactivated"] respondsToSelector:@selector(boolValue)] && [response[@"deactivated"] boolValue];
+            BOOL stale = [response[@"stale"] respondsToSelector:@selector(boolValue)] && [response[@"stale"] boolValue];
+            if (ok) {
+                NSDictionary *storedBinding = [NSUserDefaults.standardUserDefaults dictionaryForKey:kPPNotificationV2ProBindingDefaultsKey];
+                if ([[PPNotificationsManager pp_trimmedString:storedBinding[@"uid"]] isEqualToString:safeUID] &&
+                    [[PPNotificationsManager pp_trimmedString:storedBinding[@"bindingGeneration"]] isEqualToString:bindingGeneration]) {
+                    [NSUserDefaults.standardUserDefaults removeObjectForKey:kPPNotificationV2ProBindingDefaultsKey];
+                }
+            }
+            NSLog(@"PPLAB NotificationsV2 deactivation finish | appId=%@ reason=%@ ok=%@ deactivated=%@ stale=%@",
+                  kPPNotificationV2ProAppID,
+                  safeReason,
+                  ok ? @"yes" : @"no",
+                  deactivated ? @"yes" : @"no",
+                  stale ? @"yes" : @"no");
+            if (completion) completion(nil);
         });
     }];
 }
 
 - (void)invalidateLocalDeviceTokenWithCompletion:(void (^)(NSError * _Nullable))completion {
     self.deviceToken = @"";
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:kPPNotificationV2ProBindingDefaultsKey];
 
     id<UIApplicationDelegate> applicationDelegate = UIApplication.sharedApplication.delegate;
     if ([applicationDelegate isKindOfClass:AppDelegate.class]) {

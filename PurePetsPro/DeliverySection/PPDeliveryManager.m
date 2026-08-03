@@ -8,9 +8,22 @@
 #import "PPStaffAuth.h"
 #import "UserManager.h"
 #import "UserModel.h"
+#import <CommonCrypto/CommonDigest.h>
 
 NSString * const PPDeliveryOrdersDidChangeNotification = @"PPDeliveryOrdersDidChangeNotification";
 static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL20262214";
+
+static NSString *PPDeliveryV1CommandID(NSString *orderID, NSString *fulfillmentID, NSString *action) {
+    NSString *basis = [NSString stringWithFormat:@"%@|%@|%@", orderID ?: @"", fulfillmentID ?: @"", action ?: @""];
+    NSData *data = [basis dataUsingEncoding:NSUTF8StringEncoding] ?: [NSData data];
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+    NSMutableString *hex = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+    for (NSUInteger index = 0; index < CC_SHA256_DIGEST_LENGTH; index++) {
+        [hex appendFormat:@"%02x", digest[index]];
+    }
+    return [@"pro-v1-" stringByAppendingString:hex];
+}
 
 static NSArray<NSString *> *PPDeliveryAllStatuses(void) {
     return @[
@@ -393,7 +406,84 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
 #pragma mark - Cloud Function Actions
 
+- (PPDeliveryOrderModel *)pp_deliveryOrderForOrderID:(NSString *)orderID {
+    NSString *resolvedOrderID = [orderID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (resolvedOrderID.length == 0) return nil;
+    for (PPDeliveryOrderModel *order in self.allOrders) {
+        if ([order.orderId isEqualToString:resolvedOrderID]) return order;
+    }
+    return nil;
+}
+
+- (void)pp_performV1DeliveryAction:(NSString *)action
+                           orderID:(NSString *)orderID
+                              note:(NSString *)note
+                    fulfillmentIDs:(NSArray<NSString *> *)fulfillmentIDs
+                        completion:(PPDeliveryActionBlock)completion {
+    NSMutableArray<NSString *> *resolvedIDs = [NSMutableArray array];
+    for (id value in fulfillmentIDs ?: @[]) {
+        if (![value isKindOfClass:NSString.class]) continue;
+        NSString *fulfillmentID = [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (fulfillmentID.length > 0 && ![resolvedIDs containsObject:fulfillmentID]) {
+            [resolvedIDs addObject:fulfillmentID];
+        }
+    }
+
+    if (resolvedIDs.count == 0) {
+        NSError *error = [NSError errorWithDomain:@"PPDeliveryManager"
+                                             code:422
+                                         userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryOrderUnavailable")}];
+        NSLog(@"PPLAB Pro delivery v1 rejected orderId=%@ action=%@ reason=missingFulfillmentIDs", orderID, action);
+        if (completion) completion(NO, error.localizedDescription, error);
+        return;
+    }
+
+    NSArray<NSString *> *sortedIDs = [resolvedIDs sortedArrayUsingSelector:@selector(compare:)];
+    NSString *selectionIdentity = [sortedIDs componentsJoinedByString:@"|"];
+    NSString *commandID = PPDeliveryV1CommandID(orderID, selectionIdentity, action);
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"deliveryTransitionFulfillment"];
+    callable.timeoutInterval = 30;
+    NSDictionary *payload = @{
+        @"parentOrderID": orderID ?: @"",
+        @"fulfillmentIDs": sortedIDs,
+        @"action": action ?: @"",
+        @"note": note ?: @"",
+        @"commandId": commandID,
+    };
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        (void)result;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                NSLog(@"PPLAB Pro delivery v1 failed orderId=%@ action=%@ fulfillmentCount=%lu code=%ld", orderID, action, (unsigned long)sortedIDs.count, (long)error.code);
+                NSString *message = error.localizedDescription;
+                NSDictionary *details = error.userInfo[@"details"];
+                if ([details isKindOfClass:NSDictionary.class] && [details[@"message"] isKindOfClass:NSString.class]) {
+                    message = details[@"message"];
+                }
+                if (completion) completion(NO, message, error);
+                return;
+            }
+            NSLog(@"PPLAB Pro delivery v1 accepted orderId=%@ action=%@ fulfillmentCount=%lu", orderID, action, (unsigned long)sortedIDs.count);
+            if (completion) completion(YES, kLang(@"DeliverySuccess"), nil);
+        });
+    }];
+}
+
 - (void)performDeliveryAction:(NSString *)action orderId:(NSString *)orderId note:(NSString *)note completion:(PPDeliveryActionBlock)completion {
+    PPDeliveryOrderModel *order = [self pp_deliveryOrderForOrderID:orderId];
+    if (order.fulfillmentVersion == 1) {
+        NSLog(@"PPLAB Pro delivery route=v1-child orderId=%@ action=%@ fulfillmentCount=%lu", orderId, action, (unsigned long)order.fulfillmentOrderIDs.count);
+        [self pp_performV1DeliveryAction:action
+                                orderID:orderId
+                                   note:(note.length > 0) ? note : kLang(@"DeliveryDefaultActionNote")
+                         fulfillmentIDs:order.fulfillmentOrderIDs
+                             completion:completion];
+        return;
+    }
+
+    NSLog(@"PPLAB Pro delivery route=legacy-parent orderId=%@ action=%@", orderId, action);
     FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"deliveryTransitionOrderStatus"];
     callable.timeoutInterval = 30;
@@ -401,7 +491,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     NSMutableDictionary *data = [NSMutableDictionary dictionary];
     data[@"action"]  = action;
     data[@"orderId"] = orderId ?: @"";
-    data[@"note"]    = (note.length > 0) ? note : @"Action performed from Pro app";
+    data[@"note"]    = (note.length > 0) ? note : kLang(@"DeliveryDefaultActionNote");
 
     [callable callWithObject:[data copy] completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{

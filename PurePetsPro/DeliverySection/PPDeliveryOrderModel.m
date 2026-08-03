@@ -166,6 +166,19 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
     m.orderNumber        = PPOrderModelSafeString(dict, @[@"orderNumber", @"order_number"]);
     m.displayOrderNumber = PPOrderModelSafeString(dict, @[@"displayOrderNumber", @"orderNumber", @"order_number"]);
     m.userId             = PPOrderModelSafeString(dict, @[@"userId", @"uid", @"buyerId"]);
+    m.fulfillmentVersion = [dict[@"fulfillmentVersion"] respondsToSelector:@selector(integerValue)]
+        ? [dict[@"fulfillmentVersion"] integerValue]
+        : 0;
+    NSArray *rawFulfillmentIDs = [dict[@"fulfillmentOrderIDs"] isKindOfClass:NSArray.class]
+        ? dict[@"fulfillmentOrderIDs"]
+        : @[];
+    NSMutableArray<NSString *> *fulfillmentIDs = [NSMutableArray arrayWithCapacity:rawFulfillmentIDs.count];
+    for (id rawFulfillmentID in rawFulfillmentIDs) {
+        if (![rawFulfillmentID isKindOfClass:NSString.class]) continue;
+        NSString *fulfillmentID = [(NSString *)rawFulfillmentID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (fulfillmentID.length > 0) [fulfillmentIDs addObject:fulfillmentID];
+    }
+    m.fulfillmentOrderIDs = fulfillmentIDs.copy;
 
     // Customer
     m.customerName  = PPOrderModelSafeString(dict, @[@"customerName", @"userName", @"buyerName", @"name"]);
@@ -253,7 +266,7 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
     // Financials
     m.totalAmount    = PPOrderModelSafeDouble(dict, @[@"totalAmount", @"amount", @"total", @"grandTotal"]);
     m.currencyCode   = PPOrderModelSafeString(dict, @[@"currencyCode", @"currency"]);
-    if (m.currencyCode.length == 0) m.currencyCode = @"SAR";
+    if (m.currencyCode.length == 0) m.currencyCode = @"QAR";
     m.paymentMethodId = PPOrderModelSafeString(dict, @[@"paymentMethodId", @"paymentType"]);
 
     // Nested paymentMethod
@@ -345,6 +358,8 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
     d[@"orderNumber"]        = self.orderNumber ?: @"";
     d[@"displayOrderNumber"] = self.displayOrderNumber ?: @"";
     d[@"userId"]             = self.userId ?: @"";
+    d[@"fulfillmentVersion"] = @(self.fulfillmentVersion);
+    d[@"fulfillmentOrderIDs"] = self.fulfillmentOrderIDs ?: @[];
     d[@"customerName"]       = self.customerName ?: @"";
     d[@"customerPhone"]      = self.customerPhone ?: @"";
     d[@"deliveryAddress"]    = self.deliveryAddress ?: @"";
@@ -354,7 +369,7 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
     d[@"marketplaceProviderID"] = self.marketplaceProviderID ?: @"";
     d[@"marketplaceOwnerType"] = self.marketplaceOwnerType ?: @"";
     d[@"totalAmount"]        = @(self.totalAmount);
-    d[@"currencyCode"]       = self.currencyCode ?: @"SAR";
+    d[@"currencyCode"]       = self.currencyCode ?: @"QAR";
     d[@"paymentMethodId"]    = self.paymentMethodId ?: @"";
     d[@"paymentStatus"]      = self.paymentStatus ?: @"";
     d[@"status"]             = self.rawStatus ?: @"";
@@ -388,6 +403,10 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
 }
 
 - (BOOL)canMarkShipped {
+    NSString *delivery = [self.deliveryStatus lowercaseString];
+    if (self.fulfillmentVersion == 1) {
+        return [delivery isEqualToString:PPDeliveryStatusAwaitingHandover];
+    }
     return [self canConfirmPackageHandover];
 }
 
@@ -526,7 +545,7 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
 - (NSString *)formattedTotal {
     NSNumberFormatter *fmt = [[NSNumberFormatter alloc] init];
     fmt.numberStyle = NSNumberFormatterCurrencyStyle;
-    fmt.currencyCode = self.currencyCode ?: @"SAR";
+    fmt.currencyCode = self.currencyCode ?: @"QAR";
     fmt.maximumFractionDigits = 2;
     return [fmt stringFromNumber:@(self.totalAmount)] ?: [NSString stringWithFormat:@"%.2f %@", self.totalAmount, self.currencyCode];
 }

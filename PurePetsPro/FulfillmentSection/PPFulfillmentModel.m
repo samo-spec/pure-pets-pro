@@ -72,7 +72,7 @@
         };
     });
     NSString *key = map[self.status];
-    return key.length > 0 ? kLang(key) : self.status;
+    return key.length > 0 ? kLang(key) : kLang(@"Fulfillment_Status_Unknown");
 }
 
 - (UIColor *)statusColor {

@@ -7,6 +7,46 @@
 #import "PPRolePermission.h"
 #import "Lottie.h"
 #import "UIImageView+WebCache.h"
+#import "AppDelegate.h"
+
+@interface AppDelegate (PPNotificationV2LogoutBarrier)
+- (void)pp_beginNotificationV2LogoutBarrierWithCompletion:(dispatch_block_t)completion;
+- (void)pp_endNotificationV2LogoutBarrier;
+- (void)pp_abortNotificationV2LogoutBarrierAndRefreshForReason:(NSString *)reason;
+@end
+
+static AppDelegate *PPProNotificationV2AppDelegate(void)
+{
+    id<UIApplicationDelegate> delegate = UIApplication.sharedApplication.delegate;
+    return [delegate isKindOfClass:AppDelegate.class] ? (AppDelegate *)delegate : nil;
+}
+
+static UIViewController *PPProUserManagerTopViewController(void)
+{
+    UIWindow *window = nil;
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class]) continue;
+        UIWindowScene *windowScene = (UIWindowScene *)scene;
+        for (UIWindow *candidate in windowScene.windows) {
+            if (candidate.isKeyWindow) {
+                window = candidate;
+                break;
+            }
+        }
+        if (window) break;
+    }
+
+    UIViewController *controller = window.rootViewController;
+    while (controller.presentedViewController) {
+        controller = controller.presentedViewController;
+    }
+    if ([controller isKindOfClass:UINavigationController.class]) {
+        controller = ((UINavigationController *)controller).topViewController ?: controller;
+    } else if ([controller isKindOfClass:UITabBarController.class]) {
+        controller = ((UITabBarController *)controller).selectedViewController ?: controller;
+    }
+    return controller;
+}
 
 NSString * const UserManagerAuthStateDidChangeNotification = @"UserManagerAuthStateDidChangeNotification";
 NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification";
@@ -604,47 +644,95 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         userID = PPSafeString(self.currentUser.uid.length ? self.currentUser.uid : self.currentUser.ID);
     }
 
+    AppDelegate *notificationAppDelegate = PPProNotificationV2AppDelegate();
     __weak typeof(self) weakSelf = self;
-    [PPNotifications deactivateNotificationDeviceV2WithReason:@"logout" completion:^(NSError * _Nullable deactivateError) {
+    dispatch_block_t beginDeactivationAfterRegistrationSettles = ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        if (deactivateError) {
-            DLog(@"⚠️ Notification V2 deactivation failed before logout: %@", deactivateError.localizedDescription);
-        }
+        __block BOOL didContinueAfterDeactivation = NO;
+        void (^continueAfterDeactivation)(NSError * _Nullable) = ^(NSError * _Nullable deactivateError) {
+            if (didContinueAfterDeactivation) return;
+            didContinueAfterDeactivation = YES;
 
-        [PPNotifications clearProviderTokenForUserID:userID completion:^(NSError * _Nullable tokenError) {
-            if (tokenError) {
-                DLog(@"⚠️ Pro token cleanup failed before logout: %@", tokenError.localizedDescription);
+            if (deactivateError) {
+                DLog(@"⚠️ Notification V2 deactivation failed before logout: %@", deactivateError.localizedDescription);
             }
 
-            [strongSelf invalidateUserCacheForUID:userID];
-            [strongSelf clearUserCache];
-            [strongSelf stopListening];
+            __block BOOL didContinueAfterProviderTokenClear = NO;
+            void (^continueAfterProviderTokenClear)(NSError * _Nullable) = ^(NSError * _Nullable tokenError) {
+                if (didContinueAfterProviderTokenClear) return;
+                didContinueAfterProviderTokenClear = YES;
 
-            NSError *signOutError = nil;
-            [[FUManager shared] signOut:&signOutError];
-            if (signOutError) {
-                strongSelf.signOutInProgress = NO;
-                [PPAlertHelper showErrorIn:strongSelf title:kLang(@"Error") subtitle:signOutError.localizedDescription];
-                return;
-            }
-
-            strongSelf.currentUser = nil;
-
-            // Firebase Messaging is invalidated after Auth sign-out so a replacement
-            // token cannot be written back to the provider document during logout.
-            [PPNotifications invalidateLocalDeviceTokenWithCompletion:^(NSError * _Nullable localTokenError) {
-                if (localTokenError) {
-                    DLog(@"⚠️ Local Pro token invalidation failed: %@", localTokenError.localizedDescription);
+                if (tokenError) {
+                    DLog(@"⚠️ Pro token cleanup failed before logout: %@", tokenError.localizedDescription);
                 }
-            }];
 
-            strongSelf.signOutInProgress = NO;
-            [[NSNotificationCenter defaultCenter] postNotificationName:UserManagerAuthStateDidChangeNotification
-                                                                object:nil];
+                [strongSelf invalidateUserCacheForUID:userID];
+                [strongSelf clearUserCache];
+                [strongSelf stopListening];
+
+                NSError *signOutError = nil;
+                [[FUManager shared] signOut:&signOutError];
+                if (signOutError) {
+                    strongSelf.signOutInProgress = NO;
+                    [notificationAppDelegate pp_abortNotificationV2LogoutBarrierAndRefreshForReason:@"auth_signout_failed"];
+                    UIViewController *presenter = PPProUserManagerTopViewController();
+                    if (presenter) {
+                        [PPAlertHelper showErrorIn:presenter title:kLang(@"Error") subtitle:signOutError.localizedDescription];
+                    }
+                    return;
+                }
+
+                strongSelf.currentUser = nil;
+
+                __block BOOL didFinishLocalTokenInvalidation = NO;
+                void (^finishSignOut)(NSError * _Nullable) = ^(NSError * _Nullable localTokenError) {
+                    if (didFinishLocalTokenInvalidation) return;
+                    didFinishLocalTokenInvalidation = YES;
+                    if (localTokenError) {
+                        DLog(@"⚠️ Local Pro token invalidation failed: %@", localTokenError.localizedDescription);
+                    }
+                    [notificationAppDelegate pp_endNotificationV2LogoutBarrier];
+                    strongSelf.signOutInProgress = NO;
+                    [[NSNotificationCenter defaultCenter] postNotificationName:UserManagerAuthStateDidChangeNotification
+                                                                        object:nil];
+                };
+
+                // Keep the registration barrier active through token deletion so a
+                // token refresh cannot reactivate the signed-out binding.
+                [PPNotifications invalidateLocalDeviceTokenWithCompletion:finishSignOut];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
+                               dispatch_get_main_queue(), ^{
+                    if (didFinishLocalTokenInvalidation) return;
+                    DLog(@"⚠️ Local Pro token invalidation timeout; completing logout best-effort.");
+                    finishSignOut(nil);
+                });
+            };
+
+            [PPNotifications clearProviderTokenForUserID:userID completion:continueAfterProviderTokenClear];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                if (didContinueAfterProviderTokenClear) return;
+                DLog(@"⚠️ Pro token cleanup timeout; continuing logout best-effort.");
+                continueAfterProviderTokenClear(nil);
+            });
+        };
+
+        [PPNotifications deactivateNotificationDeviceV2WithReason:@"logout" completion:continueAfterDeactivation];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            if (didContinueAfterDeactivation) return;
+            DLog(@"⚠️ Notification V2 deactivation timeout; continuing logout best-effort.");
+            continueAfterDeactivation(nil);
         }];
-    }];
+    };
+
+    if (notificationAppDelegate) {
+        [notificationAppDelegate pp_beginNotificationV2LogoutBarrierWithCompletion:beginDeactivationAfterRegistrationSettles];
+    } else {
+        beginDeactivationAfterRegistrationSettles();
+    }
 }
 
 

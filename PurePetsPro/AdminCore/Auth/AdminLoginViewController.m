@@ -922,8 +922,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
         [PPHUD dismiss];
         PPAdminSetLoginInProgress(NO);
         [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"StatusUserDocError")];
-        NSError *signOutError = nil;
-        [[FUManager shared] signOut:&signOutError];
+        [UserManager.shared signOut];
         return;
     }
 
@@ -947,8 +946,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 
                 PPAdminSetLoginInProgress(NO);
                 [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"StatusUserDocError")];
-                NSError *signOutError = nil;
-                [[FUManager shared] signOut:&signOutError];
+                [UserManager.shared signOut];
                 return;
             }
 
@@ -956,8 +954,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                 DLog(@"[ProGate] user authenticated but not yet approved for provider access uid=%@", uid);
 
                 if (PPProLoginUserDocIsBlocked(userDoc ?: @{})) {
-                    NSError *signOutError = nil;
-                    [[FUManager shared] signOut:&signOutError];
+                    [UserManager.shared signOut];
                     PPAdminSetLoginInProgress(NO);
                     self.noPermissionAttempts++;
                     if (self.noPermissionAttempts == 1) {
@@ -1009,8 +1006,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                 [PPAlertHelper showErrorIn:self title:kLang(@"Error")
                                 subtitle:error.localizedDescription ?: kLang(@"StatusUserDocError")];
                 if (![self pp_errorLooksLikeAppCheckFailure:error]) {
-                    NSError *signOutError = nil;
-                    [[FUManager shared] signOut:&signOutError];
+                    [UserManager.shared signOut];
                 }
                 return;
             }

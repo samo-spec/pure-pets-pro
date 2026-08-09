@@ -360,7 +360,7 @@
         }
 
         NSString *manifestPath = [unzipDir stringByAppendingPathComponent:@"manifest.json"];
-        NSData *manifestData = [NSData dataWithContentsOfFile:manifestPath];
+        NSData *manifestData = [PPFileHelper safeDataFromFile:manifestPath];
         NSDictionary *manifest = manifestData ? [NSJSONSerialization JSONObjectWithData:manifestData options:0 error:nil] : nil;
 
         NSArray *anims = manifest[@"animations"];
@@ -377,7 +377,7 @@
         }
         NSString *jsonAbsPath = [unzipDir stringByAppendingPathComponent:jsonRelPath];
 
-        NSData *jsonData = [NSData dataWithContentsOfFile:jsonAbsPath];
+        NSData *jsonData = [PPFileHelper safeDataFromFile:jsonAbsPath];
         NSDictionary *json = jsonData ? [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:nil] : nil;
 
         if (json) {

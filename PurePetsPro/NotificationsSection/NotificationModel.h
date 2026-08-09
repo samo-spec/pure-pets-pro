@@ -1,6 +1,6 @@
 //
 //  NotificationModel.h
-//  PurePetsAdmin
+//  PurePetsPro
 //
 //  Created by Mohammed Ahmed on 24/08/2025.
 //

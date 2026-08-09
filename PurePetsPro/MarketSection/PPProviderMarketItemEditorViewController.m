@@ -877,9 +877,18 @@
         dispatch_group_enter(group);
         UIImage *img = self.selectedImages[i];
         NSData *data = UIImageJPEGRepresentation(img, 0.8);
-        NSString *path = [NSString stringWithFormat:@"marketplace_items/ّ%@_IMAGES/%@_%ld.jpg", uid, uid, (long)[[NSDate date] timeIntervalSince1970] * 1000 + i];
+        NSString *safeUID = uid ?: @"";
+        NSString *fileName = [NSString stringWithFormat:@"%@_%ld.jpg", safeUID, (long)[[NSDate date] timeIntervalSince1970] * 1000 + i];
+        NSString *path = [NSString stringWithFormat:@"marketplace_items/%@/images/%@", safeUID, fileName];
         FIRStorageReference *ref = [storage.reference child:path];
-        [ref putData:data metadata:nil completion:^(FIRStorageMetadata *meta, NSError *err) {
+        FIRStorageMetadata *metadata = [FIRStorageMetadata new];
+        metadata.contentType = @"image/jpeg";
+        metadata.customMetadata = @{
+            @"uploaded_by": safeUID,
+            @"media_type": @"image",
+            @"item_id": self.editItem.itemID ?: @""
+        };
+        [ref putData:data metadata:metadata completion:^(FIRStorageMetadata *meta, NSError *err) {
             if (!err) {
                 [ref downloadURLWithCompletion:^(NSURL *url, NSError *dErr) {
                     if (url) { @synchronized (urls) { [urls addObject:url.absoluteString]; } }

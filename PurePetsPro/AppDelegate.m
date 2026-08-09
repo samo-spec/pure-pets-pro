@@ -135,7 +135,7 @@ extern BOOL PP_TouchDotsEnabled;
             if (safeToken.length > 0) {
                 [self pp_storeFCMToken:safeToken];
             } else if (error) {
-                NSLog(@"[FIRMessaging] Unable to resolve current FCM token: %@", error.localizedDescription);
+                DLog(@"[FIRMessaging] Unable to resolve current FCM token: %@", error.localizedDescription);
             }
             if (completion) completion(safeToken.length > 0 ? safeToken : nil);
         });
@@ -162,7 +162,7 @@ extern BOOL PP_TouchDotsEnabled;
     [[NSUserDefaults standardUserDefaults] setObject:@[lang] forKey:@"AppleLanguages"];
     [[NSUserDefaults standardUserDefaults] synchronize];
 
-    NSLog(@"AppleLanguages  lang %@" ,lang);
+    DLog(@"AppleLanguages  lang %@" ,lang);
     // --- Push Notifications ---
     // Set Firebase Messaging delegate
     [FIRMessaging messaging].delegate = self;
@@ -223,7 +223,7 @@ extern BOOL PP_TouchDotsEnabled;
         [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge)
                               completionHandler:^(BOOL granted, NSError * _Nullable error) {
             if (error) {
-                NSLog(@"Error requesting notification authorization: %@", error);
+                DLog(@"Error requesting notification authorization: %@", error);
             }
         }];
     } else {
@@ -248,7 +248,7 @@ extern BOOL PP_TouchDotsEnabled;
     }
 
     self.apnsTokenHexString = [tokenString copy];
-    NSLog(@"[NotificationsV2] APNs token updated. reason=apns_registration hasToken=%@", self.apnsTokenHexString.length > 0 ? @"yes" : @"no");
+    DLog(@"[NotificationsV2] APNs token updated. reason=apns_registration hasToken=%@", self.apnsTokenHexString.length > 0 ? @"yes" : @"no");
     
     // Forward the token to Firebase Messaging
     [FIRMessaging messaging].APNSToken = deviceToken;
@@ -257,7 +257,7 @@ extern BOOL PP_TouchDotsEnabled;
 
 // This method is called if APNs registration fails
 - (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error {
-    NSLog(@"[FIRMessaging] Failed to register for remote notifications: %@", error);
+    DLog(@"[FIRMessaging] Failed to register for remote notifications: %@", error);
 }
 
 #pragma mark - FIRMessagingDelegate Methods
@@ -269,7 +269,7 @@ extern BOOL PP_TouchDotsEnabled;
     if (safeToken.length == 0) {
         return;
     }
-    NSLog(@"[NotificationsV2] FCM token updated. reason=fcm_refresh hasToken=yes");
+    DLog(@"[NotificationsV2] FCM token updated. reason=fcm_refresh hasToken=yes");
     [self pp_storeFCMToken:safeToken];
     
     // Send token to your server if needed
@@ -322,15 +322,15 @@ extern BOOL PP_TouchDotsEnabled;
         UsrMgr.currentUser.PPProTokenID = safeToken;
          [UsrMgr.currentUser SYNC:^(NSError * _Nullable error) {
             if (error) {
-                NSLog(@"[FIRMessaging] Failed syncing token via model: %@", error.localizedDescription);
+                DLog(@"[FIRMessaging] Failed syncing token via model: %@", error.localizedDescription);
             } else {
-                NSLog(@"[FIRMessaging] Token synced via model for %@", uid);
+                DLog(@"[FIRMessaging] Token synced via model for %@", uid);
             }
         }];
     }
 
     // Direct Firestore update covers launch/early login and backstops model sync.
-    NSLog(@"[FIRMessaging] Performing direct Firestore token sync for %@", uid);
+    DLog(@"[FIRMessaging] Performing direct Firestore token sync for %@", uid);
     NSDictionary *update = @{
         @"PPProTokenID": safeToken,
         @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp]
@@ -339,16 +339,16 @@ extern BOOL PP_TouchDotsEnabled;
     [[[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:uid]
         setData:update merge:YES completion:^(NSError * _Nullable error) {
         if (error) {
-            NSLog(@"[FIRMessaging] Direct Firestore sync failed: %@", error.localizedDescription);
+            DLog(@"[FIRMessaging] Direct Firestore sync failed: %@", error.localizedDescription);
         } else {
-            NSLog(@"[FIRMessaging] Direct Firestore sync success for %@", uid);
+            DLog(@"[FIRMessaging] Direct Firestore sync success for %@", uid);
         }
     }];
 }
 
 - (void)sendTokenToServer:(NSString *)token {
     // Implement your server communication here
-    NSLog(@"[FIRMessaging] Sending token to server via legacy sync.");
+    DLog(@"[FIRMessaging] Sending token to server via legacy sync.");
     [self pp_storeFCMToken:token];
     
     NSString *currentUID = [FIRAuth auth].currentUser.uid;
@@ -368,7 +368,7 @@ extern BOOL PP_TouchDotsEnabled;
         self.notificationV2LogoutBarrierActive = YES;
         self.notificationV2LifecycleEpoch += 1;
         self.notificationV2PendingReason = nil;
-        NSLog(@"PPLAB NotificationsV2 logout barrier raised | appId=%@ epoch=%lu inFlight=%@",
+        DLog(@"[PPNotificationsV2] logout barrier raised | appId=%@ epoch=%lu inFlight=%@",
               kPPProNotificationV2AppID,
               (unsigned long)self.notificationV2LifecycleEpoch,
               self.notificationV2RegistrationInFlight ? @"yes" : @"no");
@@ -392,7 +392,7 @@ extern BOOL PP_TouchDotsEnabled;
             strongSelf.notificationV2LogoutBarrierWaiters.count == 0) {
             return;
         }
-        NSLog(@"PPLAB NotificationsV2 logout barrier timeout | appId=%@ epoch=%lu inFlight=%@ continuing=yes",
+        DLog(@"[PPNotificationsV2] logout barrier timeout | appId=%@ epoch=%lu inFlight=%@ continuing=yes",
               kPPProNotificationV2AppID,
               (unsigned long)barrierEpoch,
               strongSelf.notificationV2RegistrationInFlight ? @"yes" : @"no");
@@ -426,7 +426,7 @@ extern BOOL PP_TouchDotsEnabled;
     self.notificationV2LogoutBarrierActive = NO;
     self.notificationV2PendingReason = nil;
     [self.notificationV2LogoutBarrierWaiters removeAllObjects];
-    NSLog(@"PPLAB NotificationsV2 logout barrier lowered | appId=%@ epoch=%lu",
+    DLog(@"[PPNotificationsV2] logout barrier lowered | appId=%@ epoch=%lu",
           kPPProNotificationV2AppID,
           (unsigned long)self.notificationV2LifecycleEpoch);
 }
@@ -467,7 +467,7 @@ extern BOOL PP_TouchDotsEnabled;
     if (!ok || ![activeUID isEqualToString:PPAdminRouteTrimmedString(uid)] ||
         PPAdminRouteTrimmedString(installationId).length == 0 ||
         bindingGeneration.length == 0 || fcmTokenHash.length == 0) {
-        NSLog(@"PPLAB NotificationsV2 stale registration discarded | appId=%@ compensated=no hasAuth=%@ hasBinding=%@",
+        DLog(@"[PPNotificationsV2] stale registration discarded | appId=%@ compensated=no hasAuth=%@ hasBinding=%@",
               kPPProNotificationV2AppID,
               [activeUID isEqualToString:PPAdminRouteTrimmedString(uid)] ? @"yes" : @"no",
               bindingGeneration.length > 0 && fcmTokenHash.length > 0 ? @"yes" : @"no");
@@ -489,7 +489,7 @@ extern BOOL PP_TouchDotsEnabled;
         dispatch_async(dispatch_get_main_queue(), ^{
             NSDictionary *deactivateResponse = [result.data isKindOfClass:NSDictionary.class] ? result.data : @{};
             BOOL deactivateOK = [deactivateResponse[@"ok"] respondsToSelector:@selector(boolValue)] && [deactivateResponse[@"ok"] boolValue];
-            NSLog(@"PPLAB NotificationsV2 stale registration compensated | appId=%@ ok=%@ error=%@",
+            DLog(@"[PPNotificationsV2] stale registration compensated | appId=%@ ok=%@ error=%@",
                   kPPProNotificationV2AppID,
                   deactivateOK ? @"yes" : @"no",
                   error.localizedDescription ?: @"none");
@@ -508,7 +508,7 @@ extern BOOL PP_TouchDotsEnabled;
 
     NSString *safeReason = PPAdminRouteTrimmedString(reason);
     if (self.notificationV2LogoutBarrierActive) {
-        NSLog(@"PPLAB NotificationsV2 registration blocked | reason=%@ appId=%@ logoutBarrier=yes epoch=%lu",
+        DLog(@"[PPNotificationsV2] registration blocked | reason=%@ appId=%@ logoutBarrier=yes epoch=%lu",
               safeReason.length > 0 ? safeReason : @"unknown",
               kPPProNotificationV2AppID,
               (unsigned long)self.notificationV2LifecycleEpoch);
@@ -517,7 +517,7 @@ extern BOOL PP_TouchDotsEnabled;
 
     NSString *uid = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
     if (uid.length == 0) {
-        NSLog(@"PPLAB NotificationsV2 registration skipped | reason=%@ appId=%@ hasUID=no",
+        DLog(@"[PPNotificationsV2] registration skipped | reason=%@ appId=%@ hasUID=no",
               safeReason.length > 0 ? safeReason : @"unknown",
               kPPProNotificationV2AppID);
         return;
@@ -525,7 +525,7 @@ extern BOOL PP_TouchDotsEnabled;
 
     if (self.notificationV2RegistrationInFlight) {
         self.notificationV2PendingReason = safeReason.length > 0 ? safeReason : @"coalesced";
-        NSLog(@"PPLAB NotificationsV2 registration coalesced | reason=%@ appId=%@",
+        DLog(@"[PPNotificationsV2] registration coalesced | reason=%@ appId=%@",
               self.notificationV2PendingReason,
               kPPProNotificationV2AppID);
         return;
@@ -539,7 +539,7 @@ extern BOOL PP_TouchDotsEnabled;
         if (!strongSelf) return;
 
         if (![strongSelf pp_notificationV2RegistrationIsCurrentForUID:uid epoch:registrationEpoch]) {
-            NSLog(@"PPLAB NotificationsV2 registration cancelled | reason=%@ appId=%@ staleEpoch=yes",
+            DLog(@"[PPNotificationsV2] registration cancelled | reason=%@ appId=%@ staleEpoch=yes",
                   safeReason.length > 0 ? safeReason : @"unknown",
                   kPPProNotificationV2AppID);
             [strongSelf pp_finishNotificationV2RegistrationCycle];
@@ -548,7 +548,7 @@ extern BOOL PP_TouchDotsEnabled;
 
         NSString *safeToken = PPAdminRouteTrimmedString(token);
         if (safeToken.length == 0) {
-            NSLog(@"PPLAB NotificationsV2 registration skipped | reason=%@ appId=%@ hasUID=yes hasFCM=no",
+            DLog(@"[PPNotificationsV2] registration skipped | reason=%@ appId=%@ hasUID=yes hasFCM=no",
                   safeReason.length > 0 ? safeReason : @"unknown",
                   kPPProNotificationV2AppID);
             [strongSelf pp_finishNotificationV2RegistrationCycle];
@@ -561,7 +561,7 @@ extern BOOL PP_TouchDotsEnabled;
                 if (!strongSelf) return;
 
                 if (![strongSelf pp_notificationV2RegistrationIsCurrentForUID:uid epoch:registrationEpoch]) {
-                    NSLog(@"PPLAB NotificationsV2 registration cancelled | reason=%@ appId=%@ auth_changed_or_stale=yes",
+                    DLog(@"[PPNotificationsV2] registration cancelled | reason=%@ appId=%@ auth_changed_or_stale=yes",
                           safeReason.length > 0 ? safeReason : @"unknown",
                           kPPProNotificationV2AppID);
                     [strongSelf pp_finishNotificationV2RegistrationCycle];
@@ -570,7 +570,7 @@ extern BOOL PP_TouchDotsEnabled;
 
                 NSString *safeInstallationId = PPAdminRouteTrimmedString(installationId);
                 if (safeInstallationId.length == 0) {
-                    NSLog(@"PPLAB NotificationsV2 registration skipped | reason=%@ appId=%@ hasUID=yes hasFCM=yes hasInstallation=no error=%@",
+                    DLog(@"[PPNotificationsV2] registration skipped | reason=%@ appId=%@ hasUID=yes hasFCM=yes hasInstallation=no error=%@",
                           safeReason.length > 0 ? safeReason : @"unknown",
                           kPPProNotificationV2AppID,
                           installationError.localizedDescription ?: @"unknown");
@@ -611,6 +611,8 @@ extern BOOL PP_TouchDotsEnabled;
                 } mutableCopy];
 
                 if (apnsTokenHex.length > 0) {
+                    // Backend contract: this legacy key carries raw APNs hex;
+                    // notificationsV2 hashes it in Infra before persistence.
                     payload[@"apnsTokenHash"] = apnsTokenHex;
                 }
 
@@ -629,7 +631,7 @@ extern BOOL PP_TouchDotsEnabled;
                         if (!strongSelf) return;
 
                         if (error) {
-                            NSLog(@"PPLAB NotificationsV2 registration failed | reason=%@ appId=pro_ios scopes=%lu error=%@",
+                            DLog(@"[PPNotificationsV2] registration failed | reason=%@ appId=pro_ios scopes=%lu error=%@",
                                   safeReason.length > 0 ? safeReason : @"unknown",
                                   (unsigned long)notificationScopes.count,
                                   error.localizedDescription ?: @"unknown");
@@ -639,7 +641,7 @@ extern BOOL PP_TouchDotsEnabled;
 
                         NSDictionary *response = [result.data isKindOfClass:NSDictionary.class] ? result.data : @{};
                         if (![strongSelf pp_notificationV2RegistrationIsCurrentForUID:uid epoch:registrationEpoch]) {
-                            NSLog(@"PPLAB NotificationsV2 registration ignored | reason=%@ appId=%@ auth_changed_or_stale=yes",
+                            DLog(@"[PPNotificationsV2] registration ignored | reason=%@ appId=%@ auth_changed_or_stale=yes",
                                   safeReason.length > 0 ? safeReason : @"unknown",
                                   kPPProNotificationV2AppID);
                             [strongSelf pp_compensateStaleNotificationV2Registration:response
@@ -671,7 +673,7 @@ extern BOOL PP_TouchDotsEnabled;
                                 [NSUserDefaults.standardUserDefaults setObject:binding forKey:kPPProNotificationV2BindingDefaultsKey];
                             }
                         }
-                        NSLog(@"PPLAB NotificationsV2 registration finish | reason=%@ ok=%@ appId=%@ scopes=%lu isActive=%@",
+                        DLog(@"[PPNotificationsV2] registration finish | reason=%@ ok=%@ appId=%@ scopes=%lu isActive=%@",
                               safeReason.length > 0 ? safeReason : @"unknown",
                               ok ? @"yes" : @"no",
                               PPAdminRouteTrimmedString(response[@"appId"]).length > 0 ? PPAdminRouteTrimmedString(response[@"appId"]) : @"pro_ios",
@@ -735,7 +737,7 @@ extern BOOL PP_TouchDotsEnabled;
     NSString *subtitle = effectiveBody.length > 0 ? effectiveBody : kLang(@"New notification");
 
     if (![PPProInAppNotificationPresenter notificationPreferencesAllowPayload:safePayload]) {
-        NSLog(@"[Push] Pro foreground notification suppressed by local notification settings. type=%@", effectiveType);
+        DLog(@"[Push] Pro foreground notification suppressed by local notification settings. type=%@", effectiveType);
         return YES;
     }
 
@@ -848,7 +850,7 @@ extern BOOL PP_TouchDotsEnabled;
         if (sceneDelegate) {
             [sceneDelegate openNotificationsTabFromNotificationPayload:payload];
         } else {
-            NSLog(@"[NotificationRoute] No active SceneDelegate available for notification response.");
+            DLog(@"[NotificationRoute] No active SceneDelegate available for notification response.");
         }
         if (completionHandler) {
             completionHandler();
@@ -875,7 +877,7 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
     NSString *title = [userInfo[@"title"] isKindOfClass:NSString.class] ? userInfo[@"title"] : kLang(@"pp_pro_notification_new_delivery_request_title");
     NSString *body = [userInfo[@"body"] isKindOfClass:NSString.class] ? userInfo[@"body"] : kLang(@"pp_pro_notification_new_delivery_request_body");
     
-    NSLog(@"[Push] didReceiveRemoteNotification | type=%@ notificationType=%@ effectiveType=%@ orderId=%@ title=%@ body=%@",
+    DLog(@"[Push] didReceiveRemoteNotification | type=%@ notificationType=%@ effectiveType=%@ orderId=%@ title=%@ body=%@",
           type, notificationType, effectiveType, orderId, title, body);
     
     if (application.applicationState == UIApplicationStateActive) {
@@ -883,13 +885,13 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
         BOOL allowsProForegroundAlert = [PPProInAppNotificationPresenter notificationPreferencesAllowPayload:userInfo];
         if (!allowsProForegroundAlert) {
             didShowLocalNotification = YES;
-            NSLog(@"[Push] Pro data notification suppressed by local notification settings. type=%@", effectiveType);
+            DLog(@"[Push] Pro data notification suppressed by local notification settings. type=%@", effectiveType);
         } else if (PPAdminIsCompanyDeliveryPayload(userInfo)) {
             [[PPProInAppNotificationPresenter sharedPresenter] showCompanyDeliveryNotificationWithPayload:userInfo
                                                                                                     title:title
                                                                                                  subtitle:body];
             didShowLocalNotification = YES;
-            NSLog(@"[Push] Showing in-app company delivery notification banner");
+            DLog(@"[Push] Showing in-app company delivery notification banner");
         } else if ([effectiveType hasPrefix:@"delivery"] || [effectiveType hasPrefix:@"request"] || [effectiveType hasPrefix:@"drivers_delivery_requested"] || [effectiveType hasPrefix:@"customer_delivery_requested"]) {
             [[PPProInAppNotificationPresenter sharedPresenter] showNotificationWithPayload:userInfo
                                                                                      title:title
@@ -897,7 +899,7 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
                                                                                   iconName:@"bicycle"
                                                                                accentColor:UIColor.systemOrangeColor];
             didShowLocalNotification = YES;
-            NSLog(@"[Push] Showing in-app delivery notification banner");
+            DLog(@"[Push] Showing in-app delivery notification banner");
         } else if ([effectiveType isEqualToString:@"provider_new_fulfillment"]) {
             [[PPProInAppNotificationPresenter sharedPresenter] showNotificationWithPayload:userInfo
                                                                                      title:title
@@ -905,7 +907,7 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
                                                                                   iconName:@"shippingbox.fill"
                                                                                accentColor:AppPrimaryClr];
             didShowLocalNotification = YES;
-            NSLog(@"[Push] Showing in-app fulfillment notification banner");
+            DLog(@"[Push] Showing in-app fulfillment notification banner");
         } else if ([effectiveType hasPrefix:@"order"]) {
             [[PPProInAppNotificationPresenter sharedPresenter] showNotificationWithPayload:userInfo
                                                                                      title:title
@@ -913,7 +915,7 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
                                                                                   iconName:@"shippingbox.fill"
                                                                                accentColor:AppPrimaryClr];
             didShowLocalNotification = YES;
-            NSLog(@"[Push] Showing in-app order notification banner");
+            DLog(@"[Push] Showing in-app order notification banner");
         } else if (type.length > 0 || notificationType.length > 0) {
             [[PPProInAppNotificationPresenter sharedPresenter] showNotificationWithPayload:userInfo
                                                                                      title:title
@@ -921,7 +923,7 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
                                                                                   iconName:@"bell.badge.fill"
                                                                                accentColor:AppPrimaryClr];
             didShowLocalNotification = YES;
-            NSLog(@"[Push] Showing generic in-app notification banner");
+            DLog(@"[Push] Showing generic in-app notification banner");
         }
     }
 
@@ -942,11 +944,11 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
 // =======================================================================================================================================================================/
 
 - (void)setupAppAppearance {
-    NSLog(@"[AppDelegate] setupAppAppearance called");
+    DLog(@"[AppDelegate] setupAppAppearance called");
     
     // Theme preference defaults to PPProThemePreferenceSystem via PPProCurrentThemePreference fallback
 
-    NSLog(@"[AppDelegate] [Language languageVal] %ld",[Language languageVal]);
+    DLog(@"[AppDelegate] [Language languageVal] %ld",[Language languageVal]);
     //if(!Language.languageVal)
     //    [Language userSelectedLanguage:LanguageCode[1]];
 

@@ -467,6 +467,11 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     FIRStorageReference *ref = [[[FIRStorage storage] reference] child:path];
     FIRStorageMetadata *meta = [[FIRStorageMetadata alloc] init];
     meta.contentType = @"image/png";
+    meta.customMetadata = @{
+        @"uploaded_by": [FIRAuth auth].currentUser.uid ?: @"",
+        @"entity_type": @"veterinarian",
+        @"entity_id": vetID ?: @""
+    };
 
     [ref putData:imageData metadata:meta completion:^(FIRStorageMetadata * _Nullable metadata, NSError * _Nullable error) {
         if (error) {
@@ -490,6 +495,11 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     FIRStorageReference *ref = [[[FIRStorage storage] reference] child:path];
     FIRStorageMetadata *meta = [[FIRStorageMetadata alloc] init];
     meta.contentType = @"image/png";
+    meta.customMetadata = @{
+        @"uploaded_by": [FIRAuth auth].currentUser.uid ?: @"",
+        @"entity_type": @"medicine",
+        @"entity_id": medicineID ?: @""
+    };
 
     [ref putData:imageData metadata:meta completion:^(FIRStorageMetadata * _Nullable metadata, NSError * _Nullable error) {
         if (error) {

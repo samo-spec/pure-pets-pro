@@ -64,6 +64,11 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
           tryServerThenCache:(BOOL)serverFirst
                   completion:(void(^)(UserModel * _Nullable user, NSError * _Nullable error))completion;
 - (FIRDocumentReference *)_userDoc:(NSString *)uid;
+- (void)pp_updateAdminAccessForUID:(NSString *)uid
+                          role:(NSNumber * _Nullable)role
+                       isAdmin:(BOOL)isAdmin
+                  isSuperAdmin:(NSNumber * _Nullable)isSuperAdmin
+                    completion:(void(^)(NSError * _Nullable error))completion;
 
 @end
 
@@ -428,7 +433,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     
     NSString *path = [self p_userPathForUID:uid];
     NSError *err = nil;
-    NSData *userData = [NSData dataWithContentsOfFile:path];
+    NSData *userData = [PPFileHelper safeDataFromFile:path];
     UserModel *u = [NSKeyedUnarchiver unarchivedObjectOfClass:UserModel.class
                                                      fromData:userData
                                                         error:&err];
@@ -474,7 +479,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 
 - (NSDate *)p_readUserAgeFromDisk:(NSString *)uid {
     NSString *path = [self p_agePathForUID:uid];
-    NSData *d = [NSData dataWithContentsOfFile:path];
+    NSData *d = [PPFileHelper safeDataFromFile:path];
     if (!d || d.length != sizeof(NSTimeInterval)) {
         DLog(@"p_cacheUser: p_readUserAgeFromDisk: (nil) no/invalid age file for uid=%@ at %@", uid, path);
         return nil;
@@ -818,20 +823,17 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 - (void)makeUserAdmin:(NSString *)uid
            completion:(void(^)(NSError * _Nullable error))completion {
     DLog(@"🚀 Making %@ an Admin", uid);
-    FIRDocumentReference *userRef = [[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:uid];
-    FIRWriteBatch *batch = [[FIRFirestore firestore] batch];
-    NSDictionary *payload = @{@"allowed": @YES,
-                              @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp]};
-    [batch setData:payload
-       forDocument:[[userRef collectionWithPath:kPPPermsSubCol] documentWithPath:kPermAdminAll]
-             merge:YES];
-    [batch setData:payload
-       forDocument:[[userRef collectionWithPath:kPPLegacyPermsSubCol] documentWithPath:@"AdminAll"]
-             merge:YES];
-    [batch setData:payload
-       forDocument:[[userRef collectionWithPath:kPPLegacyPermsSubColAlt] documentWithPath:@"AdminAll"]
-             merge:YES];
-    [batch commitWithCompletion:^(NSError * _Nullable error) {
+    if (!uid.length) {
+        if (completion) completion([NSError errorWithDomain:@"UserManager"
+                                                       code:-1
+                                                   userInfo:@{NSLocalizedDescriptionKey: @"Missing uid"}]);
+        return;
+    }
+    [self pp_updateAdminAccessForUID:uid
+                            role:@(UserRoleAdmin)
+                         isAdmin:YES
+                    isSuperAdmin:@NO
+                      completion:^(NSError * _Nullable error) {
         if (error) {
             DLog(@"❌ Failed to grant admin: %@", error.localizedDescription);
         } else {
@@ -844,20 +846,17 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 - (void)removeAdmin:(NSString *)uid
          completion:(void(^)(NSError * _Nullable error))completion {
     DLog(@"🔒 Removing Admin role from %@", uid);
-    FIRDocumentReference *userRef = [[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:uid];
-    FIRWriteBatch *batch = [[FIRFirestore firestore] batch];
-    NSDictionary *payload = @{@"allowed": @NO,
-                              @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp]};
-    [batch setData:payload
-       forDocument:[[userRef collectionWithPath:kPPPermsSubCol] documentWithPath:kPermAdminAll]
-             merge:YES];
-    [batch setData:payload
-       forDocument:[[userRef collectionWithPath:kPPLegacyPermsSubCol] documentWithPath:@"AdminAll"]
-             merge:YES];
-    [batch setData:payload
-       forDocument:[[userRef collectionWithPath:kPPLegacyPermsSubColAlt] documentWithPath:@"AdminAll"]
-             merge:YES];
-    [batch commitWithCompletion:^(NSError * _Nullable error) {
+    if (!uid.length) {
+        if (completion) completion([NSError errorWithDomain:@"UserManager"
+                                                       code:-1
+                                                   userInfo:@{NSLocalizedDescriptionKey: @"Missing uid"}]);
+        return;
+    }
+    [self pp_updateAdminAccessForUID:uid
+                            role:@(UserRoleUser)
+                         isAdmin:NO
+                    isSuperAdmin:@NO
+                      completion:^(NSError * _Nullable error) {
         if (error) {
             DLog(@"❌ Failed to remove admin: %@", error.localizedDescription);
         } else {
@@ -1017,7 +1016,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 - (void)toggleAdminForUser:(UserModel *)user {
     NSString *targetUID = user.uid.length ? user.uid : user.ID;
     if (!targetUID.length) {
-        NSLog(@"[UserManager] ❌ Missing user ID");
+        DLog(@"[UserManager] ❌ Missing user ID");
         return;
     }
     
@@ -1032,7 +1031,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     [self setUser:user isPPAdmin:next completion:completion];
 }
 
-// ✅ Main method: sets custom claim via CF + updates UsersCol
+// ✅ Main method: delegates coordinated claim, role, and permission updates to Infra.
 - (void)setUser:(UserModel *)user
       isPPAdmin:(BOOL)makeAdmin
      completion:(void(^)(NSError *error))completion
@@ -1052,85 +1051,46 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         return;
     }
     user.uid = targetUID;
-    
-    // 1) Call your HTTPS Callable to set/clear the custom claim
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"]; // 👈 match your deploy region
-    NSDictionary *payload = @{ @"uid": targetUID, @"makeAdmin": @(makeAdmin) };
-    
-    
-    [[functions HTTPSCallableWithName:@"setAdminClaim"] callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
-        
-        
+
+    UserRole role = user.role;
+    if (makeAdmin) {
+        if (role == UserRoleUnknown || role == UserRoleUser) {
+            role = UserRoleAdmin;
+        }
+    } else if (role == UserRoleAdmin || role == UserRoleSuperAdmin) {
+        role = UserRoleUser;
+    }
+    BOOL isSuperAdmin = (role == UserRoleSuperAdmin);
+    [self pp_updateAdminAccessForUID:targetUID
+                            role:@(role)
+                         isAdmin:makeAdmin
+                    isSuperAdmin:@(isSuperAdmin)
+                      completion:^(NSError * _Nullable error) {
         if (error) {
-            NSLog(@"❌ setAdminClaim failed: %@", error);
             if (completion) completion(error);
             return;
         }
 
-        NSLog(@"✅ setAdminClaim success: %@", result.data);
-
+        user.role = role;
         user.isAdmin = makeAdmin;
-        user.verified = YES;
-        if (makeAdmin) {
-            if (user.role == UserRoleUnknown || user.role == UserRoleUser) {
-                user.role = UserRoleAdmin;
-            }
-        } else if (user.role == UserRoleAdmin || user.role == UserRoleSuperAdmin) {
-            user.role = UserRoleUser;
+        user.isSuperAdmin = isSuperAdmin;
+
+        FIRUser *current = [FIRAuth auth].currentUser;
+        BOOL isCurrentUser = (current != nil) && [current.uid isEqualToString:targetUID];
+        if (!isCurrentUser) {
+            if (completion) completion(nil);
+            return;
         }
-        user.isSuperAdmin = (user.role == UserRoleSuperAdmin);
 
-        [UsrMgr saveUserModel:user merge:YES completion:^(NSError * _Nullable saveError) {
-            if (saveError) {
-                NSLog(@"❌ saveUserModel failed for %@: %@", targetUID, saveError.localizedDescription);
-                if (completion) completion(saveError);
-                return;
+        [current getIDTokenResultForcingRefresh:YES completion:^(__unused FIRAuthTokenResult * _Nullable tokenResult, NSError * _Nullable tokenError) {
+            if (tokenError) {
+                DLog(@"⚠️ Admin access updated, but token refresh failed for %@: %@", targetUID, tokenError.localizedDescription);
+            } else {
+                DLog(@"🔄 ID token refreshed after admin access update.");
             }
-
-            FIRFirestore *db = [FIRFirestore firestore];
-            FIRDocumentReference *userRef = [[db collectionWithPath:@"UsersCol"] documentWithPath:targetUID];
-            NSDictionary *permPayload = @{
-                @"allowed": @(makeAdmin),
-                @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp]
-            };
-            FIRWriteBatch *batch = [db batch];
-            [batch setData:permPayload
-               forDocument:[[userRef collectionWithPath:kPPPermsSubCol] documentWithPath:kPermAdminAll]
-                     merge:YES];
-            [batch setData:permPayload
-               forDocument:[[userRef collectionWithPath:kPPLegacyPermsSubCol] documentWithPath:@"AdminAll"]
-                     merge:YES];
-            [batch setData:permPayload
-               forDocument:[[userRef collectionWithPath:kPPLegacyPermsSubColAlt] documentWithPath:@"AdminAll"]
-                     merge:YES];
-
-            [batch commitWithCompletion:^(NSError * _Nullable permError) {
-                if (permError) {
-                    NSLog(@"⚠️ AdminAll permission sync failed for %@: %@", targetUID, permError.localizedDescription);
-                }
-
-                FIRUser *current = [FIRAuth auth].currentUser;
-                BOOL isCurrentUser = (current != nil) && [current.uid isEqualToString:targetUID];
-                if (!isCurrentUser) {
-                    if (completion) completion(permError);
-                    return;
-                }
-
-                [current getIDTokenResultForcingRefresh:YES completion:^(__unused FIRAuthTokenResult * _Nullable tokenResult, NSError * _Nullable tokenErr) {
-                    if (tokenErr) {
-                        NSLog(@"⚠️ Token refresh failed: %@", tokenErr.localizedDescription);
-                    } else {
-                        NSLog(@"🔄 ID token refreshed.");
-                    }
-                    if (completion) completion(permError ?: tokenErr);
-                }];
-            }];
+            if (completion) completion(tokenError);
         }];
-        
     }];
-    
-    
-   
 }
 
 
@@ -1148,6 +1108,36 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 
 - (FIRDocumentReference *)_userDoc:(NSString *)uid {
     return [[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:uid];
+}
+
+- (void)pp_updateAdminAccessForUID:(NSString *)uid
+                          role:(NSNumber *)role
+                       isAdmin:(BOOL)isAdmin
+                  isSuperAdmin:(NSNumber *)isSuperAdmin
+                    completion:(void (^)(NSError * _Nullable))completion {
+    if (!uid.length) {
+        if (completion) completion([NSError errorWithDomain:@"UserManager"
+                                                       code:-1
+                                                   userInfo:@{NSLocalizedDescriptionKey: @"Missing uid"}]);
+        return;
+    }
+
+    NSMutableDictionary *payload = [@{
+        @"uid": uid,
+        @"isAdmin": @(isAdmin)
+    } mutableCopy];
+    if (role != nil) payload[@"role"] = role;
+    if (isSuperAdmin != nil) payload[@"isSuperAdmin"] = isSuperAdmin;
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    [[functions HTTPSCallableWithName:@"updateUserAdminAccess"] callWithObject:payload completion:^(__unused FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        if (error) {
+            DLog(@"[UserManager] updateUserAdminAccess failed for %@: %@", uid, error.localizedDescription);
+        } else {
+            DLog(@"[UserManager] updateUserAdminAccess succeeded for %@", uid);
+        }
+        if (completion) completion(error);
+    }];
 }
 
 #pragma mark - Fetch
@@ -1238,34 +1228,11 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     }
 
     BOOL isAdmin = (role == UserRoleAdmin || role == UserRoleSuperAdmin);
-    NSDictionary *fields = @{
-        @"role"        : @(role),
-        @"isAdmin"     : @(isAdmin),
-        @"isSuperAdmin": @(role == UserRoleSuperAdmin),
-        @"updatedAt"   : [FIRFieldValue fieldValueForServerTimestamp]
-    };
-    [[self _userDoc:uid] setData:fields merge:YES completion:^(NSError * _Nullable error) {
-        if (error) {
-            if (completion) completion(error);
-            return;
-        }
-        NSDictionary *permPayload = @{@"allowed": @(isAdmin),
-                                      @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp]};
-        FIRWriteBatch *batch = [[FIRFirestore firestore] batch];
-        FIRDocumentReference *userRef = [self _userDoc:uid];
-        [batch setData:permPayload
-           forDocument:[[userRef collectionWithPath:kPPPermsSubCol] documentWithPath:kPermAdminAll]
-                 merge:YES];
-        [batch setData:permPayload
-           forDocument:[[userRef collectionWithPath:kPPLegacyPermsSubCol] documentWithPath:@"AdminAll"]
-                 merge:YES];
-        [batch setData:permPayload
-           forDocument:[[userRef collectionWithPath:kPPLegacyPermsSubColAlt] documentWithPath:@"AdminAll"]
-                 merge:YES];
-        [batch commitWithCompletion:^(NSError * _Nullable permError) {
-            if (completion) completion(permError);
-        }];
-    }];
+    [self pp_updateAdminAccessForUID:uid
+                            role:@(role)
+                         isAdmin:isAdmin
+                    isSuperAdmin:@(role == UserRoleSuperAdmin)
+                      completion:completion];
 }
 
 - (void)setIsAdmin:(BOOL)isAdmin
@@ -1280,40 +1247,13 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         return;
     }
 
-    NSMutableDictionary *fields = [@{
-        @"isAdmin"  : @(isAdmin),
-        @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp]
-    } mutableCopy];
-
-    if (realign) {
-        fields[@"role"] = @(isAdmin ? UserRoleAdmin : UserRoleUser);
-    }
-    if (!isAdmin || realign) {
-        fields[@"isSuperAdmin"] = @NO;
-    }
-
-    [[self _userDoc:uid] setData:fields merge:YES completion:^(NSError * _Nullable error) {
-        if (error) {
-            if (completion) completion(error);
-            return;
-        }
-        NSDictionary *permPayload = @{@"allowed": @(isAdmin),
-                                      @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp]};
-        FIRWriteBatch *batch = [[FIRFirestore firestore] batch];
-        FIRDocumentReference *userRef = [self _userDoc:uid];
-        [batch setData:permPayload
-           forDocument:[[userRef collectionWithPath:kPPPermsSubCol] documentWithPath:kPermAdminAll]
-                 merge:YES];
-        [batch setData:permPayload
-           forDocument:[[userRef collectionWithPath:kPPLegacyPermsSubCol] documentWithPath:@"AdminAll"]
-                 merge:YES];
-        [batch setData:permPayload
-           forDocument:[[userRef collectionWithPath:kPPLegacyPermsSubColAlt] documentWithPath:@"AdminAll"]
-                 merge:YES];
-        [batch commitWithCompletion:^(NSError * _Nullable permError) {
-            if (completion) completion(permError);
-        }];
-    }];
+    NSNumber *role = realign ? @(isAdmin ? UserRoleAdmin : UserRoleUser) : nil;
+    NSNumber *isSuperAdmin = (!isAdmin || realign) ? @NO : nil;
+    [self pp_updateAdminAccessForUID:uid
+                            role:role
+                         isAdmin:isAdmin
+                    isSuperAdmin:isSuperAdmin
+                      completion:completion];
 }
 
 // in UserManager.m

@@ -997,7 +997,7 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
         return nil;
     }
 
-    NSData *data = [NSData dataWithContentsOfFile:path];
+    NSData *data = [PPFileHelper safeDataFromFile:path];
     if (data.length == 0) {
         return nil;
     }

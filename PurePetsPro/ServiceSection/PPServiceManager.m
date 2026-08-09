@@ -177,6 +177,11 @@ static NSError *PPServiceError(NSInteger code, NSString *message) {
     // Explicit JPEG contentType for Storage security rules
     FIRStorageMetadata *meta = [[FIRStorageMetadata alloc] init];
     meta.contentType = @"image/jpeg";
+    meta.customMetadata = @{
+        @"uploaded_by": [FIRAuth auth].currentUser.uid ?: @"",
+        @"entity_type": @"service",
+        @"entity_id": serviceID ?: @""
+    };
 
     [ref putData:imageData metadata:meta completion:^(FIRStorageMetadata * _Nullable metadata, NSError * _Nullable error) {
         if (error) {

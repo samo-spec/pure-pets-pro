@@ -27,30 +27,39 @@ NSString * const kPermManageBanners        = @"PostAds";
 + (NSArray<NSString *> *)defaultPermissionsForRole:(UserRole)role {
     NSMutableArray<NSString *> *defaults = [NSMutableArray array];
 
-    [defaults addObject:kPermPostAds];
-    [defaults addObject:kPermProduction];
-    [defaults addObject:kPermAdoption];
-    [defaults addObject:kPermSellUsed];
-
     switch (role) {
         case UserRoleOwner:
             [defaults addObjectsFromArray:@[
+                kPermPostAds,
                 kPermSellNew,
+                kPermSellUsed,
+                kPermAdoption,
                 kPermManageServices
             ]];
             break;
 
         case UserRoleVet:
-            [defaults addObject:kPermManageServices];
+            [defaults addObjectsFromArray:@[
+                kPermPostAds,
+                kPermAdoption,
+                kPermManageServices
+            ]];
             break;
 
         case UserRoleModerator:
-            [defaults addObject:kPermModeration];
+            [defaults addObjectsFromArray:@[
+                kPermPostAds,
+                kPermAdoption,
+                kPermModeration
+            ]];
             break;
 
         case UserRoleAdmin:
             [defaults addObjectsFromArray:@[
+                kPermPostAds,
                 kPermSellNew,
+                kPermSellUsed,
+                kPermAdoption,
                 kPermModeration,
                 kPermManageStore,
                 kPermManageServices,

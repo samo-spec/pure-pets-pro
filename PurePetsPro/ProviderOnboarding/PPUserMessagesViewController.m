@@ -1321,6 +1321,12 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     FIRStorageReference *ref = [[[FIRStorage storage] reference] child:storagePath];
     FIRStorageMetadata *metadata = [FIRStorageMetadata new];
     metadata.contentType = @"audio/mp4";
+    metadata.customMetadata = @{
+        @"uploaded_by": senderID,
+        @"thread_id": self.chatThread.ID ?: @"",
+        @"message_id": messageID,
+        @"media_type": @"audio"
+    };
     FIRStorageUploadTask *task = [ref putData:audioData metadata:metadata];
     self.audioUploadTask = task;
 

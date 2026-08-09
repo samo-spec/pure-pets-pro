@@ -159,7 +159,9 @@ static inline UserRole PPParseRoleFromUserDoc(NSDictionary *doc) {
         if ([n isEqualToString:@"owner"])        return UserRoleOwner;
         if ([n isEqualToString:@"operations_manager"]) return UserRoleModerator;
         if ([n isEqualToString:@"inventory_manager"])  return UserRoleStoreManager;
-        if ([n isEqualToString:@"payments_manager"])   return UserRoleAdmin;
+        // Legacy UserRole has no payments-only value. Do not turn a scoped
+        // payments role into full Admin when parsing old documents.
+        if ([n isEqualToString:@"payments_manager"])   return UserRoleUser;
         if ([n isEqualToString:@"support_agent"])      return UserRoleVet;
         if ([n isEqualToString:@"viewer"])             return UserRoleUser;
         if ([n isEqualToString:@"vet"])          return UserRoleVet;

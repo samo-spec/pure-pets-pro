@@ -357,7 +357,7 @@
     if (path.length == 0) {
         return [LOTComposition animationNamed:@"PackageDelivery"];
     }
-    NSData *data = [NSData dataWithContentsOfFile:path];
+    NSData *data = [PPFileHelper safeDataFromFile:path];
     if (data.length == 0) {
         return [LOTComposition animationNamed:@"PackageDelivery"];
     }

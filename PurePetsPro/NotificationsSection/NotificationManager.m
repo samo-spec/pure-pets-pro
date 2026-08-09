@@ -1,6 +1,6 @@
 //
 //  NotificationManager.m
-//  PurePetsAdmin
+//  PurePetsPro
 //
 //  Created by Mohammed Ahmed on 24/08/2025.
 //
@@ -26,11 +26,17 @@
 }
 
 - (void)remove {
-    for (id<FIRListenerRegistration> registration in self.registrations) {
+    NSArray<id<FIRListenerRegistration>> *registrations = self.registrations;
+    self.registrations = @[];
+    for (id<FIRListenerRegistration> registration in registrations) {
         [registration remove];
     }
 }
 
+@end
+
+@interface NotificationManager ()
+@property (nonatomic, strong) NSMutableDictionary<NSString *, PPCombinedNotificationListener *> *activeInboxListeners;
 @end
 
 @implementation NotificationManager
@@ -42,6 +48,14 @@
         shared = [NotificationManager new];
     });
     return shared;
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _activeInboxListeners = [NSMutableDictionary dictionary];
+    }
+    return self;
 }
 
 - (FIRCollectionReference *)adminCollection {
@@ -100,6 +114,17 @@
 
 - (id<FIRListenerRegistration>)observeInboxForUser:(NSString *)uid
                                            handler:(void (^)(NSArray<NotificationModel *> *))handler {
+    NSString *safeUID = [uid isKindOfClass:NSString.class]
+        ? [uid stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+        : @"";
+    if (safeUID.length == 0) {
+        safeUID = [FIRAuth auth].currentUser.uid ?: @"";
+    }
+    if (safeUID.length > 0) {
+        [self.activeInboxListeners[safeUID] remove];
+        [self.activeInboxListeners removeObjectForKey:safeUID];
+    }
+
     FIRCollectionReference *userRef = [self inboxForUser:uid];
     FIRCollectionReference *staffRef = [self staffInboxForUser:uid];
     if (!userRef && !staffRef) {
@@ -157,11 +182,19 @@
         if (registration) [registrations addObject:registration];
     }
 
-    return [[PPCombinedNotificationListener alloc] initWithRegistrations:registrations];
+    PPCombinedNotificationListener *combined = [[PPCombinedNotificationListener alloc] initWithRegistrations:registrations];
+    if (safeUID.length > 0) {
+        self.activeInboxListeners[safeUID] = combined;
+    }
+    return combined;
 }
 
-- (void)listenInboxForUser:(NSString *)uid handler:(void (^)(NSArray<NotificationModel *> *))handler {
-    [self observeInboxForUser:uid handler:handler];
+- (void)stopListening {
+    NSArray<PPCombinedNotificationListener *> *listeners = self.activeInboxListeners.allValues.copy;
+    [self.activeInboxListeners removeAllObjects];
+    for (PPCombinedNotificationListener *listener in listeners) {
+        [listener remove];
+    }
 }
 
 - (void)fetchInboxPageForUser:(NSString *)uid
@@ -226,6 +259,10 @@
 - (void)markRead:(NotificationModel *)model
          forUser:(NSString *_Nullable)uid
       completion:(void (^)(NSError * _Nullable))completion {
+    if (![model isKindOfClass:NotificationModel.class] || model.nid.length == 0) {
+        if (completion) completion([self.class pp_notificationErrorWithMessage:@"Notification id is required."]);
+        return;
+    }
     FIRCollectionReference *ref = [self inboxReferenceForModel:model user:uid];
     if (!ref) {
         if (completion) completion([self.class pp_notificationErrorWithMessage:@"Unable to mark notification as read."]);
@@ -237,6 +274,10 @@
 - (void)deleteNotification:(NotificationModel *)model
                    forUser:(NSString *)uid
                 completion:(void (^)(NSError * _Nullable))completion {
+    if (![model isKindOfClass:NotificationModel.class] || model.nid.length == 0) {
+        if (completion) completion([self.class pp_notificationErrorWithMessage:@"Notification id is required."]);
+        return;
+    }
     FIRCollectionReference *ref = [self inboxReferenceForModel:model user:uid];
     if (!ref) {
         if (completion) completion([self.class pp_notificationErrorWithMessage:@"Unable to delete notification."]);

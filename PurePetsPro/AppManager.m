@@ -33,7 +33,6 @@ static BOOL PPAppCheckTruthyString(NSString *value) {
 
 static NSString * const PPForceAppCheckDeviceCheckProviderDefaultsKey = @"PPForceAppCheckDeviceCheckProvider";
 static NSString * const PPForceAppCheckAppAttestProviderDefaultsKey = @"PPForceAppCheckAppAttestProvider";
-static NSString * const PPForceAppCheckDebugProviderDefaultsKey = @"PPForceAppCheckDebugProvider";
 
 typedef void (^PPAppCheckTokenHandler)(FIRAppCheckToken * _Nullable token, NSError * _Nullable error);
 
@@ -307,41 +306,12 @@ static void PPFetchUsersColRootForAuthIdentity(FIRFirestore *db,
 }
 
 static BOOL PPShouldUseDebugAppCheckProvider(void) {
-#if TARGET_OS_SIMULATOR || DEBUG
-    return YES;
-#else
-    NSProcessInfo *processInfo = [NSProcessInfo processInfo];
-    NSDictionary<NSString *, NSString *> *env = processInfo.environment ?: @{};
-    NSString *forceEnv = env[@"PP_FORCE_APPCHECK_DEBUG_PROVIDER"];
-    NSString *debugTokenEnv = env[@"FIRAAppCheckDebugToken"];
-    BOOL forceFromEnv = PPAppCheckTruthyString(forceEnv);
-    BOOL hasDebugTokenEnv = [debugTokenEnv isKindOfClass:NSString.class] && debugTokenEnv.length > 0;
-
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    // Check both local flag and a potential global override
-    id forceDefaultsValue = [defaults objectForKey:PPForceAppCheckDebugProviderDefaultsKey];
-    BOOL forceDefaultsEnabled = NO;
-    if ([forceDefaultsValue isKindOfClass:NSNumber.class]) {
-        forceDefaultsEnabled = [(NSNumber *)forceDefaultsValue boolValue];
-    } else if ([forceDefaultsValue isKindOfClass:NSString.class]) {
-        forceDefaultsEnabled = PPAppCheckTruthyString((NSString *)forceDefaultsValue);
-    }
-
-    // Also allow forcing via a simple text file in the documents directory (useful for testers)
-    static BOOL forceFromDisk = NO;
-    static dispatch_once_t onceDisk;
-    dispatch_once(&onceDisk, ^{
-        NSString *path = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject stringByAppendingPathComponent:@"force_appcheck_debug.txt"];
-        forceFromDisk = [[NSFileManager defaultManager] fileExistsAtPath:path];
-    });
-
-    BOOL explicitDebug = forceFromEnv || hasDebugTokenEnv || forceDefaultsEnabled || forceFromDisk;
-
 #if DEBUG
     return YES;
 #else
-    return explicitDebug;
-#endif
+    // Release builds must never be switchable into Firebase's debug provider
+    // through environment variables, defaults, or files shipped on-device.
+    return NO;
 #endif
 }
 
@@ -450,7 +420,7 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
         }
 
         self.usingDeviceCheckFallback = YES;
-        NSLog(@"[AppCheck] App Attest failed for PurePetsPro. Falling back to DeviceCheck for this launch. Error: %@",
+        DLog(@"[AppCheck] App Attest failed for PurePetsPro. Falling back to DeviceCheck for this launch. Error: %@",
               error.localizedDescription ?: @"unknown error");
         PPFetchAppCheckTokenFromProvider(deviceCheckProvider, limitedUse, ^(FIRAppCheckToken * _Nullable fallbackToken, NSError * _Nullable fallbackError) {
             if (fallbackToken || !fallbackError) {
@@ -476,22 +446,22 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
 
 - (id<FIRAppCheckProvider>)createProviderWithApp:(FIRApp *)app {
     if (PPShouldUseDebugAppCheckProvider()) {
-        NSLog(@"[AppCheck] Using Debug provider for PurePetsPro.");
+        DLog(@"[AppCheck] Using Debug provider for PurePetsPro.");
         return [[FIRAppCheckDebugProvider alloc] initWithApp:app];
     }
 
     if (PPShouldUseDeviceCheckAppCheckProvider()) {
-        NSLog(@"[AppCheck] DeviceCheck provider forced for PurePetsPro.");
+        DLog(@"[AppCheck] DeviceCheck provider forced for PurePetsPro.");
         return [[FIRDeviceCheckProvider alloc] initWithApp:app];
     }
 
     if (PPShouldUseAppAttestAppCheckProvider() && @available(iOS 14.0, *)) {
-        NSLog(@"[AppCheck] AppAttest provider forced.");
+        DLog(@"[AppCheck] AppAttest provider forced.");
         id<FIRAppCheckProvider> attestProvider = [[FIRAppAttestProvider alloc] initWithApp:app];
         if (attestProvider) {
             return attestProvider;
         }
-        NSLog(@"[AppCheck] AppAttest provider forced but unavailable. Falling back to DeviceCheck.");
+        DLog(@"[AppCheck] AppAttest provider forced but unavailable. Falling back to DeviceCheck.");
     }
 
     // Best practice fallback sequence for iOS:
@@ -503,17 +473,17 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
         if (attestProvider) {
             id<FIRAppCheckProvider> deviceCheckProvider = [[FIRDeviceCheckProvider alloc] initWithApp:app];
             if (deviceCheckProvider) {
-                NSLog(@"[AppCheck] Using App Attest provider with DeviceCheck fallback.");
+                DLog(@"[AppCheck] Using App Attest provider with DeviceCheck fallback.");
                 return [[PPResilientAppCheckProvider alloc] initWithAppAttestProvider:attestProvider
                                                                    deviceCheckProvider:deviceCheckProvider];
             }
 
-            NSLog(@"[AppCheck] Using App Attest provider.");
+            DLog(@"[AppCheck] Using App Attest provider.");
             return attestProvider;
         }
     }
 
-    NSLog(@"[AppCheck] Using DeviceCheck provider (fallback).");
+    DLog(@"[AppCheck] Using DeviceCheck provider (fallback).");
     return [[FIRDeviceCheckProvider alloc] initWithApp:app];
 }
 
@@ -533,21 +503,18 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
     }
 
     FIRAppCheckDebugProvider *provider = [[FIRAppCheckDebugProvider alloc] initWithApp:defaultApp];
-    if (provider) {
-        NSLog(@"[AppCheck] Local debug token: '%@'", provider.localDebugToken ?: @"");
-        NSLog(@"[AppCheck] Current debug token: '%@'", provider.currentDebugToken ?: @"");
-    }
+    (void)provider;
 
     [[FIRAppCheck appCheck] tokenForcingRefresh:YES completion:^(FIRAppCheckToken * _Nullable token, NSError * _Nullable error) {
         if (error) {
-            NSLog(@"[AppCheck] Debug token exchange failed for app %@ (%@): %@",
+            DLog(@"[AppCheck] Debug token exchange failed for app %@ (%@): %@",
                   defaultApp.options.googleAppID ?: @"unknown-app",
                   defaultApp.options.projectID ?: @"unknown-project",
                   error.localizedDescription ?: @"unknown error");
             return;
         }
 
-        NSLog(@"[AppCheck] Debug token exchange succeeded. Token expiration: %@",
+        DLog(@"[AppCheck] Debug token exchange succeeded. Token expiration: %@",
               token.expirationDate ?: [NSNull null]);
     }];
 }
@@ -561,32 +528,32 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
     if (PPShouldUseDebugAppCheckProvider()) {
         NSString *apiKey = defaultApp.options.APIKey;
         if (apiKey.length == 0) {
-            NSLog(@"[GoogleSignIn][AppCheck] Missing iOS API key; debug provider was not configured.");
+            DLog(@"[GoogleSignIn][AppCheck] Missing iOS API key; debug provider was not configured.");
             return;
         }
 
         if (@available(iOS 14.0, *)) {
             [GIDSignIn.sharedInstance configureDebugProviderWithAPIKey:apiKey completion:^(NSError * _Nullable error) {
                 if (error) {
-                    NSLog(@"[GoogleSignIn][AppCheck] Debug provider configuration failed: %@",
+                    DLog(@"[GoogleSignIn][AppCheck] Debug provider configuration failed: %@",
                           error.localizedDescription ?: @"unknown error");
                     return;
                 }
-                NSLog(@"[GoogleSignIn][AppCheck] Debug provider configured for PurePetsPro.");
+                DLog(@"[GoogleSignIn][AppCheck] Debug provider configured for PurePetsPro.");
             }];
         } else {
-            NSLog(@"[GoogleSignIn][AppCheck] Debug provider requires iOS 14 or later.");
+            DLog(@"[GoogleSignIn][AppCheck] Debug provider requires iOS 14 or later.");
         }
         return;
     }
 
     [GIDSignIn.sharedInstance configureWithCompletion:^(NSError * _Nullable error) {
         if (error) {
-            NSLog(@"[GoogleSignIn][AppCheck] Production App Check configuration failed: %@",
+            DLog(@"[GoogleSignIn][AppCheck] Production App Check configuration failed: %@",
                   error.localizedDescription ?: @"unknown error");
             return;
         }
-        NSLog(@"[GoogleSignIn][AppCheck] Production App Check configured for PurePetsPro.");
+        DLog(@"[GoogleSignIn][AppCheck] Production App Check configured for PurePetsPro.");
     }];
 }
 
@@ -621,7 +588,7 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
     dispatch_once(&onceToken, ^{
         [FIRAppCheck setAppCheckProviderFactory:[[PPAppCheckProviderFactory alloc] init]];
         if (PPShouldUseDebugAppCheckProvider()) {
-            NSLog(@"[AppCheck] Debug provider active. If requests are still blocked, register the printed debug token in Firebase Console > App Check > Manage debug tokens.");
+            DLog(@"[AppCheck] Debug provider active. Register the debug token in Firebase Console > App Check > Manage debug tokens.");
         }
 
         if (![FIRApp defaultApp]) {
@@ -670,7 +637,7 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
 
         [[PPStaffAuth shared] fetchStaffDoc:user.uid completion:^(PPStaffDoc * _Nullable staffDoc, NSError * _Nullable staffError) {
             if (staffError) {
-                NSLog(@"[AdminAccess] staff_users lookup failed: %@", staffError.localizedDescription);
+                DLog(@"[AdminAccess] staff_users lookup failed: %@", staffError.localizedDescription);
                 if (completion) completion(NO);
                 return;
             }

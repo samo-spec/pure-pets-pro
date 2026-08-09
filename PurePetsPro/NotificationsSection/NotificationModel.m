@@ -1,6 +1,6 @@
 //
 //  NotificationModel.m
-//  PurePetsAdmin
+//  PurePetsPro
 //
 //  Created by Mohammed Ahmed on 24/08/2025.
 //
@@ -209,16 +209,18 @@ static NSString *PPNotificationModelKnownLocalizedBody(NSString *rawBody, NSStri
 @implementation NotificationModel
 + (instancetype)fromDoc:(FIRDocumentSnapshot *)doc {
     NotificationModel *m = [NotificationModel new];
-    m.nid = doc.documentID;
-    NSDictionary *d = doc.data ?: @{};
+    m.nid = PPNotificationModelTrimmedString(doc.documentID);
+    NSDictionary *d = PPNotificationModelSafeDictionary(doc.data);
     m.rawData = d;
     m.title = PPNotificationModelTrimmedString(d[@"title"]);
     m.body  = PPNotificationModelTrimmedString(d[@"body"]);
-    m.targetUserID = d[@"targetUserID"];
-    m.type = [d[@"type"] integerValue];
-    m.isRead = [d[@"isRead"] boolValue];
+    m.targetUserID = PPNotificationModelTrimmedString(d[@"targetUserID"]);
+    id rawType = d[@"type"];
+    m.type = [rawType isKindOfClass:NSNumber.class] ? [rawType integerValue] : PPNotificationTypeGeneral;
+    id rawIsRead = d[@"isRead"];
+    m.isRead = [rawIsRead isKindOfClass:NSNumber.class] ? [rawIsRead boolValue] : NO;
     m.meta = PPNotificationModelSafeDictionary(d[@"meta"]);
-    m.sourcePath = doc.reference.path ?: @"";
+    m.sourcePath = PPNotificationModelTrimmedString(doc.reference.path);
     id ts = d[@"createdAt"];
     if ([ts isKindOfClass:[FIRTimestamp class]]) m.createdAt = ((FIRTimestamp *)ts).dateValue;
     else m.createdAt = [NSDate date];

@@ -73,7 +73,7 @@ typedef NS_ENUM(NSInteger, PPDeliveryFilter) {
 
 #pragma mark - Order Model
 
-@interface PPDeliveryOrderModel : NSObject
+@interface PPDeliveryOrderModel : NSObject <NSCopying>
 
 // ── Identity ──
 @property (nonatomic, copy) NSString *orderId;

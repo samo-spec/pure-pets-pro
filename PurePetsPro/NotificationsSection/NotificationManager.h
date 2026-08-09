@@ -1,6 +1,6 @@
 //
 //  NotificationManager.h
-//  PurePetsAdmin
+//  PurePetsPro
 //
 //  Created by Mohammed Ahmed on 24/08/2025.
 //
@@ -25,8 +25,7 @@ typedef void(^PPNotifPage)(NSArray<NotificationModel *> *items, FIRDocumentSnaps
 - (id<FIRListenerRegistration> _Nullable)observeInboxForUser:(NSString *)uid
                                                      handler:(void(^)(NSArray<NotificationModel *> *items))handler;
 
-- (void)listenInboxForUser:(NSString *)uid
-                   handler:(void(^)(NSArray<NotificationModel *> *items))handler;
+- (void)stopListening;
 
 - (void)fetchInboxPageForUser:(NSString *)uid
                         limit:(NSInteger)limit

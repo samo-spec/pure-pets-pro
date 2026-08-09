@@ -7,6 +7,8 @@
 
 #import <XCTest/XCTest.h>
 #import "PPPaymentManagementModels.h"
+#import "PPRolePermission.h"
+#import "PPStaffAuth.h"
 
 @interface PurePetsProTests : XCTestCase
 
@@ -117,6 +119,35 @@
     XCTAssertFalse([PPPaymentAdminRecord canResolveRequest:refundApproved
                                                 withAction:PPPaymentAdminRequestResolutionComplete
                                                     order:order]);
+}
+
+- (void)testDefaultPermissionsDoNotElevateUnknownOrUserRoles {
+    NSArray<NSString *> *elevatedPermissions = @[
+        kPermPostAds,
+        kPermProduction,
+        kPermAdoption,
+        kPermSellUsed
+    ];
+
+    for (NSString *permission in elevatedPermissions) {
+        XCTAssertFalse([[PPRolePermission defaultPermissionsForRole:UserRoleUnknown] containsObject:permission],
+                       @"Unknown must not receive %@", permission);
+        XCTAssertFalse([[PPRolePermission defaultPermissionsForRole:UserRoleUser] containsObject:permission],
+                       @"User must not receive %@ by default", permission);
+    }
+}
+
+- (void)testLegacyStaffRoleMappingKeepsAdminSuperAdminAndPaymentsScoped {
+    PPStaffRole adminRole = [PPStaffAuth staffRoleFromLegacyRole:5];
+    PPStaffRole superAdminRole = [PPStaffAuth staffRoleFromLegacyRole:8];
+    NSInteger paymentsLegacyRole = [PPStaffAuth legacyRoleFromStaffRole:PPStaffRolePaymentsManager];
+
+    XCTAssertEqualObjects(adminRole, PPStaffRoleOwner);
+    XCTAssertEqualObjects(superAdminRole, PPStaffRoleSuperAdmin);
+    XCTAssertNotEqualObjects(adminRole, superAdminRole);
+    XCTAssertNotEqual(paymentsLegacyRole, UserRoleAdmin);
+    XCTAssertNotEqual(paymentsLegacyRole, UserRoleSuperAdmin);
+    XCTAssertEqual(PPParseRoleFromUserDoc(@{ @"roleName": @"payments_manager" }), UserRoleUser);
 }
 
 @end

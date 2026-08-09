@@ -5,6 +5,7 @@
 
 #import "PPDeliveryOrderModel.h"
 #import "Language.h"
+#import <objc/runtime.h>
 
 #pragma mark - Date Helper
 
@@ -148,6 +149,21 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
 #pragma mark - PPDeliveryOrderModel
 
 @implementation PPDeliveryOrderModel
+
+- (id)copyWithZone:(NSZone *)zone {
+    PPDeliveryOrderModel *copy = [[[self class] allocWithZone:zone] init];
+    unsigned int propertyCount = 0;
+    objc_property_t *properties = class_copyPropertyList(self.class, &propertyCount);
+    for (unsigned int index = 0; index < propertyCount; index++) {
+        const char *name = property_getName(properties[index]);
+        if (!name) continue;
+        NSString *key = [NSString stringWithUTF8String:name];
+        id value = [self valueForKey:key];
+        if (value) [copy setValue:value forKey:key];
+    }
+    free(properties);
+    return copy;
+}
 
 #pragma mark - Serialization
 

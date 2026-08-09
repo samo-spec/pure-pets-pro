@@ -153,6 +153,7 @@ static NSString * const PPProThemePreferenceDark = @"dark";
 #import "PPImageCacheHelper.h"
 #import "PPImageManager.h"
 #import "PPNotificationsManager.h"
+#import "PPFileHelper.h"
 
 // Swift-ObjC bridging
 #import "PurePetsPro-Swift.h"

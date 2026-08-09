@@ -97,11 +97,20 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> primaryListener;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> secondaryListener;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> branchesListener;
+@property (nonatomic, strong, nullable) id<FIRListenerRegistration> staffListener;
+@property (nonatomic, copy, nullable) PPStaffRole lastStaffAuthorizationRole;
+@property (nonatomic, assign) BOOL lastStaffAuthorizationIsActive;
+@property (nonatomic, assign) BOOL hasStaffAuthorizationState;
+@property (nonatomic, assign) NSUInteger staffListenerGeneration;
 @property (nonatomic, strong) NSArray<PPDeliveryOrderModel *> *primaryOrders;
 @property (nonatomic, strong) NSArray<PPDeliveryOrderModel *> *secondaryOrders;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *branchNameCache;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *providerNameCache;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UserModel *> *providerUserCache;
+- (void)startOrderListenersForStaff:(PPStaffDoc * _Nullable)staff uid:(NSString *)uid;
+- (void)stopOrderListeners;
+- (void)updateOrderListenersForStaff:(PPStaffDoc * _Nullable)staff uid:(NSString *)uid;
+- (void)postOrdersChangeWithError:(NSError * _Nullable)error;
 @end
 
 @implementation PPDeliveryManager
@@ -194,11 +203,78 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     [self stopListening];
     [self startBranchesListener];
 
-    FIRFirestore *db = [FIRFirestore firestore];
-    FIRCollectionReference *ordersRef = [db collectionWithPath:@"Orders"];
+    NSString *uid = [FIRAuth auth].currentUser.uid;
+    if (!uid.length) {
+        DLog(@"[PPDeliveryManager] ❌ No authenticated user — cannot listen for orders.");
+        [self postOrdersChangeWithError:[NSError errorWithDomain:@"PPDeliveryManager"
+                                                             code:401
+                                                         userInfo:@{NSLocalizedDescriptionKey: @"Authentication is required to load delivery orders."}]];
+        return;
+    }
 
-    PPStaffDoc *staff = [PPStaffAuth shared].cachedCurrentStaff;
-    BOOL hasPaymentAccess = [staff hasAnyPermission:@[kStaffPermPaymentsView, kStaffPermPaymentsManage]];
+    [self.staffListener remove];
+    self.staffListener = nil;
+    NSUInteger listenerGeneration = ++self.staffListenerGeneration;
+    __weak typeof(self) weakSelf = self;
+    self.staffListener = [[PPStaffAuth shared] listenStaffDoc:uid onChange:^(PPStaffDoc * _Nullable staff, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (listenerGeneration != strongSelf.staffListenerGeneration) return;
+        if (error) {
+            DLog(@"[PPDeliveryManager] Staff authorization listener error: %@", error.localizedDescription);
+            [strongSelf updateOrderListenersForStaff:nil uid:uid];
+            return;
+        }
+        [strongSelf updateOrderListenersForStaff:staff uid:uid];
+    }];
+}
+
+- (void)stopListening {
+    self.staffListenerGeneration += 1;
+    [self stopOrderListeners];
+    [self.branchesListener remove];
+    [self.staffListener remove];
+    self.primaryListener = nil;
+    self.secondaryListener = nil;
+    self.branchesListener = nil;
+    self.staffListener = nil;
+    self.lastStaffAuthorizationRole = nil;
+    self.lastStaffAuthorizationIsActive = NO;
+    self.hasStaffAuthorizationState = NO;
+    self.allOrders = @[];
+    [self postOrdersChangeWithError:nil];
+}
+
+- (void)stopOrderListeners {
+    [self.primaryListener remove];
+    [self.secondaryListener remove];
+    self.primaryListener = nil;
+    self.secondaryListener = nil;
+    self.primaryOrders = @[];
+    self.secondaryOrders = @[];
+}
+
+- (void)updateOrderListenersForStaff:(PPStaffDoc *)staff uid:(NSString *)uid {
+    NSString *role = staff.role ?: @"";
+    BOOL isActive = staff.isActive;
+    BOOL authorizationChanged = !self.hasStaffAuthorizationState ||
+        self.lastStaffAuthorizationIsActive != isActive ||
+        ![self.lastStaffAuthorizationRole isEqualToString:role];
+    if (!authorizationChanged) return;
+
+    self.hasStaffAuthorizationState = YES;
+    self.lastStaffAuthorizationRole = [role copy];
+    self.lastStaffAuthorizationIsActive = isActive;
+    [self stopOrderListeners];
+    [self startOrderListenersForStaff:staff uid:uid];
+}
+
+- (void)startOrderListenersForStaff:(PPStaffDoc *)staff uid:(NSString *)uid {
+    if (uid.length == 0) return;
+
+    FIRCollectionReference *ordersRef = [[FIRFirestore firestore] collectionWithPath:@"Orders"];
+    BOOL canSeeAllDeliveryOrders = staff.isActive &&
+        ([PPStaffAuth isAdminRole:staff.role] || [staff.role isEqualToString:PPStaffRoleOperationsManager]);
 
     __weak typeof(self) weakSelf = self;
     void (^applyDocuments)(NSArray<FIRDocumentSnapshot *> *, BOOL) = ^(NSArray<FIRDocumentSnapshot *> *documents, BOOL primary) {
@@ -212,8 +288,6 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
             if (!data) continue;
             PPDeliveryOrderModel *order = [PPDeliveryOrderModel fromDictionary:data withID:doc.documentID];
             [orders addObject:order];
-
-            // Collect marketplace provider IDs for pre-fetching
             if (order.marketplaceProviderID.length > 0 &&
                 ![order.marketplaceProviderID isEqualToString:@"platform"] &&
                 ![order.marketplaceProviderID isEqualToString:PPDeliveryOfficialSupportUserID]) {
@@ -221,33 +295,25 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
             }
         }
 
-        if (primary) {
-            strongSelf.primaryOrders = [orders copy];
-        } else {
-            strongSelf.secondaryOrders = [orders copy];
-        }
-
-        // Pre-fetch provider names for unique provider IDs
+        if (primary) strongSelf.primaryOrders = [orders copy];
+        else strongSelf.secondaryOrders = [orders copy];
         [strongSelf prefetchProviderNamesForIDs:providerIDs.allObjects];
-
         [strongSelf mergeAndPublishOrders];
     };
 
-    if (hasPaymentAccess) {
+    if (canSeeAllDeliveryOrders) {
+        // Infra policy grants broad operational visibility to admin/owner and
+        // operations_manager. payments_manager is financial-only and must not
+        // select this branch merely because it has payments.view/manage.
         FIRQuery *query = [[ordersRef queryWhereField:@"deliveryStatus" in:PPDeliveryAllStatuses()] queryOrderedByField:@"createdAt" descending:YES];
         self.primaryListener = [query addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
             if (error) {
-                NSLog(@"[PPDeliveryManager] ❌ Admin delivery listener error: %@", error.localizedDescription);
+                DLog(@"[PPDeliveryManager] ❌ All-order delivery listener error: %@", error.localizedDescription);
+                [weakSelf postOrdersChangeWithError:error];
                 return;
             }
             applyDocuments(snapshot.documents ?: @[], YES);
         }];
-        return;
-    }
-
-    NSString *uid = [FIRAuth auth].currentUser.uid;
-    if (!uid.length) {
-        NSLog(@"[PPDeliveryManager] ❌ No authenticated user — cannot listen for orders.");
         return;
     }
 
@@ -258,7 +324,8 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
     self.primaryListener = [openQuery addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         if (error) {
-            NSLog(@"[PPDeliveryManager] ❌ Open delivery listener error: %@", error.localizedDescription);
+            DLog(@"[PPDeliveryManager] ❌ Open delivery listener error: %@", error.localizedDescription);
+            [weakSelf postOrdersChangeWithError:error];
             return;
         }
         applyDocuments(snapshot.documents ?: @[], YES);
@@ -266,32 +333,30 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
     self.secondaryListener = [assignedQuery addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         if (error) {
-            NSLog(@"[PPDeliveryManager] ❌ Assigned delivery listener error: %@", error.localizedDescription);
+            DLog(@"[PPDeliveryManager] ❌ Assigned delivery listener error: %@", error.localizedDescription);
+            [weakSelf postOrdersChangeWithError:error];
             return;
         }
         applyDocuments(snapshot.documents ?: @[], NO);
     }];
 }
 
-- (void)stopListening {
-    [self.primaryListener remove];
-    [self.secondaryListener remove];
-    [self.branchesListener remove];
-    self.primaryListener = nil;
-    self.secondaryListener = nil;
-    self.branchesListener = nil;
-    self.primaryOrders = @[];
-    self.secondaryOrders = @[];
-    self.allOrders = @[];
+- (void)postOrdersChangeWithError:(NSError *)error {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSDictionary *userInfo = error ? @{ @"error": error } : nil;
+        [[NSNotificationCenter defaultCenter] postNotificationName:PPDeliveryOrdersDidChangeNotification
+                                                              object:self
+                                                            userInfo:userInfo];
+    });
 }
 
 - (void)mergeAndPublishOrders {
     NSMutableDictionary<NSString *, PPDeliveryOrderModel *> *merged = [NSMutableDictionary dictionary];
     for (PPDeliveryOrderModel *order in self.primaryOrders) {
-        if (order.orderId.length) merged[order.orderId] = order;
+        if (order.orderId.length) merged[order.orderId] = [order copy];
     }
     for (PPDeliveryOrderModel *order in self.secondaryOrders) {
-        if (order.orderId.length) merged[order.orderId] = order;
+        if (order.orderId.length) merged[order.orderId] = [order copy];
     }
 
     // Enrich orders with cached branch names
@@ -299,7 +364,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         if (order.branchName.length == 0 && order.branchID.length > 0) {
             NSString *cached = self.branchNameCache[order.branchID];
             if (cached.length) {
-                order.branchName = cached;
+                order.branchName = [cached copy];
             }
         }
     }
@@ -312,7 +377,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
     self.allOrders = sorted;
     dispatch_async(dispatch_get_main_queue(), ^{
-        [[NSNotificationCenter defaultCenter] postNotificationName:PPDeliveryOrdersDidChangeNotification object:self];
+        [[NSNotificationCenter defaultCenter] postNotificationName:PPDeliveryOrdersDidChangeNotification object:self userInfo:nil];
     });
 }
 
@@ -433,7 +498,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         NSError *error = [NSError errorWithDomain:@"PPDeliveryManager"
                                              code:422
                                          userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryOrderUnavailable")}];
-        NSLog(@"PPLAB Pro delivery v1 rejected orderId=%@ action=%@ reason=missingFulfillmentIDs", orderID, action);
+        DLog(@"[PPDeliveryManager] Pro delivery v1 rejected orderId=%@ action=%@ reason=missingFulfillmentIDs", orderID, action);
         if (completion) completion(NO, error.localizedDescription, error);
         return;
     }
@@ -456,7 +521,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         (void)result;
         dispatch_async(dispatch_get_main_queue(), ^{
             if (error) {
-                NSLog(@"PPLAB Pro delivery v1 failed orderId=%@ action=%@ fulfillmentCount=%lu code=%ld", orderID, action, (unsigned long)sortedIDs.count, (long)error.code);
+                DLog(@"[PPDeliveryManager] Pro delivery v1 failed orderId=%@ action=%@ fulfillmentCount=%lu code=%ld", orderID, action, (unsigned long)sortedIDs.count, (long)error.code);
                 NSString *message = error.localizedDescription;
                 NSDictionary *details = error.userInfo[@"details"];
                 if ([details isKindOfClass:NSDictionary.class] && [details[@"message"] isKindOfClass:NSString.class]) {
@@ -465,7 +530,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
                 if (completion) completion(NO, message, error);
                 return;
             }
-            NSLog(@"PPLAB Pro delivery v1 accepted orderId=%@ action=%@ fulfillmentCount=%lu", orderID, action, (unsigned long)sortedIDs.count);
+            DLog(@"[PPDeliveryManager] Pro delivery v1 accepted orderId=%@ action=%@ fulfillmentCount=%lu", orderID, action, (unsigned long)sortedIDs.count);
             if (completion) completion(YES, kLang(@"DeliverySuccess"), nil);
         });
     }];
@@ -474,7 +539,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 - (void)performDeliveryAction:(NSString *)action orderId:(NSString *)orderId note:(NSString *)note completion:(PPDeliveryActionBlock)completion {
     PPDeliveryOrderModel *order = [self pp_deliveryOrderForOrderID:orderId];
     if (order.fulfillmentVersion == 1) {
-        NSLog(@"PPLAB Pro delivery route=v1-child orderId=%@ action=%@ fulfillmentCount=%lu", orderId, action, (unsigned long)order.fulfillmentOrderIDs.count);
+        DLog(@"[PPDeliveryManager] Pro delivery route=v1-child orderId=%@ action=%@ fulfillmentCount=%lu", orderId, action, (unsigned long)order.fulfillmentOrderIDs.count);
         [self pp_performV1DeliveryAction:action
                                 orderID:orderId
                                    note:(note.length > 0) ? note : kLang(@"DeliveryDefaultActionNote")
@@ -483,7 +548,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         return;
     }
 
-    NSLog(@"PPLAB Pro delivery route=legacy-parent orderId=%@ action=%@", orderId, action);
+    DLog(@"[PPDeliveryManager] Pro delivery route=legacy-parent orderId=%@ action=%@", orderId, action);
     FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"deliveryTransitionOrderStatus"];
     callable.timeoutInterval = 30;

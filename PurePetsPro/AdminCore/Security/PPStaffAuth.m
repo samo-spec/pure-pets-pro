@@ -176,26 +176,12 @@ NSString * const kStaffPermVeterinariansManage = @"veterinarians.manage";
                 return;
             }
             
-            // Fallback to UsersCol/{uid}/staffProfile
-            [[[self.db collectionWithPath:@"UsersCol"] documentWithPath:uid] getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable userSnap, NSError * _Nullable userError) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (userError || !userSnap.exists) {
-                        if (completion) completion(nil, error ?: userError);
-                        return;
-                    }
-                    
-                    NSDictionary *userData = userSnap.data;
-                    NSString *accountType = [(NSString *)userData[@"accountType"] isKindOfClass:NSString.class] ? (NSString *)userData[@"accountType"] : nil;
-                    NSDictionary *staffProfile = [userData[@"staffProfile"] isKindOfClass:NSDictionary.class] ? (NSDictionary *)userData[@"staffProfile"] : nil;
-                    
-                    if ([accountType isEqualToString:@"staff"] && staffProfile) {
-                        PPStaffDoc *doc = [[PPStaffDoc alloc] initWithDictionary:staffProfile uid:userSnap.documentID];
-                        if (completion) completion(doc, nil);
-                    } else {
-                        if (completion) completion(nil, error);
-                    }
-                });
-            }];
+            // Security boundary: staff_users/{uid} is the only authoritative staff
+            // record. Never promote accountType/staffProfile from UsersCol after a
+            // staff read fails; that user-controlled profile path can otherwise
+            // become a privilege-escalation fallback. A missing or failed staff
+            // read is therefore fail-closed as "not staff".
+            if (completion) completion(nil, error);
         });
     }];
 }
@@ -272,7 +258,7 @@ NSString * const kStaffPermVeterinariansManage = @"veterinarians.manage";
 + (PPStaffRole)staffRoleFromLegacyRole:(NSInteger)legacyRole {
     switch (legacyRole) {
         case 8: return PPStaffRoleSuperAdmin;
-        case 5: return PPStaffRoleSuperAdmin;    // Admin → super_admin
+        case 5: return PPStaffRoleOwner;         // Admin → owner; keep distinct from super_admin.
         case 2: return PPStaffRoleOwner;
         case 6: return PPStaffRoleInventoryManager;
         case 7: return PPStaffRoleInventoryManager;
@@ -287,7 +273,9 @@ NSString * const kStaffPermVeterinariansManage = @"veterinarians.manage";
     if ([staffRole isEqualToString:PPStaffRoleOwner])             return 2;
     if ([staffRole isEqualToString:PPStaffRoleOperationsManager]) return 4;
     if ([staffRole isEqualToString:PPStaffRoleInventoryManager])  return 6;
-    if ([staffRole isEqualToString:PPStaffRolePaymentsManager])   return 5;
+    // The legacy enum has no financial-scope role. Fail closed to the ordinary
+    // user value rather than encoding payments_manager as full Admin.
+    if ([staffRole isEqualToString:PPStaffRolePaymentsManager])   return 1;
     if ([staffRole isEqualToString:PPStaffRoleSupportAgent])      return 3;
     if ([staffRole isEqualToString:PPStaffRoleViewer])            return 1;
     return 0;

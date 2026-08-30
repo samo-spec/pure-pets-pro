@@ -82,6 +82,10 @@ typedef NS_ENUM(NSInteger, PPDeliveryFilter) {
 @property (nonatomic, copy) NSString *userId;
 @property (nonatomic, assign) NSInteger fulfillmentVersion;
 @property (nonatomic, strong) NSArray<NSString *> *fulfillmentOrderIDs;
+/// Exact server-projected child set currently offered for courier acceptance.
+@property (nonatomic, copy) NSArray<NSString *> *deliveryRequestFulfillmentOrderIDs;
+/// Exact assigned child status snapshot used for fulfillment-v1 action gating.
+@property (nonatomic, copy) NSDictionary<NSString *, NSString *> *assignedFulfillmentStatusesByID;
 
 // ── Customer ──
 @property (nonatomic, copy) NSString *customerName;
@@ -107,6 +111,8 @@ typedef NS_ENUM(NSInteger, PPDeliveryFilter) {
 @property (nonatomic, copy)   NSString *currencyCode;
 @property (nonatomic, copy)   NSString *paymentMethodId;
 @property (nonatomic, copy)   NSString *paymentStatus;
+@property (nonatomic, copy, nullable) NSString *cashCollectionReceiptID;
+@property (nonatomic, copy) NSDictionary *cashCollectionReceipt;
 
 // ── Status ──
 @property (nonatomic, copy) NSString *rawStatus;
@@ -157,6 +163,7 @@ typedef NS_ENUM(NSInteger, PPDeliveryFilter) {
 - (BOOL)canMarkCompleted;
 - (BOOL)canCancel;
 - (BOOL)isTerminal;
+- (BOOL)hasValidServerCashCollectionReceipt;
 
 // ── Display Helpers ──
 - (NSString *)displayStatus;

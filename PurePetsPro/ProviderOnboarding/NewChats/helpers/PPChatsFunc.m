@@ -52,45 +52,45 @@ static BOOL PPChatIdentityFlagEnabled(id value)
 // MARK: - Canvas Colors (using Pro's Styling system)
 + (UIColor *)chatCanvasBackgroundColor
 {
-    return [UIColor systemBackgroundColor];
+    return [UIColor ppSurface];
 }
 
 + (UIColor *)chatNeutralAccentColor
 {
-    return [UIColor systemBlueColor];
+    return [UIColor ppInfo];
 }
 
 + (UIColor *)bubbleSurfaceColorForIncoming:(BOOL)isIncoming
 {
     // Incoming: light neutral, Outgoing: primary accent
     if (isIncoming) {
-        return [UIColor secondarySystemBackgroundColor];
+        return [UIColor ppElevatedSurface];
     }
-    return [[UIColor systemBlueColor] colorWithAlphaComponent:0.82];
+    return [[UIColor ppInfo] colorWithAlphaComponent:0.82];
 }
 
 + (UIColor *)bubblePrimaryContentColorForIncoming:(BOOL)isIncoming
 {
     if (isIncoming) {
-        return [UIColor labelColor];
+        return [UIColor ppTextPrimary];
     }
-    return [UIColor secondarySystemBackgroundColor];
+    return [UIColor ppElevatedSurface];
 }
 
 + (UIColor *)bubbleSecondaryContentColorForIncoming:(BOOL)isIncoming
 {
     if (isIncoming) {
-        return [[UIColor labelColor] colorWithAlphaComponent:0.7];
+        return [[UIColor ppTextPrimary] colorWithAlphaComponent:0.7];
     }
-    return [[UIColor secondaryLabelColor] colorWithAlphaComponent:0.86];
+    return [[UIColor ppTextSecondary] colorWithAlphaComponent:0.86];
 }
 
 + (UIColor *)bubbleStrokeColorForIncoming:(BOOL)isIncoming
 {
     if (isIncoming) {
-        return [[UIColor labelColor] colorWithAlphaComponent:0.15];
+        return [[UIColor ppTextPrimary] colorWithAlphaComponent:0.15];
     }
-    return [[UIColor systemBackground] colorWithAlphaComponent:0.13];
+    return [[UIColor ppSurface] colorWithAlphaComponent:0.13];
 }
 
 + (UIColor *)bubbleInteractiveAccentColorForIncoming:(BOOL)isIncoming
@@ -103,8 +103,8 @@ static BOOL PPChatIdentityFlagEnabled(id value)
 + (UIColor *)bubblePlaybackControlSurfaceColorForIncoming:(BOOL)isIncoming
 {
     return isIncoming
-        ? [[UIColor systemBackground] colorWithAlphaComponent:0.08]
-        : [[UIColor systemBackground] colorWithAlphaComponent:0.17];
+        ? [[UIColor ppSurface] colorWithAlphaComponent:0.08]
+        : [[UIColor ppSurface] colorWithAlphaComponent:0.17];
 }
 
 + (UIColor *)bubbleWaveInactiveColorForIncoming:(BOOL)isIncoming
@@ -116,9 +116,9 @@ static BOOL PPChatIdentityFlagEnabled(id value)
 + (UIColor *)bubbleReplySurfaceColorForIncoming:(BOOL)isIncoming
 {
     if (isIncoming) {
-        return [[UIColor systemBackground] colorWithAlphaComponent:0.07];
+        return [[UIColor ppSurface] colorWithAlphaComponent:0.07];
     }
-    return [[UIColor systemBackground] colorWithAlphaComponent:0.12];
+    return [[UIColor ppSurface] colorWithAlphaComponent:0.12];
 }
 
 // MARK: - Bubble Mask
@@ -309,7 +309,7 @@ static BOOL PPChatIdentityFlagEnabled(id value)
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
     UIImage *img = [UIImage systemImageNamed:imageName];
     [btn setImage:img forState:UIControlStateNormal];
-    btn.tintColor = [UIColor labelColor];
+    btn.tintColor = [UIColor ppTextPrimary];
     btn.translatesAutoresizingMaskIntoConstraints = NO;
     [btn.widthAnchor constraintEqualToConstant:side].active = YES;
     [btn.heightAnchor constraintEqualToConstant:side].active = YES;

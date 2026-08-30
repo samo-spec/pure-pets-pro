@@ -17,23 +17,23 @@ static NSString * const kPPProviderStatusArchivedValue = @"archived";
 static NSString * const kPPProviderProfileStatusActiveValue = @"active";
 
 static UIColor *PPProviderStatusAccentColor(void) {
-    return AppPrimaryClr ?: UIColor.systemTealColor;
+    return AppPrimaryClr;
 }
 
 static UIColor *PPProviderStatusBackgroundColor(void) {
-    return  UIColor.secondarySystemBackgroundColor; //AppBackgroundClrDarker ?:
+    return [UIColor ppElevatedSurface];
 }
 
 static UIColor *PPProviderStatusSurfaceColor(void) {
-    return  UIColor.systemBackgroundColor; //AppForgroundColr ?:
+    return [UIColor ppSurface];
 }
 
 static UIColor *PPProviderStatusPrimaryTextColor(void) {
-    return UIColor.labelColor; //PrimaryTextClr ?:
+    return [UIColor ppTextPrimary];
 }
 
 static UIColor *PPProviderStatusSecondaryTextColor(void) {
-    return UIColor.secondaryLabelColor; //SeconderyTextClr ?:
+    return [UIColor ppTextSecondary];
 }
 
 @interface PPProviderApplicationStatusViewController () <PPBecomeProviderBottomSheetViewControllerDelegate>
@@ -559,7 +559,7 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     }
 
     if (self.lastError) {
-        UIColor *accentColor = UIColor.systemRedColor;
+        UIColor *accentColor = [UIColor ppError];
         [self pp_applyHeroBadgeText:kLang(@"ProviderHeroErrorBadge")
                         accentColor:accentColor
                          symbolName:@"wifi.exclamationmark"
@@ -606,7 +606,7 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     self.eyebrowLabel.text = kLang(@"ProviderStatusEyebrow");
 
     if (state.isBlocked) {
-        heroAccentColor = UIColor.systemRedColor;
+        heroAccentColor = [UIColor ppError];
         heroBadgeText = kLang(@"ProviderHeroBlockedBadge");
         heroSymbolName = @"hand.raised.fill";
         self.headlineLabel.text = kLang(@"ProviderStateBlockedTitle");
@@ -617,7 +617,7 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         entryCardFootnote = kLang(@"ProviderStateBlockedFootnote");
         entryCardSymbolName = @"hand.raised.fill";
     } else if (hasArchived) {
-        heroAccentColor = UIColor.systemGrayColor;
+        heroAccentColor = [UIColor ppTextSecondary];
         heroBadgeText = kLang(@"ProviderStatusArchived");
         heroSymbolName = @"archivebox.fill";
         self.headlineLabel.text = kLang(@"ProviderStatusArchived");
@@ -628,7 +628,7 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         entryCardFootnote = kLang(@"ProviderStateRejectedFootnote");
         entryCardSymbolName = @"archivebox.fill";
     } else if (hasUnderReview || hasPending) {
-        heroAccentColor = UIColor.systemOrangeColor;
+        heroAccentColor = [UIColor ppWarning];
         heroBadgeText = kLang(@"ProviderHeroReviewBadge");
         heroSymbolName = @"clock.badge.checkmark.fill";
         self.headlineLabel.text = kLang(@"ProviderStateReviewTitle");
@@ -639,7 +639,7 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         entryCardFootnote = eligibleTypes.count > 0 ? kLang(@"ProviderStateEligibleFootnote") : kLang(@"ProviderStateNoActionFootnote");
         entryCardSymbolName = @"clock.badge.checkmark.fill";
     } else if (hasRejected) {
-        heroAccentColor = UIColor.systemRedColor;
+        heroAccentColor = [UIColor ppError];
         heroBadgeText = kLang(@"ProviderHeroRejectedBadge");
         heroSymbolName = @"arrow.triangle.2.circlepath.circle.fill";
         self.headlineLabel.text = kLang(@"ProviderStateRejectedTitle");
@@ -1187,13 +1187,13 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     NSString *statusText = [PPProviderApplicationManager localizedStatusTitle:statusValue];
     UIColor *accentColor = PPProviderStatusAccentColor();
     if ([statusValue isEqualToString:kPPProviderStatusRejectedValue]) {
-        accentColor = UIColor.systemRedColor;
+        accentColor = [UIColor ppError];
     } else if ([statusValue isEqualToString:kPPProviderStatusArchivedValue]) {
-        accentColor = UIColor.systemGrayColor;
+        accentColor = [UIColor ppTextSecondary];
     } else if ([statusValue isEqualToString:kPPProviderStatusPendingValue] || [statusValue isEqualToString:kPPProviderStatusUnderReviewValue]) {
-        accentColor = UIColor.systemOrangeColor;
+        accentColor = [UIColor ppWarning];
     } else if ([statusValue isEqualToString:kPPProviderProfileStatusActiveValue]) {
-        accentColor = UIColor.systemGreenColor;
+        accentColor = [UIColor ppSuccess];
     }
 
     UIView *card = [[UIView alloc] init];

@@ -30,10 +30,6 @@ typedef NS_ENUM(NSInteger, PPNotificationAudience) {
 // Refresh token if needed
 - (void)refreshTokenWithCompletion:(void (^)(NSString * _Nullable token, NSError * _Nullable error))completion;
 
-/// Clears this device's Pro push-token registration while the user is still authenticated.
-- (void)clearProviderTokenForUserID:(NSString *)userID
-                         completion:(void (^)(NSError * _Nullable error))completion;
-
 /// Deactivates this installation from Notification V2 while the user is still authenticated.
 - (void)deactivateNotificationDeviceV2WithReason:(NSString *)reason
                                       completion:(void (^)(NSError * _Nullable error))completion;

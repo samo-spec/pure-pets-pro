@@ -253,12 +253,12 @@ static CGFloat const kCellRingWidth   = 2.5;
     // ── Status badge ──
     BOOL disabled = vet.isDisabled;
     self.statusBadge.text = [NSString stringWithFormat:@"  %@  ", disabled ? kLang(@"Vet_Status_Disabled") : kLang(@"Vet_Status_Active")];
-    UIColor *statusColor = disabled ? UIColor.systemRedColor : AppPrimaryClr;
+    UIColor *statusColor = disabled ? [UIColor ppError] : AppPrimaryClr;
     self.statusBadge.textColor = statusColor;
     self.statusBadge.backgroundColor = [statusColor colorWithAlphaComponent:0.10];
 
     // ── Online dot ──
-    self.onlineDot.backgroundColor = disabled ? UIColor.systemRedColor : UIColor.systemGreenColor;
+    self.onlineDot.backgroundColor = disabled ? [UIColor ppError] : [UIColor ppSuccess];
 
     // ── Avatar ring ──
     self.avatarRing.layer.borderColor = disabled ? [SeconderyTextClr colorWithAlphaComponent:0.15].CGColor : AppPrimaryClr.CGColor;
@@ -269,8 +269,8 @@ static CGFloat const kCellRingWidth   = 2.5;
     BOOL expired = [vet isSubscriptionExpired];
     self.subscriptionLabel.text = [NSString stringWithFormat:@"  %@  ", tierName];
     if (expired) {
-        self.subscriptionLabel.textColor = UIColor.systemRedColor;
-        self.subscriptionLabel.layer.borderColor = UIColor.systemRedColor.CGColor;
+        self.subscriptionLabel.textColor = [UIColor ppError];
+        self.subscriptionLabel.layer.borderColor = [UIColor ppError].CGColor;
     } else {
         self.subscriptionLabel.textColor = AppPrimaryClr;
         self.subscriptionLabel.layer.borderColor = [AppPrimaryClr colorWithAlphaComponent:0.3].CGColor;

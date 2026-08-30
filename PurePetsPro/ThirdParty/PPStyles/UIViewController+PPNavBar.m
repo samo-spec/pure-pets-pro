@@ -46,6 +46,17 @@ static BOOL PPIsRTL(UIViewController *vc) {
     return Language.isRTL;// (dir == UIUserInterfaceLayoutDirectionRightToLeft);
 }
 
+static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
+    // A screen that opts into PPNavBar has one navigation owner. Keep the
+    // UINavigationBar itself alive as the host for the new bar, while removing
+    // legacy UIKit title/items that otherwise render underneath or beside it.
+    vc.navigationItem.hidesBackButton = YES;
+    vc.navigationItem.title = @"";
+    vc.navigationItem.titleView = nil;
+    vc.navigationItem.leftBarButtonItems = nil;
+    vc.navigationItem.rightBarButtonItems = nil;
+}
+
 
 
 @implementation UIViewController (PPNavBar)
@@ -56,9 +67,11 @@ static BOOL PPIsRTL(UIViewController *vc) {
     
     
     NSAssert(self.navigationController, @"pp_navBar requires a UINavigationController.");
+    [self.navigationController setNavigationBarHidden:NO animated:NO];
     UINavigationBar *navBar = self.navigationController.navigationBar;
     navBar.tintColor = UIColor.clearColor;
     navBar.backgroundColor = UIColor.clearColor;
+    PPSuppressLegacyNavigationItems(self);
     UIView *bar = PPBarForVC(self);
     if (bar) {
         if (self.navigationController && bar.superview != self.navigationController.navigationBar) {
@@ -80,8 +93,6 @@ static BOOL PPIsRTL(UIViewController *vc) {
     bar.translatesAutoresizingMaskIntoConstraints = NO;
     bar.backgroundColor = UIColor.clearColor;
     bar.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
-    
-    self.navigationItem.hidesBackButton = YES; // 🔒 Hide default back arrow
     
     UIStackView *left = [[UIStackView alloc] init];
     left.translatesAutoresizingMaskIntoConstraints = NO;
@@ -167,6 +178,8 @@ static BOOL PPIsRTL(UIViewController *vc) {
     if (!bar) return;
     
     if (self.navigationController) {
+        [self.navigationController setNavigationBarHidden:NO animated:NO];
+        PPSuppressLegacyNavigationItems(self);
         UINavigationBar *navBar = self.navigationController.navigationBar;
         if (bar.superview != navBar) {
             [navBar addSubview:bar];
@@ -431,13 +444,13 @@ static BOOL PPIsRTL(UIViewController *vc) {
     [btn setImage:icon forState:UIControlStateNormal];
 
     btn.translatesAutoresizingMaskIntoConstraints = NO;
-    btn.tintColor = AppPrimaryClr ?: [UIColor systemBlueColor];
+    btn.tintColor = AppPrimaryClr;
     
     // ✅ Remove the old backgroundColor assignment for iOS 15+
     if (@available(iOS 15.0, *)) {
         // Background is already set in configuration
     } else {
-        btn.backgroundColor = AppForgroundColr ?: [UIColor colorWithWhite:0.95 alpha:1.0];
+        btn.backgroundColor = AppForgroundColr;
         btn.layer.cornerRadius = 22;
         btn.layer.masksToBounds = YES;
     }
@@ -487,7 +500,7 @@ static BOOL PPIsRTL(UIViewController *vc) {
         btn.configuration = cfg;
         btn.configuration.cornerStyle = UIButtonConfigurationCornerStyleFixed;
         btn.configuration.baseBackgroundColor = UIColor.whiteColor;
-        btn.configuration.baseForegroundColor = UIColor.redColor;
+        btn.configuration.baseForegroundColor = [UIColor ppError];
         [btn setImage:[UIImage systemImageNamed:symbolName] forState:UIControlStateNormal];
     } else {
         btn = [UIButton new];
@@ -495,7 +508,7 @@ static BOOL PPIsRTL(UIViewController *vc) {
         btn.contentEdgeInsets = UIEdgeInsetsMake(6, 6, 6, 6);
     }
     btn.translatesAutoresizingMaskIntoConstraints = NO;
-    btn.tintColor = AppPrimaryClr ?: [UIColor systemBlueColor];
+    btn.tintColor = AppPrimaryClr;
     
     
     
@@ -642,7 +655,7 @@ static BOOL PPIsRTL(UIViewController *vc) {
     
     UIView *container = [[UIView alloc] initWithFrame:CGRectZero];
     container.translatesAutoresizingMaskIntoConstraints = NO;
-    container.backgroundColor = AppForgroundColr ?: UIColor.whiteColor;
+    container.backgroundColor = AppForgroundColr;
     container.layer.cornerRadius = 27; // half of 44
     container.layer.masksToBounds = NO;
     container.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.2].CGColor;
@@ -657,7 +670,7 @@ static BOOL PPIsRTL(UIViewController *vc) {
     UIImageView *iv = [[UIImageView alloc] initWithImage:img];
     iv.translatesAutoresizingMaskIntoConstraints = NO;
     iv.contentMode = UIViewContentModeScaleToFill;
-    iv.tintColor = AppPrimaryClr ?: UIColor.systemBlueColor;
+    iv.tintColor = AppPrimaryClr;
     
     iv.layer.masksToBounds = NO;
     iv.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.2].CGColor;
@@ -672,7 +685,7 @@ static BOOL PPIsRTL(UIViewController *vc) {
     lbl.translatesAutoresizingMaskIntoConstraints = NO;
     lbl.text = title;
     lbl.font = [Styling fontMedium:16];
-    lbl.textColor = AppPrimaryClrDarker ?: UIColor.labelColor;
+    lbl.textColor = AppPrimaryClrDarker;
     lbl.textAlignment = NSTextAlignmentCenter;
     
     UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:isRTL ? @[lbl, iv] : @[iv, lbl]];

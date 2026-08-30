@@ -1,4 +1,5 @@
 #import "SceneDelegate.h"
+#import "AppDelegate.h"
 #import "PPFirebaseCompat.h"
 #import "PPProviderApplicationStatusViewController.h"
 #import "PPDeliveryCompanyDetailViewController.h"
@@ -192,7 +193,8 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                                                   name:PPProCompanyDeliveryNotificationTappedNotification
                                                 object:nil];
      NSDictionary *notificationPayload = connectionOptions.notificationResponse.notification.request.content.userInfo;
-     if ([notificationPayload isKindOfClass:NSDictionary.class]) {
+     if ([notificationPayload isKindOfClass:NSDictionary.class] &&
+         [AppDelegate pp_isNotificationPayloadRoutable:notificationPayload]) {
           self.pp_pendingNotificationRoutePayload = [notificationPayload copy];
      }
      self.pp_requiresForegroundUnlock = NO;
@@ -448,6 +450,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 - (void)openNotificationsTabFromNotificationPayload:(NSDictionary *)payload
 {
      NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? [payload copy] : nil;
+     if (![AppDelegate pp_isNotificationPayloadRoutable:safePayload]) return;
      NSString *signature = PPSceneNotificationRouteSignature(safePayload);
      CFTimeInterval now = CACurrentMediaTime();
      if (signature.length > 0 &&
@@ -1039,7 +1042,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
  
  - (void)pp_applyNavigationAppearance {
  UISemanticContentAttribute attr = [Language semanticAttributeForCurrentLanguage];
- UIColor *titleColor = PrimaryTextClr ?: UIColor.labelColor;
+ UIColor *titleColor = PrimaryTextClr;
  UIImage *backImage = [UIImage systemImageNamed:(Language.isRTL ? @"chevron.forward" : @"chevron.backward")];
 
  UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];

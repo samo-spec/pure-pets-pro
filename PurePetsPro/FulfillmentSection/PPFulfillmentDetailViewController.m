@@ -28,7 +28,20 @@
 
 @property (nonatomic, copy) NSArray<UIView *> *heroMotionViews;
 @property (nonatomic, strong) id<FIRListenerRegistration> eventsListener;
+@property (nonatomic, strong) id<FIRListenerRegistration> fulfillmentListener;
+@property (nonatomic, assign) NSUInteger fulfillmentListenerGeneration;
+@property (nonatomic, assign) NSUInteger eventsListenerGeneration;
+@property (nonatomic, copy) NSString *listenerUID;
+@property (nonatomic, assign) BOOL hasLiveFulfillmentState;
 @property (nonatomic, assign) BOOL didAnimateHero;
+- (void)observeFulfillment;
+- (void)refreshActionBarFromLiveFulfillment;
+- (void)removeActionBar;
+- (void)performCanonicalFulfillmentAction:(NSString *)action
+                                     note:(NSString *)note
+                               completion:(void (^)(BOOL success, NSString *message, NSError *error))completion;
+- (BOOL)isFulfillmentV1ParentOrderData:(NSDictionary *)orderData;
+- (void)finishSuccessfulFulfillmentAction;
 @end
 
 @implementation PPFulfillmentDetailViewController
@@ -54,6 +67,7 @@
     [self buildItemsSection];
     [self buildEventsSection];
     [self buildActionBar];
+    [self observeFulfillment];
     [self observeEvents];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reduceMotionPreferenceDidChange)
@@ -136,9 +150,9 @@
 
 - (void)updateLiveBackgroundGlowStyle {
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
-    UIColor *champagne = [UIColor colorWithRed:0.98 green:0.82 blue:0.56 alpha:1.0];
-    UIColor *opal = [UIColor colorWithRed:0.55 green:0.88 blue:0.80 alpha:1.0];
-    UIColor *rose = [UIColor colorWithRed:0.86 green:0.54 blue:0.62 alpha:1.0];
+    UIColor *champagne = [UIColor ppPremiumAccent];
+    UIColor *opal = [UIColor ppQuickActionServices];
+    UIColor *rose = [UIColor ppDiscount];
     CGFloat alpha = isDark ? 0.22 : 0.18;
 
     self.liveGlowTopLayer.colors = @[
@@ -416,7 +430,7 @@
     gradient.colors = @[
         (id)[UIColor.whiteColor colorWithAlphaComponent:0.98].CGColor,
         (id)[AppForgroundColr colorWithAlphaComponent:0.86].CGColor,
-        (id)[UIColor colorWithRed:0.98 green:0.94 blue:0.86 alpha:0.82].CGColor
+        (id)[[UIColor ppMineralBeige] colorWithAlphaComponent:0.82].CGColor
     ];
     gradient.locations = @[@0.0, @0.52, @1.0];
     [surface.layer insertSublayer:gradient atIndex:self.moneyBlurView ? 1 : 0];
@@ -438,7 +452,7 @@
     [surface.layer addSublayer:self.moneyLiquidHighlightLayer];
 
     UIView *accentLine = [[UIView alloc] init];
-    accentLine.backgroundColor = [[UIColor colorWithRed:0.98 green:0.82 blue:0.48 alpha:1.0] colorWithAlphaComponent:0.86];
+    accentLine.backgroundColor = [[UIColor ppPremiumAccent] colorWithAlphaComponent:0.86];
     accentLine.layer.cornerRadius = 2.5;
     accentLine.translatesAutoresizingMaskIntoConstraints = NO;
     [surface addSubview:accentLine];
@@ -447,7 +461,7 @@
     titleLabel.text = kLang(@"Fulfillment_ProviderNet");
     [surface addSubview:titleLabel];
 
-    UILabel *netLabel = [self labelWithFont:[Styling fontBold:36] color:[UIColor colorWithRed:0.66 green:0.43 blue:0.16 alpha:1.0] lines:1];
+    UILabel *netLabel = [self labelWithFont:[Styling fontBold:36] color:[UIColor ppPremiumAccent] lines:1];
     netLabel.text = [self moneyString:self.model.providerNet];
     netLabel.adjustsFontSizeToFitWidth = YES;
     netLabel.minimumScaleFactor = 0.68;
@@ -507,8 +521,8 @@
     self.moneyLiquidHighlightLayer.frame = bounds;
     self.moneyLiquidHighlightLayer.cornerRadius = radius;
 
-    UIColor *gold = [UIColor colorWithRed:0.98 green:0.82 blue:0.48 alpha:1.0];
-    UIColor *mint = [UIColor colorWithRed:0.60 green:0.96 blue:0.80 alpha:1.0];
+    UIColor *gold = [UIColor ppPremiumAccent];
+    UIColor *mint = [UIColor ppQuickActionServices];
     self.moneyLiquidBorderLayer.colors = @[
         (id)[UIColor.whiteColor colorWithAlphaComponent:0.10].CGColor,
         (id)[gold colorWithAlphaComponent:0.58].CGColor,
@@ -616,6 +630,7 @@
 }
 
 - (void)buildActionBar {
+    if (!self.hasLiveFulfillmentState) return;
     NSArray<NSString *> *actions = [self.model availableActions];
     if (actions.count == 0 || self.model.isTerminal) return;
 
@@ -645,6 +660,19 @@
     ]];
 
     [self.stack addArrangedSubview:_actionBar];
+}
+
+- (void)refreshActionBarFromLiveFulfillment {
+    [self removeActionBar];
+    [self buildActionBar];
+}
+
+- (void)removeActionBar {
+    if (self.actionBar) {
+        [self.stack removeArrangedSubview:self.actionBar];
+        [self.actionBar removeFromSuperview];
+        self.actionBar = nil;
+    }
 }
 
 #pragma mark - Component Helpers
@@ -739,9 +767,9 @@
     surface.layer.cornerRadius = 18;
     surface.layer.cornerCurve = kCACornerCurveContinuous;
     surface.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    surface.layer.borderColor = [[UIColor colorWithRed:0.98 green:0.82 blue:0.48 alpha:1.0] colorWithAlphaComponent:0.14].CGColor;
+    surface.layer.borderColor = [[UIColor ppPremiumAccent] colorWithAlphaComponent:0.14].CGColor;
 
-    UILabel *valueLabel = [self labelWithFont:[Styling fontBold:15] color:[UIColor colorWithRed:0.66 green:0.43 blue:0.16 alpha:1.0] lines:1];
+    UILabel *valueLabel = [self labelWithFont:[Styling fontBold:15] color:[UIColor ppPremiumAccent] lines:1];
     valueLabel.text = value;
     valueLabel.adjustsFontSizeToFitWidth = YES;
     valueLabel.minimumScaleFactor = 0.68;
@@ -833,8 +861,8 @@
 
     BOOL destructive = [action containsString:@"cancel"] || [action containsString:@"reject"];
     if (destructive) {
-        button.backgroundColor = [UIColor.systemRedColor colorWithAlphaComponent:0.08];
-        [button setTitleColor:UIColor.systemRedColor forState:UIControlStateNormal];
+        button.backgroundColor = [[UIColor ppError] colorWithAlphaComponent:0.08];
+        [button setTitleColor:[UIColor ppError] forState:UIControlStateNormal];
     } else {
         button.backgroundColor = AppPrimaryClr;
         [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
@@ -888,10 +916,51 @@
 
 #pragma mark - Events
 
-- (void)observeEvents {
+- (void)observeFulfillment {
+    [self.fulfillmentListener remove];
+    self.fulfillmentListener = nil;
+    NSUInteger generation = ++self.fulfillmentListenerGeneration;
+    NSString *listenerUID = [[FIRAuth auth].currentUser.uid ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSString *fulfillmentID = [self.model.fulfillmentID copy] ?: @"";
+    self.listenerUID = listenerUID;
+    self.hasLiveFulfillmentState = NO;
+    [self removeActionBar];
+    if (listenerUID.length == 0 || fulfillmentID.length == 0) return;
+
     __weak typeof(self) weakSelf = self;
-    self.eventsListener = [[PPFulfillmentManager sharedManager] observeEventsForFulfillmentID:self.model.fulfillmentID onChange:^(NSArray<NSDictionary *> *events) {
+    self.fulfillmentListener = [[PPFulfillmentManager sharedManager] observeFulfillmentWithID:fulfillmentID stateHandler:^(PPFulfillmentModel * _Nullable fulfillment, NSError * _Nullable error, BOOL fromCache) {
         __strong typeof(weakSelf) self = weakSelf;
+        if (!self || generation != self.fulfillmentListenerGeneration) return;
+        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:listenerUID] || ![self.listenerUID isEqualToString:listenerUID]) return;
+        BOOL ownsFulfillment = [fulfillment.ownerType isEqualToString:@"partner"] && [fulfillment.ownerID isEqualToString:listenerUID];
+        if (error || !fulfillment || fromCache || !ownsFulfillment) {
+            self.hasLiveFulfillmentState = NO;
+            [self removeActionBar];
+            return;
+        }
+        if (![fulfillment.fulfillmentID isEqualToString:fulfillmentID]) return;
+
+        BOOL actionStateChanged = !self.hasLiveFulfillmentState || ![fulfillment.status isEqualToString:self.model.status];
+        self.model = fulfillment;
+        self.hasLiveFulfillmentState = YES;
+        if (actionStateChanged) {
+            [self refreshActionBarFromLiveFulfillment];
+        }
+    }];
+}
+
+- (void)observeEvents {
+    [self.eventsListener remove];
+    self.eventsListener = nil;
+    NSUInteger generation = ++self.eventsListenerGeneration;
+    NSString *listenerUID = self.listenerUID ?: ([FIRAuth auth].currentUser.uid ?: @"");
+    NSString *fulfillmentID = [self.model.fulfillmentID copy] ?: @"";
+    if (listenerUID.length == 0 || fulfillmentID.length == 0) return;
+    __weak typeof(self) weakSelf = self;
+    self.eventsListener = [[PPFulfillmentManager sharedManager] observeEventsForFulfillmentID:fulfillmentID onChange:^(NSArray<NSDictionary *> *events) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || generation != self.eventsListenerGeneration) return;
+        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:listenerUID] || ![self.listenerUID isEqualToString:listenerUID]) return;
         dispatch_async(dispatch_get_main_queue(), ^{
             [self renderEvents:events ?: @[]];
         });
@@ -984,6 +1053,10 @@
             @"delivery_assigned":  @"Fulfillment_Status_DeliveryAssigned",
             @"awaiting_handover":  @"Fulfillment_Status_AwaitingHandover",
             @"handed_over":        @"Fulfillment_Status_HandedOver",
+            @"in_transit":         @"InTransit",
+            @"delivered":          @"Delivered",
+            @"payment_pending":    @"Deliv_PaymentPending",
+            @"payment_confirmed":  @"Deliv_StatusPaymentConfirmed",
             @"completed":          @"Fulfillment_Status_Completed",
             @"cancelled":          @"Fulfillment_Status_Cancelled",
             @"failed":             @"Fulfillment_Status_Failed",
@@ -995,6 +1068,7 @@
 }
 
 - (void)actionTapped:(UIButton *)sender {
+    if (!self.hasLiveFulfillmentState) return;
     NSArray<NSString *> *actions = [self.model availableActions];
     NSInteger idx = sender.tag;
     if (idx < 0 || idx >= (NSInteger)actions.count) return;
@@ -1026,7 +1100,25 @@
 
 - (void)executeAction:(NSString *)action note:(NSString *)note {
     if ([action isEqualToString:@"request_delivery"]) {
-        [self presentMarketplaceBranchPickerForAction:action note:note];
+        [PPHUD showIndeterminateIn:self.view title:kLang(@"Fulfillment_Updating") subtitle:nil];
+        __weak typeof(self) weakSelf = self;
+        [self fetchParentOrderDataWithCompletion:^(NSDictionary * _Nullable orderData, NSError * _Nullable error) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            if (error || orderData.count == 0) {
+                [PPHUD dismiss];
+                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription ?: kLang(@"DeliveryCompany_Error_Generic")];
+                return;
+            }
+
+            if ([self isFulfillmentV1ParentOrderData:orderData]) {
+                [self executeStandardFulfillmentAction:action note:note];
+                return;
+            }
+
+            [PPHUD dismiss];
+            [self presentMarketplaceBranchPickerForAction:action note:note];
+        }];
         return;
     }
     [PPHUD showIndeterminateIn:self.view title:kLang(@"Fulfillment_Updating") subtitle:nil];
@@ -1073,6 +1165,13 @@
             return;
         }
 
+        // Fulfillment V1 owns delivery through providerTransitionFulfillment.
+        // The legacy company-delivery callable is fenced by Infra for V1 parents.
+        if ([self isFulfillmentV1ParentOrderData:orderData]) {
+            [self executeStandardFulfillmentAction:action note:note];
+            return;
+        }
+
         NSMutableDictionary *pickupAddress = [[branch pickupAddressPayload] mutableCopy];
         NSMutableDictionary *dropoffAddress = [[self firstAddressPayloadInDictionary:orderData
                                                                                 keys:@[@"shippingAddressSnapshot", @"deliveryRequestAddressSnapshot", @"shippingAddress", @"deliveryAddress", @"address"]] mutableCopy];
@@ -1081,27 +1180,40 @@
             ? note
             : [self firstStringInDictionary:orderData keys:@[@"deliveryNotes", @"notes", @"note"]];
 
-        [[PPDeliveryCompanyService shared] createRequestForOrderID:self.model.parentOrderId
-                                                         companyID:nil
-                                             marketplaceProviderID:self.model.ownerID
-                                                         branchID:branch.branchID
-                                                     pickupAddress:pickupAddress.copy
-                                                    dropoffAddress:dropoffAddress.copy
-                                                       deliveryFee:[self firstNumberInDictionary:orderData keys:@[@"shippingFee", @"deliveryFee", @"shippingCost"]]
-                                                     paymentStatus:[self firstStringInDictionary:orderData keys:@[@"paymentStatus"]]
-                                                   paymentProvider:[self firstStringInDictionary:orderData keys:@[@"paymentProvider"]]
-                                                      deliveryNote:requestNote
-                                                        completion:^(NSDictionary * _Nullable result, NSError * _Nullable requestError) {
+        [self performCanonicalFulfillmentAction:action note:note completion:^(BOOL transitionSucceeded, NSString *message, NSError *transitionError) {
             __strong typeof(weakSelf) innerSelf = weakSelf;
             if (!innerSelf) return;
-            if (requestError && ![innerSelf shouldIgnoreExistingCompanyRequestError:requestError]) {
+            if (!transitionSucceeded) {
                 [PPHUD dismiss];
-                [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:requestError.localizedDescription ?: kLang(@"DeliveryCompany_Error_Generic")];
+                [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:message ?: transitionError.localizedDescription];
                 return;
             }
-            [innerSelf executeStandardFulfillmentAction:action note:note];
+
+            [[PPDeliveryCompanyService shared] createRequestForOrderID:innerSelf.model.parentOrderId
+                                                              companyID:nil
+                                                  marketplaceProviderID:innerSelf.model.ownerID
+                                                              branchID:branch.branchID
+                                                          pickupAddress:pickupAddress.copy
+                                                         dropoffAddress:dropoffAddress.copy
+                                                            deliveryFee:[innerSelf firstNumberInDictionary:orderData keys:@[@"shippingFee", @"deliveryFee", @"shippingCost"]]
+                                                          paymentStatus:[innerSelf firstStringInDictionary:orderData keys:@[@"paymentStatus"]]
+                                                        paymentProvider:[innerSelf firstStringInDictionary:orderData keys:@[@"paymentProvider"]]
+                                                           deliveryNote:requestNote
+                                                             completion:^(__unused NSDictionary * _Nullable result, NSError * _Nullable requestError) {
+                if (requestError && ![innerSelf shouldIgnoreExistingCompanyRequestError:requestError]) {
+                    [PPHUD dismiss];
+                    [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:requestError.localizedDescription ?: kLang(@"DeliveryCompany_Error_Generic")];
+                    return;
+                }
+                [innerSelf finishSuccessfulFulfillmentAction];
+            }];
         }];
     }];
+}
+
+- (BOOL)isFulfillmentV1ParentOrderData:(NSDictionary *)orderData {
+    id rawVersion = [orderData isKindOfClass:NSDictionary.class] ? orderData[@"fulfillmentVersion"] : nil;
+    return [rawVersion respondsToSelector:@selector(integerValue)] && [rawVersion integerValue] == 1;
 }
 
 - (void)fetchParentOrderDataWithCompletion:(void (^)(NSDictionary * _Nullable orderData, NSError * _Nullable error))completion {
@@ -1181,18 +1293,49 @@
 
 - (void)executeStandardFulfillmentAction:(NSString *)action note:(NSString *)note {
     __weak typeof(self) weakSelf = self;
-    [[PPFulfillmentManager sharedManager] performTransitionAction:action fulfillmentID:self.model.fulfillmentID note:note completion:^(BOOL success, NSString *message, NSError *error) {
+    [self performCanonicalFulfillmentAction:action note:note completion:^(BOOL success, NSString *message, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
-        [PPHUD dismiss];
+        if (!self) return;
         if (!success) {
+            [PPHUD dismiss];
             [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:message ?: error.localizedDescription];
             return;
         }
-        [PPHUD showSuccess:kLang(@"Fulfillment_ActionSuccess")];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self.navigationController popViewControllerAnimated:YES];
-        });
+        [self finishSuccessfulFulfillmentAction];
     }];
+}
+
+- (void)performCanonicalFulfillmentAction:(NSString *)action
+                                     note:(NSString *)note
+                               completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
+    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    BOOL ownsLiveFulfillment = self.hasLiveFulfillmentState &&
+        [self.listenerUID isEqualToString:currentUID] &&
+        [self.model.ownerType isEqualToString:@"partner"] &&
+        [self.model.ownerID isEqualToString:currentUID];
+    if (!ownsLiveFulfillment) {
+        NSError *error = [NSError errorWithDomain:@"PurePetsPro.Fulfillment"
+                                             code:409
+                                         userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryStateChangedReload")}];
+        if (completion) completion(NO, error.localizedDescription, error);
+        return;
+    }
+    [[PPFulfillmentManager sharedManager] performTransitionAction:action
+                                                    fulfillmentID:self.model.fulfillmentID
+                                                   expectedStatus:self.model.status
+                                                        commandID:nil
+                                                             note:note
+                                                       completion:^(BOOL success, NSString *message, NSError *error) {
+        if (completion) completion(success, message, error);
+    }];
+}
+
+- (void)finishSuccessfulFulfillmentAction {
+    [PPHUD dismiss];
+    [PPHUD showSuccess:kLang(@"Fulfillment_ActionSuccess")];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self.navigationController popViewControllerAnimated:YES];
+    });
 }
 
 #pragma mark - Motion
@@ -1307,6 +1450,9 @@
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    self.fulfillmentListenerGeneration += 1;
+    self.eventsListenerGeneration += 1;
+    [self.fulfillmentListener remove];
     [self.eventsListener remove];
 }
 

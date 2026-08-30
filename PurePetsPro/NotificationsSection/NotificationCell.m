@@ -37,7 +37,7 @@
 
         _surfaceView = [UIView new];
         _surfaceView.translatesAutoresizingMaskIntoConstraints = NO;
-        _surfaceView.backgroundColor = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+        _surfaceView.backgroundColor = AppForgroundColr;
         _surfaceView.layer.cornerRadius = 26.0;
         _surfaceView.layer.cornerCurve = kCACornerCurveContinuous;
         _surfaceView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
@@ -58,13 +58,13 @@
         _iconView = [UIImageView new];
         _iconView.translatesAutoresizingMaskIntoConstraints = NO;
         _iconView.contentMode = UIViewContentModeScaleAspectFit;
-        _iconView.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+        _iconView.tintColor = AppPrimaryClr;
         _iconView.image = [UIImage systemImageNamed:@"bell.badge.fill"];
         [_iconShellView addSubview:_iconView];
 
         _dot = [UIView new];
         _dot.translatesAutoresizingMaskIntoConstraints = NO;
-        _dot.backgroundColor = AppPrimaryClr ?: UIColor.systemTealColor;
+        _dot.backgroundColor = AppPrimaryClr;
         _dot.layer.cornerRadius = 4.5;
         _dot.layer.cornerCurve = kCACornerCurveContinuous;
         [_surfaceView addSubview:_dot];
@@ -72,7 +72,7 @@
         _title = [UILabel new];
         _title.translatesAutoresizingMaskIntoConstraints = NO;
         _title.font = [Styling fontBold:16];
-        _title.textColor = PrimaryTextClr ?: UIColor.labelColor;
+        _title.textColor = PrimaryTextClr;
         _title.numberOfLines = 2;
         _title.textAlignment = [Language alignmentForCurrentLanguage];
 
@@ -183,10 +183,10 @@
     fmt.timeStyle = NSDateFormatterShortStyle;
     _time.text = [fmt stringFromDate:d];
 
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *secondary = SeconderyTextClr ?: UIColor.secondaryLabelColor;
-    _title.textColor = unread ? accent : (PrimaryTextClr ?: UIColor.labelColor);
-    _surfaceView.backgroundColor = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    UIColor *accent = AppPrimaryClr;
+    UIColor *secondary = SeconderyTextClr;
+    _title.textColor = unread ? accent : (PrimaryTextClr);
+    _surfaceView.backgroundColor = AppForgroundColr;
     _surfaceView.layer.borderColor = [secondary colorWithAlphaComponent:unread ? 0.14 : 0.07].CGColor;
     _surfaceView.layer.shadowOpacity = unread ? 0.06 : 0.025;
     _iconShellView.backgroundColor = [accent colorWithAlphaComponent:unread ? 0.12 : 0.07];

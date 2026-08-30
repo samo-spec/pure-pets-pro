@@ -694,7 +694,7 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
     // SECURITY: role, isAdmin, isSuperAdmin, isBlocked are server-managed.
     // They are intentionally NOT included in client-originated writes.
     // This prevents "Missing or insufficient permissions" errors on first save attempt.
-    // Tokens are written via dedicated paths (updateUserDocumentFields).
+    // Legacy token fields remain read-compatible but are never client-written.
 
     // NOTE: Addresses and permissions are stored in dedicated subcollections.
     return dict;
@@ -1077,9 +1077,7 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
     [coder encodeObject:self.loginDate forKey:kUserKeyLoginDate];
     [coder encodeObject:self.updatedAt forKey:kUserKeyUpdatedAt];
     [coder encodeInteger:self.CountryID forKey:kUserKeyCountryID];
-    [coder encodeObject:self.PPUserTokenID forKey:kUserKeyPPUserTokenID];
     [coder encodeObject:self.PPAdminTokenID forKey:kUserKeyPPAdminTokenID];
-    [coder encodeObject:self.PPProTokenID forKey:kUserKeyPPProTokenID];
     [coder encodeBool:self.isAdmin forKey:kUserKeyIsAdmin];
     [coder encodeBool:self.isSuperAdmin forKey:kUserKeyIsSuperAdmin];
     [coder encodeBool:self.isBlocked forKey:kUserKeyIsBlocked];

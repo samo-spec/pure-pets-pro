@@ -33,7 +33,7 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
     self = [super initWithFrame:CGRectZero];
     if (self) {
         self.translatesAutoresizingMaskIntoConstraints = NO;
-        UIColor *accentColor = AppPrimaryClr ?: UIColor.systemTealColor;
+        UIColor *accentColor = AppPrimaryClr;
         self.backgroundColor = AppForgroundColr;
         self.layer.cornerRadius = 20.0;
         self.layer.cornerCurve = kCACornerCurveContinuous;
@@ -43,7 +43,7 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
         _captionLabel = [[UILabel alloc] init];
         _captionLabel.translatesAutoresizingMaskIntoConstraints = NO;
         _captionLabel.font = [Styling fontMedium:10];
-        _captionLabel.textColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+        _captionLabel.textColor = SeconderyTextClr;
         _captionLabel.text = caption;
         _captionLabel.numberOfLines = 1;
         [self addSubview:_captionLabel];
@@ -51,7 +51,7 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
         _valueLabel = [[UILabel alloc] init];
         _valueLabel.translatesAutoresizingMaskIntoConstraints = NO;
         _valueLabel.font = [Styling fontBold:17];
-        _valueLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+        _valueLabel.textColor = PrimaryTextClr;
         _valueLabel.numberOfLines = 2;
         _valueLabel.minimumScaleFactor = 0.82;
         _valueLabel.adjustsFontSizeToFitWidth = YES;
@@ -73,10 +73,10 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
 
 - (void)updateValue:(NSString *)value accentColor:(nullable UIColor *)accentColor {
     self.valueLabel.text = value.length > 0 ? value : @"—";
-    self.valueLabel.textColor = accentColor ?: (PrimaryTextClr ?: UIColor.labelColor);
+    self.valueLabel.textColor = accentColor ?: (PrimaryTextClr);
     self.backgroundColor = accentColor
         ? [accentColor colorWithAlphaComponent:0.12]
-        : [(AppBackgroundClr ?: UIColor.systemBackgroundColor) colorWithAlphaComponent:0.84];
+        : [(AppBackgroundClr) colorWithAlphaComponent:0.84];
     self.layer.borderColor = (accentColor ?: [[UIColor blackColor] colorWithAlphaComponent:0.04]).CGColor;
 }
 
@@ -146,7 +146,7 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = AppBackgroundClr ?: UIColor.systemGroupedBackgroundColor;
+    self.view.backgroundColor = AppBackgroundClr;
     self.tableView.backgroundColor = self.view.backgroundColor;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.showsVerticalScrollIndicator = NO;
@@ -189,8 +189,8 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
     self.headerRoot.backgroundColor = UIColor.clearColor;
     self.headerRoot.clipsToBounds = NO;
 
-    UIColor *accentColor = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *surfaceColor = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    UIColor *accentColor = AppPrimaryClr;
+    UIColor *surfaceColor = AppForgroundColr;
 
     self.heroCard = [[UIView alloc] init];
     self.heroCard.translatesAutoresizingMaskIntoConstraints = NO;
@@ -256,14 +256,14 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
     self.eyebrowLabel = [[UILabel alloc] init];
     self.eyebrowLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.eyebrowLabel.font = [Styling fontMedium:12];
-    self.eyebrowLabel.textColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    self.eyebrowLabel.textColor = SeconderyTextClr;
     self.eyebrowLabel.text = kLang(@"Vet_Sub_Management");
     [self.heroCard addSubview:self.eyebrowLabel];
 
     self.nameLabel = [[UILabel alloc] init];
     self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.nameLabel.font = [Styling fontBold:28];
-    self.nameLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.nameLabel.textColor = PrimaryTextClr;
     self.nameLabel.numberOfLines = 2;
     self.nameLabel.text = self.vet.title.length > 0 ? self.vet.title : @"—";
     [self.heroCard addSubview:self.nameLabel];
@@ -291,7 +291,7 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
     self.periodLabel = [[UILabel alloc] init];
     self.periodLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.periodLabel.font = [Styling fontMedium:13];
-    self.periodLabel.textColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    self.periodLabel.textColor = SeconderyTextClr;
     self.periodLabel.numberOfLines = 2;
     [self.heroCard addSubview:self.periodLabel];
 
@@ -618,12 +618,12 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
 }
 
 - (NSDictionary<NSString *, id> *)statusPresentationForActive:(BOOL)active expired:(BOOL)expired {
-    UIColor *accentColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    UIColor *accentColor = AppPrimaryClr;
     if (expired) {
         return @{
             @"text": kLang(@"Vet_Sub_Expired"),
-            @"foreground": [UIColor colorWithRed:0.72 green:0.34 blue:0.10 alpha:1.0],
-            @"background": [UIColor colorWithRed:1.0 green:0.91 blue:0.80 alpha:1.0]
+            @"foreground": [UIColor ppWarning],
+            @"background": [[UIColor ppMineralBeige] colorWithAlphaComponent:0.82]
         };
     }
     if (active) {
@@ -635,8 +635,8 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
     }
     return @{
         @"text": kLang(@"Vet_Sub_Inactive"),
-        @"foreground": SeconderyTextClr ?: UIColor.secondaryLabelColor,
-        @"background": [UIColor colorWithWhite:0.0 alpha:0.05]
+        @"foreground": SeconderyTextClr,
+        @"background": [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.35]
     };
 }
 
@@ -691,13 +691,13 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.font = [Styling fontMedium:13];
-    titleLabel.textColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    titleLabel.textColor = SeconderyTextClr;
     titleLabel.text = formSection.title;
     [container addSubview:titleLabel];
 
     UIView *line = [[UIView alloc] init];
     line.translatesAutoresizingMaskIntoConstraints = NO;
-    line.backgroundColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.12];
+    line.backgroundColor = [(AppPrimaryClr) colorWithAlphaComponent:0.12];
     line.layer.cornerRadius = 0.5;
     [container addSubview:line];
 
@@ -735,8 +735,8 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
     XLFormRowDescriptor *row = [self.form formRowAtIndex:indexPath];
     BOOL isQuickRow = [self isQuickDurationRow:row];
     BOOL isSaveRow = [row.tag isEqualToString:kTagSave];
-    UIColor *accentColor = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *defaultSurfaceColor = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    UIColor *accentColor = AppPrimaryClr;
+    UIColor *defaultSurfaceColor = AppForgroundColr;
 
     cell.backgroundColor = UIColor.clearColor;
     cell.contentView.backgroundColor = UIColor.clearColor;
@@ -778,11 +778,11 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
     cell.selectedBackgroundView = selectedBackgroundView;
 
     cell.textLabel.font = [Styling fontMedium:15];
-    cell.textLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    cell.textLabel.textColor = PrimaryTextClr;
     cell.textLabel.numberOfLines = 2;
     cell.textLabel.textAlignment = Language.alignmentForCurrentLanguage;
     cell.detailTextLabel.font = [Styling fontBold:15];
-    cell.detailTextLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    cell.detailTextLabel.textColor = PrimaryTextClr;
     cell.detailTextLabel.numberOfLines = 2;
     cell.detailTextLabel.textAlignment = Language.isRTL ? NSTextAlignmentLeft : NSTextAlignmentRight;
 
@@ -792,7 +792,7 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
         switchControl.onTintColor = accentColor;
     } else if ([row.rowType isEqualToString:XLFormRowDescriptorTypeDateInline]) {
         cell.textLabel.font = [Styling fontMedium:14];
-        cell.textLabel.textColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+        cell.textLabel.textColor = SeconderyTextClr;
         cell.detailTextLabel.font = [Styling fontBold:15];
     } else if ([row.rowType isEqualToString:XLFormRowDescriptorTypeSelectorSegmentedControl] && [cell isKindOfClass:[XLFormSegmentedCell class]]) {
         XLFormSegmentedCell *segmentedCell = (XLFormSegmentedCell *)cell;
@@ -807,7 +807,7 @@ static CGFloat const kPPVetSubGroupedCornerRadius = 22.0;
         segmentedCell.segmentedControl.layer.borderColor = [accentColor colorWithAlphaComponent:0.12].CGColor;
         NSDictionary *normalAttributes = @{
             NSFontAttributeName: [Styling fontMedium:13],
-            NSForegroundColorAttributeName: PrimaryTextClr ?: UIColor.labelColor
+            NSForegroundColorAttributeName: PrimaryTextClr
         };
         NSDictionary *selectedAttributes = @{
             NSFontAttributeName: [Styling fontBold:13],

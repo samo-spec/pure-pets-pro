@@ -81,7 +81,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 - (void)setSelectedState:(BOOL)selected animated:(BOOL)animated {
     _selectedState = selected;
     void (^apply)(void) = ^{
-        self.titleLabel.textColor = selected ? (PrimaryTextClr ?: UIColor.labelColor) : SeconderyTextClr;
+        self.titleLabel.textColor = selected ? (PrimaryTextClr) : SeconderyTextClr;
         self.titleLabel.font = selected ? [Styling fontBold:14] : [Styling fontMedium:14];
         self.underline.alpha = selected ? 1.0 : 0.0;
     };
@@ -187,30 +187,15 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 }
 
 - (UIColor *)pp_canvasColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.11 green:0.11 blue:0.12 alpha:1.0];
-        }
-        return [UIColor colorWithRed:0.969 green:0.961 blue:0.949 alpha:1.0];
-    }];
+    return [UIColor ppBackground];
 }
 
 - (UIColor *)pp_surfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.17 green:0.17 blue:0.19 alpha:0.94];
-        }
-        return [[UIColor whiteColor] colorWithAlphaComponent:0.84];
-    }];
+    return [UIColor ppElevatedSurface];
 }
 
 - (UIColor *)pp_borderColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-        }
-        return [UIColor colorWithRed:0.25 green:0.17 blue:0.18 alpha:0.08];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
 }
 
 - (void)setupAmbientBackground {
@@ -247,8 +232,8 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     self.bgGlowTop.layer.shadowColor = AppPrimaryClr.CGColor;
     self.bgGlowTop.layer.shadowOpacity = isDark ? 0.04 : 0.10;
     self.bgGlowTop.layer.shadowRadius = 70.0;
-    self.bgGlowBottom.backgroundColor = [[UIColor systemTealColor] colorWithAlphaComponent:isDark ? 0.03 : 0.06];
-    self.bgGlowBottom.layer.shadowColor = UIColor.systemTealColor.CGColor;
+    self.bgGlowBottom.backgroundColor = [[UIColor ppQuickActionServices] colorWithAlphaComponent:isDark ? 0.03 : 0.06];
+    self.bgGlowBottom.layer.shadowColor = [UIColor ppQuickActionServices].CGColor;
     self.bgGlowBottom.layer.shadowOpacity = isDark ? 0.02 : 0.06;
     self.bgGlowBottom.layer.shadowRadius = 68.0;
 }
@@ -316,7 +301,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _titleLabel.text = kLang(@"Vet_Manage_Title");
     _titleLabel.font = [Styling fontBold:30];
-    _titleLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    _titleLabel.textColor = PrimaryTextClr;
     _titleLabel.numberOfLines = 2;
     _titleLabel.textAlignment = align;
     [_heroSurfaceView addSubview:_titleLabel];
@@ -496,7 +481,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     headline.translatesAutoresizingMaskIntoConstraints = NO;
     headline.text = kLang(@"Vet_Empty_List");
     headline.font = [Styling fontBold:22];
-    headline.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    headline.textColor = PrimaryTextClr;
     headline.textAlignment = NSTextAlignmentCenter;
     headline.numberOfLines = 0;
     [_emptyContainer addSubview:headline];

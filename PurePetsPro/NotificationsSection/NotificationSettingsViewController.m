@@ -48,7 +48,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     self.categorySwitches = [NSMutableDictionary dictionary];
     self.categoryRows = [NSMutableArray array];
     self.authorizationStatus = UNAuthorizationStatusNotDetermined;
-    self.view.backgroundColor = AppBackgroundClr ?: UIColor.systemGroupedBackgroundColor;
+    self.view.backgroundColor = AppBackgroundClr;
     self.view.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
 
     [self pp_buildLayout];
@@ -72,7 +72,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
     if ([self.traitCollection hasDifferentColorAppearanceComparedToTraitCollection:previousTraitCollection]) {
-        self.view.backgroundColor = AppBackgroundClr ?: UIColor.systemGroupedBackgroundColor;
+        self.view.backgroundColor = AppBackgroundClr;
         [self pp_updateStatusCardForCurrentAuthorization];
     }
 }
@@ -123,7 +123,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 
     UIView *iconSurface = [[UIView alloc] init];
     iconSurface.translatesAutoresizingMaskIntoConstraints = NO;
-    iconSurface.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10] ?: [UIColor.systemBlueColor colorWithAlphaComponent:0.10];
+    iconSurface.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10] ?: [[UIColor ppInfo] colorWithAlphaComponent:0.10];
     iconSurface.layer.cornerRadius = 23.0;
     iconSurface.layer.cornerCurve = kCACornerCurveContinuous;
     [container addSubview:iconSurface];
@@ -131,27 +131,27 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"bell.badge.fill"
                                                                        withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:20.0 weight:UIImageSymbolWeightSemibold]]];
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    iconView.tintColor = AppPrimaryClr ?: UIColor.systemBlueColor;
+    iconView.tintColor = AppPrimaryClr;
     iconView.isAccessibilityElement = NO;
     [iconSurface addSubview:iconView];
 
     UILabel *eyebrow = [self pp_labelWithText:kLang(@"NotificationSettings_Eyebrow")
                                          font:[Styling fontBold:11.0]
-                                        color:AppPrimaryClr ?: UIColor.systemBlueColor
+                                        color:AppPrimaryClr
                                         lines:1];
     eyebrow.text = [eyebrow.text uppercaseString];
     [container addSubview:eyebrow];
 
     UILabel *title = [self pp_labelWithText:kLang(@"NotificationSettings_HeroTitle")
                                        font:[Styling fontBold:31.0]
-                                      color:PrimaryTextClr ?: UIColor.labelColor
+                                      color:PrimaryTextClr
                                       lines:2];
     title.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleLargeTitle] scaledFontForFont:title.font];
     [container addSubview:title];
 
     UILabel *subtitle = [self pp_labelWithText:kLang(@"NotificationSettings_HeroSubtitle")
                                           font:[Styling fontMedium:14.0]
-                                         color:[SeconderyTextClr colorWithAlphaComponent:0.86] ?: UIColor.secondaryLabelColor
+                                         color:[SeconderyTextClr colorWithAlphaComponent:0.86]
                                          lines:3];
     subtitle.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline] scaledFontForFont:subtitle.font];
     [container addSubview:subtitle];
@@ -200,14 +200,14 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 
     self.statusTitleLabel = [self pp_labelWithText:kLang(@"NotificationSettings_CheckingStatus")
                                               font:[Styling fontBold:16.0]
-                                             color:PrimaryTextClr ?: UIColor.labelColor
+                                             color:PrimaryTextClr
                                              lines:2];
     self.statusTitleLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleHeadline] scaledFontForFont:self.statusTitleLabel.font];
     [card addSubview:self.statusTitleLabel];
 
     self.statusBodyLabel = [self pp_labelWithText:kLang(@"NotificationSettings_CheckingStatusSubtitle")
                                              font:[Styling fontMedium:12.5]
-                                            color:[SeconderyTextClr colorWithAlphaComponent:0.84] ?: UIColor.secondaryLabelColor
+                                            color:[SeconderyTextClr colorWithAlphaComponent:0.84]
                                             lines:3];
     self.statusBodyLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleFootnote] scaledFontForFont:self.statusBodyLabel.font];
     [card addSubview:self.statusBodyLabel];
@@ -268,7 +268,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
                                                    title:kLang(@"NotificationSettings_MasterTitle")
                                                 subtitle:kLang(@"NotificationSettings_MasterSubtitle")
                                                 iconName:@"bell.and.waves.left.and.right.fill"
-                                             accentColor:AppPrimaryClr ?: UIColor.systemBlueColor
+                                             accentColor:AppPrimaryClr
                                            preferenceKey:kPPProNotifMasterPreferenceKey
                                             defaultValue:YES
                                                separator:YES];
@@ -277,7 +277,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
                                                   title:kLang(@"NotificationSettings_SoundTitle")
                                                subtitle:kLang(@"NotificationSettings_SoundSubtitle")
                                                iconName:@"speaker.wave.2.fill"
-                                            accentColor:UIColor.systemOrangeColor
+                                            accentColor:[UIColor ppWarning]
                                           preferenceKey:kPPProNotifSoundPreferenceKey
                                            defaultValue:YES
                                               separator:NO];
@@ -291,7 +291,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 
     UILabel *sectionTitle = [self pp_labelWithText:kLang(@"NotificationSettings_CategoriesTitle")
                                               font:[Styling fontBold:13.0]
-                                             color:[PrimaryTextClr colorWithAlphaComponent:0.66] ?: UIColor.secondaryLabelColor
+                                             color:[PrimaryTextClr colorWithAlphaComponent:0.66]
                                              lines:1];
     sectionTitle.text = [sectionTitle.text uppercaseString];
     [wrapper addSubview:sectionTitle];
@@ -323,7 +323,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
                              title:kLang(@"NotificationSettings_CategoryOrdersTitle")
                           subtitle:kLang(@"NotificationSettings_CategoryOrdersSubtitle")
                           iconName:@"shippingbox.fill"
-                       accentColor:AppPrimaryClr ?: UIColor.systemBlueColor
+                       accentColor:AppPrimaryClr
                      preferenceKey:kPPProNotifCategoryOrdersKey
                       defaultValue:YES
                          separator:YES];
@@ -332,7 +332,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
                              title:kLang(@"NotificationSettings_CategoryDeliveryTitle")
                           subtitle:kLang(@"NotificationSettings_CategoryDeliverySubtitle")
                           iconName:@"truck.box.fill"
-                       accentColor:UIColor.systemOrangeColor
+                       accentColor:[UIColor ppWarning]
                      preferenceKey:kPPProNotifCategoryDeliveryKey
                       defaultValue:YES
                          separator:YES];
@@ -341,7 +341,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
                              title:kLang(@"NotificationSettings_CategoryReviewTitle")
                           subtitle:kLang(@"NotificationSettings_CategoryReviewSubtitle")
                           iconName:@"doc.text.magnifyingglass"
-                       accentColor:UIColor.systemTealColor
+                       accentColor:[UIColor ppQuickActionServices]
                      preferenceKey:kPPProNotifCategoryReviewKey
                       defaultValue:YES
                          separator:YES];
@@ -350,7 +350,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
                              title:kLang(@"NotificationSettings_CategoryWarningTitle")
                           subtitle:kLang(@"NotificationSettings_CategoryWarningSubtitle")
                           iconName:@"shield.lefthalf.filled"
-                       accentColor:UIColor.systemRedColor
+                       accentColor:[UIColor ppError]
                      preferenceKey:kPPProNotifCategoryWarningKey
                       defaultValue:YES
                          separator:YES];
@@ -359,7 +359,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
                              title:kLang(@"NotificationSettings_CategoryGeneralTitle")
                           subtitle:kLang(@"NotificationSettings_CategoryGeneralSubtitle")
                           iconName:@"sparkles"
-                       accentColor:UIColor.systemPurpleColor
+                       accentColor:[UIColor ppQuickActionAnimals]
                      preferenceKey:kPPProNotifCategoryGeneralKey
                       defaultValue:YES
                          separator:NO];
@@ -370,7 +370,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 - (UILabel *)pp_buildFootnoteLabel {
     UILabel *label = [self pp_labelWithText:kLang(@"NotificationSettings_Footnote")
                                        font:[Styling fontMedium:12.0]
-                                      color:[SeconderyTextClr colorWithAlphaComponent:0.78] ?: UIColor.secondaryLabelColor
+                                      color:[SeconderyTextClr colorWithAlphaComponent:0.78]
                                       lines:0];
     label.textAlignment = NSTextAlignmentCenter;
     return label;
@@ -435,21 +435,21 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 
     UILabel *titleLabel = [self pp_labelWithText:title
                                             font:[Styling fontBold:15.0]
-                                           color:PrimaryTextClr ?: UIColor.labelColor
+                                           color:PrimaryTextClr
                                            lines:2];
     titleLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody] scaledFontForFont:titleLabel.font];
     [row addSubview:titleLabel];
 
     UILabel *subtitleLabel = [self pp_labelWithText:subtitle
                                                font:[Styling fontMedium:12.0]
-                                              color:[SeconderyTextClr colorWithAlphaComponent:0.80] ?: UIColor.secondaryLabelColor
+                                              color:[SeconderyTextClr colorWithAlphaComponent:0.80]
                                               lines:3];
     subtitleLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleFootnote] scaledFontForFont:subtitleLabel.font];
     [row addSubview:subtitleLabel];
 
     UISwitch *toggle = [[UISwitch alloc] init];
     toggle.translatesAutoresizingMaskIntoConstraints = NO;
-    toggle.onTintColor = AppPrimaryClr ?: UIColor.systemBlueColor;
+    toggle.onTintColor = AppPrimaryClr;
     toggle.accessibilityIdentifier = preferenceKey;
     toggle.accessibilityLabel = title;
     toggle.on = [self pp_boolForPreferenceKey:preferenceKey defaultValue:defaultValue];
@@ -482,7 +482,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     if (separator) {
         UIView *line = [[UIView alloc] init];
         line.translatesAutoresizingMaskIntoConstraints = NO;
-        line.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.08] ?: UIColor.separatorColor;
+        line.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.08];
         [row addSubview:line];
         [NSLayoutConstraint activateConstraints:@[
             [line.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
@@ -598,7 +598,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     NSString *body = kLang(@"NotificationSettings_StatusNotDeterminedBody");
     NSString *button = kLang(@"NotificationSettings_AllowNotifications");
     NSString *symbol = @"bell.badge.fill";
-    UIColor *accent = UIColor.systemOrangeColor;
+    UIColor *accent = [UIColor ppWarning];
 
     switch (self.authorizationStatus) {
         case UNAuthorizationStatusAuthorized:
@@ -606,28 +606,28 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
             body = kLang(@"NotificationSettings_StatusEnabledBody");
             button = kLang(@"NotificationSettings_OpenIOSSettings");
             symbol = @"checkmark.seal.fill";
-            accent = UIColor.systemGreenColor;
+            accent = [UIColor ppSuccess];
             break;
         case UNAuthorizationStatusDenied:
             title = kLang(@"NotificationSettings_StatusDeniedTitle");
             body = kLang(@"NotificationSettings_StatusDeniedBody");
             button = kLang(@"NotificationSettings_OpenIOSSettings");
             symbol = @"bell.slash.fill";
-            accent = UIColor.systemRedColor;
+            accent = [UIColor ppError];
             break;
         case UNAuthorizationStatusProvisional:
             title = kLang(@"NotificationSettings_StatusQuietTitle");
             body = kLang(@"NotificationSettings_StatusQuietBody");
             button = kLang(@"NotificationSettings_OpenIOSSettings");
             symbol = @"bell.badge.fill";
-            accent = UIColor.systemOrangeColor;
+            accent = [UIColor ppWarning];
             break;
         case UNAuthorizationStatusEphemeral:
             title = kLang(@"NotificationSettings_StatusQuietTitle");
             body = kLang(@"NotificationSettings_StatusQuietBody");
             button = kLang(@"NotificationSettings_OpenIOSSettings");
             symbol = @"bell.badge.fill";
-            accent = UIColor.systemOrangeColor;
+            accent = [UIColor ppWarning];
             break;
         case UNAuthorizationStatusNotDetermined:
         default:
@@ -682,7 +682,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 - (UIView *)pp_surfaceCardWithCornerRadius:(CGFloat)radius {
     UIView *card = [[UIView alloc] init];
     card.translatesAutoresizingMaskIntoConstraints = NO;
-    card.backgroundColor = AppForgroundColr ?: UIColor.secondarySystemGroupedBackgroundColor;
+    card.backgroundColor = AppForgroundColr;
     card.layer.cornerRadius = radius;
     card.layer.cornerCurve = kCACornerCurveContinuous;
     card.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;

@@ -238,7 +238,7 @@
 
 - (void)pp_applyTheme {
     UIColor *bg = AppBackgroundClr;
-    UIColor *secColor = [UIColor colorNamed:@"AppSecColor"];
+    UIColor *secColor = [UIColor ppQuickActionServices];
     UIColor *primary = AppPrimaryClr;
     UIColor *textClr = PrimaryTextClr;
 

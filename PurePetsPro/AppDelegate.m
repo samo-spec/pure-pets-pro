@@ -44,13 +44,121 @@ static BOOL PPAdminPayloadTargetsOtherApp(NSDictionary *payload)
     return targetApp.length > 0 && ![targetApp isEqualToString:@"pro_ios"];
 }
 
+static BOOL PPProPayloadHasSupportedSchema(NSDictionary *payload)
+{
+    NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
+    NSDictionary *meta = [safePayload[@"meta"] isKindOfClass:NSDictionary.class] ? safePayload[@"meta"] : @{};
+    NSString *type = [PPAdminRouteTrimmedString(safePayload[@"notificationType"] ?: safePayload[@"type"] ?: safePayload[@"eventType"] ?: safePayload[@"templateKey"]) lowercaseString];
+    type = [type stringByReplacingOccurrencesOfString:@"." withString:@"_"];
+    type = [type stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
+    BOOL isProviderOrderCancellation = [type isEqualToString:@"provider_order_cancelled"];
+
+    id rawSchema = safePayload[@"schemaVersion"] ?: meta[@"schemaVersion"];
+    if (!rawSchema) return !isProviderOrderCancellation;
+
+    NSString *schema = @"";
+    if ([rawSchema isKindOfClass:NSString.class]) {
+        schema = [PPAdminRouteTrimmedString(rawSchema) lowercaseString];
+    } else if ([rawSchema isKindOfClass:NSNumber.class]) {
+        schema = [[(NSNumber *)rawSchema stringValue] lowercaseString];
+    }
+    if (schema.length == 0) return NO;
+
+    static NSSet<NSString *> *supportedSchemas;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        supportedSchemas = [NSSet setWithArray:@[@"1", @"2", @"order.lifecycle.v1", @"order.fulfillment.v1"]];
+    });
+    if (![supportedSchemas containsObject:schema]) return NO;
+    if (!isProviderOrderCancellation) return YES;
+
+    NSString *notificationID = PPAdminRouteTrimmedString(safePayload[@"notificationId"]);
+    if (notificationID.length == 0) notificationID = PPAdminRouteTrimmedString(meta[@"notificationId"]);
+    NSString *fulfillmentID = PPAdminRouteTrimmedString(safePayload[@"fulfillmentId"] ?: safePayload[@"fulfillmentID"]);
+    if (fulfillmentID.length == 0) fulfillmentID = PPAdminRouteTrimmedString(meta[@"fulfillmentId"] ?: meta[@"fulfillmentID"]);
+    if (![schema isEqualToString:@"2"] ||
+        notificationID.length == 0 || notificationID.length > 500 || [notificationID containsString:@"/"] ||
+        fulfillmentID.length == 0 || fulfillmentID.length > 500 || [fulfillmentID containsString:@"/"]) {
+        return NO;
+    }
+
+    BOOL hasProIOSAudience = NO;
+    for (NSDictionary *source in @[safePayload, meta]) {
+        NSString *targetApp = [PPAdminRouteTrimmedString(source[@"targetApp"] ?: source[@"targetAppId"] ?: source[@"appId"]) lowercaseString];
+        if (targetApp.length > 0) {
+            if (![targetApp isEqualToString:@"pro_ios"]) return NO;
+            hasProIOSAudience = YES;
+        }
+
+        id appIDs = source[@"targetApps"] ?: source[@"appIds"];
+        if ([appIDs isKindOfClass:NSArray.class]) {
+            for (id appID in (NSArray *)appIDs) {
+                if ([[PPAdminRouteTrimmedString(appID) lowercaseString] isEqualToString:@"pro_ios"]) {
+                    hasProIOSAudience = YES;
+                    break;
+                }
+            }
+        }
+    }
+    return hasProIOSAudience;
+}
+
+static NSString *PPProNormalizedNotificationType(NSDictionary *payload)
+{
+    NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
+    NSString *value = PPAdminRouteTrimmedString(safePayload[@"notificationType"] ?: safePayload[@"type"] ?: safePayload[@"eventType"] ?: safePayload[@"templateKey"]);
+    value = value.lowercaseString;
+    value = [value stringByReplacingOccurrencesOfString:@"." withString:@"_"];
+    value = [value stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
+    return value;
+}
+
+static BOOL PPProIsProviderOrderCancelledPayload(NSDictionary *payload)
+{
+    return [PPProNormalizedNotificationType(payload) isEqualToString:@"provider_order_cancelled"];
+}
+
+static NSString *PPProOrderReferenceFromPayload(NSDictionary *payload)
+{
+    NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
+    for (NSString *key in @[@"orderNumber", @"parentOrderNumber", @"orderReference", @"orderId", @"parentOrderId"]) {
+        NSString *value = PPAdminRouteTrimmedString(safePayload[key]);
+        if (value.length > 0) return value;
+    }
+    return @"";
+}
+
+static NSString *PPProLocalizedProviderCancellationTitle(NSDictionary *payload, NSString *fallback)
+{
+    NSString *format = kLang(@"pp_pro_notification_order_cancelled_title_format");
+    NSString *orderReference = PPProOrderReferenceFromPayload(payload);
+    if (format.length > 0 && ![format isEqualToString:@"pp_pro_notification_order_cancelled_title_format"] && orderReference.length > 0) {
+        return [NSString stringWithFormat:format, orderReference];
+    }
+    NSString *title = kLang(@"pp_pro_notification_order_cancelled_title");
+    return title.length > 0 && ![title isEqualToString:@"pp_pro_notification_order_cancelled_title"] ? title : (fallback ?: @"");
+}
+
+static NSString *PPProLocalizedProviderCancellationBody(NSString *fallback)
+{
+    NSString *body = kLang(@"pp_pro_notification_order_cancelled_body");
+    return body.length > 0 && ![body isEqualToString:@"pp_pro_notification_order_cancelled_body"] ? body : (fallback ?: @"");
+}
+
 static NSString *PPAdminNotificationEnvironment(void)
 {
-#if DEBUG
-    return @"sandbox";
-#else
+    NSString *configuredEnvironment = [PPAdminRouteTrimmedString(
+        [NSBundle.mainBundle objectForInfoDictionaryKey:@"PPNotificationsEnvironment"]
+    ) lowercaseString];
+    if ([configuredEnvironment isEqualToString:@"sandbox"] ||
+        [configuredEnvironment isEqualToString:@"production"]) {
+        return configuredEnvironment;
+    }
+
+    // Pro is connected to the production Firebase project in every build
+    // configuration. This value selects the Notifications V2 event audience;
+    // it is independent from the APNs development/production entitlement.
     return @"production";
-#endif
 }
 
 static NSString *PPAdminCurrentDeviceModel(void)
@@ -66,6 +174,7 @@ static NSString *PPAdminCurrentDeviceModel(void)
 @property (nonatomic, assign) FIRAuthStateDidChangeListenerHandle authStateHandle;
 @property (nonatomic, copy) NSString *apnsTokenHexString;
 @property (nonatomic, assign) BOOL notificationV2RegistrationInFlight;
+@property (nonatomic, assign) BOOL notificationV2RegistrationNeedsForegroundRetry;
 @property (nonatomic, copy) NSString *notificationV2PendingReason;
 @property (nonatomic, assign) BOOL notificationV2LogoutBarrierActive;
 @property (nonatomic, assign) NSUInteger notificationV2LifecycleEpoch;
@@ -73,6 +182,8 @@ static NSString *PPAdminCurrentDeviceModel(void)
 
 - (void)pp_finishNotificationV2RegistrationCycle;
 - (void)pp_releaseNotificationV2LogoutBarrierWaiters;
+- (BOOL)pp_hasCurrentNotificationV2BindingForUID:(NSString *)uid;
+- (void)pp_handleApplicationDidBecomeActive:(NSNotification *)notification;
 - (BOOL)pp_notificationV2RegistrationIsCurrentForUID:(NSString *)uid epoch:(NSUInteger)epoch;
 - (void)pp_compensateStaleNotificationV2Registration:(NSDictionary *)response
                                                   uid:(NSString *)uid
@@ -82,6 +193,11 @@ static NSString *PPAdminCurrentDeviceModel(void)
 @end
 
 @implementation AppDelegate
+
++ (BOOL)pp_isNotificationPayloadRoutable:(NSDictionary *)payload
+{
+    return PPProPayloadHasSupportedSchema(payload) && !PPAdminPayloadTargetsOtherApp(payload);
+}
 
 static SceneDelegate *PPProActiveSceneDelegate(void)
 {
@@ -169,6 +285,13 @@ extern BOOL PP_TouchDotsEnabled;
     
     // Start token sync observer
     [self pp_registerForAdminTokenSync];
+
+    // A failed V2 registration must get another chance after a server-side
+    // eligibility correction even when APNs/FCM do not issue a new token.
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleApplicationDidBecomeActive:)
+                                                 name:UIApplicationDidBecomeActiveNotification
+                                               object:nil];
     
     // Request permissions and register for remote notifications
     [self registerForRemoteNotifications];
@@ -274,8 +397,6 @@ extern BOOL PP_TouchDotsEnabled;
     
     // Send token to your server if needed
     [self sendTokenToServer:safeToken];
-
-    [self pp_attemptNotificationV2RegistrationForReason:@"fcm_refresh"];
     
     // Post notification that token has been updated
     [[NSNotificationCenter defaultCenter] postNotificationName:@"FCMTokenUpdated" object:safeToken];
@@ -286,13 +407,12 @@ extern BOOL PP_TouchDotsEnabled;
 - (void)pp_registerForAdminTokenSync {
     __weak typeof(self) weakSelf = self;
     
-    // 1. Resolve current token and sync if user is already logged in
+    // 1. Resolve the current token and register the V2 device binding.
     [self pp_resolveCurrentFCMTokenWithCompletion:^(NSString * _Nullable token) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || token.length == 0) return;
         NSString *currentUID = [FIRAuth auth].currentUser.uid;
         if (currentUID.length > 0) {
-            [strongSelf pp_syncAdminPushToken:token preferredUID:currentUID];
             [strongSelf pp_attemptNotificationV2RegistrationForReason:@"launch_sync"];
         }
     }];
@@ -304,55 +424,63 @@ extern BOOL PP_TouchDotsEnabled;
         
         [strongSelf pp_resolveCurrentFCMTokenWithCompletion:^(NSString * _Nullable token) {
             if (token.length > 0) {
-                [strongSelf pp_syncAdminPushToken:token preferredUID:user.uid];
+                [strongSelf pp_storeFCMToken:token];
             }
         }];
         [strongSelf pp_attemptNotificationV2RegistrationForReason:@"auth_change"];
     }];
 }
 
-- (void)pp_syncAdminPushToken:(NSString *)token preferredUID:(NSString *)preferredUID {
-    NSString *safeToken = PPAdminRouteTrimmedString(token);
-    NSString *uid = PPAdminRouteTrimmedString(preferredUID);
-    if (safeToken.length == 0 || uid.length == 0) return;
-
-    // Always update the local model if it exists. Also perform the direct
-    // merge below so notification routing is not dependent on model sync shape.
-    if (UsrMgr.currentUser && [UsrMgr.currentUser.uid isEqualToString:uid]) {
-        UsrMgr.currentUser.PPProTokenID = safeToken;
-         [UsrMgr.currentUser SYNC:^(NSError * _Nullable error) {
-            if (error) {
-                DLog(@"[FIRMessaging] Failed syncing token via model: %@", error.localizedDescription);
-            } else {
-                DLog(@"[FIRMessaging] Token synced via model for %@", uid);
-            }
-        }];
+- (BOOL)pp_hasCurrentNotificationV2BindingForUID:(NSString *)uid
+{
+    NSString *safeUID = PPAdminRouteTrimmedString(uid);
+    NSDictionary *binding = [NSUserDefaults.standardUserDefaults dictionaryForKey:kPPProNotificationV2BindingDefaultsKey];
+    if (![binding isKindOfClass:NSDictionary.class] || safeUID.length == 0) {
+        return NO;
     }
 
-    // Direct Firestore update covers launch/early login and backstops model sync.
-    DLog(@"[FIRMessaging] Performing direct Firestore token sync for %@", uid);
-    NSDictionary *update = @{
-        @"PPProTokenID": safeToken,
-        @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp]
-    };
-    
-    [[[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:uid]
-        setData:update merge:YES completion:^(NSError * _Nullable error) {
-        if (error) {
-            DLog(@"[FIRMessaging] Direct Firestore sync failed: %@", error.localizedDescription);
-        } else {
-            DLog(@"[FIRMessaging] Direct Firestore sync success for %@", uid);
-        }
-    }];
+    NSString *bindingUID = PPAdminRouteTrimmedString(binding[@"uid"]);
+    NSString *installationId = PPAdminRouteTrimmedString(binding[@"installationId"]);
+    NSString *appId = PPAdminRouteTrimmedString(binding[@"appId"]);
+    NSString *environment = PPAdminRouteTrimmedString(binding[@"environment"]);
+    NSString *bindingGeneration = PPAdminRouteTrimmedString(binding[@"bindingGeneration"]);
+    NSString *fcmTokenHash = PPAdminRouteTrimmedString(binding[@"fcmTokenHash"]);
+    return [bindingUID isEqualToString:safeUID] &&
+        [appId isEqualToString:kPPProNotificationV2AppID] &&
+        [environment isEqualToString:PPAdminNotificationEnvironment()] &&
+        installationId.length > 0 && bindingGeneration.length > 0 && fcmTokenHash.length > 0;
+}
+
+- (void)pp_handleApplicationDidBecomeActive:(NSNotification *)notification
+{
+    (void)notification;
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self pp_handleApplicationDidBecomeActive:nil];
+        });
+        return;
+    }
+
+    if (self.notificationV2LogoutBarrierActive) {
+        return;
+    }
+
+    NSString *uid = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    if (uid.length == 0) {
+        return;
+    }
+
+    if (!self.notificationV2RegistrationNeedsForegroundRetry &&
+        [self pp_hasCurrentNotificationV2BindingForUID:uid]) {
+        return;
+    }
+
+    [self pp_attemptNotificationV2RegistrationForReason:@"foreground_retry"];
 }
 
 - (void)sendTokenToServer:(NSString *)token {
-    // Implement your server communication here
-    DLog(@"[FIRMessaging] Sending token to server via legacy sync.");
     [self pp_storeFCMToken:token];
-    
-    NSString *currentUID = [FIRAuth auth].currentUser.uid;
-    [self pp_syncAdminPushToken:token preferredUID:currentUID];
+    [self pp_attemptNotificationV2RegistrationForReason:@"fcm_refresh"];
 }
 
 - (void)pp_beginNotificationV2LogoutBarrierWithCompletion:(dispatch_block_t)completion
@@ -631,6 +759,7 @@ extern BOOL PP_TouchDotsEnabled;
                         if (!strongSelf) return;
 
                         if (error) {
+                            strongSelf.notificationV2RegistrationNeedsForegroundRetry = YES;
                             DLog(@"[PPNotificationsV2] registration failed | reason=%@ appId=pro_ios scopes=%lu error=%@",
                                   safeReason.length > 0 ? safeReason : @"unknown",
                                   (unsigned long)notificationScopes.count,
@@ -656,6 +785,7 @@ extern BOOL PP_TouchDotsEnabled;
 
                         BOOL ok = [response[@"ok"] respondsToSelector:@selector(boolValue)] ? [response[@"ok"] boolValue] : NO;
                         NSArray *scopes = [response[@"scopes"] isKindOfClass:NSArray.class] ? response[@"scopes"] : notificationScopes;
+                        BOOL storedCurrentBinding = NO;
                         if (ok) {
                             NSString *bindingGeneration = PPAdminRouteTrimmedString(response[@"bindingGeneration"]);
                             NSString *fcmTokenHash = PPAdminRouteTrimmedString(response[@"fcmTokenHash"]);
@@ -671,8 +801,10 @@ extern BOOL PP_TouchDotsEnabled;
                                     @"fcmTokenHash": fcmTokenHash
                                 };
                                 [NSUserDefaults.standardUserDefaults setObject:binding forKey:kPPProNotificationV2BindingDefaultsKey];
+                                storedCurrentBinding = YES;
                             }
                         }
+                        strongSelf.notificationV2RegistrationNeedsForegroundRetry = !ok || !storedCurrentBinding;
                         DLog(@"[PPNotificationsV2] registration finish | reason=%@ ok=%@ appId=%@ scopes=%lu isActive=%@",
                               safeReason.length > 0 ? safeReason : @"unknown",
                               ok ? @"yes" : @"no",
@@ -734,6 +866,11 @@ extern BOOL PP_TouchDotsEnabled;
     NSString *orderId = PPAdminRouteTrimmedString(safePayload[@"orderId"]);
     NSString *effectiveTitle = title.length > 0 ? title : PPAdminRouteTrimmedString(safePayload[@"title"]);
     NSString *effectiveBody = body.length > 0 ? body : PPAdminRouteTrimmedString(safePayload[@"body"]);
+    BOOL isProviderOrderCancellation = PPProIsProviderOrderCancelledPayload(safePayload);
+    if (isProviderOrderCancellation) {
+        effectiveTitle = PPProLocalizedProviderCancellationTitle(safePayload, effectiveTitle);
+        effectiveBody = PPProLocalizedProviderCancellationBody(effectiveBody);
+    }
     NSString *subtitle = effectiveBody.length > 0 ? effectiveBody : kLang(@"New notification");
 
     if (![PPProInAppNotificationPresenter notificationPreferencesAllowPayload:safePayload]) {
@@ -747,7 +884,7 @@ extern BOOL PP_TouchDotsEnabled;
                                                                                              subtitle:subtitle];
         return YES;
     }
-    if ([effectiveType hasPrefix:@"order"]) {
+    if ([effectiveType hasPrefix:@"order"] || isProviderOrderCancellation) {
         [[PPProInAppNotificationPresenter sharedPresenter] showNotificationWithPayload:safePayload
                                                                                  title:effectiveTitle
                                                                               subtitle:subtitle
@@ -768,7 +905,7 @@ extern BOOL PP_TouchDotsEnabled;
                                                                                  title:effectiveTitle
                                                                               subtitle:effectiveBody
                                                                               iconName:@"bicycle"
-                                                                           accentColor:UIColor.systemOrangeColor];
+                                                                           accentColor:[UIColor ppWarning]];
         return YES;
     }
     if (effectiveType.length > 0 || effectiveTitle.length > 0 || effectiveBody.length > 0) {
@@ -808,7 +945,7 @@ extern BOOL PP_TouchDotsEnabled;
     (void)center;
     UNNotificationContent *content = notification.request.content;
     NSDictionary *payload = [content.userInfo isKindOfClass:NSDictionary.class] ? content.userInfo : @{};
-    if (PPAdminPayloadTargetsOtherApp(payload)) {
+    if (![AppDelegate pp_isNotificationPayloadRoutable:payload]) {
         completionHandler(UNNotificationPresentationOptionNone);
         return;
     }
@@ -841,7 +978,7 @@ extern BOOL PP_TouchDotsEnabled;
     NSDictionary *payload = [response.notification.request.content.userInfo isKindOfClass:NSDictionary.class]
         ? response.notification.request.content.userInfo
         : @{};
-    if (PPAdminPayloadTargetsOtherApp(payload)) {
+    if (![AppDelegate pp_isNotificationPayloadRoutable:payload]) {
         if (completionHandler) completionHandler();
         return;
     }
@@ -863,7 +1000,7 @@ extern BOOL PP_TouchDotsEnabled;
 - (void)application:(UIApplication *)application
 didReceiveRemoteNotification:(NSDictionary *)userInfo
 fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
-    if (PPAdminPayloadTargetsOtherApp(userInfo)) {
+    if (![AppDelegate pp_isNotificationPayloadRoutable:userInfo]) {
         if (completionHandler) {
             completionHandler(UIBackgroundFetchResultNoData);
         }
@@ -876,6 +1013,11 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
                         stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     NSString *title = [userInfo[@"title"] isKindOfClass:NSString.class] ? userInfo[@"title"] : kLang(@"pp_pro_notification_new_delivery_request_title");
     NSString *body = [userInfo[@"body"] isKindOfClass:NSString.class] ? userInfo[@"body"] : kLang(@"pp_pro_notification_new_delivery_request_body");
+    BOOL isProviderOrderCancellation = PPProIsProviderOrderCancelledPayload(userInfo);
+    if (isProviderOrderCancellation) {
+        title = PPProLocalizedProviderCancellationTitle(userInfo, title);
+        body = PPProLocalizedProviderCancellationBody(body);
+    }
     
     DLog(@"[Push] didReceiveRemoteNotification | type=%@ notificationType=%@ effectiveType=%@ orderId=%@ title=%@ body=%@",
           type, notificationType, effectiveType, orderId, title, body);
@@ -897,10 +1039,10 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
                                                                                      title:title
                                                                                   subtitle:body
                                                                                   iconName:@"bicycle"
-                                                                               accentColor:UIColor.systemOrangeColor];
+                                                                               accentColor:[UIColor ppWarning]];
             didShowLocalNotification = YES;
             DLog(@"[Push] Showing in-app delivery notification banner");
-        } else if ([effectiveType isEqualToString:@"provider_new_fulfillment"]) {
+        } else if ([effectiveType isEqualToString:@"provider_new_fulfillment"] || isProviderOrderCancellation) {
             [[PPProInAppNotificationPresenter sharedPresenter] showNotificationWithPayload:userInfo
                                                                                      title:title
                                                                                   subtitle:body

@@ -90,7 +90,7 @@
 
 - (void)pushViewController:(UIViewController *)viewController animated:(BOOL)animated {
     // Reset tint color to dynamic app standard or label color before transition
-    self.navigationBar.tintColor = AppPrimaryTextClr ?: UIColor.labelColor;
+    self.navigationBar.tintColor = AppPrimaryTextClr;
     
     // Ensure correct directionality attributes are applied to the navigation hierarchy
     UISemanticContentAttribute attribute = [Language semanticAttributeForCurrentLanguage];
@@ -111,7 +111,7 @@
     
     // Restore styling after transition completes
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        self.navigationBar.tintColor = AppPrimaryTextClr ?: UIColor.labelColor;
+        self.navigationBar.tintColor = AppPrimaryTextClr;
     });
     
     return vc;

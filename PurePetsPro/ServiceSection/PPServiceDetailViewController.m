@@ -32,30 +32,15 @@
 #pragma mark - Premium Colors
 
 - (UIColor *)pp_canvasColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.10 green:0.10 blue:0.11 alpha:1.0];
-        }
-        return [UIColor colorWithRed:0.97 green:0.96 blue:0.95 alpha:1.0];
-    }];
+    return [UIColor ppBackground];
 }
 
 - (UIColor *)pp_surfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.17 green:0.17 blue:0.19 alpha:0.94];
-        }
-        return [[UIColor whiteColor] colorWithAlphaComponent:0.88];
-    }];
+    return [UIColor ppElevatedSurface];
 }
 
 - (UIColor *)pp_borderColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-        }
-        return [UIColor colorWithRed:0.25 green:0.17 blue:0.18 alpha:0.06];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
 }
 
 - (instancetype)initWithService:(PPServiceModel *)service {
@@ -134,8 +119,8 @@
     self.bgGlowTop.layer.shadowOpacity = isDark ? 0.04 : 0.08;
     self.bgGlowTop.layer.shadowRadius = 60.0;
 
-    self.bgGlowBottom.backgroundColor = [[UIColor systemOrangeColor] colorWithAlphaComponent:isDark ? 0.03 : 0.06];
-    self.bgGlowBottom.layer.shadowColor = UIColor.systemOrangeColor.CGColor;
+    self.bgGlowBottom.backgroundColor = [[UIColor ppPremiumAccent] colorWithAlphaComponent:isDark ? 0.03 : 0.06];
+    self.bgGlowBottom.layer.shadowColor = [UIColor ppPremiumAccent].CGColor;
     self.bgGlowBottom.layer.shadowOpacity = isDark ? 0.02 : 0.06;
     self.bgGlowBottom.layer.shadowRadius = 70.0;
 }
@@ -174,13 +159,13 @@
 }
 
 - (UIColor *)pp_availabilityAccentColor {
-    return self.service.isLive ? UIColor.systemGreenColor : UIColor.systemOrangeColor;
+    return self.service.isLive ? [UIColor ppSuccess] : [UIColor ppWarning];
 }
 
 - (UIColor *)pp_verificationAccentColor {
     NSString *status = self.service.verificationStatus.lowercaseString ?: @"";
-    if ([status isEqualToString:@"verified"]) return UIColor.systemGreenColor;
-    if ([status isEqualToString:@"rejected"] || [status isEqualToString:@"blocked"]) return UIColor.systemRedColor;
+    if ([status isEqualToString:@"verified"]) return [UIColor ppSuccess];
+    if ([status isEqualToString:@"rejected"] || [status isEqualToString:@"blocked"]) return [UIColor ppError];
     return AppPrimaryClr;
 }
 

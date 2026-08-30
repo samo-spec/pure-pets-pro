@@ -52,6 +52,13 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
 // Firestore listener
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> orderListener;
+@property (nonatomic, assign) NSUInteger orderListenerGeneration;
+@property (nonatomic, copy, nullable) NSString *orderListenerUID;
+@property (nonatomic, assign) BOOL hasLiveV1ActionState;
+
+// Forward method declarations
+- (UIColor *)colorForStatus:(NSString *)status;
+- (void)openCustomerChatThreadWithID:(NSString *)threadID customerID:(NSString *)customerID displayName:(NSString *)displayName;
 
 @end
 
@@ -72,11 +79,21 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = AppBackgroundClr;
+    self.hasLiveV1ActionState = self.order.fulfillmentVersion != 1;
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_deliveryOrdersDidChange:)
+                                                 name:PPDeliveryOrdersDidChangeNotification
+                                               object:[PPDeliveryManager shared]];
 
     [self setupScrollView];
     [self setupLocationManager];
     [self buildSections];
     [self startOrderListener];
+    if (self.order.fulfillmentVersion == 1 &&
+        ![[PPDeliveryManager shared] currentDeliveryOrderWithID:self.order.orderId]) {
+        [[PPDeliveryManager shared] startListeningForDeliveryOrders];
+    }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -92,6 +109,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 }
 
 - (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
     [self stopOrderListener];
     [self.marketplaceProviderListener remove];
     self.marketplaceProviderListener = nil;
@@ -103,29 +121,98 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
 - (void)startOrderListener {
     if (!self.order.orderId.length) return;
+    NSString *listenerUID = [FIRAuth auth].currentUser.uid ?: @"";
+    if (listenerUID.length == 0) return;
+    [self.orderListener remove];
+    self.orderListener = nil;
+    self.orderListenerUID = listenerUID;
+    NSUInteger listenerGeneration = ++self.orderListenerGeneration;
+    NSString *orderID = self.order.orderId;
 
     FIRFirestore *db = [FIRFirestore firestore];
-    FIRDocumentReference *docRef = [[db collectionWithPath:@"Orders"] documentWithPath:self.order.orderId];
+    FIRDocumentReference *docRef = [[db collectionWithPath:@"Orders"] documentWithPath:orderID];
 
     __weak typeof(self) weakSelf = self;
-    self.orderListener = [docRef addSnapshotListener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
+    self.orderListener = [docRef addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
+        if (listenerGeneration != strongSelf.orderListenerGeneration) return;
+        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:listenerUID]) return;
+        if (![strongSelf.orderListenerUID isEqualToString:listenerUID]) return;
+        if (![strongSelf.order.orderId isEqualToString:orderID]) return;
         if (error || !snapshot.exists) return;
 
         NSDictionary *data = snapshot.data;
         if (!data) return;
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            strongSelf.order = [PPDeliveryOrderModel fromDictionary:data withID:snapshot.documentID];
+            if (listenerGeneration != strongSelf.orderListenerGeneration) return;
+            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:listenerUID]) return;
+            PPDeliveryOrderModel *freshOrder = [PPDeliveryOrderModel fromDictionary:data withID:snapshot.documentID];
+            PPDeliveryOrderModel *assignedProjection = [[PPDeliveryManager shared] currentDeliveryOrderWithID:snapshot.documentID];
+            if (freshOrder.fulfillmentVersion == 1) {
+                BOOL liveRequestProjection = assignedProjection.fulfillmentVersion == 1 &&
+                    [assignedProjection.deliveryStatus.lowercaseString isEqualToString:PPDeliveryStatusRequested] &&
+                    assignedProjection.deliveryRequestFulfillmentOrderIDs.count > 0;
+                BOOL liveAssignedProjection = assignedProjection.fulfillmentVersion == 1 &&
+                    assignedProjection.assignedFulfillmentStatusesByID.count > 0;
+                strongSelf.hasLiveV1ActionState = liveRequestProjection || liveAssignedProjection;
+                freshOrder.deliveryRequestFulfillmentOrderIDs = liveRequestProjection
+                    ? assignedProjection.deliveryRequestFulfillmentOrderIDs.copy
+                    : @[];
+                freshOrder.assignedFulfillmentStatusesByID = liveAssignedProjection
+                    ? assignedProjection.assignedFulfillmentStatusesByID.copy
+                    : @{};
+                if (liveAssignedProjection) {
+                    freshOrder.fulfillmentOrderIDs = assignedProjection.fulfillmentOrderIDs.copy ?: @[];
+                    freshOrder.deliveryUserId = listenerUID;
+                }
+            } else {
+                strongSelf.hasLiveV1ActionState = YES;
+            }
+            strongSelf.order = freshOrder;
             [strongSelf refreshUI];
         });
     }];
 }
 
 - (void)stopOrderListener {
+    self.orderListenerGeneration += 1;
     [self.orderListener remove];
     self.orderListener = nil;
+    self.orderListenerUID = nil;
+}
+
+- (void)pp_deliveryOrdersDidChange:(NSNotification *)notification {
+    if (notification.object != [PPDeliveryManager shared] || self.order.fulfillmentVersion != 1) return;
+    NSString *listenerUID = self.orderListenerUID ?: @"";
+    if (listenerUID.length == 0 ||
+        ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:listenerUID]) {
+        return;
+    }
+
+    PPDeliveryOrderModel *projection = [[PPDeliveryManager shared] currentDeliveryOrderWithID:self.order.orderId];
+    BOOL liveRequestProjection = projection.fulfillmentVersion == 1 &&
+        [projection.deliveryStatus.lowercaseString isEqualToString:PPDeliveryStatusRequested] &&
+        projection.deliveryRequestFulfillmentOrderIDs.count > 0;
+    BOOL liveAssignedProjection = projection.fulfillmentVersion == 1 &&
+        projection.assignedFulfillmentStatusesByID.count > 0;
+    self.hasLiveV1ActionState = liveRequestProjection || liveAssignedProjection;
+    self.order.deliveryRequestFulfillmentOrderIDs = liveRequestProjection
+        ? projection.deliveryRequestFulfillmentOrderIDs.copy
+        : @[];
+    self.order.assignedFulfillmentStatusesByID = liveAssignedProjection
+        ? projection.assignedFulfillmentStatusesByID.copy
+        : @{};
+    if (liveAssignedProjection) {
+        self.order.fulfillmentOrderIDs = projection.fulfillmentOrderIDs.copy ?: @[];
+        self.order.deliveryUserId = listenerUID;
+        self.order.deliveryStatus = projection.deliveryStatus;
+        self.order.cashCollectionReceiptID = projection.cashCollectionReceiptID;
+        self.order.cashCollectionReceipt = projection.cashCollectionReceipt;
+        self.order.paymentStatus = projection.paymentStatus;
+    }
+    [self refreshUI];
 }
 
 #pragma mark - Setup UI
@@ -423,7 +510,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
         UIView *branchPill = [[UIView alloc] init];
         branchPill.translatesAutoresizingMaskIntoConstraints = NO;
-        branchPill.backgroundColor = [[UIColor systemOrangeColor] colorWithAlphaComponent:0.15];
+        branchPill.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:0.15];
         branchPill.layer.cornerRadius = 12;
         branchPill.layer.cornerCurve = kCACornerCurveContinuous;
         [branchContainer addSubview:branchPill];
@@ -431,7 +518,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         UIImageView *branchIcon = [[UIImageView alloc] init];
         branchIcon.translatesAutoresizingMaskIntoConstraints = NO;
         branchIcon.contentMode = UIViewContentModeScaleAspectFit;
-        branchIcon.tintColor = [UIColor systemOrangeColor];
+        branchIcon.tintColor = [UIColor ppWarning];
         UIImageSymbolConfiguration *branchIconCfg = [UIImageSymbolConfiguration configurationWithPointSize:10 weight:UIImageSymbolWeightSemibold];
         branchIcon.image = [[UIImage systemImageNamed:@"building.2.fill"] imageWithConfiguration:branchIconCfg];
         [branchPill addSubview:branchIcon];
@@ -439,7 +526,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         UILabel *branchPillLabel = [[UILabel alloc] init];
         branchPillLabel.translatesAutoresizingMaskIntoConstraints = NO;
         branchPillLabel.font = PPFontBold(11);
-        branchPillLabel.textColor = [UIColor systemOrangeColor];
+        branchPillLabel.textColor = [UIColor ppWarning];
         branchPillLabel.text = [NSString stringWithFormat:@"%@: %@", kLang(@"Branch"), branchDisplay];
         [branchPill addSubview:branchPillLabel];
 
@@ -537,7 +624,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
         // ── Location ──
         if (customerLocation.length) {
-            UIView *locRow = [weakSelf infoRowWithIcon:@"location.fill" iconColor:[UIColor systemOrangeColor]
+            UIView *locRow = [weakSelf infoRowWithIcon:@"location.fill" iconColor:[UIColor ppWarning]
                                                   text:customerLocation
                                                   font:PPFontRegular(14) textColor:PrimaryTextClr];
             [stack addArrangedSubview:locRow];
@@ -574,13 +661,13 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
             if (canRevealCustomerPhone) {
                 UIButton *callBtn = [weakSelf contactActionPill:kLang(@"Call")
                                                            icon:@"phone.fill"
-                                                         color:UIColor.systemGreenColor
+                                                         color:[UIColor ppSuccess]
                                                         action:@selector(callCustomer)];
                 [actionRow addArrangedSubview:callBtn];
 
                 UIButton *whatsappBtn = [weakSelf contactActionPill:kLang(@"WhatsApp")
                                                                icon:@"message.fill"
-                                                             color:UIColor.systemGreenColor
+                                                             color:[UIColor ppSuccess]
                                                             action:@selector(openWhatsApp)];
                 [actionRow addArrangedSubview:whatsappBtn];
             }
@@ -588,7 +675,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
             if (exactLocationVisible) {
                 UIButton *mapsBtn = [weakSelf contactActionPill:kLang(@"OpenInMaps")
                                                            icon:@"map.fill"
-                                                         color:UIColor.systemBlueColor
+                                                         color:[UIColor ppInfo]
                                                         action:@selector(openInMaps)];
                 [actionRow addArrangedSubview:mapsBtn];
             }
@@ -609,9 +696,9 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
             chatBtn.translatesAutoresizingMaskIntoConstraints = NO;
             [chatBtn setTitle:[NSString stringWithFormat:@"  %@", kLang(@"Deliv_ChatWithCustomer")] forState:UIControlStateNormal];
             [chatBtn setImage:[UIImage systemImageNamed:@"message.fill"] forState:UIControlStateNormal];
-            chatBtn.tintColor = UIColor.systemBlueColor;
+            chatBtn.tintColor = [UIColor ppInfo];
             chatBtn.titleLabel.font = PPFontBold(14);
-            chatBtn.backgroundColor = [UIColor.systemBlueColor colorWithAlphaComponent:0.1];
+            chatBtn.backgroundColor = [[UIColor ppInfo] colorWithAlphaComponent:0.1];
             chatBtn.layer.cornerRadius = 14;
             chatBtn.layer.cornerCurve = kCACornerCurveContinuous;
             [chatBtn addTarget:weakSelf action:@selector(officialSupportStartChat) forControlEvents:UIControlEventTouchUpInside];
@@ -701,9 +788,9 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         buttonRow.distribution = UIStackViewDistributionFillEqually;
         [stack addArrangedSubview:buttonRow];
 
-        UIButton *navigationBtn = [self premiumMapActionButton:kLang(@"Deliv_StartNavigation") icon:@"location.fill" color:UIColor.systemGreenColor action:@selector(startDeliveryNavigation)];
-        UIButton *routeBtn = [self premiumMapActionButton:kLang(@"Deliv_ShowRoute") icon:@"arrow.triangle.turn.up.right.circle.fill" color:UIColor.systemBlueColor action:@selector(showDeliveryRoute)];
-        UIButton *distanceBtn = [self premiumMapActionButton:kLang(@"Deliv_CalculateDistance") icon:@"ruler.fill" color:UIColor.systemIndigoColor action:@selector(calculateDeliveryDistance)];
+        UIButton *navigationBtn = [self premiumMapActionButton:kLang(@"Deliv_StartNavigation") icon:@"location.fill" color:[UIColor ppSuccess] action:@selector(startDeliveryNavigation)];
+        UIButton *routeBtn = [self premiumMapActionButton:kLang(@"Deliv_ShowRoute") icon:@"arrow.triangle.turn.up.right.circle.fill" color:[UIColor ppInfo] action:@selector(showDeliveryRoute)];
+        UIButton *distanceBtn = [self premiumMapActionButton:kLang(@"Deliv_CalculateDistance") icon:@"ruler.fill" color:[UIColor ppQuickActionCommunity] action:@selector(calculateDeliveryDistance)];
         [buttonRow addArrangedSubview:navigationBtn];
         [buttonRow addArrangedSubview:routeBtn];
         [buttonRow addArrangedSubview:distanceBtn];
@@ -930,8 +1017,8 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         buttonRow.distribution = UIStackViewDistributionFillEqually;
         [stack addArrangedSubview:buttonRow];
 
-        UIButton *chatBtn = [weakSelf premiumProviderActionButton:kLang(@"Deliv_ChatProvider") icon:@"message.fill" color:UIColor.systemBlueColor action:@selector(chatWithMarketplaceProvider)];
-        UIButton *callBtn = [weakSelf premiumProviderActionButton:kLang(@"Deliv_CallProvider") icon:@"phone.fill" color:UIColor.systemGreenColor action:@selector(callMarketplaceProvider)];
+        UIButton *chatBtn = [weakSelf premiumProviderActionButton:kLang(@"Deliv_ChatProvider") icon:@"message.fill" color:[UIColor ppInfo] action:@selector(chatWithMarketplaceProvider)];
+        UIButton *callBtn = [weakSelf premiumProviderActionButton:kLang(@"Deliv_CallProvider") icon:@"phone.fill" color:[UIColor ppSuccess] action:@selector(callMarketplaceProvider)];
         [buttonRow addArrangedSubview:chatBtn];
         [buttonRow addArrangedSubview:callBtn];
 
@@ -1286,14 +1373,14 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         UIColor *payStatusColor;
         if ([order.paymentStatus.lowercaseString containsString:@"pending"]) {
             payDisplay = kLang(@"Deliv_PaymentPending");
-            payStatusColor = UIColor.systemOrangeColor;
+            payStatusColor = [UIColor ppWarning];
         } else {
             payDisplay = kLang(@"Paid");
-            payStatusColor = UIColor.systemGreenColor;
+            payStatusColor = [UIColor ppSuccess];
         }
         if (order.paymentCollectedAt) {
             payDisplay = kLang(@"Deliv_PaymentCollected");
-            payStatusColor = UIColor.systemTealColor;
+            payStatusColor = [UIColor ppQuickActionServices];
         }
 
         UIView *statusRow = [self detailRowWithStatusDot:kLang(@"PaymentStatus")
@@ -1436,13 +1523,14 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
 - (void)setupFloatingActionBar {
     PPDeliveryOrderModel *order = self.order;
+    if (order.fulfillmentVersion == 1 && !self.hasLiveV1ActionState) return;
     BOOL hasActions = [order canAcceptDelivery] ||
                       [order canConfirmPackageHandover] ||
                       [order canMarkInTransit] ||
                       [order canMarkDelivered] ||
                       [order canCollectCashPayment] ||
                       [order canMarkCompleted] ||
-                      ![order isTerminal];
+                      (order.fulfillmentVersion != 1 && ![order isTerminal]);
     if (!hasActions) return;
 
     // Blurred frosted background
@@ -1470,7 +1558,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     // Primary action
     if ([order canAcceptDelivery]) {
         UIButton *btn = [self primaryActionButton:kLang(@"AcceptDelivery")
-                                            color:UIColor.systemGreenColor
+                                            color:[UIColor ppSuccess]
                                            action:@selector(confirmAcceptDelivery)
                                              icon:@"hand.thumbsup.fill"];
         [_floatingActionStack addArrangedSubview:btn];
@@ -1481,7 +1569,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         NSString *currentUid = [FIRAuth auth].currentUser.uid;
         if (!isDeliveryAssigned || [order.deliveryUserId isEqualToString:currentUid]) {
             UIButton *btn = [self primaryActionButton:kLang(@"PickUpFromStore")
-                                                color:UIColor.systemIndigoColor
+                                                color:[UIColor ppQuickActionCommunity]
                                                action:@selector(confirmPickup)
                                                  icon:@"shippingbox.fill"];
             [_floatingActionStack addArrangedSubview:btn];
@@ -1491,7 +1579,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         NSString *currentUid = [FIRAuth auth].currentUser.uid;
         if (order.deliveryUserId.length == 0 || [order.deliveryUserId isEqualToString:currentUid]) {
             UIButton *btn = [self primaryActionButton:kLang(@"Deliv_StartTransit")
-                                                color:UIColor.systemBlueColor
+                                                color:[UIColor ppInfo]
                                                action:@selector(confirmStartTransit)
                                                  icon:@"truck.box.fill"];
             [_floatingActionStack addArrangedSubview:btn];
@@ -1503,23 +1591,25 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         NSString *currentUid = [FIRAuth auth].currentUser.uid;
         if (!isDeliveryAssigned || [order.deliveryUserId isEqualToString:currentUid]) {
             UIButton *btn = [self primaryActionButton:kLang(@"MarkAsDelivered")
-                                                color:UIColor.systemGreenColor
+                                                color:[UIColor ppSuccess]
                                                action:@selector(confirmDelivery)
                                                  icon:@"checkmark.circle.fill"];
             [_floatingActionStack addArrangedSubview:btn];
             self.actionButton = btn;
         }
     } else if ([order canCollectCashPayment]) {
-        NSString *title = [NSString stringWithFormat:@"%@ — %@", kLang(@"CollectCashPayment"), [order formattedTotal]];
+        NSString *title = order.fulfillmentVersion == 1
+            ? kLang(@"CollectCashPayment")
+            : [NSString stringWithFormat:@"%@ — %@", kLang(@"CollectCashPayment"), [order formattedTotal]];
         UIButton *btn = [self primaryActionButton:title
-                                            color:UIColor.systemTealColor
+                                            color:[UIColor ppQuickActionServices]
                                            action:@selector(confirmCashCollection)
                                              icon:@"banknote.fill"];
         [_floatingActionStack addArrangedSubview:btn];
         self.actionButton = btn;
     } else if ([order canMarkCompleted]) {
         UIButton *btn = [self primaryActionButton:kLang(@"Deliv_CompleteOrder")
-                                            color:UIColor.systemGreenColor
+                                            color:[UIColor ppSuccess]
                                            action:@selector(confirmCompleteOrder)
                                              icon:@"checkmark.seal.fill"];
         [_floatingActionStack addArrangedSubview:btn];
@@ -1527,14 +1617,14 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     }
 
     // Report issue
-    if (![order isTerminal]) {
+    if (![order isTerminal] && order.fulfillmentVersion != 1) {
         self.reportIssueButton = [UIButton buttonWithType:UIButtonTypeSystem];
         self.reportIssueButton.translatesAutoresizingMaskIntoConstraints = NO;
         [self.reportIssueButton setTitle:[NSString stringWithFormat:@"  %@", kLang(@"ReportIssue")] forState:UIControlStateNormal];
         [self.reportIssueButton setImage:[UIImage systemImageNamed:@"exclamationmark.bubble.fill"] forState:UIControlStateNormal];
-        self.reportIssueButton.tintColor = UIColor.systemOrangeColor;
+        self.reportIssueButton.tintColor = [UIColor ppWarning];
         self.reportIssueButton.titleLabel.font = PPFontMedium(14);
-        self.reportIssueButton.backgroundColor = [UIColor.systemOrangeColor colorWithAlphaComponent:0.1];
+        self.reportIssueButton.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:0.1];
         self.reportIssueButton.layer.cornerRadius = 14;
         self.reportIssueButton.layer.cornerCurve = kCACornerCurveContinuous;
         [self.reportIssueButton addTarget:self action:@selector(reportIssue) forControlEvents:UIControlEventTouchUpInside];
@@ -1573,11 +1663,12 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     btnStack.spacing = 12;
 
     PPDeliveryOrderModel *order = self.order;
+    if (order.fulfillmentVersion == 1 && !self.hasLiveV1ActionState) return;
 
     // Accept delivery (highest priority — shown when order is ready and no delivery agent)
     if ([order canAcceptDelivery]) {
         UIButton *btn = [self primaryActionButton:kLang(@"AcceptDelivery")
-                                            color:UIColor.systemTealColor
+                                            color:[UIColor ppQuickActionServices]
                                            action:@selector(confirmAcceptDelivery)
                                              icon:@"hand.raised.fill"];
         [btnStack addArrangedSubview:btn];
@@ -1590,7 +1681,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         NSString *currentUid = [FIRAuth auth].currentUser.uid;
         if (!isDeliveryAssigned || [order.deliveryUserId isEqualToString:currentUid]) {
             UIButton *btn = [self primaryActionButton:kLang(@"PickUpFromStore")
-                                                color:UIColor.systemIndigoColor
+                                                color:[UIColor ppQuickActionCommunity]
                                                action:@selector(confirmPickup)
                                                  icon:@"shippingbox.fill"];
             [btnStack addArrangedSubview:btn];
@@ -1602,16 +1693,18 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         NSString *currentUid = [FIRAuth auth].currentUser.uid;
         if (!isDeliveryAssigned || [order.deliveryUserId isEqualToString:currentUid]) {
             UIButton *btn = [self primaryActionButton:kLang(@"MarkAsDelivered")
-                                                color:UIColor.systemGreenColor
+                                                color:[UIColor ppSuccess]
                                                action:@selector(confirmDelivery)
                                                  icon:@"checkmark.circle.fill"];
             [btnStack addArrangedSubview:btn];
             self.actionButton = btn;
         }
     } else if ([order canCollectCashPayment]) {
-        NSString *title = [NSString stringWithFormat:@"%@ — %@", kLang(@"CollectCashPayment"), [order formattedTotal]];
+        NSString *title = order.fulfillmentVersion == 1
+            ? kLang(@"CollectCashPayment")
+            : [NSString stringWithFormat:@"%@ — %@", kLang(@"CollectCashPayment"), [order formattedTotal]];
         UIButton *btn = [self primaryActionButton:title
-                                            color:UIColor.systemTealColor
+                                            color:[UIColor ppQuickActionServices]
                                            action:@selector(confirmCashCollection)
                                              icon:@"banknote.fill"];
         [btnStack addArrangedSubview:btn];
@@ -1619,12 +1712,12 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     }
 
     // Report issue (always available for active orders)
-    if (![order isTerminal]) {
+    if (![order isTerminal] && order.fulfillmentVersion != 1) {
         self.reportIssueButton = [UIButton buttonWithType:UIButtonTypeSystem];
         self.reportIssueButton.translatesAutoresizingMaskIntoConstraints = NO;
         [self.reportIssueButton setTitle:[NSString stringWithFormat:@"  %@", kLang(@"ReportIssue")] forState:UIControlStateNormal];
         [self.reportIssueButton setImage:[UIImage systemImageNamed:@"exclamationmark.bubble.fill"] forState:UIControlStateNormal];
-        self.reportIssueButton.tintColor = UIColor.systemOrangeColor;
+        self.reportIssueButton.tintColor = [UIColor ppWarning];
         self.reportIssueButton.titleLabel.font = PPFontMedium(15);
         [self.reportIssueButton addTarget:self action:@selector(reportIssue) forControlEvents:UIControlEventTouchUpInside];
         [self.reportIssueButton.heightAnchor constraintEqualToConstant:44].active = YES;
@@ -1672,6 +1765,14 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
 - (void)officialSupportStartChat {
     [PPFunc pp_playTapEffect];
+    // Pro is not a staff authority. Support lifecycle replies must go through
+    // the audited Admin/Console support command, never this provider account.
+    [PPToast toast:kLang(@"Deliv_CannotChatProvider")];
+    return;
+}
+
+#if 0
+- (void)unusedLegacyOfficialSupportStartChat {
     NSString *customerUID = self.order.userId;
     NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
     if (customerUID.length == 0 || currentUID.length == 0) return;
@@ -1759,6 +1860,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         });
     }];
 }
+#endif
 
 - (void)openCustomerChatThreadWithID:(NSString *)threadID customerID:(NSString *)customerID displayName:(NSString *)displayName {
     ChatThreadModel *thread = [[ChatThreadModel alloc] init];
@@ -1781,16 +1883,16 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 - (UIColor *)colorForStatus:(NSString *)status {
     NSString *lower = [status lowercaseString];
     if ([@[PPDeliveryStatusReadyToShip, PPDeliveryStatusRequested, PPDeliveryStatusAwaitingHandover] containsObject:lower])
-        return UIColor.systemOrangeColor;
+        return [UIColor ppWarning];
     if ([@[PPDeliveryStatusPickedUp, PPDeliveryStatusInTransit] containsObject:lower])
-        return UIColor.systemIndigoColor;
+        return [UIColor ppQuickActionCommunity];
     if ([@[PPDeliveryStatusDelivered, PPDeliveryStatusPaymentPending, PPDeliveryStatusPaymentConfirmed, PPDeliveryStatusCompleted] containsObject:lower])
-        return UIColor.systemGreenColor;
+        return [UIColor ppSuccess];
     if ([@[PPDeliveryStatusCancelled, PPDeliveryStatusFailed, PPDeliveryStatusReturnedToStore] containsObject:lower])
-        return UIColor.systemRedColor;
+        return [UIColor ppError];
     if ([@[@"processing", @"preparing", @"packed", @"confirmed", @"paid"] containsObject:lower])
-        return UIColor.systemBlueColor;
-    return UIColor.systemGrayColor;
+        return [UIColor ppInfo];
+    return [UIColor ppTextSecondary];
 }
 
 #pragma mark - Actions: Accept Delivery
@@ -1957,11 +2059,13 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 - (void)confirmCashCollection {
     [PPFunc pp_playTapEffect];
     __weak typeof(self) weakSelf = self;
-    NSString *amountStr = [self.order formattedTotal];
+    NSString *message = self.order.fulfillmentVersion == 1
+        ? kLang(@"ConfirmCashCollectionServerReceiptMessage")
+        : [NSString stringWithFormat:kLang(@"ConfirmCashCollectionMessage"), [self.order formattedTotal]];
 
     [PPAlertHelper showConfirmationIn:self
                               title:kLang(@"ConfirmCashCollection")
-                           subtitle:[NSString stringWithFormat:kLang(@"ConfirmCashCollectionMessage"), amountStr]
+                           subtitle:message
                         placeholder:nil
                       confirmButton:kLang(@"ConfirmCashCollection")
                        cancelButton:kLang(@"Cancel")
@@ -2037,6 +2141,10 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
 - (void)reportIssue {
     [PPFunc pp_playTapEffect];
+    if (self.order.fulfillmentVersion == 1) {
+        [PPAlertHelper showErrorIn:self title:kLang(@"ReportIssue") subtitle:kLang(@"DeliveryIssueV1Unavailable")];
+        return;
+    }
     __weak typeof(self) weakSelf = self;
 
     [PPAlertHelper showTextPromptIn:self
@@ -2051,16 +2159,45 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // Save issue note to Firestore
+        NSString *actorUID = [FIRAuth auth].currentUser.uid ?: @"";
+        NSString *orderID = strongSelf.order.orderId ?: @"";
+        if (actorUID.length == 0 || orderID.length == 0) return;
+
+        // Preserve the V0 issue workflow, but bind its parent write to a
+        // transactionally current version read. This prevents a stale V0 row
+        // or open prompt from mutating an activated fulfillment-v1 parent.
         FIRFirestore *db = [FIRFirestore firestore];
-        FIRDocumentReference *docRef = [[db collectionWithPath:@"Orders"] documentWithPath:strongSelf.order.orderId];
+        FIRDocumentReference *docRef = [[db collectionWithPath:@"Orders"] documentWithPath:orderID];
         NSDictionary *update = @{
             @"deliveryIssue": text,
             @"deliveryIssueAt": [FIRFieldValue fieldValueForServerTimestamp],
-            @"deliveryIssueBy": [FIRAuth auth].currentUser.uid ?: @""
+            @"deliveryIssueBy": actorUID
         };
-        [docRef updateData:update completion:^(NSError * _Nullable error) {
+        [db runTransactionWithBlock:^id _Nullable(FIRTransaction * _Nonnull transaction,
+                                                   NSError * _Nullable __autoreleasing * _Nonnull errorPointer) {
+            FIRDocumentSnapshot *snapshot = [transaction getDocument:docRef error:errorPointer];
+            if (*errorPointer) return nil;
+            if (!snapshot.exists) {
+                *errorPointer = [NSError errorWithDomain:@"PPDeliveryIssue"
+                                                    code:404
+                                                userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryOrderUnavailable")}];
+                return nil;
+            }
+            if ([snapshot.data[@"fulfillmentVersion"] integerValue] == 1) {
+                *errorPointer = [NSError errorWithDomain:@"PPDeliveryIssue"
+                                                    code:409
+                                                userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryIssueV1Unavailable")}];
+                return nil;
+            }
+            [transaction updateData:update forDocument:docRef];
+            return @YES;
+        } completion:^(id _Nullable result, NSError * _Nullable error) {
+            (void)result;
             dispatch_async(dispatch_get_main_queue(), ^{
+                if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:actorUID] ||
+                    ![strongSelf.order.orderId isEqualToString:orderID]) {
+                    return;
+                }
                 if (error) {
                     [PPAlertHelper showErrorIn:strongSelf title:kLang(@"Error") subtitle:error.localizedDescription];
                 } else {

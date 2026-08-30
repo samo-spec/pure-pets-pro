@@ -341,11 +341,11 @@
     _priceLabel.text = [NSString stringWithFormat:@"%.2f %@", medicine.price, currency];
 
     _statusBadgeLabel.text = [NSString stringWithFormat:@"  %@  ", medicine.isPublished ? kLang(@"Pharmacy_Status_Published") : kLang(@"Pharmacy_Status_Draft")];
-    UIColor *statusColor = medicine.isPublished ? AppPrimaryClr : [UIColor systemOrangeColor];
+    UIColor *statusColor = medicine.isPublished ? AppPrimaryClr : [UIColor ppWarning];
     _statusBadgeLabel.textColor = statusColor;
     _statusBadgeLabel.backgroundColor = [statusColor colorWithAlphaComponent:0.10];
     BOOL isAvailable = medicine.isAvailable && medicine.stockQuantity > 0 && medicine.isPublished && !medicine.isDisabled;
-    UIColor *availabilityColor = isAvailable ? [UIColor systemGreenColor] : [UIColor systemRedColor];
+    UIColor *availabilityColor = isAvailable ? [UIColor ppSuccess] : [UIColor ppError];
     _availabilityBadgeLabel.text = [NSString stringWithFormat:@"  %@  ", isAvailable ? kLang(@"Pharmacy_Status_Available") : kLang(@"Pharmacy_Status_NotAvailable")];
     _availabilityBadgeLabel.textColor = availabilityColor;
     _availabilityBadgeLabel.backgroundColor = [availabilityColor colorWithAlphaComponent:isAvailable ? 0.12 : 0.10];

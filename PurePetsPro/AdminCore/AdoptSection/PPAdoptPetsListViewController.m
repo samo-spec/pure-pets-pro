@@ -88,24 +88,19 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 #pragma mark - Colors
 
 - (UIColor *)pp_canvasColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.10 green:0.10 blue:0.11 alpha:1.0];
-        }
-        return [UIColor colorWithRed:0.969 green:0.961 blue:0.949 alpha:1.0];
-    }];
+    return [UIColor ppBackground];
 }
 
 - (UIColor *)pp_surfaceColor {
-    return AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    return AppForgroundColr;
 }
 
 - (UIColor *)pp_borderColor {
-    return [SeconderyTextClr colorWithAlphaComponent:0.09] ?: [UIColor.separatorColor colorWithAlphaComponent:0.40];
+    return [SeconderyTextClr colorWithAlphaComponent:0.09];
 }
 
 - (UIColor *)pp_accentColor {
-    return AppPrimaryClr ?: UIColor.systemTealColor;
+    return AppPrimaryClr;
 }
 
 #pragma mark - Building
@@ -148,8 +143,8 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     self.bgGlowTop.layer.shadowRadius = 64.0;
     self.bgGlowTop.layer.shadowOffset = CGSizeZero;
 
-    self.bgGlowBottom.backgroundColor = [[UIColor systemOrangeColor] colorWithAlphaComponent:isDark ? 0.035 : 0.075];
-    self.bgGlowBottom.layer.shadowColor = UIColor.systemOrangeColor.CGColor;
+    self.bgGlowBottom.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:isDark ? 0.035 : 0.075];
+    self.bgGlowBottom.layer.shadowColor = [UIColor ppWarning].CGColor;
     self.bgGlowBottom.layer.shadowOpacity = isDark ? 0.03 : 0.06;
     self.bgGlowBottom.layer.shadowRadius = 72.0;
     self.bgGlowBottom.layer.shadowOffset = CGSizeZero;
@@ -192,13 +187,13 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     self.eyebrowLabel.text = [kLang(@"AdoptPro_ListEyebrow") uppercaseString];
     [self.heroSurfaceView addSubview:self.eyebrowLabel];
 
-    self.titleLabel = [self labelWithFont:[Styling fontBold:30.0] color:PrimaryTextClr ?: UIColor.labelColor lines:2];
+    self.titleLabel = [self labelWithFont:[Styling fontBold:30.0] color:PrimaryTextClr lines:2];
     self.titleLabel.text = kLang(@"AdoptPro_ListTitle");
     self.titleLabel.adjustsFontSizeToFitWidth = YES;
     self.titleLabel.minimumScaleFactor = 0.82;
     [self.heroSurfaceView addSubview:self.titleLabel];
 
-    self.subtitleLabel = [self labelWithFont:[Styling fontRegular:14.0] color:SeconderyTextClr ?: UIColor.secondaryLabelColor lines:2];
+    self.subtitleLabel = [self labelWithFont:[Styling fontRegular:14.0] color:SeconderyTextClr lines:2];
     self.subtitleLabel.text = kLang(@"AdoptPro_ListSubtitle");
     [self.heroSurfaceView addSubview:self.subtitleLabel];
 
@@ -229,7 +224,7 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     self.filterControl.selectedSegmentTintColor = [[self pp_accentColor] colorWithAlphaComponent:0.18];
     [self.filterControl setTitleTextAttributes:@{
         NSFontAttributeName: [Styling fontBold:11.0],
-        NSForegroundColorAttributeName: SeconderyTextClr ?: UIColor.secondaryLabelColor
+        NSForegroundColorAttributeName: SeconderyTextClr
     } forState:UIControlStateNormal];
     [self.filterControl setTitleTextAttributes:@{
         NSFontAttributeName: [Styling fontBold:11.0],
@@ -303,7 +298,7 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 
     UILabel *caption = [self labelWithFont:[Styling fontMedium:10.5] color:[SeconderyTextClr colorWithAlphaComponent:0.78] lines:1];
     caption.text = title;
-    UILabel *valueLabel = [self labelWithFont:[Styling fontBold:20.0] color:PrimaryTextClr ?: UIColor.labelColor lines:1];
+    UILabel *valueLabel = [self labelWithFont:[Styling fontBold:20.0] color:PrimaryTextClr lines:1];
     valueLabel.text = value;
     valueLabel.tag = 9151;
 
@@ -360,12 +355,12 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     icon.tintColor = [self pp_accentColor];
     [iconShell addSubview:icon];
 
-    self.emptyTitleLabel = [self labelWithFont:[Styling fontBold:21.0] color:PrimaryTextClr ?: UIColor.labelColor lines:2];
+    self.emptyTitleLabel = [self labelWithFont:[Styling fontBold:21.0] color:PrimaryTextClr lines:2];
     self.emptyTitleLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyTitleLabel.text = kLang(@"AdoptPro_EmptyTitle");
     [self.emptyStateView addSubview:self.emptyTitleLabel];
 
-    self.emptySubtitleLabel = [self labelWithFont:[Styling fontRegular:14.0] color:SeconderyTextClr ?: UIColor.secondaryLabelColor lines:3];
+    self.emptySubtitleLabel = [self labelWithFont:[Styling fontRegular:14.0] color:SeconderyTextClr lines:3];
     self.emptySubtitleLabel.textAlignment = NSTextAlignmentCenter;
     self.emptySubtitleLabel.text = kLang(@"AdoptPro_EmptySubtitle");
     [self.emptyStateView addSubview:self.emptySubtitleLabel];
@@ -378,7 +373,7 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     self.loadingIndicator.color = [self pp_accentColor];
     [self.view addSubview:self.loadingIndicator];
 
-    self.stateLabel = [self labelWithFont:[Styling fontMedium:13.0] color:SeconderyTextClr ?: UIColor.secondaryLabelColor lines:2];
+    self.stateLabel = [self labelWithFont:[Styling fontMedium:13.0] color:SeconderyTextClr lines:2];
     self.stateLabel.textAlignment = NSTextAlignmentCenter;
     [self.view addSubview:self.stateLabel];
 
@@ -437,10 +432,10 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
     btn.translatesAutoresizingMaskIntoConstraints = NO;
     btn.tintColor = [self pp_accentColor];
-    btn.backgroundColor = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    btn.backgroundColor = AppForgroundColr;
     btn.layer.cornerRadius = 22.0;
     btn.layer.cornerCurve = kCACornerCurveContinuous;
-    btn.layer.shadowColor = (AppShadowColor ?: UIColor.blackColor).CGColor;
+    btn.layer.shadowColor = (AppShadowColor).CGColor;
     btn.layer.shadowOpacity = 0.08;
     btn.layer.shadowRadius = 14.0;
     btn.layer.shadowOffset = CGSizeMake(0, 7.0);

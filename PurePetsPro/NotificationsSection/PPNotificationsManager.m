@@ -145,59 +145,6 @@ static NSString *PPNotificationV2ProEnvironment(void)
     }];
 }
 
-- (void)clearProviderTokenForUserID:(NSString *)userID
-                         completion:(void (^)(NSError * _Nullable))completion {
-    NSString *safeUserID = [PPNotificationsManager pp_trimmedString:userID];
-    NSString *localToken = [PPNotificationsManager pp_trimmedString:self.deviceToken];
-    if (localToken.length == 0) {
-        localToken = [PPNotificationsManager pp_trimmedString:[FIRMessaging messaging].FCMToken];
-    }
-
-    if (safeUserID.length == 0) {
-        if (completion) completion(nil);
-        return;
-    }
-
-    FIRFirestore *firestore = [FIRFirestore firestore];
-    FIRDocumentReference *userRef = [[firestore collectionWithPath:@"UsersCol"] documentWithPath:safeUserID];
-
-    [firestore runTransactionWithBlock:^id _Nullable(FIRTransaction * _Nonnull transaction,
-                                                       NSError * _Nullable * _Nonnull errorPointer) {
-        FIRDocumentSnapshot *snapshot = [transaction getDocument:userRef error:errorPointer];
-        if (*errorPointer || !snapshot.exists) {
-            return @NO;
-        }
-
-        NSString *storedToken = [PPNotificationsManager pp_trimmedString:snapshot[@"PPProTokenID"]];
-        BOOL tokenBelongsToThisDevice =
-            storedToken.length == 0 ||
-            localToken.length == 0 ||
-            [storedToken isEqualToString:localToken];
-
-        if (!tokenBelongsToThisDevice) {
-            NSLog(@"[FIRMessaging] Skipping Pro token clear because another device owns the latest token.");
-            return @NO;
-        }
-
-        [transaction updateData:@{
-            @"PPProTokenID": @"",
-            @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp]
-        } forDocument:userRef];
-        return @YES;
-    } completion:^(id _Nullable result, NSError * _Nullable error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (error) {
-                NSLog(@"[FIRMessaging] Failed clearing Pro token for %@: %@", safeUserID, error.localizedDescription);
-            } else if ([result boolValue]) {
-                NSLog(@"[FIRMessaging] Cleared Pro token registration for %@", safeUserID);
-            } else {
-                NSLog(@"[FIRMessaging] No matching Pro token registration needed clearing for %@", safeUserID);
-            }
-            if (completion) completion(error);
-        });
-    }];
-}
-
 - (void)deactivateNotificationDeviceV2WithReason:(NSString *)reason
                                       completion:(void (^)(NSError * _Nullable))completion {
     NSString *safeUID = [PPNotificationsManager pp_trimmedString:[FIRAuth auth].currentUser.uid];

@@ -139,10 +139,10 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
         self.disableButton = [UIButton buttonWithType:UIButtonTypeSystem];
         self.disableButton.translatesAutoresizingMaskIntoConstraints = NO;
         self.disableButton.titleLabel.font = PPFontBold(12);
-        self.disableButton.backgroundColor = [UIColor.systemRedColor colorWithAlphaComponent:0.09];
+        self.disableButton.backgroundColor = [[UIColor ppError] colorWithAlphaComponent:0.09];
         self.disableButton.layer.cornerRadius = 13.0;
         [self.disableButton setTitle:kLang(@"DeliveryCompany_Members_Disable") forState:UIControlStateNormal];
-        [self.disableButton setTitleColor:UIColor.systemRedColor forState:UIControlStateNormal];
+        [self.disableButton setTitleColor:[UIColor ppError] forState:UIControlStateNormal];
         [self.disableButton addTarget:self action:@selector(disableTapped) forControlEvents:UIControlEventTouchUpInside];
 
         self.chevronView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:(Language.isRTL ? @"chevron.left" : @"chevron.right")]];
@@ -235,7 +235,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
         ? kLang(@"DeliveryCompany_Members_Disabled")
         : (member.available ? kLang(@"DeliveryCompany_Members_Available") : kLang(@"DeliveryCompany_Members_Unavailable"));
     self.availabilityLabel.text = availability;
-    self.availabilityLabel.textColor = [member.status isEqualToString:@"active"] && member.available ? UIColor.systemGreenColor : UIColor.systemOrangeColor;
+    self.availabilityLabel.textColor = [member.status isEqualToString:@"active"] && member.available ? [UIColor ppSuccess] : [UIColor ppWarning];
     self.activeCountLabel.text = [NSString stringWithFormat:kLang(@"DeliveryCompany_Members_ActiveCount_Format"), (long)member.activeDeliveryCount];
     self.disableButton.hidden = !showDisable;
     self.chevronView.hidden = showDisable;
@@ -423,16 +423,16 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 - (void)applyValidationStateWithMessage:(NSString *)message valid:(BOOL)valid highlighted:(BOOL)highlighted {
     self.fieldValid = valid;
     self.helperLabel.text = message;
-    UIColor *accent = valid ? UIColor.systemGreenColor : (highlighted ? UIColor.systemOrangeColor : SeconderyTextClr);
+    UIColor *accent = valid ? [UIColor ppSuccess] : (highlighted ? [UIColor ppWarning] : SeconderyTextClr);
     self.helperLabel.textColor = accent;
     CGFloat borderAlpha = (valid || highlighted) ? 0.28 : 0.08;
     self.surface.layer.borderColor = [accent colorWithAlphaComponent:borderAlpha].CGColor;
     self.surface.backgroundColor = valid
-        ? [UIColor.systemGreenColor colorWithAlphaComponent:0.055]
-        : (highlighted ? [UIColor.systemOrangeColor colorWithAlphaComponent:0.05] : [AppForgroundColr colorWithAlphaComponent:0.96]);
+        ? [[UIColor ppSuccess] colorWithAlphaComponent:0.055]
+        : (highlighted ? [[UIColor ppWarning] colorWithAlphaComponent:0.05] : [AppForgroundColr colorWithAlphaComponent:0.96]);
     NSString *imageName = valid ? @"checkmark.circle.fill" : (highlighted ? @"exclamationmark.circle.fill" : @"circle");
     self.statusImageView.image = [UIImage systemImageNamed:imageName];
-    self.statusImageView.tintColor = valid ? UIColor.systemGreenColor : (highlighted ? UIColor.systemOrangeColor : [SeconderyTextClr colorWithAlphaComponent:0.42]);
+    self.statusImageView.tintColor = valid ? [UIColor ppSuccess] : (highlighted ? [UIColor ppWarning] : [SeconderyTextClr colorWithAlphaComponent:0.42]);
 }
 
 @end
@@ -1079,13 +1079,13 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
             subtitle = kLang(@"DeliveryCompany_Members_InviteSheet_StatusIdleSubtitle");
             break;
         case PPDeliveryCompanyInviteVerificationStateNeedsAttention:
-            accent = UIColor.systemOrangeColor;
+            accent = [UIColor ppWarning];
             iconName = @"exclamationmark.shield.fill";
             title = kLang(@"DeliveryCompany_Members_InviteSheet_StatusNeedsAttentionTitle");
             subtitle = kLang(@"DeliveryCompany_Members_InviteSheet_StatusNeedsAttentionSubtitle");
             break;
         case PPDeliveryCompanyInviteVerificationStateReady: {
-            accent = UIColor.systemGreenColor;
+            accent = [UIColor ppSuccess];
             iconName = @"checkmark.shield.fill";
             title = kLang(@"DeliveryCompany_Members_InviteSheet_StatusReadyTitle");
             NSString *methodKey = @"DeliveryCompany_Members_InviteSheet_MethodUID";
@@ -1106,13 +1106,13 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
             subtitle = kLang(@"DeliveryCompany_Members_InviteSheet_StatusSubmittingSubtitle");
             break;
         case PPDeliveryCompanyInviteVerificationStateSuccess:
-            accent = UIColor.systemGreenColor;
+            accent = [UIColor ppSuccess];
             iconName = @"checkmark.seal.fill";
             title = kLang(@"DeliveryCompany_Members_InviteSheet_StatusSuccessTitle");
             subtitle = kLang(@"DeliveryCompany_Members_InviteSheet_StatusSuccessSubtitle");
             break;
         case PPDeliveryCompanyInviteVerificationStateFailure:
-            accent = UIColor.systemRedColor;
+            accent = [UIColor ppError];
             iconName = @"xmark.shield.fill";
             title = kLang(@"DeliveryCompany_Members_InviteSheet_StatusFailureTitle");
             subtitle = error.localizedDescription.length ? error.localizedDescription : kLang(@"DeliveryCompany_Members_InviteSheet_StatusFailureSubtitle");
@@ -1122,7 +1122,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
     self.statusTitleLabel.text = title;
     self.statusSubtitleLabel.text = subtitle;
     self.statusTitleLabel.textColor = accent;
-    self.statusSubtitleLabel.textColor = (state == PPDeliveryCompanyInviteVerificationStateFailure) ? [UIColor.systemRedColor colorWithAlphaComponent:0.9] : SeconderyTextClr;
+    self.statusSubtitleLabel.textColor = (state == PPDeliveryCompanyInviteVerificationStateFailure) ? [[UIColor ppError] colorWithAlphaComponent:0.9] : SeconderyTextClr;
     self.statusIconView.image = [UIImage systemImageNamed:iconName];
     self.statusIconView.tintColor = accent;
 }
@@ -1134,7 +1134,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
     self.roleLockLabel.text = rolesEnabled
         ? kLang(@"DeliveryCompany_Members_InviteSheet_RoleUnlocked")
         : kLang(@"DeliveryCompany_Members_InviteSheet_RoleLocked");
-    self.roleLockLabel.textColor = rolesEnabled ? SeconderyTextClr : UIColor.systemOrangeColor;
+    self.roleLockLabel.textColor = rolesEnabled ? SeconderyTextClr : [UIColor ppWarning];
 
     for (PPDeliveryCompanyInviteRoleButton *button in self.roleButtons) {
         [button applySelected:[button.role isEqualToString:self.selectedRole] enabled:rolesEnabled];
@@ -1312,7 +1312,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 
     UIButton *callButton = [self actionButtonWithTitle:kLang(@"DeliveryCompany_Members_Sheet_Call")
                                                   icon:@"phone.fill"
-                                                 color:UIColor.systemGreenColor
+                                                 color:[UIColor ppSuccess]
                                                 action:@selector(callTapped)];
     callButton.enabled = self.member.phone.length > 0;
     callButton.alpha = callButton.enabled ? 1.0 : 0.48;
@@ -1320,7 +1320,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 
     UIButton *chatButton = [self actionButtonWithTitle:kLang(@"DeliveryCompany_Members_Sheet_Chat")
                                                   icon:@"message.fill"
-                                                 color:UIColor.systemBlueColor
+                                                 color:[UIColor ppInfo]
                                                 action:@selector(chatTapped)];
     NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
     BOOL canChat = self.member.uid.length > 0 && ![self.member.uid isEqualToString:currentUID];
@@ -1562,8 +1562,8 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 }
 
 - (UIColor *)availabilityColor {
-    if (![self.member.status isEqualToString:@"active"]) return UIColor.systemOrangeColor;
-    return self.member.available ? UIColor.systemGreenColor : UIColor.systemOrangeColor;
+    if (![self.member.status isEqualToString:@"active"]) return [UIColor ppWarning];
+    return self.member.available ? [UIColor ppSuccess] : [UIColor ppWarning];
 }
 
 - (void)callTapped {

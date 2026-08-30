@@ -92,7 +92,7 @@ static const CGFloat PPQuickActionRailCardShadowInset = 4.0;
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.font = [Styling fontBold:19.0];
-    self.titleLabel.textColor = UIColor.labelColor;
+    self.titleLabel.textColor = [UIColor ppTextPrimary];
     self.titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     self.titleLabel.numberOfLines = 1;
     [self.sectionCardView addSubview:self.titleLabel];
@@ -106,7 +106,7 @@ static const CGFloat PPQuickActionRailCardShadowInset = 4.0;
     self.trailingButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.28];
     self.trailingButton.contentEdgeInsets = UIEdgeInsetsMake(7.0, 12.0, 7.0, 12.0);
     self.trailingButton.titleLabel.font = [Styling fontMedium:12.0];
-    [self.trailingButton setTitleColor:UIColor.labelColor forState:UIControlStateNormal];
+    [self.trailingButton setTitleColor:[UIColor ppTextPrimary] forState:UIControlStateNormal];
     [self.trailingButton addTarget:self action:@selector(pp_didTapTrailingButton) forControlEvents:UIControlEventTouchUpInside];
     [PPButtonHelper attachTapAnimationToButton:self.trailingButton style:PPButtonAnimationStyleDefault];
     [self.sectionCardView addSubview:self.trailingButton];
@@ -331,7 +331,7 @@ static const CGFloat PPQuickActionRailCardShadowInset = 4.0;
 
     self.cardView = [[UIView alloc] init];
     self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.cardView.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+    self.cardView.backgroundColor = [UIColor ppBackground];
     self.cardView.layer.cornerRadius = PPQuickActionRailCornerRadius;
     self.cardView.layer.cornerCurve = kCACornerCurveContinuous;
     self.cardView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
@@ -360,7 +360,7 @@ static const CGFloat PPQuickActionRailCardShadowInset = 4.0;
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.font = [UIFont fontWithName:@"Beiruti-Bold" size:13.5];
-    self.titleLabel.textColor = [UIColor labelColor];
+    self.titleLabel.textColor = [UIColor ppTextPrimary];
     self.titleLabel.numberOfLines = 2;
     self.titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     [self.cardView addSubview:self.titleLabel];
@@ -368,7 +368,7 @@ static const CGFloat PPQuickActionRailCardShadowInset = 4.0;
     self.badgeLabel = [[UILabel alloc] init];
     self.badgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.badgeLabel.font = [UIFont fontWithName:@"Beiruti-Bold" size:11.0];
-    self.badgeLabel.textColor = UIColor.labelColor;
+    self.badgeLabel.textColor = [UIColor ppTextPrimary];
     self.badgeLabel.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
         return tc.userInterfaceStyle == UIUserInterfaceStyleDark
             ? [UIColor colorWithWhite:1.0 alpha:0.18]
@@ -383,7 +383,7 @@ static const CGFloat PPQuickActionRailCardShadowInset = 4.0;
 
     self.chevronView = [[UIImageView alloc] init];
     self.chevronView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.chevronView.tintColor = [UIColor secondaryLabelColor];
+    self.chevronView.tintColor = [UIColor ppTextSecondary];
     self.chevronView.contentMode = UIViewContentModeScaleAspectFit;
     self.chevronView.image = [UIImage systemImageNamed:Language.isRTL ? @"chevron.left" : @"chevron.right"];
     [self.cardView addSubview:self.chevronView];
@@ -466,7 +466,7 @@ static const CGFloat PPQuickActionRailCardShadowInset = 4.0;
         self.badgeLabel.backgroundColor = actionColor;
         self.badgeLabel.layer.borderWidth = 0.0;
     } else {
-        self.badgeLabel.textColor = UIColor.labelColor;
+        self.badgeLabel.textColor = [UIColor ppTextPrimary];
         self.badgeLabel.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
             return tc.userInterfaceStyle == UIUserInterfaceStyleDark
                 ? [UIColor colorWithWhite:1.0 alpha:0.18]
@@ -487,13 +487,24 @@ static const CGFloat PPQuickActionRailCardShadowInset = 4.0;
 }
 
 - (void)pp_applySolidItemBackgroundWithActionColor:(UIColor *)actionColor {
-    BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
-    UIColor *baseColor = isDark
-        ? [UIColor colorWithRed:0.090 green:0.096 blue:0.112 alpha:1.0]
-        : [UIColor colorWithRed:0.988 green:0.982 blue:0.966 alpha:1.0];
+    UIColor *baseColor = [UIColor ppElevatedSurface];
     self.cardView.backgroundColor = [self pp_colorByBlendingBaseColor:baseColor
                                                             withColor:actionColor
-                                                               amount:(isDark ? 0.22 : 0.11)];
+                                                               amount:0.11];
+}
+
+- (UIColor *)pp_ultraPremiumColorWithLightRed:(CGFloat)lightRed green:(CGFloat)lightGreen blue:(CGFloat)lightBlue darkRed:(CGFloat)darkRed green:(CGFloat)darkGreen blue:(CGFloat)darkBlue {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+            if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
+                return [UIColor colorWithRed:darkRed green:darkGreen blue:darkBlue alpha:1.0];
+            } else {
+                return [UIColor colorWithRed:lightRed green:lightGreen blue:lightBlue alpha:1.0];
+            }
+        }];
+    } else {
+        return [UIColor colorWithRed:lightRed green:lightGreen blue:lightBlue alpha:1.0];
+    }
 }
 
 - (UIColor *)pp_colorByBlendingBaseColor:(UIColor *)baseColor withColor:(UIColor *)overlayColor amount:(CGFloat)amount {
@@ -521,67 +532,38 @@ static const CGFloat PPQuickActionRailCardShadowInset = 4.0;
 - (UIColor *)pp_premiumActionColorForItem:(PPDashboardQuickActionRailItem *)item
                                     style:(PPDashboardQuickActionRailStyle)style
                             fallbackColor:(UIColor *)fallbackColor {
+    (void)fallbackColor;
     NSString *signature = [NSString stringWithFormat:@"%@ %@", item.titleKey ?: @"", item.iconName ?: @""].lowercaseString;
     if ([signature containsString:@"fulfillment"] || [signature containsString:@"shippingbox"]) {
-        return [self pp_ultraPremiumColorWithLightRed:0.225 green:0.208 blue:0.510
-                                              darkRed:0.690 green:0.655 blue:1.000];
+        return [UIColor ppPremiumAccent];
     }
     if ([signature containsString:@"market"] || [signature containsString:@"bag"] || [signature containsString:@"branch"]) {
-        return [self pp_ultraPremiumColorWithLightRed:0.000 green:0.445 blue:0.392
-                                              darkRed:0.410 green:0.875 blue:0.800];
+        return [UIColor ppQuickActionShopping];
     }
     if ([signature containsString:@"delivery"] || [signature containsString:@"truck"] || [signature containsString:@"location"]) {
-        return [self pp_ultraPremiumColorWithLightRed:0.050 green:0.275 blue:0.560
-                                              darkRed:0.455 green:0.735 blue:1.000];
+        return [UIColor ppQuickActionCommunity];
     }
     if ([signature containsString:@"pharmacy"] || [signature containsString:@"pill"]) {
-        return [self pp_ultraPremiumColorWithLightRed:0.085 green:0.520 blue:0.355
-                                              darkRed:0.455 green:0.900 blue:0.635];
+        return [UIColor ppSuccess];
     }
     if ([signature containsString:@"vet"] || [signature containsString:@"cross"]) {
-        return [self pp_ultraPremiumColorWithLightRed:0.610 green:0.095 blue:0.170
-                                              darkRed:1.000 green:0.515 blue:0.555];
+        return [UIColor ppQuickActionServices];
     }
     if ([signature containsString:@"adopt"] || [signature containsString:@"heart"]) {
-        return [self pp_ultraPremiumColorWithLightRed:0.665 green:0.165 blue:0.390
-                                              darkRed:1.000 green:0.565 blue:0.730];
+        return [UIColor ppQuickActionAdoption];
     }
     if ([signature containsString:@"notification"] || [signature containsString:@"bell"]) {
-        return [self pp_ultraPremiumColorWithLightRed:0.695 green:0.355 blue:0.060
-                                              darkRed:1.000 green:0.685 blue:0.310];
+        return [UIColor ppWarning];
     }
     if ([signature containsString:@"support"] || [signature containsString:@"message"]) {
-        return [self pp_ultraPremiumColorWithLightRed:0.435 green:0.200 blue:0.565
-                                              darkRed:0.795 green:0.610 blue:0.980];
+        return [UIColor ppQuickActionAnimals];
     }
     if ([signature containsString:@"profile"] || [signature containsString:@"person"] || [signature containsString:@"pencil"] || [signature containsString:@"building"]) {
-        return [self pp_ultraPremiumColorWithLightRed:0.455 green:0.335 blue:0.240
-                                              darkRed:0.835 green:0.695 blue:0.560];
+        return [UIColor ppMineralBeige];
     }
-    UIColor *styleFallback = style == PPDashboardQuickActionRailStyleDeliveryMember
-        ? [self pp_ultraPremiumColorWithLightRed:0.050 green:0.275 blue:0.560
-                                         darkRed:0.455 green:0.735 blue:1.000]
-        : [self pp_ultraPremiumColorWithLightRed:0.000 green:0.445 blue:0.392
-                                         darkRed:0.410 green:0.875 blue:0.800];
-    return styleFallback;
-}
-
-- (UIColor *)pp_ultraPremiumColorWithLightRed:(CGFloat)lightRed
-                                        green:(CGFloat)lightGreen
-                                         blue:(CGFloat)lightBlue
-                                      darkRed:(CGFloat)darkRed
-                                        green:(CGFloat)darkGreen
-                                         blue:(CGFloat)darkBlue {
-    if (@available(iOS 13.0, *)) {
-        return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traitCollection) {
-            BOOL isDark = traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
-            return [UIColor colorWithRed:(isDark ? darkRed : lightRed)
-                                   green:(isDark ? darkGreen : lightGreen)
-                                    blue:(isDark ? darkBlue : lightBlue)
-                                   alpha:1.0];
-        }];
-    }
-    return [UIColor colorWithRed:lightRed green:lightGreen blue:lightBlue alpha:1.0];
+    return style == PPDashboardQuickActionRailStyleDeliveryMember
+        ? [UIColor ppQuickActionCommunity]
+        : [UIColor ppQuickActionShopping];
 }
 
 @end

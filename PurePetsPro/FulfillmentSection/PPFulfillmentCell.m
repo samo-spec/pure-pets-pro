@@ -20,57 +20,27 @@
 + (CGFloat)preferredHeight { return 112.0; }
 
 + (UIColor *)pp_cellSurfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traitCollection) {
-        if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [[UIColor colorWithRed:0.055 green:0.078 blue:0.070 alpha:1.0] colorWithAlphaComponent:0.78];
-        }
-        return [UIColor.whiteColor colorWithAlphaComponent:0.94];
-    }];
+    return [[UIColor ppSurface] colorWithAlphaComponent:0.94];
 }
 
 + (UIColor *)pp_cellSurfaceBorderColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traitCollection) {
-        if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [[UIColor colorWithRed:0.60 green:0.96 blue:0.80 alpha:1.0] colorWithAlphaComponent:0.10];
-        }
-        return [SeconderyTextClr colorWithAlphaComponent:0.08];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
 }
 
 + (UIColor *)pp_cellPrimaryTextColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traitCollection) {
-        if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [[UIColor colorWithRed:0.94 green:0.98 blue:0.96 alpha:1.0] colorWithAlphaComponent:0.98];
-        }
-        return PrimaryTextClr;
-    }];
+    return [UIColor ppTextPrimary];
 }
 
 + (UIColor *)pp_cellSecondaryTextColorWithAlpha:(CGFloat)alpha {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traitCollection) {
-        if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [[UIColor colorWithRed:0.72 green:0.82 blue:0.78 alpha:1.0] colorWithAlphaComponent:alpha];
-        }
-        return [SeconderyTextClr colorWithAlphaComponent:alpha];
-    }];
+    return [[UIColor ppTextSecondary] colorWithAlphaComponent:alpha];
 }
 
 + (UIColor *)pp_amountPillColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traitCollection) {
-        if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [[UIColor colorWithRed:0.16 green:0.115 blue:0.060 alpha:1.0] colorWithAlphaComponent:0.54];
-        }
-        return [[UIColor colorWithRed:0.98 green:0.94 blue:0.86 alpha:1.0] colorWithAlphaComponent:0.82];
-    }];
+    return [[UIColor ppMineralBeige] colorWithAlphaComponent:0.82];
 }
 
 + (UIColor *)pp_amountTextColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traitCollection) {
-        if (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.98 green:0.91 blue:0.70 alpha:1.0];
-        }
-        return [UIColor colorWithRed:0.66 green:0.43 blue:0.16 alpha:1.0];
-    }];
+    return [UIColor ppPremiumAccent];
 }
 
 - (UIBlurEffect *)pp_amountBlurEffect {
@@ -122,7 +92,7 @@
         _amountPillView.layer.cornerRadius = 14.0;
         _amountPillView.layer.cornerCurve = kCACornerCurveContinuous;
         _amountPillView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-        _amountPillView.layer.borderColor = [[UIColor colorWithRed:0.98 green:0.82 blue:0.48 alpha:1.0] colorWithAlphaComponent:0.22].CGColor;
+        _amountPillView.layer.borderColor = [[UIColor ppPremiumAccent] colorWithAlphaComponent:0.22].CGColor;
         _amountPillView.translatesAutoresizingMaskIntoConstraints = NO;
         [_surfaceView addSubview:_amountPillView];
 

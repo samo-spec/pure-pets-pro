@@ -22,7 +22,7 @@ static NSInteger PPGetPickerTag(UIViewController *vc) {
 }
 
 static UIColor *PPProviderSheetAccentColor(void) {
-    return AppPrimaryClr ?: UIColor.systemTealColor;
+    return AppPrimaryClr;
 }
 
 static UIColor *PPProviderSheetActionTextOnAccentColor(void) {
@@ -31,39 +31,33 @@ static UIColor *PPProviderSheetActionTextOnAccentColor(void) {
 
 static UIColor *PPProviderSheetBackgroundColor(void) {
     if (@available(iOS 13.0, *)) {
-        return UIColor.systemBackgroundColor;
+        return [UIColor ppSurface];
     }
-    return AppBackgroundClr ?: UIColor.whiteColor;
+    return AppBackgroundClr;
 }
 
 static UIColor *PPProviderSheetSurfaceColor(void) {
-    return AppForgroundColr ?: UIColor.systemBackgroundColor;
+    return AppForgroundColr;
 }
 
 static UIColor *PPProviderSheetMatteColor(void) {
-    if (@available(iOS 13.0, *)) {
-        return UIColor.secondarySystemGroupedBackgroundColor;
-    }
-    return [UIColor colorWithWhite:0.96 alpha:1.0];
+    return [UIColor ppBackground];
 }
 
 static UIColor *PPProviderSheetSoftFillColor(void) {
-    if (@available(iOS 13.0, *)) {
-        return [UIColor.secondarySystemBackgroundColor colorWithAlphaComponent:0.5];
-    }
-    return [UIColor colorWithWhite:0.90 alpha:1.0];
+    return [[UIColor ppElevatedSurface] colorWithAlphaComponent:0.5];
 }
 
 static UIColor *PPProviderSheetPrimaryTextColor(void) {
-    return UIColor.labelColor;
+    return [UIColor ppTextPrimary];
 }
 
 static UIColor *PPProviderSheetSecondaryTextColor(void) {
-    return UIColor.secondaryLabelColor;
+    return [UIColor ppTextSecondary];
 }
 
 static UIColor *PPProviderSheetShadowColor(void) {
-    return AppShadowColor ?: [UIColor colorWithWhite:0.0 alpha:1.0];
+    return AppShadowColor;
 }
 
 static NSDictionary *PPProviderSheetOption(NSString *value, NSString *titleKey, NSString *subtitleKey) {
@@ -1543,7 +1537,7 @@ static NSInteger const PPDCAttachTagCommercialReg = 200;
     removeButton.hidden = YES;
     UIImage *removeIcon = [UIImage systemImageNamed:@"xmark.circle.fill"];
     [removeButton setImage:removeIcon forState:UIControlStateNormal];
-    removeButton.tintColor = [UIColor.systemRedColor colorWithAlphaComponent:0.72];
+    removeButton.tintColor = [[UIColor ppError] colorWithAlphaComponent:0.72];
     removeButton.backgroundColor = UIColor.clearColor;
     [removeButton addTarget:self action:@selector(pp_removeDocumentTapped:) forControlEvents:UIControlEventTouchUpInside];
     [NSLayoutConstraint activateConstraints:@[

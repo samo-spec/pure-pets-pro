@@ -14,13 +14,13 @@
 
 + (UIColor *)pp_selectedCellColorFromPrimaryWithAlpha:(float)cusAlpha
 {
-    UIColor *primary = AppPrimaryClr ?: [UIColor systemBlueColor];
+    UIColor *primary = [UIColor ppPrimary];
     return [primary colorWithAlphaComponent:MAX(0.0f, MIN(1.0f, cusAlpha))];
 }
 
 + (UIColor *)pp_selectedCellColorFromPrimaryFull
 {
-    return AppPrimaryClr ?: [UIColor systemBlueColor];
+    return [UIColor ppPrimary];
 }
 
 @end

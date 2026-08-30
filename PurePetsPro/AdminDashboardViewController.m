@@ -23,9 +23,11 @@
 #import "PPDeliveryCompanyDetailViewController.h"
 #import "PPDeliveryCompanyMembersViewController.h"
 #import "PPDeliveryOrderModel.h"
+#import "PPDeliveryOrderDetailViewController.h"
 #import "PPDeliveryManager.h"
 #import "PPFulfillmentManager.h"
 #import "PPFulfillmentModel.h"
+#import "PPFulfillmentDetailViewController.h"
 #import "PPServicesListViewController.h"
 #import "PPProviderApplicationManager.h"
 #import "PPProviderSubscriptionManagmetVC.h"
@@ -46,6 +48,59 @@ static const NSUInteger PPAdminDashboardMaxQuickActionCount = 3;
 static const NSInteger PPAdminChatMessageStatusRead = 3;
 static NSString * const PPAdminQuickActionSignalDelivery = @"delivery";
 static NSString * const PPAdminQuickActionSignalFulfillment = @"fulfillment";
+
+static NSError *PPProCommandCenterCacheOnlyError(NSString *source) {
+    return [NSError errorWithDomain:@"PurePetsPro.CommandCenterAvailability"
+                               code:1
+                           userInfo:@{
+        NSLocalizedDescriptionKey: @"Operational data is available from the local cache only.",
+        @"source": source ?: @"unknown"
+    }];
+}
+
+static NSString *PPProCommandFormattedAmount(double amount, NSString *currencyCode) {
+    NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
+    formatter.numberStyle = NSNumberFormatterCurrencyStyle;
+    formatter.locale = NSLocale.currentLocale;
+    formatter.currencyCode = currencyCode.length > 0 ? currencyCode : @"QAR";
+    formatter.maximumFractionDigits = 2;
+    return [formatter stringFromNumber:@(amount)] ?: @"";
+}
+
+static PPProCommandDetailDescriptor *PPProCommandDetail(NSString *identifier,
+                                                        NSString *title,
+                                                        NSString *value,
+                                                        NSString *symbolName) {
+    PPProCommandDetailDescriptor *detail = [[PPProCommandDetailDescriptor alloc] init];
+    detail.identifier = identifier ?: @"";
+    detail.title = title ?: @"";
+    detail.value = value ?: @"";
+    detail.symbolName = symbolName ?: @"info.circle.fill";
+    return detail;
+}
+
+static PPProCommandQuickActionDescriptor *PPProCommandQuickAction(NSString *identifier,
+                                                                  NSString *title,
+                                                                  NSString *symbolName,
+                                                                  BOOL destructive) {
+    PPProCommandQuickActionDescriptor *action = [[PPProCommandQuickActionDescriptor alloc] init];
+    action.identifier = identifier ?: @"";
+    action.title = title ?: @"";
+    action.symbolName = symbolName ?: @"bolt.fill";
+    action.isDestructive = destructive;
+    return action;
+}
+
+typedef NS_OPTIONS(NSUInteger, PPProCommandDataSource) {
+    PPProCommandDataSourceNone = 0,
+    PPProCommandDataSourceFulfillment = 1 << 0,
+    PPProCommandDataSourceDeliveryOpen = 1 << 1,
+    PPProCommandDataSourceDeliveryAssigned = 1 << 2,
+    PPProCommandDataSourceInbox = 1 << 3,
+    PPProCommandDataSourceSupportThreads = 1 << 4,
+    PPProCommandDataSourceSupportMessages = 1 << 5,
+    PPProCommandDataSourceDeliveryCompanyRequests = 1 << 6,
+};
 
 static BOOL PPProDashboardUserHasPartnerApplicationInReview(UserModel *user) {
     if (![user isKindOfClass:UserModel.class]) {
@@ -68,7 +123,7 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
     return PPSafeString(payload[@"chatId"]);
 }
 
-@interface AdminDashboardViewController ()<TOCropViewControllerDelegate>
+@interface AdminDashboardViewController ()<TOCropViewControllerDelegate, PPProCommandCenterSurfaceControllerDelegate>
 @property (nonatomic, strong) UIButton *addPhotoButton;
 @property (nonatomic, strong) PPQuickActionsView *quickActionsView;
 
@@ -114,6 +169,7 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 @property (nonatomic, strong) id<FIRListenerRegistration> quickActionFulfillmentSignalListener;
 @property (nonatomic, strong) id<FIRListenerRegistration> quickActionDeliveryOpenSignalListener;
 @property (nonatomic, strong) id<FIRListenerRegistration> quickActionDeliveryAssignedSignalListener;
+@property (nonatomic, strong) id quickActionDeliveryAssignedObserver;
 @property (nonatomic, strong) id<FIRListenerRegistration> providerSubscriptionStateListener;
 @property (nonatomic, strong) id<FIRListenerRegistration> pendingOrdersListener;
 @property (nonatomic, strong) id<FIRListenerRegistration> inboxUnreadListener;
@@ -127,8 +183,21 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 @property (nonatomic, copy) NSSet<NSString *> *fulfillmentQuickActionSignals;
 @property (nonatomic, copy) NSSet<NSString *> *deliveryOpenQuickActionSignals;
 @property (nonatomic, copy) NSSet<NSString *> *deliveryAssignedQuickActionSignals;
+@property (nonatomic, copy) NSArray<PPFulfillmentModel *> *actionableFulfillments;
+@property (nonatomic, copy) NSArray<PPDeliveryOrderModel *> *deliveryOpenActionableOrders;
+@property (nonatomic, copy) NSArray<PPDeliveryOrderModel *> *deliveryAssignedActionableOrders;
 @property (nonatomic, strong) NSArray<PPDeliveryOrderModel *> *pendingOrders;
 @property (nonatomic, assign) NSInteger fulfillmentNewRequestsCount;
+@property (nonatomic, assign) PPProCommandDataSource commandLoadedSources;
+@property (nonatomic, assign) PPProCommandDataSource commandDegradedSources;
+@property (nonatomic, assign) BOOL preservesCommandDataDuringRetry;
+@property (nonatomic, assign) BOOL hasConfirmedFulfillmentCommandData;
+@property (nonatomic, assign) BOOL hasConfirmedDeliveryOpenCommandData;
+@property (nonatomic, assign) BOOL hasConfirmedDeliveryAssignedCommandData;
+@property (nonatomic, assign) BOOL hasConfirmedSupportThreadsCommandData;
+@property (nonatomic, assign) BOOL hasConfirmedSupportMessagesCommandData;
+@property (nonatomic, assign) NSUInteger quickActionObservationGeneration;
+@property (nonatomic, assign) NSUInteger supportObservationGeneration;
 @property (nonatomic, strong) PPProviderOnboardingState *providerSubscriptionState;
 @property (nonatomic, strong) NSError *providerSubscriptionError;
 @property (nonatomic, assign) BOOL isProviderSubscriptionLoading;
@@ -142,6 +211,58 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 @property (nonatomic, copy, nullable) NSString *deliveryCompanyDashboardNextPageToken;
 @property (nonatomic, strong, nullable) NSError *deliveryCompanyDashboardError;
 @property (nonatomic, assign) BOOL isLoadingDeliveryCompanyDashboard;
+@property (nonatomic, strong, nullable) PPProCommandCenterSurfaceController *commandCenterSurfaceController;
+@property (nonatomic, assign) BOOL isExecutingCommandCenterAction;
+- (void)pp_installCommandCenterSurfaceIfNeeded;
+- (void)pp_refreshCommandCenterSnapshot;
+- (PPProCommandCapabilityDescriptor *)pp_commandCapabilityWithIdentifier:(NSString *)identifier
+                                                                   title:(NSString *)title
+                                                                subtitle:(NSString *)subtitle
+                                                              symbolName:(NSString *)symbolName
+                                                                routeTag:(NSString *)routeTag
+                                                             actionCount:(NSInteger)actionCount
+                                                                readOnly:(BOOL)readOnly;
+- (PPProCommandSignalDescriptor *)pp_commandSignalWithIdentifier:(NSString *)identifier
+                                           capabilityIdentifiers:(NSArray<NSString *> *)capabilityIdentifiers
+                                                          title:(NSString *)title
+                                                       subtitle:(NSString *)subtitle
+                                                     symbolName:(NSString *)symbolName
+                                                       routeTag:(NSString *)routeTag
+                                                     badgeCount:(NSInteger)badgeCount
+                                                        priority:(NSInteger)priority
+                                                          unseen:(BOOL)unseen;
+- (PPProCommandActionDescriptor *)pp_resolveCommandActionTargetForSignalIdentifier:(NSString *)signalIdentifier
+                                                               capabilityIdentifier:(NSString *)capabilityIdentifier
+                                                                    workspaceRouteTag:(NSString *)workspaceRouteTag
+                                                               workspaceActionTitle:(NSString *)workspaceActionTitle
+                                                                            priority:(NSInteger)priority;
+- (PPProCommandActionDescriptor *)pp_workspaceCommandActionTargetWithSignalIdentifier:(NSString *)signalIdentifier
+                                                                    capabilityIdentifier:(NSString *)capabilityIdentifier
+                                                                         workspaceRouteTag:(NSString *)workspaceRouteTag
+                                                                    workspaceActionTitle:(NSString *)workspaceActionTitle
+                                                                                 priority:(NSInteger)priority;
+- (nullable PPFulfillmentModel *)pp_highestPriorityActionableFulfillment;
+- (nullable PPDeliveryOrderModel *)pp_highestPriorityActionableDeliveryOrder;
+- (nullable PPDeliveryCompanyRequest *)pp_highestPriorityActionableDeliveryCompanyRequest;
+- (nullable NSString *)pp_fulfillmentActionKindForModel:(PPFulfillmentModel *)model;
+- (nullable NSString *)pp_deliveryActionKindForOrder:(PPDeliveryOrderModel *)order;
+- (nullable NSString *)pp_deliveryCompanyActionKindForRequest:(PPDeliveryCompanyRequest *)request;
+- (NSString *)pp_primaryActionTitleForFulfillment:(PPFulfillmentModel *)model;
+- (NSString *)pp_primaryActionTitleForDeliveryActionKind:(NSString *)actionKind;
+- (NSString *)pp_primaryActionTitleForDeliveryCompanyActionKind:(NSString *)actionKind;
+- (NSInteger)pp_actionPriorityForFulfillment:(PPFulfillmentModel *)model;
+- (NSInteger)pp_actionPriorityForDeliveryOrder:(PPDeliveryOrderModel *)order;
+- (NSInteger)pp_actionPriorityForDeliveryCompanyRequest:(PPDeliveryCompanyRequest *)request;
+- (BOOL)pp_deliveryOrderBelongsToCurrentDeliveryUser:(PPDeliveryOrderModel *)order;
+- (void)pp_executeCommandCenterActionTarget:(PPProCommandActionDescriptor *)target;
+- (void)pp_executeCommandCenterQuickActionTarget:(PPProCommandActionDescriptor *)target;
+- (void)pp_finishCommandCenterQuickActionWithSuccess:(BOOL)success
+                                              message:(nullable NSString *)message
+                                                error:(nullable NSError *)error;
+- (void)pp_refreshPulseAfterInvalidActionTarget;
+- (void)pp_finishCommandCenterActionNavigation;
+- (void)pp_routeCommandCenterRoute:(NSString *)route;
+- (void)pp_presentCommandCenterMoreMenu;
 - (nullable UserModel *)pp_activeDashboardUser;
 - (BOOL)pp_canAccessPermission:(NSString *)permKey;
 - (BOOL)pp_canManageDelivery;
@@ -205,8 +326,14 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 - (void)pp_updateNotificationsRowBadge;
 - (void)pp_startSupportChatsUnreadObserverForUser:(UserModel *)user;
 - (void)pp_stopSupportChatsUnreadObserver;
+- (void)pp_reconcileSupportChatsObserverForUser:(nullable UserModel *)user;
 - (void)pp_recomputeSupportChatsUnreadCount;
 - (void)pp_updateSupportChatsRowBadge;
+- (PPProCommandDataSource)pp_requiredCommandDataSourcesForUser:(nullable UserModel *)user;
+- (void)pp_beginCommandDataSources:(PPProCommandDataSource)sources;
+- (void)pp_finishCommandDataSource:(PPProCommandDataSource)source error:(nullable NSError *)error;
+- (void)pp_clearCommandDataSources:(PPProCommandDataSource)sources;
+- (void)pp_retryCommandCenterOperationalData;
 - (void)pp_markQuickActionKindSeen:(NSString *)kind;
 - (NSString *)pp_fulfillmentQuickActionSignalFingerprint:(PPFulfillmentModel *)model;
 - (void)pp_applyFulfillmentQuickActionSignals:(NSSet<NSString *> *)signals;
@@ -215,6 +342,8 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 - (BOOL)pp_hasUnseenQuickActionSignals:(NSSet<NSString *> *)signals kind:(NSString *)kind;
 - (NSSet<NSString *> *)pp_currentDeliveryQuickActionSignals;
 - (NSSet<NSString *> *)pp_deliveryQuickActionSignalsFromDocuments:(NSArray<FIRDocumentSnapshot *> *)documents;
+- (NSSet<NSString *> *)pp_deliveryQuickActionSignalsFromOrders:(NSArray<PPDeliveryOrderModel *> *)orders;
+- (NSArray<PPDeliveryOrderModel *> *)pp_deliveryQuickActionOrdersFromDocuments:(NSArray<FIRDocumentSnapshot *> *)documents;
 - (NSString *)pp_deliveryQuickActionSignalFingerprint:(PPDeliveryOrderModel *)order;
 - (void)pp_updateDashboardHeroLiveState;
 - (void)pp_handleDashboardHeroPrimaryAction;
@@ -281,6 +410,9 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
     self = [super initWithForm:[XLFormDescriptor formDescriptor] style:UITableViewStyleInsetGrouped];
     if (self) {
         _deliveryCompanyDashboardRequests = @[];
+        _actionableFulfillments = @[];
+        _deliveryOpenActionableOrders = @[];
+        _deliveryAssignedActionableOrders = @[];
         [self pp_applyDeliveryCompanyProfile:profile];
         self.form = [self buildLoginForm];
     }
@@ -529,6 +661,8 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
         self.deliveryCompanyDashboardRequests = @[];
         self.deliveryCompanyDashboardNextPageToken = nil;
         self.deliveryCompanyDashboardError = nil;
+        self.isLoadingDeliveryCompanyDashboard = NO;
+        [self pp_clearCommandDataSources:PPProCommandDataSourceDeliveryCompanyRequests];
     }
 }
 
@@ -607,12 +741,7 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
 }
 
 - (UIColor *)pp_settingsurfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.17 green:0.17 blue:0.19 alpha:0.92];
-        }
-        return [[UIColor whiteColor] colorWithAlphaComponent:0.82];
-    }];
+    return [UIColor ppElevatedSurface];
 }
 
 - (BOOL)pp_canManageServices {
@@ -719,19 +848,13 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
     if (!self.isDeliveryCompanyMode || !self.deliveryCompanyContext.companyID.length) {
         return 0;
     }
-    PPDeliveryCompanyProfile *profile = self.deliveryCompanyContext;
-    if (profile.isDriver) {
-        NSInteger assignedCount = [self pp_deliveryCompanyCountForStatuses:@[PPDeliveryCompanyStatusAssigned]];
-        NSInteger inTransitCount = [self pp_deliveryCompanyCountForStatuses:@[
-            PPDeliveryCompanyStatusPickedUp,
-            PPDeliveryCompanyStatusInTransit
-        ]];
-        return assignedCount + inTransitCount;
+    NSInteger count = 0;
+    for (PPDeliveryCompanyRequest *request in self.deliveryCompanyDashboardRequests ?: @[]) {
+        if ([self pp_deliveryCompanyActionKindForRequest:request].length > 0) {
+            count++;
+        }
     }
-    if (profile.isViewer) {
-        return 0;
-    }
-    return [self pp_deliveryCompanyCountForStatuses:@[PPDeliveryCompanyStatusOffered]];
+    return count;
 }
 
 - (NSString *)pp_dashboardHeroActionSummaryWithFulfillmentCount:(NSInteger)fulfillmentCount
@@ -861,12 +984,17 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
 
 - (void)pp_refreshDeliveryCompanyDashboardSummary {
     PPDeliveryCompanyProfile *profile = self.deliveryCompanyContext;
-    if (!self.isDeliveryCompanyMode || !profile.companyID.length || self.isLoadingDeliveryCompanyDashboard) {
+    if (!self.isDeliveryCompanyMode || !profile.companyID.length) {
+        [self pp_clearCommandDataSources:PPProCommandDataSourceDeliveryCompanyRequests];
+        return;
+    }
+    if (self.isLoadingDeliveryCompanyDashboard) {
         return;
     }
 
     self.isLoadingDeliveryCompanyDashboard = YES;
     self.deliveryCompanyDashboardError = nil;
+    [self pp_beginCommandDataSources:PPProCommandDataSourceDeliveryCompanyRequests];
     [self pp_updateDashboardHeroLiveState];
     __weak typeof(self) weakSelf = self;
     [PPDeliveryCompanyService.shared listRequestsForProfile:profile
@@ -876,7 +1004,13 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
                                                              NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) self = weakSelf;
-            if (!self || ![self.deliveryCompanyId isEqualToString:profile.companyID]) {
+            if (!self) {
+                return;
+            }
+            if (![self.deliveryCompanyId isEqualToString:profile.companyID]) {
+                self.isLoadingDeliveryCompanyDashboard = NO;
+                [self pp_clearCommandDataSources:PPProCommandDataSourceDeliveryCompanyRequests];
+                [self pp_refreshDeliveryCompanyDashboardSummary];
                 return;
             }
             self.isLoadingDeliveryCompanyDashboard = NO;
@@ -887,6 +1021,7 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
             }
             [self pp_updateDashboardHeroLiveState];
             [self pp_refreshQuickActions];
+            [self pp_finishCommandDataSource:PPProCommandDataSourceDeliveryCompanyRequests error:error];
         });
     }];
 }
@@ -911,6 +1046,9 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
 }
 
 - (void)pp_openProfileSettings {
+    if (![self pp_activeDashboardUser]) {
+        return;
+    }
     [PPFunc pp_playTapEffect];
     PPProProfileSettingsViewController *controller = [[PPProProfileSettingsViewController alloc] init];
     [self.navigationController pushViewController:controller animated:YES];
@@ -981,6 +1119,7 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
     CGFloat previousOffsetY = self.tableView.contentOffset.y;
     NSArray<NSString *> *oldSignature = [self pp_formSectionSignature:self.form];
     XLFormDescriptor *updatedForm = [self buildLoginForm];
+    [self pp_reconcileSupportChatsObserverForUser:[self pp_activeDashboardUser]];
     NSArray<NSString *> *newSignature = [self pp_formSectionSignature:updatedForm];
     BOOL didChangeSections = ![oldSignature isEqualToArray:newSignature];
 
@@ -1102,6 +1241,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
             if (!roleChanged) {
                 return;
             }
+            [strongSelf pp_reconcileSupportChatsObserverForUser:UsrMgr.currentUser];
             [strongSelf updateHeaderWithUser:UsrMgr.currentUser];
             [strongSelf pp_requestDebouncedDashboardRebuild];
         });
@@ -1190,10 +1330,10 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_configureDashboardAppearance {
-    UIColor *surfaceColor = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
-
-    self.view.backgroundColor = AppBackgroundClrDarker ?: UIColor.systemGroupedBackgroundColor;
-    self.tableView.hidden = NO;
+    self.view.backgroundColor = AppBackgroundClrDarker;
+    BOOL commandSurfaceOwnsPresentation = self.commandCenterSurfaceController != nil;
+    self.tableView.hidden = commandSurfaceOwnsPresentation;
+    self.tableView.accessibilityElementsHidden = commandSurfaceOwnsPresentation;
     self.tableView.backgroundColor = UIColor.clearColor;
     self.tableView.clipsToBounds = NO;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
@@ -1212,7 +1352,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         self.tableView.sectionHeaderTopPadding = 4.0;
     }
 
-    self.tableView.refreshControl.tintColor = AppPrimaryClr ?: surfaceColor;
+    self.tableView.refreshControl.tintColor = AppPrimaryClr;
 
     [self pp_setupAmbientBackgroundGlows];
     [self pp_buildSubscriptionFooterIfNeeded];
@@ -1221,21 +1361,11 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 #pragma mark - Subscription Footer
 
 - (UIColor *)pp_subscriptionFooterSurfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.10 green:0.10 blue:0.11 alpha:0.96];
-        }
-        return [UIColor colorWithWhite:1.0 alpha:0.88];
-    }];
+    return [[UIColor ppSurface] colorWithAlphaComponent:0.96];
 }
 
 - (UIColor *)pp_subscriptionFooterInsetColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithWhite:1.0 alpha:0.055];
-        }
-        return [UIColor colorWithWhite:0.0 alpha:0.030];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.18];
 }
 
 - (void)pp_buildSubscriptionFooterIfNeeded {
@@ -1246,8 +1376,8 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 
     self.isProviderSubscriptionLoading = YES;
 
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *secondaryText = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    UIColor *accent = AppPrimaryClr;
+    UIColor *secondaryText = SeconderyTextClr;
 
     UIView *root = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1.0)];
     root.backgroundColor = UIColor.clearColor;
@@ -1258,7 +1388,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     UIView *shadowWrap = [[UIView alloc] init];
     shadowWrap.translatesAutoresizingMaskIntoConstraints = NO;
     shadowWrap.backgroundColor = UIColor.clearColor;
-    shadowWrap.layer.shadowColor = (AppShadowColor ?: UIColor.blackColor).CGColor;
+    shadowWrap.layer.shadowColor = (AppShadowColor).CGColor;
     shadowWrap.layer.shadowOpacity = 0.08;
     shadowWrap.layer.shadowRadius = 18.0;
     shadowWrap.layer.shadowOffset = CGSizeMake(0.0, 10.0);
@@ -1318,7 +1448,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.subscriptionTitleLabel = [[UILabel alloc] init];
     self.subscriptionTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.subscriptionTitleLabel.font = [Styling fontBold:22.0];
-    self.subscriptionTitleLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.subscriptionTitleLabel.textColor = PrimaryTextClr;
     self.subscriptionTitleLabel.numberOfLines = 2;
     self.subscriptionTitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     [card addSubview:self.subscriptionTitleLabel];
@@ -1417,7 +1547,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     UILabel *captionLabel = [[UILabel alloc] init];
     captionLabel.translatesAutoresizingMaskIntoConstraints = NO;
     captionLabel.font = [Styling fontMedium:10.0];
-    captionLabel.textColor = (SeconderyTextClr ?: UIColor.secondaryLabelColor);
+    captionLabel.textColor = (SeconderyTextClr);
     captionLabel.textAlignment = Language.alignmentForCurrentLanguage;
     captionLabel.text = caption;
     [surface addSubview:captionLabel];
@@ -1425,7 +1555,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     UILabel *metricValueLabel = [[UILabel alloc] init];
     metricValueLabel.translatesAutoresizingMaskIntoConstraints = NO;
     metricValueLabel.font = [Styling fontBold:13.0];
-    metricValueLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    metricValueLabel.textColor = PrimaryTextClr;
     metricValueLabel.numberOfLines = 2;
     metricValueLabel.adjustsFontSizeToFitWidth = YES;
     metricValueLabel.minimumScaleFactor = 0.78;
@@ -1470,12 +1600,107 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.providerSubscriptionStateListener = nil;
 }
 
+- (PPProCommandDataSource)pp_requiredCommandDataSourcesForUser:(UserModel *)user {
+    if (!user) {
+        return PPProCommandDataSourceNone;
+    }
+
+    PPProCommandDataSource sources = PPProCommandDataSourceNone;
+    NSString *uid = user.uid.length ? user.uid : ([FIRAuth auth].currentUser.uid ?: @"");
+    if (uid.length > 0) {
+        sources |= PPProCommandDataSourceInbox;
+    }
+    if ([self pp_canManageServices] || [self pp_canManageMarketplace]) {
+        sources |= PPProCommandDataSourceFulfillment;
+    }
+    if ([self pp_canManageDelivery]) {
+        sources |= PPProCommandDataSourceDeliveryOpen | PPProCommandDataSourceDeliveryAssigned;
+    }
+    if ([self pp_hasNonDeliveryCompanyWorkspaceForUser:user] ||
+        [self pp_hasDeliveryCompanyWorkspaceForUser:user]) {
+        sources |= PPProCommandDataSourceSupportThreads | PPProCommandDataSourceSupportMessages;
+    }
+    if (self.isDeliveryCompanyMode && self.deliveryCompanyContext.companyID.length > 0) {
+        sources |= PPProCommandDataSourceDeliveryCompanyRequests;
+    }
+    return sources;
+}
+
+- (void)pp_beginCommandDataSources:(PPProCommandDataSource)sources {
+    if (sources == PPProCommandDataSourceNone) return;
+    if (![NSThread isMainThread]) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf pp_beginCommandDataSources:sources];
+        });
+        return;
+    }
+    self.commandLoadedSources &= ~sources;
+    self.commandDegradedSources &= ~sources;
+    [self pp_refreshCommandCenterSnapshot];
+}
+
+- (void)pp_finishCommandDataSource:(PPProCommandDataSource)source error:(NSError *)error {
+    if (source == PPProCommandDataSourceNone) return;
+    if (![NSThread isMainThread]) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf pp_finishCommandDataSource:source error:error];
+        });
+        return;
+    }
+    self.commandLoadedSources |= source;
+    if (error) {
+        self.commandDegradedSources |= source;
+    } else {
+        self.commandDegradedSources &= ~source;
+    }
+    [self pp_refreshCommandCenterSnapshot];
+}
+
+- (void)pp_clearCommandDataSources:(PPProCommandDataSource)sources {
+    if (sources == PPProCommandDataSourceNone) return;
+    if (![NSThread isMainThread]) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf pp_clearCommandDataSources:sources];
+        });
+        return;
+    }
+    self.commandLoadedSources &= ~sources;
+    self.commandDegradedSources &= ~sources;
+    [self pp_refreshCommandCenterSnapshot];
+}
+
+- (void)pp_retryCommandCenterOperationalData {
+    UserModel *user = [self pp_activeDashboardUser];
+    if (!user) return;
+
+    [PPFunc pp_playTapEffect];
+    self.preservesCommandDataDuringRetry = YES;
+    [self pp_stopQuickActionSignalObservers];
+    [self pp_startQuickActionSignalObserversForUser:user];
+    [self pp_stopInboxUnreadObserver];
+    [self pp_startInboxUnreadObserverForUser:user];
+    [self pp_stopSupportChatsUnreadObserver];
+    [self pp_reconcileSupportChatsObserverForUser:user];
+    [self pp_refreshDeliveryCompanyDashboardSummary];
+    self.preservesCommandDataDuringRetry = NO;
+}
+
 - (void)pp_startInboxUnreadObserverForUser:(UserModel *)user {
     [self pp_stopInboxUnreadObserver];
-    if (!user.uid.length) return;
+    (void)user;
+    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    if (!uid.length) {
+        [self pp_clearCommandDataSources:PPProCommandDataSourceInbox];
+        return;
+    }
+
+    [self pp_beginCommandDataSources:PPProCommandDataSourceInbox];
 
     __weak typeof(self) weakSelf = self;
-    self.inboxUnreadListener = [[NotificationManager shared] observeInboxForUser:user.uid handler:^(NSArray<NotificationModel *> *items) {
+    self.inboxUnreadListener = [[NotificationManager shared] observeInboxForUser:uid stateHandler:^(NSArray<NotificationModel *> *items, NSError *error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
@@ -1486,36 +1711,49 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         }
         strongSelf.inboxUnreadCount = unreadCount;
         [strongSelf pp_updateNotificationsRowBadge];
+        [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceInbox error:error];
     }];
 }
 
 - (void)pp_stopInboxUnreadObserver {
     [self.inboxUnreadListener remove];
     self.inboxUnreadListener = nil;
+    [self pp_clearCommandDataSources:PPProCommandDataSourceInbox];
 }
 
 - (void)pp_updateNotificationsRowBadge {
     XLFormRowDescriptor *notificationsRow = [self.form formRowWithTag:@"notificationsInbox"];
-    if (!notificationsRow) return;
-
-    NSMutableDictionary *dict = [notificationsRow.value mutableCopy] ?: [NSMutableDictionary dictionary];
-    if (self.inboxUnreadCount > 0) {
-        dict[@"badgeCount"] = @(self.inboxUnreadCount);
-    } else {
-        [dict removeObjectForKey:@"badgeCount"];
+    if (notificationsRow) {
+        NSMutableDictionary *dict = [notificationsRow.value mutableCopy] ?: [NSMutableDictionary dictionary];
+        if (self.inboxUnreadCount > 0) {
+            dict[@"badgeCount"] = @(self.inboxUnreadCount);
+        } else {
+            [dict removeObjectForKey:@"badgeCount"];
+        }
+        notificationsRow.value = dict;
+        [self reloadFormRow:notificationsRow];
     }
-    notificationsRow.value = dict;
-    [self reloadFormRow:notificationsRow];
+    [self pp_refreshCommandCenterSnapshot];
 }
 
 - (void)pp_startSupportChatsUnreadObserverForUser:(UserModel *)user {
     [self pp_stopSupportChatsUnreadObserver];
+    NSUInteger observationGeneration = self.supportObservationGeneration;
     NSString *providerUID = user.uid.length > 0 ? user.uid : ([FIRAuth auth].currentUser.uid ?: @"");
     if (providerUID.length == 0) return;
 
-    self.supportChatThreadIDs = [NSMutableSet set];
-    self.supportChatsUnreadThreadIDs = [NSMutableSet set];
-    self.supportChatsUnreadThreadsCount = 0;
+    PPProCommandDataSource supportSources = PPProCommandDataSourceSupportThreads | PPProCommandDataSourceSupportMessages;
+    [self pp_beginCommandDataSources:supportSources];
+
+    if (!self.supportChatThreadIDs) {
+        self.supportChatThreadIDs = [NSMutableSet set];
+    }
+    if (!self.supportChatsUnreadThreadIDs) {
+        self.supportChatsUnreadThreadIDs = [NSMutableSet set];
+    }
+    if (!self.preservesCommandDataDuringRetry) {
+        self.supportChatsUnreadThreadsCount = 0;
+    }
     [self pp_updateSupportChatsRowBadge];
 
     FIRQuery *threadsQuery =
@@ -1526,21 +1764,32 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
      queryOrderedByField:@"timestamp" descending:YES];
 
     __weak typeof(self) weakSelf = self;
-    self.supportChatsThreadsListener = [threadsQuery addSnapshotListener:^(FIRQuerySnapshot *snapshot, NSError *error) {
+    self.supportChatsThreadsListener = [threadsQuery addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot *snapshot, NSError *error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
+        if (!strongSelf || strongSelf.supportObservationGeneration != observationGeneration) return;
 
         dispatch_async(dispatch_get_main_queue(), ^{
+            if (strongSelf.supportObservationGeneration != observationGeneration) return;
             if (error || !snapshot) {
                 NSLog(@"[DashboardSupportBadge] Thread listener failed: %@", error.localizedDescription ?: @"unknown error");
+                NSError *resolvedError = error ?: [NSError errorWithDomain:@"PurePetsPro.CommandCenter"
+                                                                       code:1
+                                                                   userInfo:nil];
+                [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceSupportThreads error:resolvedError];
                 return;
             }
-            NSMutableSet<NSString *> *threadIDs = [NSMutableSet set];
-            for (FIRDocumentSnapshot *doc in snapshot.documents) {
-                if (doc.exists && doc.documentID.length > 0) [threadIDs addObject:doc.documentID];
+            BOOL fromCache = snapshot.metadata.isFromCache;
+            if (!fromCache || !strongSelf.hasConfirmedSupportThreadsCommandData) {
+                NSMutableSet<NSString *> *threadIDs = [NSMutableSet set];
+                for (FIRDocumentSnapshot *doc in snapshot.documents) {
+                    if (doc.exists && doc.documentID.length > 0) [threadIDs addObject:doc.documentID];
+                }
+                strongSelf.supportChatThreadIDs = threadIDs;
+                [strongSelf pp_recomputeSupportChatsUnreadCount];
             }
-            strongSelf.supportChatThreadIDs = threadIDs;
-            [strongSelf pp_recomputeSupportChatsUnreadCount];
+            if (!fromCache) strongSelf.hasConfirmedSupportThreadsCommandData = YES;
+            NSError *availabilityError = fromCache ? PPProCommandCenterCacheOnlyError(@"Chats/provider-threads") : nil;
+            [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceSupportThreads error:availabilityError];
         });
     }];
 
@@ -1549,25 +1798,51 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
       queryWhereField:@"receiverID" isEqualTo:providerUID]
      queryWhereField:@"status" isLessThan:@(PPAdminChatMessageStatusRead)];
 
-    self.supportChatsMessagesListener = [messagesQuery addSnapshotListener:^(FIRQuerySnapshot *snapshot, NSError *error) {
+    self.supportChatsMessagesListener = [messagesQuery addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot *snapshot, NSError *error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
+        if (!strongSelf || strongSelf.supportObservationGeneration != observationGeneration) return;
 
         dispatch_async(dispatch_get_main_queue(), ^{
+            if (strongSelf.supportObservationGeneration != observationGeneration) return;
             if (error || !snapshot) {
                 NSLog(@"[DashboardSupportBadge] Unread-message listener failed: %@", error.localizedDescription ?: @"unknown error");
+                NSError *resolvedError = error ?: [NSError errorWithDomain:@"PurePetsPro.CommandCenter"
+                                                                       code:2
+                                                                   userInfo:nil];
+                [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceSupportMessages error:resolvedError];
                 return;
             }
-            NSMutableSet<NSString *> *unreadThreadIDs = [NSMutableSet set];
-            for (FIRDocumentSnapshot *doc in snapshot.documents) {
-                if (!doc.exists) continue;
-                NSString *threadID = PPAdminChatThreadIDFromMessage(doc, doc.data ?: @{});
-                if (threadID.length > 0) [unreadThreadIDs addObject:threadID];
+            BOOL fromCache = snapshot.metadata.isFromCache;
+            if (!fromCache || !strongSelf.hasConfirmedSupportMessagesCommandData) {
+                NSMutableSet<NSString *> *unreadThreadIDs = [NSMutableSet set];
+                for (FIRDocumentSnapshot *doc in snapshot.documents) {
+                    if (!doc.exists) continue;
+                    NSString *threadID = PPAdminChatThreadIDFromMessage(doc, doc.data ?: @{});
+                    if (threadID.length > 0) [unreadThreadIDs addObject:threadID];
+                }
+                strongSelf.supportChatsUnreadThreadIDs = unreadThreadIDs;
+                [strongSelf pp_recomputeSupportChatsUnreadCount];
             }
-            strongSelf.supportChatsUnreadThreadIDs = unreadThreadIDs;
-            [strongSelf pp_recomputeSupportChatsUnreadCount];
+            if (!fromCache) strongSelf.hasConfirmedSupportMessagesCommandData = YES;
+            NSError *availabilityError = fromCache ? PPProCommandCenterCacheOnlyError(@"Messages/provider-unread") : nil;
+            [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceSupportMessages error:availabilityError];
         });
     }];
+}
+
+- (void)pp_reconcileSupportChatsObserverForUser:(UserModel *)user {
+    BOOL shouldObserve = user && ([self pp_hasNonDeliveryCompanyWorkspaceForUser:user] ||
+                                  [self pp_hasDeliveryCompanyWorkspaceForUser:user]);
+    BOOL isObserving = self.supportChatsThreadsListener != nil || self.supportChatsMessagesListener != nil;
+    if (shouldObserve && !isObserving) {
+        [self pp_startSupportChatsUnreadObserverForUser:user];
+        return;
+    }
+    if (!shouldObserve && isObserving) {
+        [self pp_stopSupportChatsUnreadObserver];
+        self.supportChatsUnreadThreadsCount = 0;
+        [self pp_updateSupportChatsRowBadge];
+    }
 }
 
 - (void)pp_recomputeSupportChatsUnreadCount {
@@ -1580,12 +1855,18 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_stopSupportChatsUnreadObserver {
+    self.supportObservationGeneration += 1;
     [self.supportChatsThreadsListener remove];
     self.supportChatsThreadsListener = nil;
     [self.supportChatsMessagesListener remove];
     self.supportChatsMessagesListener = nil;
-    self.supportChatThreadIDs = nil;
-    self.supportChatsUnreadThreadIDs = nil;
+    if (!self.preservesCommandDataDuringRetry) {
+        self.supportChatThreadIDs = nil;
+        self.supportChatsUnreadThreadIDs = nil;
+        self.hasConfirmedSupportThreadsCommandData = NO;
+        self.hasConfirmedSupportMessagesCommandData = NO;
+    }
+    [self pp_clearCommandDataSources:(PPProCommandDataSourceSupportThreads | PPProCommandDataSourceSupportMessages)];
 }
 
 - (void)pp_updateSupportChatsRowBadge {
@@ -1678,7 +1959,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 - (void)pp_renderSubscriptionFooter {
     [self pp_buildSubscriptionFooterIfNeeded];
 
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
+    UIColor *accent = AppPrimaryClr;
     UIColor *statusColor = accent;
     NSString *pill = kLang(@"ProviderSubscriptionCardChecking");
     NSString *title = kLang(@"ProviderSubscriptionCardTitle");
@@ -1689,7 +1970,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 
     PPProviderOnboardingState *state = self.providerSubscriptionState;
     if (self.providerSubscriptionError) {
-        statusColor = UIColor.systemRedColor;
+        statusColor = [UIColor ppError];
         pill = kLang(@"ProviderHeroErrorBadge");
         subtitle = self.providerSubscriptionError.localizedDescription.length ? self.providerSubscriptionError.localizedDescription : kLang(@"ProviderPlansLoadFailed");
         statusValue = kLang(@"ProviderHeroErrorBadge");
@@ -1700,14 +1981,14 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         NSUInteger eligibleCount = state.eligibleProviderTypes.count;
 
         if (state.isBlocked) {
-            statusColor = UIColor.systemRedColor;
+            statusColor = [UIColor ppError];
             pill = kLang(@"ProviderHeroBlockedBadge");
             title = kLang(@"ProviderSubscriptionCardBlockedTitle");
             subtitle = kLang(@"ProviderSubscriptionCardBlockedSubtitle");
             statusValue = kLang(@"ProviderHeroBlockedBadge");
             renewalValue = kLang(@"ProviderSubscriptionCardManagedByConsole");
         } else if (activeProfile) {
-            statusColor = UIColor.systemGreenColor;
+            statusColor = [UIColor ppSuccess];
             pill = kLang(@"ProviderStatusActive");
             NSString *planName = activeProfile.localizedPlanName.length ? activeProfile.localizedPlanName : kLang(@"ProviderSubscriptionCardActivePlanFallback");
             title = planName;
@@ -1715,7 +1996,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
             statusValue = kLang(@"ProviderStatusActive");
             renewalValue = [self pp_nextRenewalTextForProfile:activeProfile];
         } else if (pendingCount > 0) {
-            statusColor = UIColor.systemOrangeColor;
+            statusColor = [UIColor ppWarning];
             pill = kLang(@"ProviderHeroReviewBadge");
             title = kLang(@"ProviderSubscriptionCardReviewTitle");
             subtitle = kLang(@"ProviderSubscriptionCardReviewSubtitle");
@@ -1837,8 +2118,8 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_updateAmbientGlowsForStyle {
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *secColor = [UIColor colorNamed:@"AppSecColor"];
+    UIColor *accent = AppPrimaryClr;
+    UIColor *secColor = [UIColor ppQuickActionServices];
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
 
     UIColor *glow1Color = secColor ?: accent;
@@ -1866,30 +2147,15 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 #pragma mark - Dashboard Hero Palette
 
 - (UIColor *)pp_dashboardHeroSurfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.071 green:0.073 blue:0.078 alpha:0.965];
-        }
-        return [UIColor colorWithRed:0.985 green:0.982 blue:0.966 alpha:0.965];
-    }];
+    return [[UIColor ppElevatedSurface] colorWithAlphaComponent:0.965];
 }
 
 - (UIColor *)pp_dashboardHeroInsetSurfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithWhite:1.0 alpha:0.082];
-        }
-        return [UIColor colorWithRed:1.0 green:1.0 blue:0.985 alpha:0.72];
-    }];
+    return [[UIColor ppSurfaceOverlay] colorWithAlphaComponent:0.72];
 }
 
 - (UIColor *)pp_dashboardHeroBorderColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithWhite:1.0 alpha:0.115];
-        }
-        return [UIColor colorWithWhite:1.0 alpha:0.82];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.82];
 }
 
 - (UIColor *)pp_dashboardHeroLineColor {
@@ -1905,26 +2171,16 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (UIColor *)pp_dashboardHeroThreadColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithWhite:1.0 alpha:0.16];
-        }
-        return [UIColor colorWithWhite:0.42 alpha:0.12];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.16];
 }
 
 - (UIColor *)pp_dashboardHeroSignalColor {
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
+    UIColor *accent = AppPrimaryClr;
     return [accent colorWithAlphaComponent:(self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) ? 0.92 : 0.82];
 }
 
 - (UIColor *)pp_dashboardHeroPlateColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithWhite:1.0 alpha:0.072];
-        }
-        return [UIColor colorWithRed:1.0 green:0.998 blue:0.976 alpha:0.84];
-    }];
+    return [[UIColor ppSurfaceOverlay] colorWithAlphaComponent:0.84];
 }
 
 - (UIColor *)pp_dashboardAvatarContainerColor {
@@ -1932,9 +2188,9 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (UIColor *)pp_dashboardHeroShadowColor {
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
+    UIColor *accent = AppPrimaryClr;
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
-    return isDark ? [accent colorWithAlphaComponent:0.55] : [UIColor colorWithWhite:0.0 alpha:0.65];
+    return isDark ? [accent colorWithAlphaComponent:0.55] : [[UIColor ppShadow] colorWithAlphaComponent:0.65];
 }
 
 - (void)pp_applyDashboardHeroShadow {
@@ -1986,7 +2242,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_refreshDashboardHeroMaterials {
-    self.heroSurfaceView.accentColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.heroSurfaceView.accentColor = AppPrimaryClr;
     [self.heroSurfaceView reapplyPalette];
     [self pp_applyDashboardHeroShadow];
 
@@ -2010,16 +2266,16 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     }];
 
     self.heroStatusDotView.backgroundColor = [self pp_dashboardHeroSignalColor];
-    self.heroPrimaryActionButton.backgroundColor = AppPrimaryClr ?: UIColor.systemTealColor;
-    [self.heroPrimaryActionButton setTitleColor:AppForgroundColr ?: UIColor.whiteColor forState:UIControlStateNormal];
+    self.heroPrimaryActionButton.backgroundColor = AppPrimaryClr;
+    [self.heroPrimaryActionButton setTitleColor:AppForgroundColr forState:UIControlStateNormal];
     [self pp_updateDashboardHeroLiveState];
 }
 
 - (UIButton *)pp_dashboardHeaderButtonWithSymbol:(NSString *)symbol
                                         selector:(SEL)selector
                               accessibilityLabel:(NSString *)accessibilityLabel {
-    UIColor *accentColor = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *buttonSurface = AppForgroundColr ?: UIColor.systemBackgroundColor;
+    UIColor *accentColor = AppPrimaryClr;
+    UIColor *buttonSurface = AppForgroundColr;
 
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
@@ -2052,15 +2308,15 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 - (void)pp_buildDashboardHeaderIfNeeded {
     if (self.headerSetupCompleted) return;
 
-    UIColor *accentColor = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *surfaceColor = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    UIColor *accentColor = AppPrimaryClr;
+    UIColor *surfaceColor = AppForgroundColr;
     UIColor *heroSurfaceColor = [self pp_dashboardHeroSurfaceColor];
     UIColor *heroInsetSurfaceColor = [self pp_dashboardHeroInsetSurfaceColor];
     UIColor *heroBorderColor = [self pp_dashboardHeroBorderColor];
     UIColor *heroLineColor = [self pp_dashboardHeroLineColor];
     UIColor *heroPulseColor = [self pp_dashboardHeroPulseColor];
-    UIColor *secondaryTextColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
-    UIColor *shadowColor = AppShadowColor ?: [UIColor colorWithWhite:0.0 alpha:1.0];
+    UIColor *secondaryTextColor = SeconderyTextClr;
+    UIColor *shadowColor = AppShadowColor;
 
     self.headerRoot = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 1)];
     self.headerRoot.backgroundColor = UIColor.clearColor;
@@ -2121,7 +2377,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.adminNameLabel = [[UILabel alloc] init];
     self.adminNameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.adminNameLabel.font = [Styling fontBold:21];
-    self.adminNameLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.adminNameLabel.textColor = PrimaryTextClr;
     self.adminNameLabel.numberOfLines = 1;
     self.adminNameLabel.textAlignment = Language.alignmentForCurrentLanguage;
     self.adminNameLabel.text = kLang(@"DashboardHero_Command_AllClear");
@@ -2153,7 +2409,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.heroStatusPillLabel = [[UILabel alloc] init];
     self.heroStatusPillLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.heroStatusPillLabel.font = [Styling fontBold:10];
-    self.heroStatusPillLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.heroStatusPillLabel.textColor = PrimaryTextClr;
     self.heroStatusPillLabel.textAlignment = NSTextAlignmentCenter;
     self.heroStatusPillLabel.text = kLang(@"DashboardHero_Status_Live");
     self.heroStatusPillLabel.numberOfLines = 1;
@@ -2184,7 +2440,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.heroCommandNumberLabel = [[UILabel alloc] init];
     self.heroCommandNumberLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.heroCommandNumberLabel.font = [Styling fontBold:34];
-    self.heroCommandNumberLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.heroCommandNumberLabel.textColor = PrimaryTextClr;
     self.heroCommandNumberLabel.textAlignment = NSTextAlignmentNatural;
     self.heroCommandNumberLabel.text = @"0";
     self.heroCommandNumberLabel.adjustsFontSizeToFitWidth = YES;
@@ -2195,7 +2451,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.heroFulfillmentMetricValueLabel = [[UILabel alloc] init];
     self.heroFulfillmentMetricValueLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.heroFulfillmentMetricValueLabel.font = [Styling fontBold:20];
-    self.heroFulfillmentMetricValueLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.heroFulfillmentMetricValueLabel.textColor = PrimaryTextClr;
     self.heroFulfillmentMetricValueLabel.textAlignment = NSTextAlignmentCenter;
     self.heroFulfillmentMetricValueLabel.text = @"0";
 
@@ -2215,7 +2471,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.heroDeliveryMetricValueLabel = [[UILabel alloc] init];
     self.heroDeliveryMetricValueLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.heroDeliveryMetricValueLabel.font = [Styling fontBold:20];
-    self.heroDeliveryMetricValueLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.heroDeliveryMetricValueLabel.textColor = PrimaryTextClr;
     self.heroDeliveryMetricValueLabel.textAlignment = NSTextAlignmentCenter;
     self.heroDeliveryMetricValueLabel.text = @"0";
 
@@ -2296,8 +2552,8 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.heroPrimaryActionButton.titleLabel.font = [Styling fontBold:12];
     self.heroPrimaryActionButton.titleLabel.adjustsFontSizeToFitWidth = YES;
     self.heroPrimaryActionButton.titleLabel.minimumScaleFactor = 0.78;
-    self.heroPrimaryActionButton.backgroundColor = AppPrimaryClr ?: UIColor.systemTealColor;
-    [self.heroPrimaryActionButton setTitleColor:AppForgroundColr ?: UIColor.whiteColor forState:UIControlStateNormal];
+    self.heroPrimaryActionButton.backgroundColor = AppPrimaryClr;
+    [self.heroPrimaryActionButton setTitleColor:AppForgroundColr forState:UIControlStateNormal];
     self.heroPrimaryActionButton.layer.cornerRadius = 17.0;
     self.heroPrimaryActionButton.layer.cornerCurve = kCACornerCurveContinuous;
     self.heroPrimaryActionButton.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
@@ -2858,6 +3114,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         fulfillmentRow.value = dict;
         [self reloadFormRow:fulfillmentRow];
     }
+    [self pp_refreshCommandCenterSnapshot];
 }
 
 - (NSString *)pp_dashboardActionSignatureWithTitleKey:(NSString *)titleKey iconName:(NSString *)iconName {
@@ -3210,56 +3467,87 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_stopQuickActionSignalObservers {
+    self.quickActionObservationGeneration += 1;
     [self.quickActionFulfillmentSignalListener remove];
     [self.quickActionDeliveryOpenSignalListener remove];
     [self.quickActionDeliveryAssignedSignalListener remove];
+    if (self.quickActionDeliveryAssignedObserver) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self.quickActionDeliveryAssignedObserver];
+    }
     [self.pendingOrdersListener remove];
     self.quickActionFulfillmentSignalListener = nil;
     self.quickActionDeliveryOpenSignalListener = nil;
     self.quickActionDeliveryAssignedSignalListener = nil;
+    self.quickActionDeliveryAssignedObserver = nil;
     self.pendingOrdersListener = nil;
     self.quickActionSignalSignature = nil;
 
-    self.fulfillmentQuickActionSignals = [NSSet set];
-    self.deliveryOpenQuickActionSignals = [NSSet set];
-    self.deliveryAssignedQuickActionSignals = [NSSet set];
-    self.pendingOrders = @[];
-    self.hasUnseenDeliveryQuickAction = NO;
-    self.hasUnseenFulfillmentQuickAction = NO;
+    if (!self.preservesCommandDataDuringRetry) {
+        self.fulfillmentQuickActionSignals = [NSSet set];
+        self.deliveryOpenQuickActionSignals = [NSSet set];
+        self.deliveryAssignedQuickActionSignals = [NSSet set];
+        self.actionableFulfillments = @[];
+        self.deliveryOpenActionableOrders = @[];
+        self.deliveryAssignedActionableOrders = @[];
+        self.pendingOrders = @[];
+        self.hasUnseenDeliveryQuickAction = NO;
+        self.hasUnseenFulfillmentQuickAction = NO;
+        self.hasConfirmedFulfillmentCommandData = NO;
+        self.hasConfirmedDeliveryOpenCommandData = NO;
+        self.hasConfirmedDeliveryAssignedCommandData = NO;
+    }
+    [self pp_clearCommandDataSources:(PPProCommandDataSourceFulfillment |
+                                      PPProCommandDataSourceDeliveryOpen |
+                                      PPProCommandDataSourceDeliveryAssigned)];
     [self pp_updateDashboardHeroLiveState];
 }
 
 - (void)pp_startFulfillmentQuickActionSignalObserverForUID:(NSString *)uid {
+    [self pp_beginCommandDataSources:PPProCommandDataSourceFulfillment];
+    NSUInteger observationGeneration = self.quickActionObservationGeneration;
     __weak typeof(self) weakSelf = self;
-    self.quickActionFulfillmentSignalListener = [[PPFulfillmentManager sharedManager] observeFulfillmentsForOwnerID:uid onChange:^(NSArray<PPFulfillmentModel *> *fulfillments, NSError *error) {
+    self.quickActionFulfillmentSignalListener = [[PPFulfillmentManager sharedManager] observeFulfillmentsForOwnerID:uid stateHandler:^(NSArray<PPFulfillmentModel *> *fulfillments, NSError *error, BOOL fromCache) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
+        if (!strongSelf || strongSelf.quickActionObservationGeneration != observationGeneration) return;
+        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
 
         if (error) {
             NSLog(@"[DashboardQuickActions] Fulfillment signal listener error: %@", error.localizedDescription);
-            strongSelf.fulfillmentNewRequestsCount = 0;
-            [strongSelf pp_applyFulfillmentQuickActionSignals:[NSSet set]];
+            [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceFulfillment error:error];
+            return;
+        }
+
+        if (fromCache && strongSelf.hasConfirmedFulfillmentCommandData) {
+            [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceFulfillment
+                                             error:PPProCommandCenterCacheOnlyError(@"FulfillmentOrders")];
             return;
         }
 
         NSMutableSet<NSString *> *signals = [NSMutableSet set];
+        NSMutableArray<PPFulfillmentModel *> *actionableFulfillments = [NSMutableArray array];
         NSInteger newRequestsCount = 0;
         for (PPFulfillmentModel *model in fulfillments ?: @[]) {
             NSString *fingerprint = [strongSelf pp_fulfillmentQuickActionSignalFingerprint:model];
             if (fingerprint.length) {
                 [signals addObject:fingerprint];
+                [actionableFulfillments addObject:model];
             }
             if ([[model.status lowercaseString] isEqualToString:@"new_request"]) {
                 newRequestsCount++;
             }
         }
         strongSelf.fulfillmentNewRequestsCount = newRequestsCount;
+        strongSelf.actionableFulfillments = actionableFulfillments.copy;
         [strongSelf pp_applyFulfillmentQuickActionSignals:signals.copy];
+        if (!fromCache) strongSelf.hasConfirmedFulfillmentCommandData = YES;
+        NSError *availabilityError = fromCache ? PPProCommandCenterCacheOnlyError(@"FulfillmentOrders") : nil;
+        [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceFulfillment error:availabilityError];
     }];
 }
 
 - (void)pp_startPendingOrdersObserverForUID:(NSString *)uid {
     FIRCollectionReference *ordersRef = [[FIRFirestore firestore] collectionWithPath:@"Orders"];
+    NSUInteger observationGeneration = self.quickActionObservationGeneration;
     __weak typeof(self) weakSelf = self;
 
     FIRQuery *pendingQuery = [[[ordersRef queryWhereField:@"rawStatus" isEqualTo:PPOrderRawStatusPending]
@@ -3268,7 +3556,8 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 
     self.pendingOrdersListener = [pendingQuery addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
+        if (!strongSelf || strongSelf.quickActionObservationGeneration != observationGeneration) return;
+        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
 
         if (error) {
             NSLog(@"[DashboardQuickActions] Pending orders listener error: %@", error.localizedDescription);
@@ -3290,50 +3579,75 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_startDeliveryQuickActionSignalObserversForUID:(NSString *)uid {
+    [self pp_beginCommandDataSources:(PPProCommandDataSourceDeliveryOpen |
+                                      PPProCommandDataSourceDeliveryAssigned)];
     FIRCollectionReference *ordersRef = [[FIRFirestore firestore] collectionWithPath:@"Orders"];
+    NSUInteger observationGeneration = self.quickActionObservationGeneration;
     __weak typeof(self) weakSelf = self;
 
     FIRQuery *openQuery = [[[ordersRef queryWhereField:@"deliveryStatus" isEqualTo:PPDeliveryStatusRequested]
                             queryOrderedByField:@"createdAt" descending:YES]
                            queryLimitedTo:50];
-    self.quickActionDeliveryOpenSignalListener = [openQuery addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
+    self.quickActionDeliveryOpenSignalListener = [openQuery addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
+        if (!strongSelf || strongSelf.quickActionObservationGeneration != observationGeneration) return;
+        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
 
-        if (error) {
+        if (error || !snapshot) {
             NSLog(@"[DashboardQuickActions] Open delivery signal listener error: %@", error.localizedDescription);
-            [strongSelf pp_applyDeliveryOpenQuickActionSignals:[NSSet set]];
+            NSError *resolvedError = error ?: PPProCommandCenterCacheOnlyError(@"Orders/delivery-open");
+            [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceDeliveryOpen error:resolvedError];
             return;
         }
 
-        [strongSelf pp_applyDeliveryOpenQuickActionSignals:[strongSelf pp_deliveryQuickActionSignalsFromDocuments:snapshot.documents ?: @[]]];
+        BOOL fromCache = snapshot.metadata.isFromCache;
+        if (!fromCache || !strongSelf.hasConfirmedDeliveryOpenCommandData) {
+            NSArray<PPDeliveryOrderModel *> *orders = [strongSelf pp_deliveryQuickActionOrdersFromDocuments:snapshot.documents ?: @[]];
+            strongSelf.deliveryOpenActionableOrders = orders;
+            [strongSelf pp_applyDeliveryOpenQuickActionSignals:[strongSelf pp_deliveryQuickActionSignalsFromOrders:orders]];
+        }
+        if (!fromCache) strongSelf.hasConfirmedDeliveryOpenCommandData = YES;
+        NSError *availabilityError = fromCache ? PPProCommandCenterCacheOnlyError(@"Orders/delivery-open") : nil;
+        [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceDeliveryOpen error:availabilityError];
     }];
 
-    NSArray<NSString *> *assignedStatuses = @[
-        PPDeliveryStatusAssigned,
-        PPDeliveryStatusAwaitingHandover,
-        PPDeliveryStatusPickedUp,
-        PPDeliveryStatusInTransit,
-        PPDeliveryStatusDelivered,
-        PPDeliveryStatusPaymentPending,
-        PPDeliveryStatusPaymentConfirmed
-    ];
-    FIRQuery *assignedQuery = [[[[ordersRef queryWhereField:@"deliveryUserId" isEqualTo:uid]
-                                 queryWhereField:@"deliveryStatus" in:assignedStatuses]
-                                queryOrderedByField:@"createdAt" descending:YES]
-                               queryLimitedTo:50];
-    self.quickActionDeliveryAssignedSignalListener = [assignedQuery addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
+    void (^applyCanonicalAssignedOrders)(NSError * _Nullable) = ^(NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
+        if (!strongSelf || strongSelf.quickActionObservationGeneration != observationGeneration) return;
+        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
 
         if (error) {
-            NSLog(@"[DashboardQuickActions] Assigned delivery signal listener error: %@", error.localizedDescription);
-            [strongSelf pp_applyDeliveryAssignedQuickActionSignals:[NSSet set]];
+            NSLog(@"[DashboardQuickActions] Canonical assigned-child delivery listener error: %@", error.localizedDescription);
+            [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceDeliveryAssigned error:error];
             return;
         }
 
-        [strongSelf pp_applyDeliveryAssignedQuickActionSignals:[strongSelf pp_deliveryQuickActionSignalsFromDocuments:snapshot.documents ?: @[]]];
+        NSMutableArray<PPDeliveryOrderModel *> *assignedOrders = [NSMutableArray array];
+        for (PPDeliveryOrderModel *order in PPDeliveryManager.shared.allOrders ?: @[]) {
+            BOOL exactAssignment = [order.deliveryUserId isEqualToString:uid];
+            BOOL canonicalV1 = order.fulfillmentVersion == 1 &&
+                order.assignedFulfillmentStatusesByID.count > 0;
+            BOOL legacyV0 = order.fulfillmentVersion != 1;
+            if (exactAssignment && (canonicalV1 || legacyV0) &&
+                [strongSelf pp_deliveryQuickActionSignalFingerprint:order].length > 0) {
+                [assignedOrders addObject:order];
+            }
+        }
+        strongSelf.deliveryAssignedActionableOrders = assignedOrders.copy;
+        [strongSelf pp_applyDeliveryAssignedQuickActionSignals:[strongSelf pp_deliveryQuickActionSignalsFromOrders:assignedOrders]];
+        strongSelf.hasConfirmedDeliveryAssignedCommandData = YES;
+        [strongSelf pp_finishCommandDataSource:PPProCommandDataSourceDeliveryAssigned error:nil];
+    };
+    self.quickActionDeliveryAssignedObserver = [[NSNotificationCenter defaultCenter]
+        addObserverForName:PPDeliveryOrdersDidChangeNotification
+                    object:PPDeliveryManager.shared
+                     queue:NSOperationQueue.mainQueue
+                usingBlock:^(NSNotification * _Nonnull notification) {
+        id rawError = notification.userInfo[@"error"];
+        applyCanonicalAssignedOrders([rawError isKindOfClass:NSError.class] ? rawError : nil);
     }];
+    [PPDeliveryManager.shared startListeningForDeliveryOrders];
+    applyCanonicalAssignedOrders(nil);
 }
 
 - (NSString *)pp_fulfillmentQuickActionSignalFingerprint:(PPFulfillmentModel *)model {
@@ -3348,13 +3662,27 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (NSSet<NSString *> *)pp_deliveryQuickActionSignalsFromDocuments:(NSArray<FIRDocumentSnapshot *> *)documents {
-    NSMutableSet<NSString *> *signals = [NSMutableSet set];
-    for (FIRDocumentSnapshot *doc in documents) {
+    return [self pp_deliveryQuickActionSignalsFromOrders:[self pp_deliveryQuickActionOrdersFromDocuments:documents]];
+}
+
+- (NSArray<PPDeliveryOrderModel *> *)pp_deliveryQuickActionOrdersFromDocuments:(NSArray<FIRDocumentSnapshot *> *)documents {
+    NSMutableArray<PPDeliveryOrderModel *> *orders = [NSMutableArray array];
+    for (FIRDocumentSnapshot *doc in documents ?: @[]) {
         NSDictionary *data = doc.data;
         if (![data isKindOfClass:NSDictionary.class]) {
             continue;
         }
         PPDeliveryOrderModel *order = [PPDeliveryOrderModel fromDictionary:data withID:doc.documentID];
+        if ([self pp_deliveryQuickActionSignalFingerprint:order].length > 0) {
+            [orders addObject:order];
+        }
+    }
+    return orders.copy;
+}
+
+- (NSSet<NSString *> *)pp_deliveryQuickActionSignalsFromOrders:(NSArray<PPDeliveryOrderModel *> *)orders {
+    NSMutableSet<NSString *> *signals = [NSMutableSet set];
+    for (PPDeliveryOrderModel *order in orders ?: @[]) {
         NSString *fingerprint = [self pp_deliveryQuickActionSignalFingerprint:order];
         if (fingerprint.length) {
             [signals addObject:fingerprint];
@@ -3951,11 +4279,1075 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickAc
 }
 
 
+#pragma mark - Pulse Command Center SwiftUI Bridge
+
+- (void)pp_installCommandCenterSurfaceIfNeeded {
+    if (self.commandCenterSurfaceController) {
+        // The XLForm remains alive for its established permission-aware routes and
+        // listeners, but never regains visual or accessibility ownership when a
+        // dashboard lifecycle refresh rebuilds its data.
+        self.tableView.hidden = YES;
+        self.tableView.accessibilityElementsHidden = YES;
+        [self.view bringSubviewToFront:self.commandCenterSurfaceController.view];
+        return;
+    }
+
+    PPProCommandCenterSurfaceController *surface = [[PPProCommandCenterSurfaceController alloc] init];
+    surface.delegate = self;
+    self.commandCenterSurfaceController = surface;
+
+    [self addChildViewController:surface];
+    surface.view.translatesAutoresizingMaskIntoConstraints = NO;
+    surface.view.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:surface.view];
+    [NSLayoutConstraint activateConstraints:@[
+        [surface.view.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [surface.view.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [surface.view.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [surface.view.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+    ]];
+    [surface didMoveToParentViewController:self];
+
+    // XLForm remains the authoritative routing layer under the SwiftUI surface.
+    self.tableView.hidden = YES;
+    self.tableView.accessibilityElementsHidden = YES;
+    [self pp_refreshCommandCenterSnapshot];
+}
+
+- (PPProCommandCapabilityDescriptor *)pp_commandCapabilityWithIdentifier:(NSString *)identifier
+                                                                   title:(NSString *)title
+                                                                subtitle:(NSString *)subtitle
+                                                              symbolName:(NSString *)symbolName
+                                                                routeTag:(NSString *)routeTag
+                                                             actionCount:(NSInteger)actionCount
+                                                                readOnly:(BOOL)readOnly {
+    PPProCommandCapabilityDescriptor *capability = [[PPProCommandCapabilityDescriptor alloc] init];
+    capability.identifier = identifier ?: @"";
+    capability.title = title ?: @"";
+    capability.subtitle = subtitle ?: @"";
+    capability.symbolName = symbolName ?: @"circle.grid.2x2.fill";
+    capability.routeTag = routeTag ?: @"";
+    capability.actionCount = MAX(0, actionCount);
+    capability.isReadOnly = readOnly;
+    return capability;
+}
+
+- (PPProCommandSignalDescriptor *)pp_commandSignalWithIdentifier:(NSString *)identifier
+                                           capabilityIdentifiers:(NSArray<NSString *> *)capabilityIdentifiers
+                                                          title:(NSString *)title
+                                                       subtitle:(NSString *)subtitle
+                                                     symbolName:(NSString *)symbolName
+                                                       routeTag:(NSString *)routeTag
+                                                     badgeCount:(NSInteger)badgeCount
+                                                       priority:(NSInteger)priority
+                                                         unseen:(BOOL)unseen {
+    PPProCommandSignalDescriptor *signal = [[PPProCommandSignalDescriptor alloc] init];
+    signal.identifier = identifier ?: @"";
+    signal.capabilityIdentifiers = capabilityIdentifiers ?: @[];
+    signal.title = title ?: @"";
+    signal.subtitle = subtitle ?: @"";
+    signal.symbolName = symbolName ?: @"bolt.fill";
+    signal.routeTag = routeTag ?: @"";
+    signal.badgeCount = MAX(0, badgeCount);
+    signal.priorityRawValue = MAX(0, MIN(2, priority));
+    signal.isUnseen = unseen;
+    return signal;
+}
+
+- (PPProCommandActionDescriptor *)pp_workspaceCommandActionTargetWithSignalIdentifier:(NSString *)signalIdentifier
+                                                                    capabilityIdentifier:(NSString *)capabilityIdentifier
+                                                                         workspaceRouteTag:(NSString *)workspaceRouteTag
+                                                                    workspaceActionTitle:(NSString *)workspaceActionTitle
+                                                                                 priority:(NSInteger)priority {
+    PPProCommandActionDescriptor *target = [[PPProCommandActionDescriptor alloc] init];
+    target.signalIdentifier = signalIdentifier ?: @"";
+    target.capabilityIdentifier = capabilityIdentifier ?: @"";
+    target.actionKind = @"workspace";
+    target.interactionKind = @"workspace";
+    target.priorityRawValue = MAX(0, MIN(2, priority));
+    target.primaryActionTitle = workspaceActionTitle ?: @"";
+    target.workspaceRouteTag = workspaceRouteTag ?: @"";
+    target.isConcreteTarget = NO;
+    target.isPrimaryActionPermitted = target.workspaceRouteTag.length > 0;
+    return target;
+}
+
+- (PPProCommandActionDescriptor *)pp_resolveCommandActionTargetForSignalIdentifier:(NSString *)signalIdentifier
+                                                               capabilityIdentifier:(NSString *)capabilityIdentifier
+                                                                    workspaceRouteTag:(NSString *)workspaceRouteTag
+                                                               workspaceActionTitle:(NSString *)workspaceActionTitle
+                                                                            priority:(NSInteger)priority {
+    PPProCommandActionDescriptor *target = [self pp_workspaceCommandActionTargetWithSignalIdentifier:signalIdentifier
+                                                                                   capabilityIdentifier:capabilityIdentifier
+                                                                                        workspaceRouteTag:workspaceRouteTag
+                                                                                   workspaceActionTitle:workspaceActionTitle
+                                                                                                priority:priority];
+
+    if ([signalIdentifier isEqualToString:@"fulfillment"]) {
+        PPFulfillmentModel *model = [self pp_highestPriorityActionableFulfillment];
+        NSString *actionKind = [self pp_fulfillmentActionKindForModel:model];
+        if (model.fulfillmentID.length > 0 && actionKind.length > 0) {
+            target.actionKind = actionKind;
+            target.interactionKind = @"primary";
+            target.entityID = model.fulfillmentID;
+            target.fulfillmentID = model.fulfillmentID;
+            target.expectedStatus = model.status ?: @"";
+            target.primaryActionTitle = [self pp_primaryActionTitleForFulfillment:model];
+            target.detailsActionTitle = kLang(@"Fulfillment_DetailTitle");
+            NSString *itemCount = [NSString stringWithFormat:kLang(@"Items_Count"), (long)model.itemCount];
+            NSString *amount = PPProCommandFormattedAmount(model.subtotal, model.currency);
+            target.detailRows = @[
+                PPProCommandDetail(@"order", kLang(@"PulseCommand_TargetOrder"),
+                                   model.parentOrderNumber.length > 0 ? model.parentOrderNumber : model.parentOrderId,
+                                   @"number.square.fill"),
+                PPProCommandDetail(@"status", kLang(@"PulseCommand_LatestStatus"), model.statusDisplayName, @"clock.badge.checkmark.fill"),
+                PPProCommandDetail(@"itemsAmount", kLang(@"PulseCommand_ItemsAndAmount"),
+                                   [NSString stringWithFormat:@"%@ · %@", itemCount, amount],
+                                   @"shippingbox.fill"),
+            ];
+            NSMutableArray<PPProCommandQuickActionDescriptor *> *quickActions = [NSMutableArray array];
+            if (![actionKind isEqualToString:@"fulfillment.reject"] &&
+                [model.availableActions containsObject:@"reject"]) {
+                [quickActions addObject:PPProCommandQuickAction(@"fulfillment.reject", kLang(@"Fulfillment_Reject"), @"xmark.circle.fill", YES)];
+            }
+            if (![actionKind isEqualToString:@"fulfillment.cancel_request"] &&
+                [model.availableActions containsObject:@"cancel_request"]) {
+                [quickActions addObject:PPProCommandQuickAction(@"fulfillment.cancel_request", kLang(@"Fulfillment_CancelRequest"), @"trash.fill", YES)];
+            }
+            target.quickActions = quickActions.copy;
+            target.isConcreteTarget = YES;
+            target.isPrimaryActionPermitted = YES;
+        }
+        return target;
+    }
+
+    if ([signalIdentifier isEqualToString:@"delivery"]) {
+        PPDeliveryOrderModel *order = [self pp_highestPriorityActionableDeliveryOrder];
+        NSString *actionKind = [self pp_deliveryActionKindForOrder:order];
+        if (order.orderId.length > 0 && actionKind.length > 0) {
+            target.actionKind = actionKind;
+            target.interactionKind = @"primary";
+            target.entityID = order.orderId;
+            target.orderID = order.orderId;
+            target.expectedStatus = order.deliveryStatus ?: @"";
+            target.primaryActionTitle = [self pp_primaryActionTitleForDeliveryActionKind:actionKind];
+            target.detailsActionTitle = kLang(@"OrderDetails");
+            NSString *itemCount = [NSString stringWithFormat:kLang(@"Items_Count"), (long)order.items.count];
+            target.detailRows = @[
+                PPProCommandDetail(@"order", kLang(@"PulseCommand_TargetOrder"), order.bestOrderNumber, @"number.square.fill"),
+                PPProCommandDetail(@"status", kLang(@"PulseCommand_LatestStatus"), order.displayStatus, @"clock.badge.checkmark.fill"),
+                PPProCommandDetail(@"itemsAmount", kLang(@"PulseCommand_ItemsAndAmount"),
+                                   [NSString stringWithFormat:@"%@ · %@", itemCount, order.formattedTotal],
+                                   @"shippingbox.fill"),
+                PPProCommandDetail(@"location", kLang(@"PulseCommand_DeliveryLocation"),
+                                   order.pp_visibleCustomerLocationSummary,
+                                   @"location.fill"),
+            ];
+            NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+            if (order.canCancel && currentUID.length > 0 && [order.deliveryUserId isEqualToString:currentUID]) {
+                target.quickActions = @[
+                    PPProCommandQuickAction(@"delivery.cancel", kLang(@"Cancel"), @"trash.fill", YES),
+                ];
+            }
+            target.isConcreteTarget = YES;
+            target.isPrimaryActionPermitted = YES;
+        }
+        return target;
+    }
+
+    if ([signalIdentifier isEqualToString:@"deliveryCompany"]) {
+        PPDeliveryCompanyRequest *request = [self pp_highestPriorityActionableDeliveryCompanyRequest];
+        NSString *actionKind = [self pp_deliveryCompanyActionKindForRequest:request];
+        PPDeliveryCompanyProfile *profile = self.deliveryCompanyContext;
+        if (request.requestID.length > 0 && actionKind.length > 0 && profile.companyID.length > 0) {
+            target.actionKind = actionKind;
+            target.interactionKind = @"primary";
+            target.entityID = request.requestID;
+            target.requestID = request.requestID;
+            target.orderID = request.orderID ?: @"";
+            target.companyID = profile.companyID;
+            target.expectedStatus = request.status ?: @"";
+            target.primaryActionTitle = [self pp_primaryActionTitleForDeliveryCompanyActionKind:actionKind];
+            target.detailsActionTitle = kLang(@"DeliveryCompany_Detail_NavTitle");
+            target.detailRows = @[
+                PPProCommandDetail(@"order", kLang(@"PulseCommand_TargetOrder"), request.bestOrderNumber, @"number.square.fill"),
+                PPProCommandDetail(@"status", kLang(@"PulseCommand_LatestStatus"), request.statusDisplayName, @"clock.badge.checkmark.fill"),
+                PPProCommandDetail(@"fee", kLang(@"DeliveryCompany_Detail_Fee"), request.formattedFee, @"banknote.fill"),
+                PPProCommandDetail(@"location", kLang(@"PulseCommand_DeliveryLocation"), request.dropoffSummary, @"location.fill"),
+            ];
+            if (profile.canDispatch && [request.status isEqualToString:PPDeliveryCompanyStatusOffered]) {
+                target.quickActions = @[
+                    PPProCommandQuickAction(@"deliveryCompany.reject", kLang(@"DeliveryCompany_Action_Reject"), @"xmark.circle.fill", YES),
+                ];
+            } else if (profile.canDispatch &&
+                       ([request.status isEqualToString:PPDeliveryCompanyStatusAccepted] ||
+                        [request.status isEqualToString:PPDeliveryCompanyStatusAssigned])) {
+                target.quickActions = @[
+                    PPProCommandQuickAction(@"deliveryCompany.cancel", kLang(@"DeliveryCompany_Action_Cancel"), @"trash.fill", YES),
+                ];
+            }
+            target.isConcreteTarget = YES;
+            target.isPrimaryActionPermitted = YES;
+        }
+        return target;
+    }
+
+    return target;
+}
+
+- (nullable NSString *)pp_fulfillmentActionKindForModel:(PPFulfillmentModel *)model {
+    if (![model isKindOfClass:PPFulfillmentModel.class] || model.fulfillmentID.length == 0 || model.isTerminal) {
+        return nil;
+    }
+    NSString *action = model.availableActions.firstObject;
+    return action.length > 0 ? [@"fulfillment." stringByAppendingString:action] : nil;
+}
+
+- (NSString *)pp_primaryActionTitleForFulfillment:(PPFulfillmentModel *)model {
+    NSString *title = [model nextActionForStatus];
+    return title.length > 0 ? title : kLang(@"PulseCommand_ReviewFulfillment");
+}
+
+- (NSInteger)pp_actionPriorityForFulfillment:(PPFulfillmentModel *)model {
+    NSString *actionKind = [self pp_fulfillmentActionKindForModel:model];
+    if ([actionKind isEqualToString:@"fulfillment.accept"]) return 600;
+    if ([actionKind isEqualToString:@"fulfillment.start_preparing"]) return 500;
+    if ([actionKind isEqualToString:@"fulfillment.mark_ready"]) return 400;
+    if ([actionKind isEqualToString:@"fulfillment.request_delivery"]) return 300;
+    if ([actionKind isEqualToString:@"fulfillment.confirm_handover"]) return 200;
+    if ([actionKind isEqualToString:@"fulfillment.cancel_request"]) return 100;
+    return 0;
+}
+
+- (nullable PPFulfillmentModel *)pp_highestPriorityActionableFulfillment {
+    PPFulfillmentModel *selected = nil;
+    NSInteger selectedPriority = NSIntegerMin;
+    for (PPFulfillmentModel *model in self.actionableFulfillments ?: @[]) {
+        if (![self pp_fulfillmentActionKindForModel:model].length) {
+            continue;
+        }
+        NSInteger priority = [self pp_actionPriorityForFulfillment:model];
+        if (!selected || priority > selectedPriority) {
+            selected = model;
+            selectedPriority = priority;
+        }
+    }
+    return selected;
+}
+
+- (BOOL)pp_deliveryOrderBelongsToCurrentDeliveryUser:(PPDeliveryOrderModel *)order {
+    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    if (currentUID.length == 0) {
+        return NO;
+    }
+    if (order.canAcceptDelivery) {
+        return order.deliveryUserId.length == 0;
+    }
+    return order.deliveryUserId.length > 0 && [order.deliveryUserId isEqualToString:currentUID];
+}
+
+- (nullable NSString *)pp_deliveryActionKindForOrder:(PPDeliveryOrderModel *)order {
+    if (![order isKindOfClass:PPDeliveryOrderModel.class] || order.orderId.length == 0 || order.isTerminal ||
+        ![self pp_deliveryOrderBelongsToCurrentDeliveryUser:order]) {
+        return nil;
+    }
+    if (order.canAcceptDelivery) return @"delivery.accept";
+    if (order.canConfirmPackageHandover) return @"delivery.confirm_handover";
+    if (order.canMarkInTransit) return @"delivery.mark_in_transit";
+    if (order.canMarkDelivered) return @"delivery.mark_delivered";
+    if (order.canCollectCashPayment) return @"delivery.collect_cash";
+    if (order.canMarkCompleted) return @"delivery.mark_completed";
+    return nil;
+}
+
+- (NSString *)pp_primaryActionTitleForDeliveryActionKind:(NSString *)actionKind {
+    if ([actionKind isEqualToString:@"delivery.accept"]) return kLang(@"AcceptDelivery");
+    if ([actionKind isEqualToString:@"delivery.confirm_handover"]) return kLang(@"PickUpFromStore");
+    if ([actionKind isEqualToString:@"delivery.mark_in_transit"]) return kLang(@"Deliv_StartTransit");
+    if ([actionKind isEqualToString:@"delivery.mark_delivered"]) return kLang(@"MarkAsDelivered");
+    if ([actionKind isEqualToString:@"delivery.collect_cash"]) return kLang(@"CollectCashPayment");
+    if ([actionKind isEqualToString:@"delivery.mark_completed"]) return kLang(@"Deliv_CompleteOrder");
+    return kLang(@"OrderDetails");
+}
+
+- (NSInteger)pp_actionPriorityForDeliveryOrder:(PPDeliveryOrderModel *)order {
+    NSString *actionKind = [self pp_deliveryActionKindForOrder:order];
+    if ([actionKind isEqualToString:@"delivery.mark_delivered"]) return 600;
+    if ([actionKind isEqualToString:@"delivery.collect_cash"]) return 500;
+    if ([actionKind isEqualToString:@"delivery.mark_completed"]) return 400;
+    if ([actionKind isEqualToString:@"delivery.mark_in_transit"]) return 300;
+    if ([actionKind isEqualToString:@"delivery.confirm_handover"]) return 200;
+    if ([actionKind isEqualToString:@"delivery.accept"]) return 100;
+    return 0;
+}
+
+- (nullable PPDeliveryOrderModel *)pp_highestPriorityActionableDeliveryOrder {
+    NSMutableDictionary<NSString *, PPDeliveryOrderModel *> *ordersByID = [NSMutableDictionary dictionary];
+    for (PPDeliveryOrderModel *order in self.deliveryOpenActionableOrders ?: @[]) {
+        if (order.orderId.length > 0) ordersByID[order.orderId] = order;
+    }
+    for (PPDeliveryOrderModel *order in self.deliveryAssignedActionableOrders ?: @[]) {
+        if (order.orderId.length > 0) ordersByID[order.orderId] = order;
+    }
+
+    PPDeliveryOrderModel *selected = nil;
+    NSInteger selectedPriority = NSIntegerMin;
+    for (PPDeliveryOrderModel *order in ordersByID.allValues) {
+        if (![self pp_deliveryActionKindForOrder:order].length) {
+            continue;
+        }
+        NSInteger priority = [self pp_actionPriorityForDeliveryOrder:order];
+        if (!selected || priority > selectedPriority) {
+            selected = order;
+            selectedPriority = priority;
+        }
+    }
+    return selected;
+}
+
+- (nullable NSString *)pp_deliveryCompanyActionKindForRequest:(PPDeliveryCompanyRequest *)request {
+    PPDeliveryCompanyProfile *profile = self.deliveryCompanyContext;
+    if (![request isKindOfClass:PPDeliveryCompanyRequest.class] || request.requestID.length == 0 ||
+        profile.companyID.length == 0 || profile.isViewer) {
+        return nil;
+    }
+
+    if (profile.canDispatch) {
+        if ([request.status isEqualToString:PPDeliveryCompanyStatusOffered]) return @"deliveryCompany.accept";
+        if ([request.status isEqualToString:PPDeliveryCompanyStatusAccepted]) return @"deliveryCompany.assign";
+        if ([request.status isEqualToString:PPDeliveryCompanyStatusAssigned]) return @"deliveryCompany.reassign";
+        if ([request.status isEqualToString:PPDeliveryCompanyStatusDelivered]) return @"deliveryCompany.complete";
+        return nil;
+    }
+
+    if (profile.isDriver) {
+        NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+        if (request.assignedDriverUID.length > 0 && ![request.assignedDriverUID isEqualToString:currentUID]) {
+            return nil;
+        }
+        NSString *nextStatus = request.nextDriverStatus;
+        if ([nextStatus isEqualToString:PPDeliveryCompanyStatusPickedUp]) return @"deliveryCompany.mark_picked_up";
+        if ([nextStatus isEqualToString:PPDeliveryCompanyStatusInTransit]) return @"deliveryCompany.mark_in_transit";
+        if ([nextStatus isEqualToString:PPDeliveryCompanyStatusDelivered]) return @"deliveryCompany.mark_delivered";
+    }
+    return nil;
+}
+
+- (NSString *)pp_primaryActionTitleForDeliveryCompanyActionKind:(NSString *)actionKind {
+    if ([actionKind isEqualToString:@"deliveryCompany.accept"]) return kLang(@"DeliveryCompany_Action_Accept");
+    if ([actionKind isEqualToString:@"deliveryCompany.assign"]) return kLang(@"DeliveryCompany_Action_Assign");
+    if ([actionKind isEqualToString:@"deliveryCompany.reassign"]) return kLang(@"DeliveryCompany_Action_Reassign");
+    if ([actionKind isEqualToString:@"deliveryCompany.complete"]) return kLang(@"DeliveryCompany_Action_Complete");
+    if ([actionKind isEqualToString:@"deliveryCompany.mark_picked_up"]) return kLang(@"DeliveryCompany_Action_PickedUp");
+    if ([actionKind isEqualToString:@"deliveryCompany.mark_in_transit"]) return kLang(@"DeliveryCompany_Action_InTransit");
+    if ([actionKind isEqualToString:@"deliveryCompany.mark_delivered"]) return kLang(@"DeliveryCompany_Action_Delivered");
+    return kLang(@"DeliveryCompany_Detail_NavTitle");
+}
+
+- (NSInteger)pp_actionPriorityForDeliveryCompanyRequest:(PPDeliveryCompanyRequest *)request {
+    NSString *actionKind = [self pp_deliveryCompanyActionKindForRequest:request];
+    if ([actionKind isEqualToString:@"deliveryCompany.accept"]) return 700;
+    if ([actionKind isEqualToString:@"deliveryCompany.assign"]) return 600;
+    if ([actionKind isEqualToString:@"deliveryCompany.mark_delivered"]) return 500;
+    if ([actionKind isEqualToString:@"deliveryCompany.mark_in_transit"]) return 400;
+    if ([actionKind isEqualToString:@"deliveryCompany.mark_picked_up"]) return 300;
+    if ([actionKind isEqualToString:@"deliveryCompany.complete"]) return 200;
+    if ([actionKind isEqualToString:@"deliveryCompany.reassign"]) return 100;
+    return 0;
+}
+
+- (nullable PPDeliveryCompanyRequest *)pp_highestPriorityActionableDeliveryCompanyRequest {
+    PPDeliveryCompanyRequest *selected = nil;
+    NSInteger selectedPriority = NSIntegerMin;
+    for (PPDeliveryCompanyRequest *request in self.deliveryCompanyDashboardRequests ?: @[]) {
+        if (![self pp_deliveryCompanyActionKindForRequest:request].length) {
+            continue;
+        }
+        NSInteger priority = [self pp_actionPriorityForDeliveryCompanyRequest:request];
+        if (!selected || priority > selectedPriority) {
+            selected = request;
+            selectedPriority = priority;
+        }
+    }
+    return selected;
+}
+
+- (void)pp_executeCommandCenterActionTarget:(PPProCommandActionDescriptor *)target {
+    if (![self pp_activeDashboardUser]) {
+        return;
+    }
+    if (self.isExecutingCommandCenterAction) {
+        return;
+    }
+    self.isExecutingCommandCenterAction = YES;
+
+    if (![target isKindOfClass:PPProCommandActionDescriptor.class] || !target.isPrimaryActionPermitted) {
+        [self pp_refreshPulseAfterInvalidActionTarget];
+        return;
+    }
+
+    if ([target.interactionKind isEqualToString:@"quickAction"]) {
+        [self pp_executeCommandCenterQuickActionTarget:target];
+        return;
+    }
+
+    if ([target.actionKind isEqualToString:@"workspace"]) {
+        [self pp_routeCommandCenterRoute:target.workspaceRouteTag];
+        [self pp_finishCommandCenterActionNavigation];
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    BOOL opensDetailsOnly = [target.interactionKind isEqualToString:@"details"];
+    if ([target.actionKind hasPrefix:@"fulfillment."] && target.fulfillmentID.length > 0) {
+        [[PPFulfillmentManager sharedManager] fetchFulfillmentWithID:target.fulfillmentID completion:^(PPFulfillmentModel * _Nullable model, NSError * _Nullable error) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            NSString *currentActionKind = [strongSelf pp_fulfillmentActionKindForModel:model];
+            NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+            BOOL ownsFulfillment = currentUID.length > 0 && [model.ownerID isEqualToString:currentUID] &&
+                [model.ownerType isEqualToString:@"partner"];
+            BOOL canManageFulfillment = [strongSelf pp_canManageServices] || [strongSelf pp_canManageMarketplace];
+            BOOL actionRemainsCurrent = opensDetailsOnly || [currentActionKind isEqualToString:target.actionKind];
+            BOOL statusRemainsCurrent = opensDetailsOnly || target.expectedStatus.length == 0 ||
+                [model.status isEqualToString:target.expectedStatus];
+            if (error || !model || !ownsFulfillment || !canManageFulfillment || !actionRemainsCurrent || !statusRemainsCurrent) {
+                [strongSelf pp_refreshPulseAfterInvalidActionTarget];
+                return;
+            }
+            [PPFunc pp_playTapEffect];
+            PPFulfillmentDetailViewController *controller = [[PPFulfillmentDetailViewController alloc] initWithModel:model];
+            [strongSelf.navigationController pushViewController:controller animated:YES];
+            [strongSelf pp_finishCommandCenterActionNavigation];
+        }];
+        return;
+    }
+
+    if ([target.actionKind hasPrefix:@"delivery."] && target.orderID.length > 0) {
+        [[PPDeliveryManager shared] fetchDeliveryOrderWithID:target.orderID completion:^(PPDeliveryOrderModel * _Nullable order, NSError * _Nullable error) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            NSString *currentActionKind = [strongSelf pp_deliveryActionKindForOrder:order];
+            BOOL actionRemainsCurrent = opensDetailsOnly || [currentActionKind isEqualToString:target.actionKind];
+            BOOL statusRemainsCurrent = opensDetailsOnly || target.expectedStatus.length == 0 ||
+                [order.deliveryStatus isEqualToString:target.expectedStatus];
+            if (error || !order || ![strongSelf pp_canManageDelivery] ||
+                ![strongSelf pp_deliveryOrderBelongsToCurrentDeliveryUser:order] ||
+                !actionRemainsCurrent || !statusRemainsCurrent) {
+                [strongSelf pp_refreshPulseAfterInvalidActionTarget];
+                return;
+            }
+            [PPFunc pp_playTapEffect];
+            PPDeliveryOrderDetailViewController *controller = [[PPDeliveryOrderDetailViewController alloc] initWithOrder:order];
+            [strongSelf.navigationController pushViewController:controller animated:YES];
+            [strongSelf pp_finishCommandCenterActionNavigation];
+        }];
+        return;
+    }
+
+    if ([target.actionKind hasPrefix:@"deliveryCompany."] && target.requestID.length > 0) {
+        PPDeliveryCompanyProfile *profile = self.deliveryCompanyContext;
+        if (!profile.companyID.length || ![profile.companyID isEqualToString:target.companyID]) {
+            [self pp_refreshPulseAfterInvalidActionTarget];
+            return;
+        }
+        [PPDeliveryCompanyService.shared getRequestWithID:target.requestID completion:^(PPDeliveryCompanyRequest * _Nullable request, NSError * _Nullable error) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            NSString *currentActionKind = [strongSelf pp_deliveryCompanyActionKindForRequest:request];
+            PPDeliveryCompanyProfile *currentProfile = strongSelf.deliveryCompanyContext;
+            BOOL isAuthorizedGlobalOffer = request.companyID.length == 0 &&
+                [request.status isEqualToString:PPDeliveryCompanyStatusOffered];
+            BOOL isCurrentCompany = currentProfile.companyID.length > 0 &&
+                [currentProfile.companyID isEqualToString:target.companyID] &&
+                ([request.companyID isEqualToString:target.companyID] || isAuthorizedGlobalOffer);
+            BOOL actionRemainsCurrent = opensDetailsOnly || [currentActionKind isEqualToString:target.actionKind];
+            BOOL statusRemainsCurrent = opensDetailsOnly || target.expectedStatus.length == 0 ||
+                [request.status isEqualToString:target.expectedStatus];
+            if (error || !request || !isCurrentCompany || !actionRemainsCurrent || !statusRemainsCurrent) {
+                [strongSelf pp_refreshPulseAfterInvalidActionTarget];
+                return;
+            }
+            [PPFunc pp_playTapEffect];
+            PPDeliveryCompanyDetailViewController *controller =
+                [[PPDeliveryCompanyDetailViewController alloc] initWithRequestID:request.requestID profile:strongSelf.deliveryCompanyContext];
+            [strongSelf.navigationController pushViewController:controller animated:YES];
+            [strongSelf pp_finishCommandCenterActionNavigation];
+        }];
+        return;
+    }
+
+    [self pp_refreshPulseAfterInvalidActionTarget];
+}
+
+- (void)pp_executeCommandCenterQuickActionTarget:(PPProCommandActionDescriptor *)target {
+    __weak typeof(self) weakSelf = self;
+
+    if ([target.actionKind hasPrefix:@"fulfillment."] && target.fulfillmentID.length > 0) {
+        [[PPFulfillmentManager sharedManager] fetchFulfillmentWithID:target.fulfillmentID completion:^(PPFulfillmentModel * _Nullable model, NSError * _Nullable error) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            NSString *rawAction = [target.actionKind substringFromIndex:@"fulfillment.".length];
+            BOOL isSupportedQuickAction = [rawAction isEqualToString:@"reject"] || [rawAction isEqualToString:@"cancel_request"];
+            NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+            BOOL ownsFulfillment = currentUID.length > 0 && [model.ownerID isEqualToString:currentUID] &&
+                [model.ownerType isEqualToString:@"partner"];
+            BOOL canManageFulfillment = [self pp_canManageServices] || [self pp_canManageMarketplace];
+            BOOL statusRemainsCurrent = target.expectedStatus.length == 0 || [model.status isEqualToString:target.expectedStatus];
+            if (error || !model || !isSupportedQuickAction || !ownsFulfillment || !canManageFulfillment ||
+                !statusRemainsCurrent || ![model.availableActions containsObject:rawAction]) {
+                [self pp_refreshPulseAfterInvalidActionTarget];
+                return;
+            }
+
+            [PPAlertHelper showTextPromptIn:self
+                                      title:target.primaryActionTitle
+                                   subtitle:kLang(@"Fulfillment_ConfirmAction")
+                                placeholder:kLang(@"Fulfillment_NoteOptional")
+                                initialText:nil
+                                confirmText:kLang(@"Confirm")
+                                 cancelText:kLang(@"Cancel")
+                                 completion:^(NSString * _Nullable note) {
+                if (note == nil) {
+                    self.isExecutingCommandCenterAction = NO;
+                    return;
+                }
+                [PPHUD showIndeterminateIn:self.view title:kLang(@"Fulfillment_Updating") subtitle:nil];
+                [[PPFulfillmentManager sharedManager] performTransitionAction:rawAction
+                                                               fulfillmentID:model.fulfillmentID
+                                                              expectedStatus:model.status
+                                                                   commandID:nil
+                                                                       note:note
+                                                                   completion:^(BOOL success, NSString *message, NSError *operationError) {
+                    [self pp_finishCommandCenterQuickActionWithSuccess:success message:message error:operationError];
+                }];
+            }];
+        }];
+        return;
+    }
+
+    if ([target.actionKind isEqualToString:@"delivery.cancel"] && target.orderID.length > 0) {
+        [[PPDeliveryManager shared] fetchDeliveryOrderWithID:target.orderID completion:^(PPDeliveryOrderModel * _Nullable order, NSError * _Nullable error) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+            BOOL ownsAssignedOrder = currentUID.length > 0 && [order.deliveryUserId isEqualToString:currentUID];
+            BOOL statusRemainsCurrent = target.expectedStatus.length == 0 || [order.deliveryStatus isEqualToString:target.expectedStatus];
+            if (error || !order || ![self pp_canManageDelivery] || !ownsAssignedOrder || !order.canCancel || !statusRemainsCurrent) {
+                [self pp_refreshPulseAfterInvalidActionTarget];
+                return;
+            }
+
+            [PPAlertHelper showTextPromptIn:self
+                                      title:target.primaryActionTitle
+                                   subtitle:kLang(@"PulseCommand_CancelReasonSubtitle")
+                                placeholder:kLang(@"DeliveryCompany_Reason_Placeholder")
+                                initialText:nil
+                                confirmText:kLang(@"Confirm")
+                                 cancelText:kLang(@"Cancel")
+                                 completion:^(NSString * _Nullable note) {
+                if (note == nil) {
+                    self.isExecutingCommandCenterAction = NO;
+                    return;
+                }
+                NSString *trimmedNote = [note stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+                if (trimmedNote.length < 3) {
+                    self.isExecutingCommandCenterAction = NO;
+                    [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"PulseCommand_ReasonRequired")];
+                    return;
+                }
+                [PPHUD showIndeterminateIn:self.view title:kLang(@"Deliv_UpdatingStatus") subtitle:nil];
+                [[PPDeliveryManager shared] cancelOrder:order.orderId note:trimmedNote completion:^(BOOL success, NSString *message, NSError *operationError) {
+                    [self pp_finishCommandCenterQuickActionWithSuccess:success message:message error:operationError];
+                }];
+            }];
+        }];
+        return;
+    }
+
+    if ([target.actionKind hasPrefix:@"deliveryCompany."] && target.requestID.length > 0) {
+        [PPDeliveryCompanyService.shared getRequestWithID:target.requestID completion:^(PPDeliveryCompanyRequest * _Nullable request, NSError * _Nullable error) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            PPDeliveryCompanyProfile *profile = self.deliveryCompanyContext;
+            BOOL isAuthorizedGlobalOffer = request.companyID.length == 0 &&
+                [request.status isEqualToString:PPDeliveryCompanyStatusOffered];
+            BOOL isCurrentCompany = profile.canDispatch && profile.companyID.length > 0 &&
+                [profile.companyID isEqualToString:target.companyID] &&
+                ([request.companyID isEqualToString:target.companyID] || isAuthorizedGlobalOffer);
+            BOOL isReject = [target.actionKind isEqualToString:@"deliveryCompany.reject"] &&
+                [request.status isEqualToString:PPDeliveryCompanyStatusOffered];
+            BOOL isCancel = [target.actionKind isEqualToString:@"deliveryCompany.cancel"] &&
+                ([request.status isEqualToString:PPDeliveryCompanyStatusAccepted] ||
+                 [request.status isEqualToString:PPDeliveryCompanyStatusAssigned]);
+            BOOL statusRemainsCurrent = target.expectedStatus.length == 0 || [request.status isEqualToString:target.expectedStatus];
+            if (error || !request || !isCurrentCompany || (!isReject && !isCancel) || !statusRemainsCurrent) {
+                [self pp_refreshPulseAfterInvalidActionTarget];
+                return;
+            }
+
+            NSString *confirmationTitle = isReject
+                ? kLang(@"DeliveryCompany_Confirm_Reject_Title")
+                : kLang(@"DeliveryCompany_Confirm_Cancel_Title");
+            [PPAlertHelper showTextPromptIn:self
+                                      title:confirmationTitle
+                                   subtitle:kLang(@"DeliveryCompany_Reason_Subtitle")
+                                placeholder:kLang(@"DeliveryCompany_Reason_Placeholder")
+                                initialText:nil
+                                confirmText:kLang(@"Confirm")
+                                 cancelText:kLang(@"Cancel")
+                                 completion:^(NSString * _Nullable reason) {
+                if (reason == nil) {
+                    self.isExecutingCommandCenterAction = NO;
+                    return;
+                }
+                [PPHUD showIndeterminateIn:self.view title:kLang(@"Updating") subtitle:nil];
+                PPDeliveryCompanyActionCompletion completion = ^(NSDictionary * _Nullable result, NSError * _Nullable operationError) {
+                    (void)result;
+                    [self pp_finishCommandCenterQuickActionWithSuccess:(operationError == nil)
+                                                               message:kLang(@"DeliveryCompany_Action_Success")
+                                                                 error:operationError];
+                };
+                if (isReject) {
+                    [PPDeliveryCompanyService.shared rejectRequestID:request.requestID reason:reason completion:completion];
+                } else {
+                    [PPDeliveryCompanyService.shared cancelRequestID:request.requestID reason:reason completion:completion];
+                }
+            }];
+        }];
+        return;
+    }
+
+    [self pp_refreshPulseAfterInvalidActionTarget];
+}
+
+- (void)pp_finishCommandCenterQuickActionWithSuccess:(BOOL)success
+                                              message:(NSString *)message
+                                                error:(NSError *)error {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [PPHUD dismiss];
+        self.isExecutingCommandCenterAction = NO;
+        if (!success || error) {
+            [PPFunc pp_playErrorEffect];
+            [PPAlertHelper showErrorIn:self
+                                  title:kLang(@"Error")
+                               subtitle:message.length > 0 ? message : error.localizedDescription];
+            return;
+        }
+
+        [PPFunc pp_playSuccessEffect];
+        [self.commandCenterSurfaceController resetToUnifiedPulseAnimated:YES];
+        [self pp_refreshQuickActions];
+        [self pp_refreshDeliveryCompanyDashboardSummary];
+        [PPToast toast:message.length > 0 ? message : kLang(@"DeliverySuccess")
+                 style:PPToastStyleSuccess
+                haptic:NO
+              duration:2.0];
+    });
+}
+
+- (void)pp_refreshPulseAfterInvalidActionTarget {
+    self.isExecutingCommandCenterAction = NO;
+    [self.commandCenterSurfaceController resetToUnifiedPulseAnimated:YES];
+    [self pp_refreshQuickActions];
+    [self pp_refreshDeliveryCompanyDashboardSummary];
+    [PPToast toast:kLang(@"PulseCommand_ActionUnavailable") style:PPToastStyleError haptic:YES duration:2.4];
+}
+
+- (void)pp_finishCommandCenterActionNavigation {
+    id<UIViewControllerTransitionCoordinator> coordinator =
+        self.navigationController.topViewController.transitionCoordinator ?: self.navigationController.transitionCoordinator;
+    if (coordinator) {
+        __weak typeof(self) weakSelf = self;
+        BOOL queued = [coordinator animateAlongsideTransition:nil completion:^(__unused id<UIViewControllerTransitionCoordinatorContext> context) {
+            weakSelf.isExecutingCommandCenterAction = NO;
+        }];
+        if (queued) {
+            return;
+        }
+    }
+    self.isExecutingCommandCenterAction = NO;
+}
+
+- (void)pp_refreshCommandCenterSnapshot {
+    if (![NSThread isMainThread]) {
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf pp_refreshCommandCenterSnapshot];
+        });
+        return;
+    }
+
+    PPProCommandCenterSurfaceController *surface = self.commandCenterSurfaceController;
+    if (!surface) {
+        return;
+    }
+
+    UserModel *user = [self pp_activeDashboardUser];
+    if (!user) {
+        PPProCommandCenterSnapshotDescriptor *lockedSnapshot = [[PPProCommandCenterSnapshotDescriptor alloc] init];
+        lockedSnapshot.workspaceEyebrow = kLang(@"PulseCommand_Workspace_Eyebrow");
+        lockedSnapshot.isRTL = Language.isRTL;
+        lockedSnapshot.isOperationalLoading = YES;
+        lockedSnapshot.isOperationalDegraded = NO;
+        lockedSnapshot.canRetryOperationalData = NO;
+        [surface applySnapshot:lockedSnapshot animated:NO];
+        return;
+    }
+
+    BOOL canManageServices = [self pp_canManageServices];
+    BOOL canManageMarketplace = [self pp_canManageMarketplace];
+    BOOL canManagePharmacy = [self pp_canManagePharmacy];
+    BOOL canManageDelivery = [self pp_canManageDelivery];
+    BOOL canManageVets = [self pp_canManageVets];
+    BOOL canManageAdoption = [self pp_canManageAdoption];
+    BOOL hasDeliveryCompany = [self pp_hasDeliveryCompanyWorkspaceForUser:user];
+    BOOL hasProviderWorkspace = hasDeliveryCompany || canManageServices || canManageMarketplace ||
+        canManagePharmacy || canManageDelivery || canManageVets || canManageAdoption;
+
+    NSInteger fulfillmentCount = [self pp_dashboardHeroFulfillmentActionCount];
+    NSInteger deliveryCount = [self pp_dashboardHeroDeliveryActionCount];
+    NSInteger deliveryCompanyCount = [self pp_dashboardHeroDeliveryCompanyActionCount];
+    NSInteger operationalActionCount = fulfillmentCount + deliveryCount + deliveryCompanyCount;
+
+    NSMutableArray<PPProCommandCapabilityDescriptor *> *capabilities = [NSMutableArray array];
+
+    if (canManageMarketplace) {
+        [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"marketplace"
+                                                                   title:kLang(@"Market_Title")
+                                                                subtitle:kLang(@"Market_EmptySubtitle")
+                                                              symbolName:@"bag.fill"
+                                                                routeTag:@"marketItems"
+                                                             actionCount:fulfillmentCount
+                                                                readOnly:NO]];
+    }
+    if (canManagePharmacy) {
+        [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"pharmacy"
+                                                                   title:kLang(@"Pharmacy_Section_Title")
+                                                                subtitle:kLang(@"Pharmacy_Manage_Subtitle")
+                                                              symbolName:@"pills.fill"
+                                                                routeTag:@"managePharmacy"
+                                                             actionCount:0
+                                                                readOnly:NO]];
+    }
+    if (canManageServices) {
+        [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"services"
+                                                                   title:kLang(@"ManageServices")
+                                                                subtitle:kLang(@"ProviderTypeServiceSubtitle")
+                                                              symbolName:@"scissors"
+                                                                routeTag:@"manageServices"
+                                                             actionCount:fulfillmentCount
+                                                                readOnly:NO]];
+    }
+    if (canManageVets) {
+        [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"veterinary"
+                                                                   title:kLang(@"ProviderTypeVetTitle")
+                                                                subtitle:kLang(@"Vet_Manage_Subtitle")
+                                                              symbolName:@"cross.case.fill"
+                                                                routeTag:@"__vet"
+                                                             actionCount:0
+                                                                readOnly:NO]];
+    }
+    if (hasDeliveryCompany) {
+        NSString *fleetTitle = (self.isDeliveryCompanyMode && self.deliveryCompanyContext.isDriver)
+            ? kLang(@"DeliveryCompany_DashboardShell_MyAssigned")
+            : kLang(@"DeliveryCompany_Title");
+        NSString *fleetSubtitle = self.isDeliveryCompanyMode && self.deliveryCompanyContext.isDriver
+            ? kLang(@"DeliveryCompany_DashboardShell_MyAssignedSubtitle")
+            : kLang(@"DeliveryCompany_DashboardShell_OpenCompanySubtitle");
+        [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"deliveryCompany"
+                                                                   title:fleetTitle
+                                                                subtitle:fleetSubtitle
+                                                              symbolName:@"truck.box.fill"
+                                                                routeTag:@"deliveryCompany"
+                                                             actionCount:deliveryCompanyCount
+                                                                readOnly:(self.isDeliveryCompanyMode && self.deliveryCompanyContext.isViewer)]];
+    }
+    if (canManageDelivery) {
+        [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"delivery"
+                                                                   title:kLang(@"DeliveryManagement")
+                                                                subtitle:kLang(@"DeliveryManagementSubtitle")
+                                                              symbolName:@"shippingbox.fill"
+                                                                routeTag:@"delivery"
+                                                             actionCount:deliveryCount
+                                                                readOnly:NO]];
+    }
+    if (canManageAdoption) {
+        [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"adoption"
+                                                                   title:kLang(@"AdoptPetsTitle")
+                                                                subtitle:kLang(@"AdoptPetsSubtitle")
+                                                              symbolName:@"heart.fill"
+                                                                routeTag:@"adoptPetsList"
+                                                             actionCount:0
+                                                                readOnly:NO]];
+    }
+
+    NSMutableArray<PPProCommandSignalDescriptor *> *signals = [NSMutableArray array];
+
+    if (fulfillmentCount > 0) {
+        NSMutableArray<NSString *> *scope = [NSMutableArray array];
+        if (canManageMarketplace) [scope addObject:@"marketplace"];
+        if (canManageServices) [scope addObject:@"services"];
+        PPProCommandSignalDescriptor *signal = [self pp_commandSignalWithIdentifier:@"fulfillment"
+                                                               capabilityIdentifiers:scope.copy
+                                                                              title:kLang(@"Fulfillment_Title")
+                                                                           subtitle:kLang(@"Fulfillment_EmptySubtitle")
+                                                                         symbolName:@"shippingbox.fill"
+                                                                           routeTag:@"fulfillmentOrders"
+                                                                         badgeCount:fulfillmentCount
+                                                                           priority:1
+                                                                             unseen:self.hasUnseenFulfillmentQuickAction];
+        signal.actionTarget = [self pp_resolveCommandActionTargetForSignalIdentifier:@"fulfillment"
+                                                                capabilityIdentifier:scope.firstObject ?: @""
+                                                                     workspaceRouteTag:@"fulfillmentOrders"
+                                                                workspaceActionTitle:kLang(@"PulseCommand_ViewAllFulfillmentOrders")
+                                                                             priority:1];
+        [signals addObject:signal];
+    }
+
+    if (deliveryCount > 0 && canManageDelivery) {
+        PPProCommandSignalDescriptor *signal = [self pp_commandSignalWithIdentifier:@"delivery"
+                                                               capabilityIdentifiers:@[@"delivery"]
+                                                                              title:kLang(@"DeliveryManagement")
+                                                                           subtitle:kLang(@"DeliveryManagementSubtitle")
+                                                                         symbolName:@"shippingbox.fill"
+                                                                           routeTag:@"delivery"
+                                                                         badgeCount:deliveryCount
+                                                                           priority:1
+                                                                             unseen:self.hasUnseenDeliveryQuickAction];
+        signal.actionTarget = [self pp_resolveCommandActionTargetForSignalIdentifier:@"delivery"
+                                                                capabilityIdentifier:@"delivery"
+                                                                     workspaceRouteTag:@"delivery"
+                                                                workspaceActionTitle:kLang(@"PulseCommand_ViewAllDeliveries")
+                                                                             priority:1];
+        [signals addObject:signal];
+    }
+
+    if (deliveryCompanyCount > 0 && hasDeliveryCompany) {
+        NSString *fleetTitle = (self.isDeliveryCompanyMode && self.deliveryCompanyContext.isDriver)
+            ? kLang(@"DeliveryCompany_DashboardShell_MyAssigned")
+            : kLang(@"DeliveryCompany_Title");
+        NSString *fleetSubtitle = (self.isDeliveryCompanyMode && self.deliveryCompanyContext.isDriver)
+            ? kLang(@"DeliveryCompany_DashboardShell_MyAssignedSubtitle")
+            : kLang(@"DeliveryCompany_DashboardShell_OpenCompanySubtitle");
+        PPProCommandSignalDescriptor *signal = [self pp_commandSignalWithIdentifier:@"deliveryCompany"
+                                                               capabilityIdentifiers:@[@"deliveryCompany"]
+                                                                              title:fleetTitle
+                                                                           subtitle:fleetSubtitle
+                                                                         symbolName:@"truck.box.fill"
+                                                                           routeTag:@"deliveryCompany"
+                                                                         badgeCount:deliveryCompanyCount
+                                                                           priority:1
+                                                                             unseen:NO];
+        signal.actionTarget = [self pp_resolveCommandActionTargetForSignalIdentifier:@"deliveryCompany"
+                                                                capabilityIdentifier:@"deliveryCompany"
+                                                                     workspaceRouteTag:@"deliveryCompany"
+                                                                workspaceActionTitle:kLang(@"PulseCommand_ViewAllCompanyDeliveries")
+                                                                             priority:1];
+        [signals addObject:signal];
+    }
+
+    if (self.inboxUnreadCount > 0) {
+        PPProCommandSignalDescriptor *signal = [self pp_commandSignalWithIdentifier:@"notifications"
+                                                               capabilityIdentifiers:@[]
+                                                                              title:kLang(@"NotificationsTitle")
+                                                                           subtitle:kLang(@"NotificationsDashboardSubtitle")
+                                                                         symbolName:@"bell.badge.fill"
+                                                                           routeTag:@"notificationsInbox"
+                                                                         badgeCount:self.inboxUnreadCount
+                                                                           priority:0
+                                                                             unseen:YES];
+        signal.actionTarget = [self pp_resolveCommandActionTargetForSignalIdentifier:@"notifications"
+                                                                capabilityIdentifier:@""
+                                                                     workspaceRouteTag:@"notificationsInbox"
+                                                                workspaceActionTitle:kLang(@"DashboardHero_CTA_Notifications")
+                                                                             priority:0];
+        [signals addObject:signal];
+    }
+
+    if (hasProviderWorkspace && self.supportChatsUnreadThreadsCount > 0) {
+        PPProCommandSignalDescriptor *signal = [self pp_commandSignalWithIdentifier:@"supportChats"
+                                                               capabilityIdentifiers:@[]
+                                                                              title:kLang(@"ch_provider_support_chats_title")
+                                                                           subtitle:kLang(@"ch_provider_support_chats_subtitle")
+                                                                         symbolName:@"message.badge.fill"
+                                                                           routeTag:@"providerSupportChats"
+                                                                         badgeCount:self.supportChatsUnreadThreadsCount
+                                                                           priority:0
+                                                                             unseen:YES];
+        signal.actionTarget = [self pp_resolveCommandActionTargetForSignalIdentifier:@"supportChats"
+                                                                capabilityIdentifier:@""
+                                                                     workspaceRouteTag:@"providerSupportChats"
+                                                                workspaceActionTitle:kLang(@"ch_provider_support_chats_title")
+                                                                             priority:0];
+        [signals addObject:signal];
+    }
+
+    PPProCommandCenterSnapshotDescriptor *snapshot = [[PPProCommandCenterSnapshotDescriptor alloc] init];
+    snapshot.workspaceEyebrow = kLang(@"PulseCommand_Workspace_Eyebrow");
+    snapshot.greeting = [self pp_dashboardGreetingText] ?: @"";
+
+    NSString *resolvedName = user.displayName.length ? user.displayName : [user PPBestDisplayName];
+    snapshot.displayName = resolvedName.length ? resolvedName : kLang(@"pp_me_guest");
+    snapshot.roleSummary = [self pp_dashboardRoleBadgeTextForUser:user] ?: @"";
+    snapshot.isRTL = Language.isRTL;
+    snapshot.workspaceCount = capabilities.count;
+    snapshot.actionCount = operationalActionCount;
+    snapshot.inboxUnreadCount = self.inboxUnreadCount;
+    snapshot.supportUnreadCount = hasProviderWorkspace ? self.supportChatsUnreadThreadsCount : 0;
+    PPProCommandDataSource requiredSources = [self pp_requiredCommandDataSourcesForUser:user];
+    BOOL isOperationalLoading = (requiredSources & ~self.commandLoadedSources) != PPProCommandDataSourceNone;
+    BOOL isOperationalDegraded = (requiredSources & self.commandDegradedSources) != PPProCommandDataSourceNone;
+    snapshot.isOperationalLoading = isOperationalLoading;
+    snapshot.isOperationalDegraded = isOperationalDegraded;
+    snapshot.canRetryOperationalData = isOperationalDegraded && !isOperationalLoading;
+    snapshot.capabilities = capabilities.copy;
+    snapshot.signals = signals.copy;
+
+    NSString *avatarURL = @"";
+    if ([user.UserImageUrl isKindOfClass:NSURL.class]) {
+        avatarURL = [(NSURL *)user.UserImageUrl absoluteString] ?: @"";
+    } else if ([user.UserImageUrl isKindOfClass:NSString.class]) {
+        avatarURL = (NSString *)user.UserImageUrl;
+    }
+    if (avatarURL.length == 0) {
+        avatarURL = [FIRAuth auth].currentUser.photoURL.absoluteString ?: @"";
+    }
+    snapshot.avatarURLString = avatarURL;
+
+    BOOL animated = self.didCompleteInitialDashboardLoad && self.view.window != nil;
+    [surface applySnapshot:snapshot animated:animated];
+}
+
+- (void)pp_presentCommandCenterMoreMenu {
+    UIAlertController *menu = [UIAlertController alertControllerWithTitle:kLang(@"PulseCommand_More_Title")
+                                                                   message:kLang(@"PulseCommand_More_Subtitle")
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    __weak typeof(self) weakSelf = self;
+    void (^addFormRoute)(NSString *, NSString *) = ^(NSString *route, NSString *titleKey) {
+        if (![weakSelf.form formRowWithTag:route]) {
+            return;
+        }
+        [menu addAction:[UIAlertAction actionWithTitle:kLang(titleKey)
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *action) {
+            [weakSelf pp_routeCommandCenterRoute:route];
+        }]];
+    };
+
+    addFormRoute(@"providerSupportChats", @"ch_provider_support_chats_title");
+    addFormRoute(@"fulfillmentOrders", @"Fulfillment_Title");
+    addFormRoute(@"branchesManagement", @"MarketplaceBranches_Manage");
+    addFormRoute(@"deliveryCompanyMembers", @"DeliveryCompany_Tab_Members");
+    addFormRoute(@"notificationSettings", @"NotificationSettings");
+    addFormRoute(@"profileSettings", @"ProfileSettings");
+
+    UserModel *user = [self pp_activeDashboardUser];
+    BOOL hasProviderWorkspace = [self pp_hasNonDeliveryCompanyWorkspaceForUser:user] ||
+        [self pp_hasDeliveryCompanyWorkspaceForUser:user];
+    if (hasProviderWorkspace) {
+        [menu addAction:[UIAlertAction actionWithTitle:kLang(@"ProfileSettings_EditProviderProfile")
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *action) {
+            [weakSelf pp_routeCommandCenterRoute:@"__providerEditor"];
+        }]];
+        [menu addAction:[UIAlertAction actionWithTitle:kLang(@"ProviderSubscriptionCardTitle")
+                                                 style:UIAlertActionStyleDefault
+                                               handler:^(__unused UIAlertAction *action) {
+            [weakSelf pp_routeCommandCenterRoute:@"__subscription"];
+        }]];
+    }
+
+    [menu addAction:[UIAlertAction actionWithTitle:kLang(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
+    UIPopoverPresentationController *popover = menu.popoverPresentationController;
+    if (popover) {
+        popover.sourceView = self.view;
+        popover.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds) - 1.0, 1.0, 1.0);
+        popover.permittedArrowDirections = 0;
+    }
+    [self presentViewController:menu animated:YES completion:nil];
+}
+
+- (void)pp_routeCommandCenterRoute:(NSString *)route {
+    if (route.length == 0 || ![self pp_activeDashboardUser]) {
+        return;
+    }
+
+    if ([route isEqualToString:@"__retryCommandData"]) {
+        [self pp_retryCommandCenterOperationalData];
+        return;
+    }
+
+    if ([route isEqualToString:@"__vet"]) {
+        [PPFunc pp_playTapEffect];
+        PPVetsListViewController *controller = [[PPVetsListViewController alloc] init];
+        [self.navigationController pushViewController:controller animated:YES];
+        return;
+    }
+
+    if ([route isEqualToString:@"__subscription"]) {
+        [self pp_openSubscriptionManagement];
+        return;
+    }
+
+    if ([route isEqualToString:@"__providerEditor"]) {
+        [self pp_openProviderProfileEditor];
+        return;
+    }
+
+    if ([route isEqualToString:@"__more"]) {
+        [self pp_presentCommandCenterMoreMenu];
+        return;
+    }
+
+    if ([route isEqualToString:@"fulfillmentOrders"]) {
+        [self pp_markQuickActionKindSeen:PPAdminQuickActionSignalFulfillment];
+    } else if ([route isEqualToString:@"delivery"]) {
+        [self pp_markQuickActionKindSeen:PPAdminQuickActionSignalDelivery];
+    }
+
+    XLFormRowDescriptor *row = [self.form formRowWithTag:route];
+    if (row.action.formBlock) {
+        row.action.formBlock(row);
+        return;
+    }
+
+    // Keep current quick-action reachability if a role-gated XLForm row is absent.
+    if ([route isEqualToString:@"delivery"] && [self pp_canManageDelivery]) {
+        PPDeliveryDashboardViewController *controller = [[PPDeliveryDashboardViewController alloc] init];
+        [self.navigationController pushViewController:controller animated:YES];
+    } else if ([route isEqualToString:@"profileSettings"]) {
+        [self pp_openProfileSettings];
+    } else if ([route isEqualToString:@"providerSupportChats"] &&
+               [self.form formRowWithTag:@"providerSupportChats"]) {
+        [self pp_openSupportChats];
+    } else if ([route isEqualToString:@"deliveryCompany"] && self.isDeliveryCompanyMode) {
+        [self pp_openDeliveryCompanyDashboard];
+    }
+}
+
+- (void)commandCenterSurface:(PPProCommandCenterSurfaceController *)controller didActivateRoute:(NSString *)route {
+    (void)controller;
+    [self pp_routeCommandCenterRoute:route];
+}
+
+- (void)commandCenterSurface:(PPProCommandCenterSurfaceController *)controller
+      didActivateActionTarget:(PPProCommandActionDescriptor *)target {
+    (void)controller;
+    [self pp_executeCommandCenterActionTarget:target];
+}
+
+- (void)commandCenterSurfaceDidRequestProfile:(PPProCommandCenterSurfaceController *)controller {
+    (void)controller;
+    [self pp_openProfileSettings];
+}
+
 #pragma mark - Lifecycle
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     [self pp_configureDashboardAppearance];
+    [self pp_installCommandCenterSurfaceIfNeeded];
     [self pp_refreshDeliveryCompanyDashboardSummary];
     [self pp_refreshDeliveryCompanyMembership];
 
@@ -3963,15 +5355,14 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickAc
     UserModel *curUser = UsrMgr.currentUser ?: (currentUID.length ? [UsrMgr p_readUserFromDisk:currentUID] : nil);
     if (curUser) {
         UsrMgr.currentUser = curUser;
-        PPLOG(@"[FUM] viewDidLoad cached dashboard user: uid=%@ email=%@ token=%@ name=%@",
-              curUser.uid, curUser.UserEmail, curUser.PPProTokenID, curUser.displayName);
+        PPLOG(@"[FUM] viewDidLoad cached dashboard user: uid=%@ email=%@ name=%@",
+              curUser.uid, curUser.UserEmail, curUser.displayName);
         [self setupHeaderUIWithUser:curUser];
         [self pp_rebuildDashboardFormPreservingOffset:NO];
-        [self pp_syncCachedAdminNotificationTokenIfNeeded];
         [self pp_startProviderSubscriptionObserver];
         [self pp_startDashboardAccessObserversForUser:curUser];
         [self pp_startInboxUnreadObserverForUser:curUser];
-        [self pp_startSupportChatsUnreadObserverForUser:curUser];
+        [self pp_reconcileSupportChatsObserverForUser:curUser];
         self.didCompleteInitialDashboardLoad = YES;
     } else {
         __weak typeof(self) weakSelf = self;
@@ -3984,8 +5375,8 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickAc
                 return;
             }
 
-            PPLOG(@"[FUM] viewDidLoad reloaded dashboard user: uid=%@ email=%@ token=%@ name=%@",
-                  user.uid, user.UserEmail, user.PPProTokenID, user.displayName);
+            PPLOG(@"[FUM] viewDidLoad reloaded dashboard user: uid=%@ email=%@ name=%@",
+                  user.uid, user.UserEmail, user.displayName);
 
             UsrMgr.currentUser = user;
             [UsrMgr p_cacheUser:user];
@@ -3996,11 +5387,10 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickAc
             dispatch_async(dispatch_get_main_queue(), ^{
                 [strongSelf setupHeaderUIWithUser:user];
                 [strongSelf pp_rebuildDashboardFormPreservingOffset:NO];
-                [strongSelf pp_syncCachedAdminNotificationTokenIfNeeded];
                 [strongSelf pp_startProviderSubscriptionObserver];
                 [strongSelf pp_startDashboardAccessObserversForUser:user];
                 [strongSelf pp_startInboxUnreadObserverForUser:user];
-                [strongSelf pp_startSupportChatsUnreadObserverForUser:user];
+                [strongSelf pp_reconcileSupportChatsObserverForUser:user];
                 strongSelf.didCompleteInitialDashboardLoad = YES;
             });
         }];
@@ -4008,57 +5398,12 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickAc
     }
 }
 
-- (void)pp_syncCachedAdminNotificationTokenIfNeeded {
-    UserModel *currentUser = UsrMgr.currentUser;
-    if (!currentUser) {
-        return;
-    }
-
-    __weak typeof(self) weakSelf = self;
-    void (^syncToken)(NSString *) = ^(NSString *token) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-
-        NSString *safeToken = [token isKindOfClass:NSString.class] ? [token stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] : @"";
-        if (safeToken.length == 0) {
-            return;
-        }
-
-        if ([currentUser.PPProTokenID isEqualToString:safeToken]) {
-            return;
-        }
-
-        currentUser.PPProTokenID = safeToken;
-        [currentUser SYNC:^(NSError * _Nullable error) {
-            if (error) {
-                NSLog(@"[FIRMessaging] Failed syncing cached admin dashboard token: %@", error.localizedDescription);
-            } else {
-                NSLog(@"[FIRMessaging] Cached admin dashboard token synced for %@", currentUser.uid);
-            }
-        }];
-    };
-
-    NSString *cachedToken = PPNotifications.deviceToken;
-    if ([cachedToken isKindOfClass:NSString.class] && cachedToken.length > 0) {
-        syncToken(cachedToken);
-        return;
-    }
-
-    [PPNotifications getDeviceTokenWithCompletion:^(NSString * _Nullable token, NSError * _Nullable error) {
-        if (error) {
-            NSLog(@"[FIRMessaging] Unable to fetch admin token on dashboard load: %@", error.localizedDescription);
-            return;
-        }
-        syncToken(token);
-    }];
-}
-
 #pragma mark - UI Header
 - (void)setupHeaderUIWithUser:(UserModel *)curUser {
     if (!curUser) return;
 
-    PPLOG(@"[FUM] setupHeaderUIWithUser: uid=%@ email=%@ token=%@ name=%@",
-          curUser.uid, curUser.UserEmail, curUser.PPProTokenID, curUser.displayName);
+    PPLOG(@"[FUM] setupHeaderUIWithUser: uid=%@ email=%@ name=%@",
+          curUser.uid, curUser.UserEmail, curUser.displayName);
 
     [self pp_buildDashboardHeaderIfNeeded];
     [self pp_refreshQuickActions];
@@ -4396,7 +5741,7 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
 - (void)pp_applyAvatarURL:(NSURL * _Nullable)url {
     UIImage *placeholder = [UIImage systemImageNamed:@"person.crop.circle.fill"];
     self.avatarIMV.image = placeholder;
-    self.avatarIMV.tintColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    self.avatarIMV.tintColor = SeconderyTextClr;
 
     if (!url.absoluteString.length) {
         self.avatarIMV.contentMode = UIViewContentModeCenter;
@@ -4483,20 +5828,20 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
     UILabel *label = [[UILabel alloc] init];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.font = [Styling fontBold:14];
-    label.textColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    label.textColor = SeconderyTextClr;
     label.text = title;
     label.textAlignment = Language.alignmentForCurrentLanguage;
     [container addSubview:label];
 
     UIView *dotView = [[UIView alloc] init];
     dotView.translatesAutoresizingMaskIntoConstraints = NO;
-    dotView.backgroundColor = [AppPrimaryClr ?: UIColor.systemTealColor colorWithAlphaComponent:0.20];
+    dotView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.20];
     dotView.layer.cornerRadius = 4.0;
     [container addSubview:dotView];
 
     UIView *line = [[UIView alloc] init];
     line.translatesAutoresizingMaskIntoConstraints = NO;
-    line.backgroundColor = [(AppPrimaryClr ?: UIColor.separatorColor) colorWithAlphaComponent:0.12];
+    line.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.12];
     line.layer.cornerRadius = 1.0;
     [container addSubview:line];
 
@@ -4545,15 +5890,15 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
     }
 
     /* ── Standard rows (switch, etc.) → card-style surface ── */
-    UIColor *accent  = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *surface = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    UIColor *accent  = AppPrimaryClr;
+    UIColor *surface = AppForgroundColr;
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
 
     cell.backgroundColor = UIColor.clearColor;
     cell.contentView.backgroundColor = UIColor.clearColor;
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
     cell.textLabel.font = [Styling fontMedium:15];
-    cell.textLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    cell.textLabel.textColor = PrimaryTextClr;
     cell.preservesSuperviewLayoutMargins = NO;
     cell.layoutMargins = UIEdgeInsetsMake(0, 12, 0, 12);
     cell.separatorInset = UIEdgeInsetsMake(0, 12, 0, 12);
@@ -4640,23 +5985,38 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [self pp_installCommandCenterSurfaceIfNeeded];
     [self pp_refreshDeliveryCompanyDashboardSummary];
     [self pp_refreshDeliveryCompanyMembership];
 
     if (UsrMgr.currentUser) {
         [self updateHeaderWithUser:UsrMgr.currentUser];
+        // Reconcile the dashboard-owned listener with the current Firebase Auth
+        // owner and any staff/provider eligibility changes made while away.
+        [self pp_startInboxUnreadObserverForUser:UsrMgr.currentUser];
     }
     if (self.didCompleteInitialDashboardLoad) {
         [self pp_rebuildDashboardFormPreservingOffset:YES];
     }
-    [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:kLang(@"AdminDashboard") showBack:NO];
-    [self pp_navBarSetRightIcon:@"gearshape.fill" key:kPPKeyBaseBack target:self action:@selector(pp_openProfileSettings) tap:^{}];
-    [self pp_navBarSetLeftIcon:@"power.circle.fill" key:kPPKeyBaseButton target:self action:@selector(didTapAuthButton) tap:^{}];
+
+    // The SwiftUI greeting header is the dashboard's single navigation owner.
+    // Remove the retained legacy bar before hiding UINavigationBar so the
+    // command surface reclaims its vertical space and no stale controls are
+    // reattached by the shared PPNavBar lifecycle hook.
+    [self pp_removeNavBar];
+    [self.navigationController setNavigationBarHidden:YES animated:animated];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
     [self pp_stopHeaderAccentMotion];
+
+    // Pushed destinations continue to own their established PPNavBar setup.
+    // Restore the host only when another controller is becoming the stack top;
+    // returning to this dashboard hides it again in viewWillAppear:.
+    if (self.navigationController.topViewController != self) {
+        [self.navigationController setNavigationBarHidden:NO animated:animated];
+    }
 }
 
 - (void)didTapBiometric {
@@ -4667,7 +6027,6 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
 
-    [self pp_syncCachedAdminNotificationTokenIfNeeded];
     [self pp_playDashboardEntranceIfNeeded];
 }
 

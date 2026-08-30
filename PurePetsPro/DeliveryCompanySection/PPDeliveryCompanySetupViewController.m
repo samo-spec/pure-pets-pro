@@ -213,7 +213,7 @@
     self.companyIDField.accessibilityLabel = kLang(@"DeliveryCompany_Setup_CompanyID");
     [fieldSurface addSubview:self.companyIDField];
 
-    self.connectedLabel = [self labelWithFont:PPFontMedium(13) color:UIColor.systemGreenColor lines:0];
+    self.connectedLabel = [self labelWithFont:PPFontMedium(13) color:[UIColor ppSuccess] lines:0];
     self.connectedLabel.hidden = YES;
     [surface addSubview:self.connectedLabel];
 
@@ -240,11 +240,11 @@
     self.disconnectButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.disconnectButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.disconnectButton.titleLabel.font = PPFontMedium(15);
-    self.disconnectButton.backgroundColor = [UIColor.systemRedColor colorWithAlphaComponent:0.08];
+    self.disconnectButton.backgroundColor = [[UIColor ppError] colorWithAlphaComponent:0.08];
     self.disconnectButton.layer.cornerRadius = 16.0;
     self.disconnectButton.layer.cornerCurve = kCACornerCurveContinuous;
     [self.disconnectButton setTitle:kLang(@"DeliveryCompany_Setup_Disconnect") forState:UIControlStateNormal];
-    [self.disconnectButton setTitleColor:UIColor.systemRedColor forState:UIControlStateNormal];
+    [self.disconnectButton setTitleColor:[UIColor ppError] forState:UIControlStateNormal];
     [self.disconnectButton addTarget:self action:@selector(disconnectTapped) forControlEvents:UIControlEventTouchUpInside];
     self.disconnectButton.hidden = YES;
     [surface addSubview:self.disconnectButton];
@@ -316,7 +316,7 @@
         self.connectedLabel.text = [NSString stringWithFormat:kLang(@"DeliveryCompany_Setup_Connected_Format"),
                                     companyName.length ? companyName : profile.companyID,
                                     PPDeliveryCompanyRoleDisplayName(profile.role)];
-        self.connectedLabel.textColor = UIColor.systemGreenColor;
+        self.connectedLabel.textColor = [UIColor ppSuccess];
         self.connectedLabel.hidden = NO;
         [self.primaryButton setTitle:kLang(@"DeliveryCompany_Setup_OpenDashboard") forState:UIControlStateNormal];
     } else if (self.isDiscoveringMemberships) {

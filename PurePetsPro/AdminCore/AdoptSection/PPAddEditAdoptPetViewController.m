@@ -73,20 +73,15 @@
 #pragma mark - Colors
 
 - (UIColor *)pp_canvasColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.10 green:0.10 blue:0.11 alpha:1.0];
-        }
-        return [UIColor colorWithRed:0.969 green:0.961 blue:0.949 alpha:1.0];
-    }];
+    return [UIColor ppBackground];
 }
 
 - (UIColor *)pp_surfaceColor {
-    return AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    return AppForgroundColr;
 }
 
 - (UIColor *)pp_accentColor {
-    return AppPrimaryClr ?: UIColor.systemTealColor;
+    return AppPrimaryClr;
 }
 
 #pragma mark - Build
@@ -103,8 +98,8 @@
     self.bgGlowTop.layer.shadowOpacity = isDark ? 0.04 : 0.08;
     self.bgGlowTop.layer.shadowRadius = 64.0;
 
-    self.bgGlowBottom.backgroundColor = [[UIColor systemOrangeColor] colorWithAlphaComponent:isDark ? 0.035 : 0.075];
-    self.bgGlowBottom.layer.shadowColor = UIColor.systemOrangeColor.CGColor;
+    self.bgGlowBottom.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:isDark ? 0.035 : 0.075];
+    self.bgGlowBottom.layer.shadowColor = [UIColor ppWarning].CGColor;
     self.bgGlowBottom.layer.shadowOpacity = isDark ? 0.03 : 0.06;
     self.bgGlowBottom.layer.shadowRadius = 72.0;
 
@@ -173,7 +168,7 @@
     surface.layer.cornerCurve = kCACornerCurveContinuous;
     surface.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     surface.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.08].CGColor;
-    surface.layer.shadowColor = (AppShadowColor ?: UIColor.blackColor).CGColor;
+    surface.layer.shadowColor = (AppShadowColor).CGColor;
     surface.layer.shadowOpacity = 0.07;
     surface.layer.shadowRadius = 24.0;
     surface.layer.shadowOffset = CGSizeMake(0, 14.0);
@@ -200,13 +195,13 @@
     eyebrow.text = [kLang(@"AdoptPro_FormEyebrow") uppercaseString];
     [surface addSubview:eyebrow];
 
-    UILabel *title = [self labelWithFont:[Styling fontBold:30.0] color:PrimaryTextClr ?: UIColor.labelColor lines:2];
+    UILabel *title = [self labelWithFont:[Styling fontBold:30.0] color:PrimaryTextClr lines:2];
     title.text = self.isEditingPet ? kLang(@"AdoptPro_FormEditTitle") : kLang(@"AdoptPro_FormAddTitle");
     title.adjustsFontSizeToFitWidth = YES;
     title.minimumScaleFactor = 0.82;
     [surface addSubview:title];
 
-    UILabel *subtitle = [self labelWithFont:[Styling fontRegular:14.0] color:SeconderyTextClr ?: UIColor.secondaryLabelColor lines:3];
+    UILabel *subtitle = [self labelWithFont:[Styling fontRegular:14.0] color:SeconderyTextClr lines:3];
     subtitle.text = self.isEditingPet ? kLang(@"AdoptPro_FormEditSubtitle") : kLang(@"AdoptPro_FormAddSubtitle");
     [surface addSubview:subtitle];
 
@@ -263,7 +258,7 @@
     self.statusControl.selectedSegmentTintColor = [[self pp_accentColor] colorWithAlphaComponent:0.18];
     [self.statusControl setTitleTextAttributes:@{
         NSFontAttributeName: [Styling fontBold:12.0],
-        NSForegroundColorAttributeName: SeconderyTextClr ?: UIColor.secondaryLabelColor
+        NSForegroundColorAttributeName: SeconderyTextClr
     } forState:UIControlStateNormal];
     [self.statusControl setTitleTextAttributes:@{
         NSFontAttributeName: [Styling fontBold:12.0],
@@ -300,9 +295,9 @@
     stack.tag = 7701;
     [surface addSubview:stack];
 
-    UILabel *titleLabel = [self labelWithFont:[Styling fontBold:18.0] color:PrimaryTextClr ?: UIColor.labelColor lines:1];
+    UILabel *titleLabel = [self labelWithFont:[Styling fontBold:18.0] color:PrimaryTextClr lines:1];
     titleLabel.text = title;
-    UILabel *subtitleLabel = [self labelWithFont:[Styling fontRegular:13.0] color:SeconderyTextClr ?: UIColor.secondaryLabelColor lines:2];
+    UILabel *subtitleLabel = [self labelWithFont:[Styling fontRegular:13.0] color:SeconderyTextClr lines:2];
     subtitleLabel.text = subtitle;
     [stack addArrangedSubview:titleLabel];
     [stack addArrangedSubview:subtitleLabel];
@@ -354,7 +349,7 @@
     self.descriptionView.translatesAutoresizingMaskIntoConstraints = NO;
     self.descriptionView.backgroundColor = UIColor.clearColor;
     self.descriptionView.font = [Styling fontRegular:15.0];
-    self.descriptionView.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.descriptionView.textColor = PrimaryTextClr;
     self.descriptionView.textAlignment = Language.alignmentForCurrentLanguage;
     self.descriptionView.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
     self.descriptionView.delegate = self;
@@ -386,7 +381,7 @@
     field.translatesAutoresizingMaskIntoConstraints = NO;
     field.backgroundColor = UIColor.clearColor;
     field.font = [Styling fontBold:15.0];
-    field.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    field.textColor = PrimaryTextClr;
     field.tintColor = [self pp_accentColor];
     field.textAlignment = Language.alignmentForCurrentLanguage;
     field.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
@@ -418,7 +413,7 @@
     self.saveBar.backgroundColor = [self pp_surfaceColor];
     self.saveBar.layer.cornerRadius = 28.0;
     self.saveBar.layer.cornerCurve = kCACornerCurveContinuous;
-    self.saveBar.layer.shadowColor = (AppShadowColor ?: UIColor.blackColor).CGColor;
+    self.saveBar.layer.shadowColor = (AppShadowColor).CGColor;
     self.saveBar.layer.shadowOpacity = 0.10;
     self.saveBar.layer.shadowRadius = 22.0;
     self.saveBar.layer.shadowOffset = CGSizeMake(0, 12.0);

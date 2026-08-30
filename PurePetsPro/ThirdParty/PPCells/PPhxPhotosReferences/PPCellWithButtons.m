@@ -96,12 +96,12 @@
         // Default appearance to ensure visibility
         _titleLabel.numberOfLines = 2;
         _titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-        _titleLabel.textColor = PrimaryTextClr ?: [UIColor labelColor];
+        _titleLabel.textColor = PrimaryTextClr;
         _titleLabel.backgroundColor = UIColor.clearColor;
 #ifdef DEBUG
         // Temporary visual debug: translucent yellow background and thin red border
-        //_titleLabel.backgroundColor = [[UIColor systemYellowColor] colorWithAlphaComponent:0.20];
-        //_titleLabel.layer.borderColor = [UIColor systemRedColor].CGColor;
+        //_titleLabel.backgroundColor = [[UIColor ppPremiumAccent] colorWithAlphaComponent:0.20];
+        //_titleLabel.layer.borderColor = [UIColor ppError].CGColor;
         //_titleLabel.layer.borderWidth = 0.6;
 #endif
         
@@ -114,7 +114,7 @@
         _detailLabel = [[PaddedLabel alloc] init];
         _detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
         _detailLabel.font = [Styling fontMedium:13]; // smaller than subtitle
-        _detailLabel.textColor = UIColor.systemGrayColor;
+        _detailLabel.textColor = [UIColor ppTextSecondary];
         _detailLabel.textAlignment = Language.alignmentForCurrentLanguage;
         _detailLabel.numberOfLines = 1;
 
@@ -366,11 +366,10 @@
         self.secondButton.tintColor = SeconderyTextClr;
         
         _titleLabel.text = acees.name.length ? acees.name : @"-";
-        // PrimaryTextClr may be colorNamed and return nil; fallback to labelColor
-        UIColor *titleColor = (PrimaryTextClr != nil) ? PrimaryTextClr : [UIColor labelColor];
+        UIColor *titleColor = [UIColor ppTextPrimary];
 #ifdef DEBUG
         // In debug, force a vivid color to help visual debugging
-        titleColor = [UIColor systemRedColor];
+        titleColor = [UIColor ppError];
 #endif
         _titleLabel.textColor = titleColor;
         _titleLabel.hidden = NO;
@@ -388,7 +387,7 @@
         NSInteger qty = MAX(0, acees.quantity);
         UIColor *overlayColor = nil;
         if (qty <= 0) {
-            overlayColor = [[UIColor systemRedColor] colorWithAlphaComponent:0.12];
+            overlayColor = [[UIColor ppError] colorWithAlphaComponent:0.12];
         } else if (qty <= 5) {
             // Use a subtle foreground overlay for low stock
             overlayColor = [AppForgroundColr colorWithAlphaComponent:1];
@@ -402,7 +401,7 @@
         _subtitleLabel.text = [NSString stringWithFormat:@"%@: %ld", kLang(@"Qty"), (long)qty];
        
        
-        _subtitleLabel.textColor = qty == 0 ? SeconderyTextClr : UIColor.secondaryLabelColor;
+        _subtitleLabel.textColor = qty == 0 ? SeconderyTextClr : [UIColor ppTextSecondary];
         _subtitleLabel.backgroundColor = AppClearClr;
         _subtitleLabel.layer.cornerRadius =  13;
         _subtitleLabel.clipsToBounds = YES;
@@ -432,7 +431,7 @@
     // Rounded full
     v.layer.cornerRadius = size / 2.0;
     v.clipsToBounds = NO; // keep shadow visible
-    v.backgroundColor = AppForgroundColr ?: [UIColor whiteColor];
+    v.backgroundColor = AppForgroundColr;
     
     // Shadow
     v.layer.shadowColor = [UIColor colorWithWhite:0 alpha:0.25].CGColor;

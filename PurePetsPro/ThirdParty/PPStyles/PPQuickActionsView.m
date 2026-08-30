@@ -50,8 +50,8 @@
     if (self = [super initWithFrame:frame]) {
         _buttonHeight = 58.0;
         _cornerRadius = 24.0;
-        _backgroundColorForButton = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
-        _tintColorForIcon = AppPrimaryClr ?: UIColor.systemTealColor;
+        _backgroundColorForButton = AppForgroundColr;
+        _tintColorForIcon = AppPrimaryClr;
 
         self.stack = [UIStackView new];
         self.stack.axis = UILayoutConstraintAxisHorizontal;
@@ -139,8 +139,8 @@
 #pragma mark - Helpers
 
 - (UIView *)buildButtonFor:(PPQuickActionItem *)item featured:(BOOL)featured {
-    UIColor *accentColor = self.tintColorForIcon ?: UIColor.systemTealColor;
-    UIColor *surfaceColor = self.backgroundColorForButton ?: UIColor.secondarySystemBackgroundColor;
+    UIColor *accentColor = self.tintColorForIcon ?: [UIColor ppQuickActionServices];
+    UIColor *surfaceColor = self.backgroundColorForButton ?: [UIColor ppElevatedSurface];
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
     UIColor *neutralAccentSurface = [accentColor colorWithAlphaComponent:isDark ? 0.16 : 0.10];
     CGFloat resolvedHeight = featured ? MAX(self.buttonHeight, 92.0) : self.buttonHeight;
@@ -196,10 +196,10 @@
     UILabel *badgeLabel = nil;
 
     if (item.badgeText.length > 0) {
-        breathingDot = [self pp_breathingDotWithAccentColor:[UIColor colorWithRed:1.0 green:0.23 blue:0.188 alpha:1.0] coreView:&breathingDotCore badgeText:item.badgeText];
+        breathingDot = [self pp_breathingDotWithAccentColor:[UIColor ppError] coreView:&breathingDotCore badgeText:item.badgeText];
         [button addSubview:breathingDot];
     } else if (item.showsBreathingDot) {
-        breathingDot = [self pp_breathingDotWithAccentColor:UIColor.systemGreenColor coreView:&breathingDotCore badgeText:nil];
+        breathingDot = [self pp_breathingDotWithAccentColor:[UIColor ppSuccess] coreView:&breathingDotCore badgeText:nil];
         [button addSubview:breathingDot];
     }
 
@@ -207,7 +207,7 @@
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.text = kLang(item.titleKey);
     titleLabel.font = [Styling fontBold:titleFontSize];
-    titleLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    titleLabel.textColor = PrimaryTextClr;
     titleLabel.numberOfLines = 1;
     titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     titleLabel.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
@@ -281,7 +281,7 @@
 }
 
 - (UIView *)pp_breathingDotWithAccentColor:(UIColor *)accentColor coreView:(UIView * _Nullable * _Nullable)coreView badgeText:(NSString * _Nullable)badgeText {
-    UIColor *signalColor = AppPrimaryClr ?: accentColor ?: UIColor.systemTealColor;
+    UIColor *signalColor = accentColor ?: AppPrimaryClr;
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
 
     UIView *container = [[UIView alloc] init];

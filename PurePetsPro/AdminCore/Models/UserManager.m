@@ -664,63 +664,45 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
                 DLog(@"⚠️ Notification V2 deactivation failed before logout: %@", deactivateError.localizedDescription);
             }
 
-            __block BOOL didContinueAfterProviderTokenClear = NO;
-            void (^continueAfterProviderTokenClear)(NSError * _Nullable) = ^(NSError * _Nullable tokenError) {
-                if (didContinueAfterProviderTokenClear) return;
-                didContinueAfterProviderTokenClear = YES;
+            [strongSelf invalidateUserCacheForUID:userID];
+            [strongSelf clearUserCache];
+            [strongSelf stopListening];
 
-                if (tokenError) {
-                    DLog(@"⚠️ Pro token cleanup failed before logout: %@", tokenError.localizedDescription);
+            NSError *signOutError = nil;
+            [[FUManager shared] signOut:&signOutError];
+            if (signOutError) {
+                strongSelf.signOutInProgress = NO;
+                [notificationAppDelegate pp_abortNotificationV2LogoutBarrierAndRefreshForReason:@"auth_signout_failed"];
+                UIViewController *presenter = PPProUserManagerTopViewController();
+                if (presenter) {
+                    [PPAlertHelper showErrorIn:presenter title:kLang(@"Error") subtitle:signOutError.localizedDescription];
                 }
+                return;
+            }
 
-                [strongSelf invalidateUserCacheForUID:userID];
-                [strongSelf clearUserCache];
-                [strongSelf stopListening];
+            strongSelf.currentUser = nil;
 
-                NSError *signOutError = nil;
-                [[FUManager shared] signOut:&signOutError];
-                if (signOutError) {
-                    strongSelf.signOutInProgress = NO;
-                    [notificationAppDelegate pp_abortNotificationV2LogoutBarrierAndRefreshForReason:@"auth_signout_failed"];
-                    UIViewController *presenter = PPProUserManagerTopViewController();
-                    if (presenter) {
-                        [PPAlertHelper showErrorIn:presenter title:kLang(@"Error") subtitle:signOutError.localizedDescription];
-                    }
-                    return;
+            __block BOOL didFinishLocalTokenInvalidation = NO;
+            void (^finishSignOut)(NSError * _Nullable) = ^(NSError * _Nullable localTokenError) {
+                if (didFinishLocalTokenInvalidation) return;
+                didFinishLocalTokenInvalidation = YES;
+                if (localTokenError) {
+                    DLog(@"⚠️ Local Pro token invalidation failed: %@", localTokenError.localizedDescription);
                 }
-
-                strongSelf.currentUser = nil;
-
-                __block BOOL didFinishLocalTokenInvalidation = NO;
-                void (^finishSignOut)(NSError * _Nullable) = ^(NSError * _Nullable localTokenError) {
-                    if (didFinishLocalTokenInvalidation) return;
-                    didFinishLocalTokenInvalidation = YES;
-                    if (localTokenError) {
-                        DLog(@"⚠️ Local Pro token invalidation failed: %@", localTokenError.localizedDescription);
-                    }
-                    [notificationAppDelegate pp_endNotificationV2LogoutBarrier];
-                    strongSelf.signOutInProgress = NO;
-                    [[NSNotificationCenter defaultCenter] postNotificationName:UserManagerAuthStateDidChangeNotification
-                                                                        object:nil];
-                };
-
-                // Keep the registration barrier active through token deletion so a
-                // token refresh cannot reactivate the signed-out binding.
-                [PPNotifications invalidateLocalDeviceTokenWithCompletion:finishSignOut];
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
-                               dispatch_get_main_queue(), ^{
-                    if (didFinishLocalTokenInvalidation) return;
-                    DLog(@"⚠️ Local Pro token invalidation timeout; completing logout best-effort.");
-                    finishSignOut(nil);
-                });
+                [notificationAppDelegate pp_endNotificationV2LogoutBarrier];
+                strongSelf.signOutInProgress = NO;
+                [[NSNotificationCenter defaultCenter] postNotificationName:UserManagerAuthStateDidChangeNotification
+                                                                    object:nil];
             };
 
-            [PPNotifications clearProviderTokenForUserID:userID completion:continueAfterProviderTokenClear];
+            // Keep the registration barrier active through token deletion so a
+            // token refresh cannot reactivate the signed-out binding.
+            [PPNotifications invalidateLocalDeviceTokenWithCompletion:finishSignOut];
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)),
                            dispatch_get_main_queue(), ^{
-                if (didContinueAfterProviderTokenClear) return;
-                DLog(@"⚠️ Pro token cleanup timeout; continuing logout best-effort.");
-                continueAfterProviderTokenClear(nil);
+                if (didFinishLocalTokenInvalidation) return;
+                DLog(@"⚠️ Local Pro token invalidation timeout; completing logout best-effort.");
+                finishSignOut(nil);
             });
         };
 
@@ -730,7 +712,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
             if (didContinueAfterDeactivation) return;
             DLog(@"⚠️ Notification V2 deactivation timeout; continuing logout best-effort.");
             continueAfterDeactivation(nil);
-        }];
+        });
     };
 
     if (notificationAppDelegate) {
@@ -896,7 +878,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     
     // ✅ Add shimmer/blur before loading
     UIView *loadingOverlay = [[UIView alloc] initWithFrame:imageView.bounds];
-    loadingOverlay.backgroundColor = [UIColor systemGray5Color];
+    loadingOverlay.backgroundColor = [UIColor ppSecondarySurface];
     loadingOverlay.tag = 9999;
     loadingOverlay.layer.cornerRadius = imageView.layer.cornerRadius;
     loadingOverlay.layer.masksToBounds = YES;
@@ -907,9 +889,9 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         DLog(@"[ProfileImage] Applying shimmer animation.");
         CAGradientLayer *gradient = [CAGradientLayer layer];
         gradient.frame = loadingOverlay.bounds;
-        gradient.colors = @[(__bridge id)[UIColor systemGray4Color].CGColor,
-                            (__bridge id)[UIColor systemGray6Color].CGColor,
-                            (__bridge id)[UIColor systemGray4Color].CGColor];
+        gradient.colors = @[(__bridge id)[UIColor ppSecondarySurface].CGColor,
+                            (__bridge id)[UIColor ppSecondarySurface].CGColor,
+                            (__bridge id)[UIColor ppSecondarySurface].CGColor];
         gradient.startPoint = CGPointMake(0, 0.5);
         gradient.endPoint = CGPointMake(1, 0.5);
         gradient.locations = @[@0.0, @0.5, @1.0];
@@ -1170,6 +1152,8 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     
     // Add server timestamp automatically
     NSMutableDictionary *payload = [fields mutableCopy] ?: [NSMutableDictionary new];
+    [payload removeObjectForKey:@"PPUserTokenID"];
+    [payload removeObjectForKey:@"PPProTokenID"];
     payload[@"updatedAt"] = [FIRFieldValue fieldValueForServerTimestamp];
     
     [[self _userDoc:uid] setData:payload merge:YES completion:^(NSError * _Nullable error) {

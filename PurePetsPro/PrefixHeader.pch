@@ -53,6 +53,7 @@ static NSString * const PPProThemePreferenceDark = @"dark";
 #import "AppDelegate.h"
 #import "AppManager.h"
 #import "Styling.h"
+#import "ThirdParty/PPStyles/PPDesignTokens.h"
 #import "UIView.h"
 #import "UIImageView.h"
 #import "SceneDelegate.h"
@@ -189,15 +190,6 @@ static NSString * const PPProThemePreferenceDark = @"dark";
 #define kPPScreenWidth   ([UIScreen mainScreen].bounds.size.width)
 #define kPPScreenHeight  ([UIScreen mainScreen].bounds.size.height)
 
-static inline UIColor *pp_canvasColor(void) {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.11 green:0.11 blue:0.12 alpha:1.0];
-        }
-        return [UIColor colorWithRed:0.969 green:0.961 blue:0.949 alpha:1.0];
-    }];
-}
-
 static inline UIFont *PPFontBold(CGFloat size) {
     return [UIFont fontWithName:@"Beiruti-Bold" size:size];
 }
@@ -220,24 +212,8 @@ static inline UIFont *PPFontRegular(CGFloat size) {
 //#define kLang(key) NSLocalizedString((key), nil)
 
 // ===== Colors =====
-#define AppBackgroundClrShiner         [UIColor colorNamed:@"AppBackgroundClrShiner"]                                                 // Main brand color
-#define AppBackgroundClrDarker         [UIColor colorNamed:@"AppBackgroundClrDarker"]
-#define AppPrimaryClr                   [UIColor colorNamed:@"AppPrimaryClr"]                                                 // Main brand color
-#define AppPrimaryClrDarker              [UIColor colorNamed:@"AppPrimaryClrDarker"]                                           // Main brand color Darker
-#define AppPrimaryClrShiner               [UIColor colorNamed:@"AppPrimaryClrShiner"]                                           // Main brand color Shiner
-#define AppSecondaryClr                   [UIColor systemTealColor]                                                             // Accent / secondary
-#define AppBackgroundClr                pp_canvasColor()//[UIColor colorNamed:@"AppBackgroundClr"]                                              // Background
-#define PrimaryTextClr                [UIColor colorNamed:@"PrimaryTextClr"]                                                // Text color
-#define SeconderyTextClr                  [UIColor colorNamed:@"SeconderyTextClr"]                                              // Secondary text color
-#define AppForgroundColr                   [UIColor colorNamed:@"AppForgroundColr"]                                              // Custom Foreground
-#define AppShadowColor                [UIColor blackColor]                                                                  // Accent / secondary
-#define AppShadowClr                  AppShadowColor                                                                        // Alias for iOS compat
-#define AppPrimaryTextClr             PrimaryTextClr                                                                        // Alias for iOS compat
-#define AppClearClr                [UIColor clearColor]                                                                  // Accent / secondary
-#define AppPrimaryClr_CG              [UIColor colorNamed:@"AppPrimaryClr"].CGColor                                         // Main brand color
-#define AppPrimaryClrWithAlpha(alpha)         [[UIColor colorNamed:@"AppPrimaryClr"] colorWithAlphaComponent:alpha]
-#define AppSurfColor                [[UIColor colorNamed:@"AppSurfColor"] colorWithAlphaComponent:1.0]
-#define AppPageColr                   [UIColor colorNamed:@"PageColor"] 
+// The semantic color API and compatibility names are defined only by
+// PPDesignTokens.h.  Do not add palette values or named-color lookups here.
 // Heights are dynamic — compute them when you need them.
 // Call after the view is on screen (e.g. viewDidLayoutSubviews / viewDidAppear).
 #define NAVIGATION_BAR_HEIGHT   (self.navigationController.isNavigationBarHidden ? 0.0 : self.navigationController.navigationBar.frame.size.height)
@@ -516,8 +492,9 @@ static NSString * const XLFormRowDescriptorTypePPXHImage = @"XLFormRowPPXHImage"
 // RTL helper (matches iOS PPIsRL)
 #define PPIsRL (UIApplication.sharedApplication.userInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft)
 
-// Missing color variant (matches iOS)
-#define AppBackgroundClrLigter [UIColor colorNamed:@"AppBackgroundColorLigter"]
+// Legacy spelling retained for source compatibility; it resolves through the
+// shared semantic token bridge rather than an asset lookup.
+#define AppBackgroundClrLigter [UIColor ppSurfaceOverlay]
 
 // ============================================================
 // Chat Enums (copied from Pure Pets IOS for messaging parity)

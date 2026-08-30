@@ -5,6 +5,7 @@
 
 #import "PPDeliveryOrderModel.h"
 #import "Language.h"
+#import <math.h>
 #import <objc/runtime.h>
 
 #pragma mark - Date Helper
@@ -127,6 +128,33 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
     return NO;
 }
 
+static BOOL PPDeliveryAllStatusesAreInSet(NSDictionary<NSString *, NSString *> *statusesByID,
+                                          NSSet<NSString *> *allowedStatuses) {
+    if (statusesByID.count == 0 || allowedStatuses.count == 0) return NO;
+    for (id rawStatus in statusesByID.allValues) {
+        NSString *status = [rawStatus isKindOfClass:NSString.class]
+            ? PPNormalizedDeliveryStatus(rawStatus)
+            : @"";
+        if (![allowedStatuses containsObject:status]) return NO;
+    }
+    return YES;
+}
+
+static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
+    if (![value isKindOfClass:NSArray.class]) return @[];
+    NSMutableArray<NSString *> *resolved = [NSMutableArray array];
+    NSMutableSet<NSString *> *seen = [NSMutableSet set];
+    for (id candidate in (NSArray *)value) {
+        NSString *documentID = PPOrderModelOptionalString(candidate);
+        if (documentID.length == 0 || [documentID containsString:@"/"] || [seen containsObject:documentID]) {
+            return @[];
+        }
+        [seen addObject:documentID];
+        [resolved addObject:documentID];
+    }
+    return [resolved sortedArrayUsingSelector:@selector(compare:)];
+}
+
 #pragma mark - PPDeliveryOrderItem
 
 @implementation PPDeliveryOrderItem
@@ -185,16 +213,11 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
     m.fulfillmentVersion = [dict[@"fulfillmentVersion"] respondsToSelector:@selector(integerValue)]
         ? [dict[@"fulfillmentVersion"] integerValue]
         : 0;
-    NSArray *rawFulfillmentIDs = [dict[@"fulfillmentOrderIDs"] isKindOfClass:NSArray.class]
-        ? dict[@"fulfillmentOrderIDs"]
-        : @[];
-    NSMutableArray<NSString *> *fulfillmentIDs = [NSMutableArray arrayWithCapacity:rawFulfillmentIDs.count];
-    for (id rawFulfillmentID in rawFulfillmentIDs) {
-        if (![rawFulfillmentID isKindOfClass:NSString.class]) continue;
-        NSString *fulfillmentID = [(NSString *)rawFulfillmentID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        if (fulfillmentID.length > 0) [fulfillmentIDs addObject:fulfillmentID];
-    }
-    m.fulfillmentOrderIDs = fulfillmentIDs.copy;
+    m.fulfillmentOrderIDs = PPOrderModelExactDocumentIDs(dict[@"fulfillmentOrderIDs"]);
+    m.deliveryRequestFulfillmentOrderIDs = PPOrderModelExactDocumentIDs(
+        dict[@"deliveryRequestFulfillmentOrderIDs"]
+    );
+    m.assignedFulfillmentStatusesByID = @{};
 
     // Customer
     m.customerName  = PPOrderModelSafeString(dict, @[@"customerName", @"userName", @"buyerName", @"name"]);
@@ -280,8 +303,15 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
     m.marketplaceProviderPhotoURLString = PPOrderModelSafeOptionalString(dict, @[@"marketplaceProviderPhotoURL", @"providerPhotoURL", @"deliveryRequestProviderPhotoURL", @"marketplaceProviderPhotoURLString"]);
 
     // Financials
+    NSDictionary *moneySnapshot = PPOrderModelSafeDictionary(dict[@"money"]);
     m.totalAmount    = PPOrderModelSafeDouble(dict, @[@"totalAmount", @"amount", @"total", @"grandTotal"]);
+    if (m.totalAmount <= 0.0) {
+        m.totalAmount = PPOrderModelSafeDouble(moneySnapshot, @[@"totalAmount", @"total"]);
+    }
     m.currencyCode   = PPOrderModelSafeString(dict, @[@"currencyCode", @"currency"]);
+    if (m.currencyCode.length == 0) {
+        m.currencyCode = PPOrderModelSafeString(moneySnapshot, @[@"currencyCode", @"currency"]);
+    }
     if (m.currencyCode.length == 0) m.currencyCode = @"QAR";
     m.paymentMethodId = PPOrderModelSafeString(dict, @[@"paymentMethodId", @"paymentType"]);
 
@@ -293,6 +323,8 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
         }
     }
     m.paymentStatus = PPOrderModelSafeString(dict, @[@"paymentStatus", @"payment_status"]);
+    m.cashCollectionReceiptID = PPOrderModelOptionalString(dict[@"cashCollectionReceiptId"]);
+    m.cashCollectionReceipt = PPOrderModelSafeDictionary(dict[@"cashCollectionReceipt"]);
 
     // Status
     m.rawStatus = PPOrderModelSafeString(dict, @[@"status", @"rawStatus", @"orderStatus"]);
@@ -376,6 +408,7 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
     d[@"userId"]             = self.userId ?: @"";
     d[@"fulfillmentVersion"] = @(self.fulfillmentVersion);
     d[@"fulfillmentOrderIDs"] = self.fulfillmentOrderIDs ?: @[];
+    d[@"deliveryRequestFulfillmentOrderIDs"] = self.deliveryRequestFulfillmentOrderIDs ?: @[];
     d[@"customerName"]       = self.customerName ?: @"";
     d[@"customerPhone"]      = self.customerPhone ?: @"";
     d[@"deliveryAddress"]    = self.deliveryAddress ?: @"";
@@ -408,29 +441,52 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
 }
 
 - (BOOL)canAcceptDelivery {
+    if (self.fulfillmentVersion == 1) {
+        // V1 assignment truth is the server-projected requested child set;
+        // legacy parent courier fields are only a derived compatibility view.
+        return [[self.deliveryStatus lowercaseString] isEqualToString:PPDeliveryStatusRequested] &&
+               self.deliveryRequestFulfillmentOrderIDs.count > 0;
+    }
     return [[self.deliveryStatus lowercaseString] isEqualToString:PPDeliveryStatusRequested] &&
            self.deliveryUserId.length == 0;
 }
 
 - (BOOL)canConfirmPackageHandover {
     NSString *delivery = [self.deliveryStatus lowercaseString];
+    if (self.fulfillmentVersion == 1) {
+        return PPDeliveryAllStatusesAreInSet(
+            self.assignedFulfillmentStatusesByID,
+            [NSSet setWithObject:@"awaiting_handover"]
+        );
+    }
     return [delivery isEqualToString:PPDeliveryStatusAssigned] ||
            [delivery isEqualToString:PPDeliveryStatusAwaitingHandover];
 }
 
 - (BOOL)canMarkShipped {
-    NSString *delivery = [self.deliveryStatus lowercaseString];
     if (self.fulfillmentVersion == 1) {
-        return [delivery isEqualToString:PPDeliveryStatusAwaitingHandover];
+        return [self canConfirmPackageHandover];
     }
     return [self canConfirmPackageHandover];
 }
 
 - (BOOL)canMarkInTransit {
+    if (self.fulfillmentVersion == 1) {
+        return PPDeliveryAllStatusesAreInSet(
+            self.assignedFulfillmentStatusesByID,
+            [NSSet setWithObject:@"handed_over"]
+        );
+    }
     return [[self.deliveryStatus lowercaseString] isEqualToString:PPDeliveryStatusPickedUp];
 }
 
 - (BOOL)canMarkDelivered {
+    if (self.fulfillmentVersion == 1) {
+        return PPDeliveryAllStatusesAreInSet(
+            self.assignedFulfillmentStatusesByID,
+            [NSSet setWithArray:@[@"handed_over", @"in_transit"]]
+        );
+    }
     NSString *delivery = [self.deliveryStatus lowercaseString];
     return [delivery isEqualToString:PPDeliveryStatusPickedUp] ||
            [delivery isEqualToString:PPDeliveryStatusInTransit];
@@ -439,12 +495,35 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
 - (BOOL)canCollectCashPayment {
     if (![self isCashOrder]) return NO;
     NSSet *validStatus  = [NSSet setWithArray:@[PPDeliveryStatusDelivered, PPDeliveryStatusPaymentPending]];
+    if (self.fulfillmentVersion == 1) {
+        // The callable creates the immutable server receipt and derives its
+        // amount/currency from the parent snapshot. The client only confirms
+        // exact assigned children that are all waiting for cash collection.
+        return ![self hasValidServerCashCollectionReceipt] &&
+               PPDeliveryAllStatusesAreInSet(
+                   self.assignedFulfillmentStatusesByID,
+                   [NSSet setWithObject:@"payment_pending"]
+               );
+    }
     NSSet *validPayment = [NSSet setWithArray:@[@"pending_collection", @"pending"]];
     return [validStatus containsObject:[self.deliveryStatus lowercaseString]] &&
            [validPayment containsObject:[self.paymentStatus lowercaseString]];
 }
 
 - (BOOL)canMarkCompleted {
+    if (self.fulfillmentVersion == 1) {
+        if ([self isCashOrder]) {
+            return [self hasValidServerCashCollectionReceipt] &&
+                   PPDeliveryAllStatusesAreInSet(
+                       self.assignedFulfillmentStatusesByID,
+                       [NSSet setWithObject:@"payment_confirmed"]
+                   );
+        }
+        return PPDeliveryAllStatusesAreInSet(
+            self.assignedFulfillmentStatusesByID,
+            [NSSet setWithArray:@[@"delivered", @"payment_confirmed"]]
+        );
+    }
     NSString *delivery = [self.deliveryStatus lowercaseString];
     if ([delivery isEqualToString:PPDeliveryStatusPaymentConfirmed]) {
         return YES;
@@ -456,10 +535,83 @@ static BOOL PPStatusHasAny(NSString *status, NSArray<NSString *> *tokens) {
 }
 
 - (BOOL)canCancel {
+    if (self.fulfillmentVersion == 1) {
+        return PPDeliveryAllStatusesAreInSet(
+            self.assignedFulfillmentStatusesByID,
+            [NSSet setWithArray:@[@"delivery_assigned", @"awaiting_handover"]]
+        );
+    }
     NSString *delivery = [self.deliveryStatus lowercaseString];
     return [delivery isEqualToString:PPDeliveryStatusRequested] ||
            [delivery isEqualToString:PPDeliveryStatusAssigned] ||
            [delivery isEqualToString:PPDeliveryStatusAwaitingHandover];
+}
+
+- (BOOL)hasValidServerCashCollectionReceipt {
+    NSDictionary *receipt = [self.cashCollectionReceipt isKindOfClass:NSDictionary.class]
+        ? self.cashCollectionReceipt
+        : @{};
+    if (receipt.count == 0) return NO;
+
+    NSString *receiptID = PPOrderModelOptionalString(receipt[@"receiptId"]);
+    NSString *status = [PPOrderModelOptionalString(receipt[@"status"]) lowercaseString];
+    NSString *evidenceType = PPOrderModelOptionalString(receipt[@"evidenceType"]);
+    NSString *parentOrderID = PPOrderModelOptionalString(receipt[@"parentOrderID"]);
+    NSString *collectorUID = PPOrderModelOptionalString(receipt[@"collectorUid"]);
+    NSString *currency = PPOrderModelOptionalString(receipt[@"currency"]);
+    NSString *source = PPOrderModelOptionalString(receipt[@"source"]);
+    NSArray *fulfillmentIDs = [receipt[@"fulfillmentIDs"] isKindOfClass:NSArray.class]
+        ? receipt[@"fulfillmentIDs"]
+        : @[];
+    NSMutableArray<NSString *> *safeFulfillmentIDs = [NSMutableArray arrayWithCapacity:fulfillmentIDs.count];
+    for (id value in fulfillmentIDs) {
+        NSString *fulfillmentID = PPOrderModelOptionalString(value);
+        if (fulfillmentID.length == 0 || [fulfillmentID containsString:@"/"]) return NO;
+        [safeFulfillmentIDs addObject:fulfillmentID];
+    }
+    NSArray<NSString *> *sortedIDs = [safeFulfillmentIDs sortedArrayUsingSelector:@selector(compare:)];
+    if (![safeFulfillmentIDs isEqualToArray:sortedIDs] ||
+        [NSSet setWithArray:safeFulfillmentIDs].count != safeFulfillmentIDs.count) {
+        return NO;
+    }
+
+    double receiptAmount = [receipt[@"amount"] respondsToSelector:@selector(doubleValue)]
+        ? [receipt[@"amount"] doubleValue]
+        : NAN;
+    NSArray<NSString *> *assignedIDs = [self.assignedFulfillmentStatusesByID.allKeys
+        sortedArrayUsingSelector:@selector(compare:)];
+
+    if (![receipt[@"schemaVersion"] respondsToSelector:@selector(integerValue)] ||
+        [receipt[@"schemaVersion"] integerValue] != 1 ||
+        ![status isEqualToString:@"recorded"] ||
+        ![evidenceType isEqualToString:@"assigned_courier_cash_collection_acknowledgement"] ||
+        ![parentOrderID isEqualToString:self.orderId ?: @""] ||
+        receiptID.length == 0 ||
+        ![receiptID isEqualToString:self.cashCollectionReceiptID ?: @""] ||
+        collectorUID.length == 0 ||
+        (self.deliveryUserId.length > 0 && ![collectorUID isEqualToString:self.deliveryUserId]) ||
+        ![receipt[@"amount"] isKindOfClass:NSNumber.class] ||
+        !isfinite(receiptAmount) ||
+        fabs(receiptAmount - self.totalAmount) > 0.005 ||
+        currency.length == 0 ||
+        [currency caseInsensitiveCompare:self.currencyCode ?: @""] != NSOrderedSame ||
+        PPDateFromFirestoreValue(receipt[@"collectedAt"]) == nil ||
+        ![source isEqualToString:@"fulfillment_v1_delivery_command"] ||
+        safeFulfillmentIDs.count == 0 ||
+        assignedIDs.count == 0 ||
+        ![sortedIDs isEqualToArray:assignedIDs]) {
+        return NO;
+    }
+
+    for (NSString *fulfillmentID in assignedIDs) {
+        NSString *childStatus = PPNormalizedDeliveryStatus(
+            self.assignedFulfillmentStatusesByID[fulfillmentID]
+        );
+        if (![childStatus isEqualToString:@"payment_confirmed"]) {
+            return NO;
+        }
+    }
+    return YES;
 }
 
 - (BOOL)isTerminal {

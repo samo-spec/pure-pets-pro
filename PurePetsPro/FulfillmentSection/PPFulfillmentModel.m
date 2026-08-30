@@ -65,6 +65,10 @@
             @"delivery_assigned":  @"Fulfillment_Status_DeliveryAssigned",
             @"awaiting_handover":  @"Fulfillment_Status_AwaitingHandover",
             @"handed_over":        @"Fulfillment_Status_HandedOver",
+            @"in_transit":         @"InTransit",
+            @"delivered":          @"Delivered",
+            @"payment_pending":    @"Deliv_PaymentPending",
+            @"payment_confirmed":  @"Deliv_StatusPaymentConfirmed",
             @"completed":          @"Fulfillment_Status_Completed",
             @"cancelled":          @"Fulfillment_Status_Cancelled",
             @"failed":             @"Fulfillment_Status_Failed",
@@ -77,10 +81,10 @@
 
 - (UIColor *)statusColor {
     NSString *s = self.status;
-    if ([s isEqualToString:@"accepted"] || [s isEqualToString:@"completed"] || [s isEqualToString:@"ready_for_pickup"]) return UIColor.systemGreenColor;
-    if ([s isEqualToString:@"new_request"] || [s isEqualToString:@"preparing"] || [s isEqualToString:@"delivery_requested"] || [s isEqualToString:@"delivery_assigned"] || [s isEqualToString:@"awaiting_handover"]) return UIColor.systemOrangeColor;
-    if ([s isEqualToString:@"rejected"] || [s isEqualToString:@"cancelled"] || [s isEqualToString:@"failed"] || [s isEqualToString:@"returned"]) return UIColor.systemRedColor;
-    return UIColor.systemGrayColor;
+    if ([s isEqualToString:@"accepted"] || [s isEqualToString:@"completed"] || [s isEqualToString:@"ready_for_pickup"]) return [UIColor ppSuccess];
+    if ([s isEqualToString:@"new_request"] || [s isEqualToString:@"preparing"] || [s isEqualToString:@"delivery_requested"] || [s isEqualToString:@"delivery_assigned"] || [s isEqualToString:@"awaiting_handover"]) return [UIColor ppWarning];
+    if ([s isEqualToString:@"rejected"] || [s isEqualToString:@"cancelled"] || [s isEqualToString:@"failed"] || [s isEqualToString:@"returned"]) return [UIColor ppError];
+    return [UIColor ppTextSecondary];
 }
 
 - (NSString *)nextActionForStatus {
@@ -101,7 +105,7 @@
     if ([s isEqualToString:@"ready_for_pickup"])   return @[@"request_delivery", @"cancel_request"];
     if ([s isEqualToString:@"delivery_requested"]) return @[@"cancel_request"];
     if ([s isEqualToString:@"delivery_assigned"])  return @[@"confirm_handover", @"cancel_request"];
-    if ([s isEqualToString:@"awaiting_handover"])  return @[@"confirm_handover", @"cancel_request"];
+    if ([s isEqualToString:@"awaiting_handover"])  return @[@"cancel_request"];
     return @[];
 }
 

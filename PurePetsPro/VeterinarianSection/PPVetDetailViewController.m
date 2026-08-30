@@ -70,12 +70,7 @@
 - (void)configureWithTitle:(NSString *)title value:(NSString *)value borderColor:(UIColor *)borderColor {
     self.titleLabel.text = title;
     self.valueLabel.text = value;
-    self.cardView.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.17 green:0.17 blue:0.19 alpha:0.94];
-        }
-        return [[UIColor whiteColor] colorWithAlphaComponent:0.86];
-    }];
+    self.cardView.backgroundColor = [UIColor ppElevatedSurface];
     self.cardView.layer.borderColor = borderColor.CGColor;
 }
 
@@ -93,30 +88,15 @@
 @implementation PPVetDetailViewController
 
 - (UIColor *)pp_canvasColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.11 green:0.11 blue:0.12 alpha:1.0];
-        }
-        return [UIColor colorWithRed:0.969 green:0.961 blue:0.949 alpha:1.0];
-    }];
+    return [UIColor ppBackground];
 }
 
 - (UIColor *)pp_surfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.17 green:0.17 blue:0.19 alpha:0.94];
-        }
-        return [[UIColor whiteColor] colorWithAlphaComponent:0.86];
-    }];
+    return [UIColor ppElevatedSurface];
 }
 
 - (UIColor *)pp_borderColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-        }
-        return [UIColor colorWithRed:0.25 green:0.17 blue:0.18 alpha:0.08];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
 }
 
 - (UserModel *)pp_currentUser {
@@ -286,7 +266,7 @@
     status.translatesAutoresizingMaskIntoConstraints = NO;
     status.font = [Styling fontBold:11.0];
     BOOL disabled = self.vet.isDisabled;
-    UIColor *statusColor = disabled ? UIColor.systemRedColor : AppPrimaryClr;
+    UIColor *statusColor = disabled ? [UIColor ppError] : AppPrimaryClr;
     status.textColor = statusColor;
     status.textAlignment = NSTextAlignmentCenter;
     status.text = [NSString stringWithFormat:@"  %@  ", disabled ? kLang(@"Vet_Status_Disabled") : kLang(@"Vet_Status_Active")];
@@ -399,7 +379,7 @@
     // Action buttons
     NSArray *icons    = @[@"phone.fill", @"message.fill", @"square.and.pencil", @"creditcard.circle"];
     NSArray *actions  = @[@"callTapped", @"whatsappTapped", @"editTapped", @"subscriptionTapped"];
-    NSArray *colors   = @[UIColor.systemGreenColor, UIColor.systemTealColor, UIColor.systemBlueColor, AppPrimaryClr];
+    NSArray *colors   = @[[UIColor ppSuccess], [UIColor ppQuickActionServices], [UIColor ppInfo], AppPrimaryClr];
 
     CGFloat btnSize = 44;
     CGFloat spacing = 24;

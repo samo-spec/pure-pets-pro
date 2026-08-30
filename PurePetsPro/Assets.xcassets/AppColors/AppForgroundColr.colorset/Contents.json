@@ -2,8 +2,13 @@
   "colors" : [
     {
       "color" : {
-        "platform" : "visionos",
-        "reference" : "secondarySystemGroupedBackgroundColor"
+        "color-space" : "srgb",
+        "components" : {
+          "alpha" : "1.000",
+          "blue" : "0xFC",
+          "green" : "0xFD",
+          "red" : "0xFF"
+        }
       },
       "idiom" : "universal"
     },
@@ -18,9 +23,9 @@
         "color-space" : "srgb",
         "components" : {
           "alpha" : "1.000",
-          "blue" : "0.165",
-          "green" : "0.160",
-          "red" : "0.160"
+          "blue" : "0.110",
+          "green" : "0.098",
+          "red" : "0.129"
         }
       },
       "idiom" : "universal"

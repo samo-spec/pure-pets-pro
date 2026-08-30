@@ -126,7 +126,7 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = AppBackgroundClr ?: UIColor.systemGroupedBackgroundColor;
+    self.view.backgroundColor = AppBackgroundClr;
     self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     [self pp_navBarWithOtherButton:nil title:kLang(@"Notification")];
     self.routePayload = [NotificationManager routingPayloadForNotificationModel:self.model];
@@ -198,8 +198,8 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
 }
 
 - (void)pp_updateBackgroundGlowStyle {
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *support = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    UIColor *accent = AppPrimaryClr;
+    UIColor *support = SeconderyTextClr;
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
 
     self.topBackgroundGlowView.backgroundColor = [accent colorWithAlphaComponent:isDark ? 0.052 : 0.078];
@@ -237,14 +237,14 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
 
     UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"bell.badge.fill"]];
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    iconView.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    iconView.tintColor = AppPrimaryClr;
     iconView.contentMode = UIViewContentModeScaleAspectFit;
     [iconShell addSubview:iconView];
 
     self.statusLabel = [[UILabel alloc] init];
     self.statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.statusLabel.font = [Styling fontBold:11];
-    self.statusLabel.textColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.statusLabel.textColor = AppPrimaryClr;
     self.statusLabel.textAlignment = NSTextAlignmentCenter;
 
     UIView *statusPill = [[UIView alloc] init];
@@ -258,7 +258,7 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.font = [Styling fontBold:27];
-    self.titleLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.titleLabel.textColor = PrimaryTextClr;
     self.titleLabel.numberOfLines = 0;
     self.titleLabel.textAlignment = [Language alignmentForCurrentLanguage];
 
@@ -272,7 +272,7 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
     self.bodyLabel = [[UILabel alloc] init];
     self.bodyLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.bodyLabel.font = [Styling fontMedium:16];
-    self.bodyLabel.textColor = [PrimaryTextClr colorWithAlphaComponent:0.92] ?: UIColor.labelColor;
+    self.bodyLabel.textColor = [PrimaryTextClr colorWithAlphaComponent:0.92];
     self.bodyLabel.numberOfLines = 0;
     self.bodyLabel.textAlignment = [Language alignmentForCurrentLanguage];
 
@@ -372,9 +372,9 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
         return nil;
     }
 
-    UIColor *accentColor = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *primaryTextColor = PrimaryTextClr ?: UIColor.labelColor;
-    UIColor *secondaryTextColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    UIColor *accentColor = AppPrimaryClr;
+    UIColor *primaryTextColor = PrimaryTextClr;
+    UIColor *secondaryTextColor = SeconderyTextClr;
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
 
     UIView *container = [[UIView alloc] init];
@@ -627,7 +627,9 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
     }
 
     if ([type isEqualToString:@"provider_new_fulfillment"] ||
-        [type isEqualToString:@"fulfillment_order"]) {
+        [type isEqualToString:@"fulfillment_order"] ||
+        [type isEqualToString:@"provider_order_cancelled"] ||
+        [type isEqualToString:@"provider.order.cancelled"]) {
         return YES;
     }
 
@@ -731,7 +733,7 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
 
     UILabel *rowValueLabel = [self pp_summaryLabelWithFont:[self pp_scaledFontWithTextStyle:UIFontTextStyleBody
                                                                                   baseFont:[Styling fontMedium:15]]
-                                                     color:PrimaryTextClr ?: UIColor.labelColor
+                                                     color:PrimaryTextClr
                                                      lines:0];
     rowValueLabel.text = value;
 
@@ -784,14 +786,14 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
                                                                                                           weight:UIImageSymbolWeightSemibold];
     UIImageView *headerIcon = [[UIImageView alloc] initWithImage:[[UIImage systemImageNamed:@"shippingbox.fill"] imageWithConfiguration:headerIconConfiguration]];
     headerIcon.translatesAutoresizingMaskIntoConstraints = NO;
-    headerIcon.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    headerIcon.tintColor = AppPrimaryClr;
     headerIcon.contentMode = UIViewContentModeScaleAspectFit;
     headerIcon.isAccessibilityElement = NO;
     [headerIconShell addSubview:headerIcon];
 
     UILabel *headingLabel = [self pp_summaryLabelWithFont:[self pp_scaledFontWithTextStyle:UIFontTextStyleHeadline
                                                                                  baseFont:[Styling fontBold:19]]
-                                                    color:PrimaryTextClr ?: UIColor.labelColor
+                                                    color:PrimaryTextClr
                                                     lines:0];
     headingLabel.text = kLang(@"Notification_RequestSummaryTitle");
 
@@ -809,7 +811,7 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
 
     self.summaryStatusLabel = [self pp_summaryLabelWithFont:[self pp_scaledFontWithTextStyle:UIFontTextStyleCaption1
                                                                                    baseFont:[Styling fontBold:11]]
-                                                      color:AppPrimaryClr ?: UIColor.systemTealColor
+                                                      color:AppPrimaryClr
                                                       lines:2];
     self.summaryStatusLabel.textAlignment = NSTextAlignmentCenter;
     self.summaryStatusLabel.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
@@ -842,7 +844,7 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
 
     UILabel *orderValueLabel = nil;
     UIView *orderRow = [self pp_summaryRowWithIcon:@"number"
-                                        iconColor:AppPrimaryClr ?: UIColor.systemTealColor
+                                        iconColor:AppPrimaryClr
                                              title:kLang(@"Notification_RequestSummaryOrder")
                                              value:kLang(@"Notification_RequestSummaryLoading")
                                         titleLabel:NULL
@@ -851,7 +853,7 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
 
     UILabel *pickupValueLabel = nil;
     UIView *pickupRow = [self pp_summaryRowWithIcon:@"shippingbox.fill"
-                                         iconColor:UIColor.systemIndigoColor
+                                         iconColor:[UIColor ppQuickActionCommunity]
                                               title:kLang(@"Deliv_PackagePickupLocation")
                                               value:kLang(@"Notification_RequestSummaryLoading")
                                          titleLabel:NULL
@@ -861,7 +863,7 @@ static NSString *PPNotificationDetailNormalizedStatus(NSString *value)
     UILabel *destinationTitleLabel = nil;
     UILabel *destinationValueLabel = nil;
     UIView *destinationRow = [self pp_summaryRowWithIcon:@"location.fill"
-                                              iconColor:UIColor.systemOrangeColor
+                                              iconColor:[UIColor ppWarning]
                                                    title:kLang(@"Deliv_DeliveryArea")
                                                    value:kLang(@"Notification_RequestSummaryLoading")
                                               titleLabel:&destinationTitleLabel

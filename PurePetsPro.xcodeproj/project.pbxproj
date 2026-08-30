@@ -29,6 +29,8 @@
 		C54AFB88580CEB55093C550F /* ImageViewerController.m in Sources */ = {isa = PBXBuildFile; fileRef = 1F4961B9BADF9C82FBB7B6FC /* ImageViewerController.m */; };
 		CC56314264F8477EAADF6431 /* PPVetCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 70515340F318451EA70F47F6 /* PPVetCell.m */; };
 		D2980444903339DC203D029F /* PPPickerAssetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = EFBAA62442349371CE398FC6 /* PPPickerAssetManager.m */; };
+		D7B2A0022F9C4C1B00000002 /* PPDesignTokens.m in Sources */ = {isa = PBXBuildFile; fileRef = D7B2A0042F9C4C1B00000004 /* PPDesignTokens.m */; };
+		E2A9C5F02F9C4C1B00000001 /* PPFileHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = E2A9C5F02F9C4C1B00000003 /* PPFileHelper.m */; };
 		E68C465D0E996576351A44ED /* RPManager.m in Sources */ = {isa = PBXBuildFile; fileRef = A0E5C836F3B3CAD482A342C7 /* RPManager.m */; };
 		F2052C842F7E175A00C06FDF /* PPPaddingLabel.m in Sources */ = {isa = PBXBuildFile; fileRef = F2052C832F7E175A00C06FDF /* PPPaddingLabel.m */; };
 		F20B38612E60DEC2007465EE /* PPQuickActionsView.m in Sources */ = {isa = PBXBuildFile; fileRef = F20B38602E60DEB7007465EE /* PPQuickActionsView.m */; };
@@ -303,7 +305,11 @@
 		C8268E01E527FB23C2D72879 /* PPImageCollection.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPImageCollection.h; sourceTree = "<group>"; };
 		CD00877D6CBACF3A522F9088 /* PPImageCollectionRow.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPImageCollectionRow.m; sourceTree = "<group>"; };
 		CEFE7BC8BF5E4D1DA7960E4A /* PPVetDetailViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPVetDetailViewController.m; sourceTree = "<group>"; };
+		D7B2A0032F9C4C1B00000003 /* PPDesignTokens.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPDesignTokens.h; sourceTree = "<group>"; };
+		D7B2A0042F9C4C1B00000004 /* PPDesignTokens.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPDesignTokens.m; sourceTree = "<group>"; };
 		D9AB96A1DB1BBD4A7B73FDEF /* PPColorUtils.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = PPColorUtils.h; sourceTree = "<group>"; };
+		E2A9C5F02F9C4C1B00000002 /* PPFileHelper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPFileHelper.h; sourceTree = "<group>"; };
+		E2A9C5F02F9C4C1B00000003 /* PPFileHelper.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPFileHelper.m; sourceTree = "<group>"; };
 		DE14AC5B600617327E026CDA /* QBImagePickerController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = QBImagePickerController.h; sourceTree = "<group>"; };
 		E3B58C28B4FC29BF66823B12 /* QBVideoIconView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = QBVideoIconView.h; sourceTree = "<group>"; };
 		EC26493C439637AD9C289661 /* Pods-PurePetsPro.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-PurePetsPro.release.xcconfig"; path = "Target Support Files/Pods-PurePetsPro/Pods-PurePetsPro.release.xcconfig"; sourceTree = "<group>"; };
@@ -751,6 +757,8 @@
 		4D4C558676D459A4D96F899C /* Utilities */ = {
 			isa = PBXGroup;
 			children = (
+				E2A9C5F02F9C4C1B00000002 /* PPFileHelper.h */,
+				E2A9C5F02F9C4C1B00000003 /* PPFileHelper.m */,
 				D9AB96A1DB1BBD4A7B73FDEF /* PPColorUtils.h */,
 				7DB9D83B879A58F4F60D242D /* PPColorUtils.m */,
 			);
@@ -1470,6 +1478,8 @@
 		F2D542E32E5A3FEF004F6B9F /* PPStyles */ = {
 			isa = PBXGroup;
 			children = (
+				D7B2A0032F9C4C1B00000003 /* PPDesignTokens.h */,
+				D7B2A0042F9C4C1B00000004 /* PPDesignTokens.m */,
 				F266009E2FF18194005B4BD4 /* PPQuickActionsRailView.h */,
 				F266009F2FF18194005B4BD4 /* PPQuickActionsRailView.m */,
 				F2A1BB0C2E752EBF00B86BF9 /* PPImageManager.h */,
@@ -1840,6 +1850,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				F5A0B1013005000100A0B101 /* PPHero.swift in Sources */,
+				D7B2A0022F9C4C1B00000002 /* PPDesignTokens.m in Sources */,
+				E2A9C5F02F9C4C1B00000001 /* PPFileHelper.m in Sources */,
 				F2ALERT0001HELPER00B00001 /* PPAlertHelper.m in Sources */,
 				FA23686D0529430AA2E37709 /* PPVetModel.m in Sources */,
 				6C65E6AFB8534ED2B64E8AC0 /* PPVetManager.m in Sources */,
@@ -2174,7 +2186,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2207,7 +2219,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES = YES;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = PurePetsPro/PurePetsPro.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "PurePetsPro/PurePetsPro Release.entitlements";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 8;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
@@ -2259,7 +2271,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.6;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

@@ -84,6 +84,13 @@ static BOOL PPNotificationModelStringHasPrefix(NSString *value, NSString *prefix
     return [PPNotificationModelTrimmedString(value) rangeOfString:prefix options:NSCaseInsensitiveSearch | NSAnchoredSearch].location != NSNotFound;
 }
 
+static BOOL PPNotificationModelIsProviderOrderCancellationType(NSString *type)
+{
+    NSString *normalized = PPNotificationModelTrimmedString(type).lowercaseString;
+    return [normalized isEqualToString:@"provider_order_cancelled"] ||
+           [normalized isEqualToString:@"provider.order.cancelled"];
+}
+
 static NSString *PPNotificationModelOrderReferenceFromTitle(NSString *title)
 {
     NSString *safeTitle = PPNotificationModelTrimmedString(title);
@@ -134,6 +141,15 @@ static NSString *PPNotificationModelKnownLocalizedTitle(NSString *rawTitle, NSDi
         return kLang(@"pp_pro_notification_delivery_request_closed_title");
     }
 
+    if (PPNotificationModelIsProviderOrderCancellationType(type)) {
+        NSString *orderReference = PPNotificationModelFirstScalarForKeys(meta, @[@"orderNumber", @"parentOrderNumber", @"orderReference", @"orderId", @"parentOrderId"]);
+        if (orderReference.length == 0) {
+            orderReference = PPNotificationModelFirstScalarForKeys(raw, @[@"orderNumber", @"orderReference", @"orderId", @"parentOrderId"]);
+        }
+        NSString *format = kLang(@"pp_pro_notification_order_cancelled_title_format");
+        return orderReference.length > 0 ? [NSString stringWithFormat:format, orderReference] : kLang(@"pp_pro_notification_order_cancelled_title");
+    }
+
     if ([type isEqualToString:@"provider_new_fulfillment"] ||
         [type isEqualToString:@"fulfillment_order"] ||
         [status isEqualToString:@"new_request"] ||
@@ -170,6 +186,10 @@ static NSString *PPNotificationModelKnownLocalizedBody(NSString *rawBody, NSStri
         PPNotificationModelStringEquals(rawTitle, @"Delivery Request Closed") ||
         PPNotificationModelStringEquals(rawBody, @"This delivery request is no longer available.")) {
         return kLang(@"pp_pro_notification_delivery_request_closed_body");
+    }
+
+    if (PPNotificationModelIsProviderOrderCancellationType(type)) {
+        return kLang(@"pp_pro_notification_order_cancelled_body");
     }
 
     if ([type isEqualToString:@"provider_new_fulfillment"] ||
@@ -248,7 +268,17 @@ static NSString *PPNotificationModelKnownLocalizedBody(NSString *rawBody, NSStri
         titleKey = PPNotificationModelFirstStringForKeys(raw, @[@"titleLocalizationKey", @"titleKey", @"titleLocKey"]);
     }
     if (titleKey.length > 0) {
-        return kLang(titleKey);
+        NSString *localizedTitle = kLang(titleKey);
+        if ([titleKey isEqualToString:@"pp_pro_notification_order_cancelled_title_format"]) {
+            NSString *orderReference = PPNotificationModelFirstScalarForKeys(meta, @[@"orderNumber", @"parentOrderNumber", @"orderReference", @"orderId", @"parentOrderId"]);
+            if (orderReference.length == 0) {
+                orderReference = PPNotificationModelFirstScalarForKeys(raw, @[@"orderNumber", @"orderReference", @"orderId", @"parentOrderId"]);
+            }
+            return orderReference.length > 0
+                ? [NSString stringWithFormat:localizedTitle, orderReference]
+                : kLang(@"pp_pro_notification_order_cancelled_title");
+        }
+        return localizedTitle;
     }
 
     NSString *localized = PPNotificationModelLocalizedValueFromDictionary(raw,

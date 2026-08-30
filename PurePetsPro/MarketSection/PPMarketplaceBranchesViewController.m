@@ -534,7 +534,7 @@ static NSString * const PPMarketplaceErrorRecoverableUnavailableKey = @"PPMarket
             completionHandler(success);
         }];
     }];
-    toggle.backgroundColor = branch.active ? UIColor.systemOrangeColor : UIColor.systemGreenColor;
+    toggle.backgroundColor = branch.active ? [UIColor ppWarning] : [UIColor ppSuccess];
     return [UISwipeActionsConfiguration configurationWithActions:@[toggle]];
 }
 

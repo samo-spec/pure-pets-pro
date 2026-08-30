@@ -525,35 +525,13 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
         return;
     }
 
-    if (PPShouldUseDebugAppCheckProvider()) {
-        NSString *apiKey = defaultApp.options.APIKey;
-        if (apiKey.length == 0) {
-            DLog(@"[GoogleSignIn][AppCheck] Missing iOS API key; debug provider was not configured.");
-            return;
-        }
-
-        if (@available(iOS 14.0, *)) {
-            [GIDSignIn.sharedInstance configureDebugProviderWithAPIKey:apiKey completion:^(NSError * _Nullable error) {
-                if (error) {
-                    DLog(@"[GoogleSignIn][AppCheck] Debug provider configuration failed: %@",
-                          error.localizedDescription ?: @"unknown error");
-                    return;
-                }
-                DLog(@"[GoogleSignIn][AppCheck] Debug provider configured for PurePetsPro.");
-            }];
-        } else {
-            DLog(@"[GoogleSignIn][AppCheck] Debug provider requires iOS 14 or later.");
-        }
-        return;
-    }
-
     [GIDSignIn.sharedInstance configureWithCompletion:^(NSError * _Nullable error) {
         if (error) {
-            DLog(@"[GoogleSignIn][AppCheck] Production App Check configuration failed: %@",
+            DLog(@"[GoogleSignIn][AppCheck] App Check configuration failed: %@",
                   error.localizedDescription ?: @"unknown error");
             return;
         }
-        DLog(@"[GoogleSignIn][AppCheck] Production App Check configured for PurePetsPro.");
+        DLog(@"[GoogleSignIn][AppCheck] App Check configured for PurePetsPro.");
     }];
 }
 

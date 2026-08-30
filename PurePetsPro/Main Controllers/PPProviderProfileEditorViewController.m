@@ -19,53 +19,31 @@ typedef NS_ENUM(NSInteger, PPProviderProfileEditorPickerMode) {
 };
 
 static UIColor *PPProviderProfileEditorAccentColor(void) {
-    return AppPrimaryClr ?: [UIColor colorWithRed:0.92 green:0.27 blue:0.56 alpha:1.0];
+    return AppPrimaryClr;
 }
 
 static UIColor *PPProviderProfileEditorCanvasColor(void) {
-    if (AppPageColr) {
-        return AppPageColr;
-    }
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
-            ? [UIColor colorWithWhite:0.07 alpha:1.0]
-            : [UIColor colorWithWhite:0.96 alpha:1.0];
-    }];
+    return AppPageColr;
 }
 
 static UIColor *PPProviderProfileEditorSurfaceColor(void) {
-    if (AppForgroundColr) {
-        return AppForgroundColr;
-    }
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
-            ? [UIColor colorWithWhite:0.13 alpha:0.96]
-            : [UIColor colorWithWhite:1.0 alpha:0.90];
-    }];
+    return AppForgroundColr;
 }
 
 static UIColor *PPProviderProfileEditorInnerSurfaceColor(void) {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
-            ? [UIColor colorWithWhite:0.17 alpha:0.98]
-            : [UIColor colorWithWhite:0.97 alpha:0.98];
-    }];
+    return [UIColor ppSurface];
 }
 
 static UIColor *PPProviderProfileEditorBorderColor(void) {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
-            ? [UIColor colorWithWhite:1.0 alpha:0.08]
-            : [UIColor colorWithWhite:0.0 alpha:0.06];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
 }
 
 static UIColor *PPProviderProfileEditorPrimaryTextColor(void) {
-    return PrimaryTextClr ?: UIColor.labelColor;
+    return PrimaryTextClr;
 }
 
 static UIColor *PPProviderProfileEditorSecondaryTextColor(void) {
-    return SeconderyTextClr ?: AppSecondaryClr ?: UIColor.secondaryLabelColor;
+    return SeconderyTextClr;
 }
 
 static UIColor *PPProviderProfileEditorHeroFallbackColor(void) {
@@ -339,7 +317,7 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
     cell.textLabel.font = [Styling fontMedium:16.0];
     cell.textLabel.textColor = PPProviderProfileEditorPrimaryTextColor();
     cell.detailTextLabel.text = [cityID isEqualToString:_selectedCity] ? kLang(@"ProviderProfileEditor_Selected") : @"";
-    cell.detailTextLabel.textColor = AppPrimaryClr ?: UIColor.systemBlueColor;
+    cell.detailTextLabel.textColor = AppPrimaryClr;
     cell.backgroundColor = UIColor.clearColor;
     cell.accessoryType = [cityID isEqualToString:_selectedCity] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
     return cell;
@@ -539,7 +517,7 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
     self.footerBar = [[UIView alloc] init];
     self.footerBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.footerBar.backgroundColor = [PPProviderProfileEditorSurfaceColor() colorWithAlphaComponent:0.98];
-    self.footerBar.layer.shadowColor = (AppShadowColor ?: UIColor.blackColor).CGColor;
+    self.footerBar.layer.shadowColor = (AppShadowColor).CGColor;
     self.footerBar.layer.shadowOpacity = 0.06;
     self.footerBar.layer.shadowRadius = 18.0;
     self.footerBar.layer.shadowOffset = CGSizeMake(0.0, -6.0);

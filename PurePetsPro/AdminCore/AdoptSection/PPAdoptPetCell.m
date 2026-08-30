@@ -29,7 +29,7 @@
     [super prepareForReuse];
     [self.petImageView sd_cancelCurrentImageLoad];
     self.petImageView.image = [UIImage systemImageNamed:@"pawprint.fill"];
-    self.petImageView.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.petImageView.tintColor = AppPrimaryClr;
     self.alpha = 1.0;
     self.transform = CGAffineTransformIdentity;
 }
@@ -42,12 +42,12 @@
 
     _surfaceView = [UIView new];
     _surfaceView.translatesAutoresizingMaskIntoConstraints = NO;
-    _surfaceView.backgroundColor = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    _surfaceView.backgroundColor = AppForgroundColr;
     _surfaceView.layer.cornerRadius = 24.0;
     _surfaceView.layer.cornerCurve = kCACornerCurveContinuous;
     _surfaceView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     _surfaceView.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.08].CGColor;
-    _surfaceView.layer.shadowColor = (AppShadowColor ?: UIColor.blackColor).CGColor;
+    _surfaceView.layer.shadowColor = (AppShadowColor).CGColor;
     _surfaceView.layer.shadowOpacity = 0.055;
     _surfaceView.layer.shadowRadius = 18.0;
     _surfaceView.layer.shadowOffset = CGSizeMake(0, 10.0);
@@ -56,7 +56,7 @@
     _petImageView = [UIImageView new];
     _petImageView.translatesAutoresizingMaskIntoConstraints = NO;
     _petImageView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
-    _petImageView.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    _petImageView.tintColor = AppPrimaryClr;
     _petImageView.image = [UIImage systemImageNamed:@"pawprint.fill"];
     _petImageView.contentMode = UIViewContentModeScaleAspectFill;
     _petImageView.clipsToBounds = YES;
@@ -67,7 +67,7 @@
     _petTitle = [UILabel new];
     _petTitle.translatesAutoresizingMaskIntoConstraints = NO;
     _petTitle.font = [Styling fontBold:17.0];
-    _petTitle.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    _petTitle.textColor = PrimaryTextClr;
     _petTitle.textAlignment = Language.alignmentForCurrentLanguage;
     _petTitle.numberOfLines = 1;
     [_surfaceView addSubview:_petTitle];
@@ -83,7 +83,7 @@
     _adopterInfoLabel = [UILabel new];
     _adopterInfoLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _adopterInfoLabel.font = [Styling fontMedium:12.0];
-    _adopterInfoLabel.textColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    _adopterInfoLabel.textColor = SeconderyTextClr;
     _adopterInfoLabel.textAlignment = Language.alignmentForCurrentLanguage;
     _adopterInfoLabel.numberOfLines = 1;
     [_surfaceView addSubview:_adopterInfoLabel];
@@ -200,10 +200,10 @@
 }
 
 - (UIColor *)statusColorForPet:(PPAdoptPetModel *)pet {
-    if (pet.isDeleted || pet.isBlocked) return UIColor.systemRedColor;
-    if (pet.visibility == 1 || [pet.status isEqualToString:@"hidden"]) return UIColor.systemOrangeColor;
-    if (pet.isAdopted || [pet.status isEqualToString:@"adopted"]) return UIColor.systemGreenColor;
-    return AppPrimaryClr ?: UIColor.systemTealColor;
+    if (pet.isDeleted || pet.isBlocked) return [UIColor ppError];
+    if (pet.visibility == 1 || [pet.status isEqualToString:@"hidden"]) return [UIColor ppWarning];
+    if (pet.isAdopted || [pet.status isEqualToString:@"adopted"]) return [UIColor ppSuccess];
+    return AppPrimaryClr;
 }
 
 @end

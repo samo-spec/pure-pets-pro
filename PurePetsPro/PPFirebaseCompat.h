@@ -234,8 +234,8 @@ typedef NS_ENUM(NSInteger, FIRFunctionsErrorCode) {
     FIRFunctionsErrorCodeUnauthenticated = 16,
 };
 
-FOUNDATION_EXPORT NSString * const FIRFunctionsErrorDomain;
-FOUNDATION_EXPORT NSString * const FIRFunctionsErrorDetailsKey;
+static NSString * const FIRFunctionsErrorDomain = @"com.firebase.functions";
+static NSString * const FIRFunctionsErrorDetailsKey = @"details";
 
 #ifndef PP_FIREBASE_STORAGE_TYPEDEFS_IMPORTED
 typedef NSString *FIRStorageHandle;

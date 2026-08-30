@@ -465,7 +465,7 @@ static BOOL PPTimelineStatusInSet(NSString *status, NSArray<NSString *> *values)
 
     PPTimelineStep *placed = [PPTimelineStep new];
     placed.title = kLang(@"Deliv_StatusOrderPlaced");
-    placed.activeColor = UIColor.systemOrangeColor;
+    placed.activeColor = [UIColor ppWarning];
     if (order.createdAt) {
         placed.subtitle = [dateFormatter stringFromDate:order.createdAt];
     }
@@ -473,7 +473,7 @@ static BOOL PPTimelineStatusInSet(NSString *status, NSArray<NSString *> *values)
 
     PPTimelineStep *preparing = [PPTimelineStep new];
     preparing.title = kLang(@"Deliv_StatusPreparing");
-    preparing.activeColor = UIColor.systemOrangeColor;
+    preparing.activeColor = [UIColor ppWarning];
     if (order.processedAt) {
         preparing.subtitle = [dateFormatter stringFromDate:order.processedAt];
     }
@@ -481,7 +481,7 @@ static BOOL PPTimelineStatusInSet(NSString *status, NSArray<NSString *> *values)
 
     PPTimelineStep *requested = [PPTimelineStep new];
     requested.title = kLang(@"Deliv_StatusRequested");
-    requested.activeColor = UIColor.systemOrangeColor;
+    requested.activeColor = [UIColor ppWarning];
     if (order.deliveryRequestedAt) {
         requested.subtitle = [dateFormatter stringFromDate:order.deliveryRequestedAt];
     }
@@ -489,7 +489,7 @@ static BOOL PPTimelineStatusInSet(NSString *status, NSArray<NSString *> *values)
 
     PPTimelineStep *handover = [PPTimelineStep new];
     handover.title = kLang(@"Deliv_StatusAwaitingHandover");
-    handover.activeColor = UIColor.systemBlueColor;
+    handover.activeColor = [UIColor ppInfo];
     if (order.deliveryAcceptedAt) {
         handover.subtitle = [dateFormatter stringFromDate:order.deliveryAcceptedAt];
     }
@@ -497,7 +497,7 @@ static BOOL PPTimelineStatusInSet(NSString *status, NSArray<NSString *> *values)
 
     PPTimelineStep *transit = [PPTimelineStep new];
     transit.title = kLang(@"Deliv_StatusInTransit");
-    transit.activeColor = UIColor.systemIndigoColor;
+    transit.activeColor = [UIColor ppQuickActionCommunity];
     NSDate *transitDate = order.inTransitAt ?: order.pickedUpAt ?: order.shippedAt;
     if (transitDate) {
         transit.subtitle = [dateFormatter stringFromDate:transitDate];
@@ -506,7 +506,7 @@ static BOOL PPTimelineStatusInSet(NSString *status, NSArray<NSString *> *values)
 
     PPTimelineStep *delivered = [PPTimelineStep new];
     delivered.title = kLang(@"Deliv_StatusDelivered");
-    delivered.activeColor = UIColor.systemGreenColor;
+    delivered.activeColor = [UIColor ppSuccess];
     if (order.deliveredAt) {
         delivered.subtitle = [dateFormatter stringFromDate:order.deliveredAt];
     }
@@ -516,7 +516,7 @@ static BOOL PPTimelineStatusInSet(NSString *status, NSArray<NSString *> *values)
     if (isCash) {
         cashStep = [PPTimelineStep new];
         cashStep.title = kLang(@"Deliv_StatusPaymentConfirmed");
-        cashStep.activeColor = UIColor.systemTealColor;
+        cashStep.activeColor = [UIColor ppQuickActionServices];
         NSDate *paymentDate = order.paymentCollectedAt ?: order.paymentConfirmedAt;
         if (paymentDate) {
             cashStep.subtitle = [dateFormatter stringFromDate:paymentDate];
@@ -526,7 +526,7 @@ static BOOL PPTimelineStatusInSet(NSString *status, NSArray<NSString *> *values)
 
     PPTimelineStep *completed = [PPTimelineStep new];
     completed.title = kLang(@"Deliv_StatusCompleted");
-    completed.activeColor = UIColor.systemGreenColor;
+    completed.activeColor = [UIColor ppSuccess];
     if (order.completedAt) {
         completed.subtitle = [dateFormatter stringFromDate:order.completedAt];
     }

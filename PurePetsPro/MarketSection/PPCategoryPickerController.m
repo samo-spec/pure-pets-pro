@@ -202,7 +202,7 @@ static NSInteger const PPCategoryPickerEmptyTag = 5301;
 
 - (void)applyCardSelected:(BOOL)selected compact:(BOOL)compact {
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
-    UIColor *surface = AppForgroundColr ?: UIColor.secondarySystemGroupedBackgroundColor;
+    UIColor *surface = AppForgroundColr;
     self.cardView.backgroundColor = selected ? [surface colorWithAlphaComponent:isDark ? 0.96 : 0.98] : [surface colorWithAlphaComponent:isDark ? 0.84 : 0.92];
     self.cardView.layer.borderColor = (selected ? [AppPrimaryClr colorWithAlphaComponent:0.22] : [SeconderyTextClr colorWithAlphaComponent:0.08]).CGColor;
     self.cardView.layer.shadowColor = UIColor.blackColor.CGColor;
@@ -262,7 +262,7 @@ static NSInteger const PPCategoryPickerEmptyTag = 5301;
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = kLang(@"Market_SectionClassification");
-    self.view.backgroundColor = AppBackgroundClr ?: UIColor.systemGroupedBackgroundColor;
+    self.view.backgroundColor = AppBackgroundClr;
     self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     self.navigationController.navigationBar.prefersLargeTitles = NO;
     self.headerWidth = MAX(CGRectGetWidth(self.view.bounds), UIScreen.mainScreen.bounds.size.width);
@@ -316,7 +316,7 @@ static NSInteger const PPCategoryPickerEmptyTag = 5301;
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.text = kLang(@"Market_SectionClassification");
     titleLabel.font = [Styling fontBold:21.0];
-    titleLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    titleLabel.textColor = PrimaryTextClr;
     titleLabel.textAlignment = NSTextAlignmentCenter;
     titleLabel.adjustsFontSizeToFitWidth = YES;
     titleLabel.minimumScaleFactor = 0.82;
@@ -353,13 +353,13 @@ static NSInteger const PPCategoryPickerEmptyTag = 5301;
 
 - (void)updateBackdropGlows {
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
+    UIColor *accent = AppPrimaryClr;
     self.bgGlowTop.backgroundColor = [accent colorWithAlphaComponent:isDark ? 0.045 : 0.10];
     self.bgGlowTop.layer.shadowColor = accent.CGColor;
     self.bgGlowTop.layer.shadowOpacity = isDark ? 0.05 : 0.10;
     self.bgGlowTop.layer.shadowRadius = 66.0;
 
-    UIColor *warm = UIColor.systemOrangeColor;
+    UIColor *warm = [UIColor ppWarning];
     self.bgGlowBottom.backgroundColor = [warm colorWithAlphaComponent:isDark ? 0.025 : 0.055];
     self.bgGlowBottom.layer.shadowColor = warm.CGColor;
     self.bgGlowBottom.layer.shadowOpacity = isDark ? 0.03 : 0.07;
@@ -373,10 +373,10 @@ static NSInteger const PPCategoryPickerEmptyTag = 5301;
     [self.doneButton setTitle:kLang(@"Save") forState:UIControlStateNormal];
     [self.doneButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.doneButton.titleLabel.font = [Styling fontBold:15.0];
-    self.doneButton.backgroundColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.doneButton.backgroundColor = AppPrimaryClr;
     self.doneButton.layer.cornerRadius = 16.0;
     self.doneButton.layer.cornerCurve = kCACornerCurveContinuous;
-    self.doneButton.layer.shadowColor = (AppPrimaryClr ?: UIColor.systemTealColor).CGColor;
+    self.doneButton.layer.shadowColor = (AppPrimaryClr).CGColor;
     self.doneButton.layer.shadowOpacity = 0.20;
     self.doneButton.layer.shadowRadius = 10.0;
     self.doneButton.layer.shadowOffset = CGSizeMake(0, 6.0);
@@ -413,7 +413,7 @@ static NSInteger const PPCategoryPickerEmptyTag = 5301;
 - (void)setupLoadingAndEmptyStates {
     self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.spinner.translatesAutoresizingMaskIntoConstraints = NO;
-    self.spinner.color = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.spinner.color = AppPrimaryClr;
     [self.view addSubview:self.spinner];
 
     self.emptyView = [self buildEmptyStateView];
@@ -454,7 +454,7 @@ static NSInteger const PPCategoryPickerEmptyTag = 5301;
     icon.translatesAutoresizingMaskIntoConstraints = NO;
     icon.image = [UIImage systemImageNamed:@"square.grid.2x2.fill"
                          withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:22.0 weight:UIImageSymbolWeightSemibold]];
-    icon.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    icon.tintColor = AppPrimaryClr;
     icon.contentMode = UIViewContentModeCenter;
     [iconSurface addSubview:icon];
 
@@ -490,7 +490,7 @@ static NSInteger const PPCategoryPickerEmptyTag = 5301;
     self.heroSummaryLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.heroSummaryLabel.font = [Styling fontBold:12.0];
     self.heroSummaryLabel.textAlignment = NSTextAlignmentCenter;
-    self.heroSummaryLabel.textColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.heroSummaryLabel.textColor = AppPrimaryClr;
     self.heroSummaryLabel.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.09];
     self.heroSummaryLabel.layer.cornerRadius = 15.0;
     self.heroSummaryLabel.layer.cornerCurve = kCACornerCurveContinuous;
@@ -551,7 +551,7 @@ static NSInteger const PPCategoryPickerEmptyTag = 5301;
     icon.translatesAutoresizingMaskIntoConstraints = NO;
     icon.image = [UIImage systemImageNamed:@"tray"
                          withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:24.0 weight:UIImageSymbolWeightSemibold]];
-    icon.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    icon.tintColor = AppPrimaryClr;
     [iconSurface addSubview:icon];
 
     UILabel *title = [[UILabel alloc] init];
@@ -647,7 +647,7 @@ static NSInteger const PPCategoryPickerEmptyTag = 5301;
     NSString *display = [self displayNameForCurrentSelection];
     BOOL hasSelection = self.selectedMainID > 0;
     self.heroSummaryLabel.text = hasSelection ? [NSString stringWithFormat:kLang(@"Market_CategoryPickerSelectedFormat"), display] : kLang(@"Market_CategoryPickerTapFamily");
-    self.heroSummaryLabel.textColor = hasSelection ? (AppPrimaryClr ?: UIColor.systemTealColor) : SeconderyTextClr;
+    self.heroSummaryLabel.textColor = hasSelection ? (AppPrimaryClr) : SeconderyTextClr;
     self.heroSummaryLabel.backgroundColor = hasSelection ? [AppPrimaryClr colorWithAlphaComponent:0.09] : [SeconderyTextClr colorWithAlphaComponent:0.055];
 }
 

@@ -84,7 +84,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
     _surfaceView = [[UIView alloc] init];
     _surfaceView.translatesAutoresizingMaskIntoConstraints = NO;
-    _surfaceView.backgroundColor = UIColor.systemBackgroundColor;
+    _surfaceView.backgroundColor = [UIColor ppSurface];
     _surfaceView.clipsToBounds = YES;
     _surfaceView.layer.cornerRadius = kCardRadius;
     _surfaceView.layer.cornerCurve = kCACornerCurveContinuous;
@@ -133,7 +133,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     _statusPill.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     [_surfaceView addSubview:_statusPill];
 
-    _statusLabel = [self labelWithFont:PPFontBold(11) color:UIColor.systemGreenColor];
+    _statusLabel = [self labelWithFont:PPFontBold(11) color:[UIColor ppSuccess]];
     _statusLabel.textAlignment = NSTextAlignmentCenter;
     [_statusPill addSubview:_statusLabel];
 
@@ -145,22 +145,22 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
     _branchBadgeView = [[UIView alloc] init];
     _branchBadgeView.translatesAutoresizingMaskIntoConstraints = NO;
-    _branchBadgeView.backgroundColor = [[UIColor systemOrangeColor] colorWithAlphaComponent:0.10];
+    _branchBadgeView.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:0.10];
     _branchBadgeView.layer.cornerRadius = 14.0;
     _branchBadgeView.layer.cornerCurve = kCACornerCurveContinuous;
     _branchBadgeView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    _branchBadgeView.layer.borderColor = [[UIColor systemOrangeColor] colorWithAlphaComponent:0.16].CGColor;
+    _branchBadgeView.layer.borderColor = [[UIColor ppWarning] colorWithAlphaComponent:0.16].CGColor;
     [_surfaceView addSubview:_branchBadgeView];
 
     _branchIconView = [[UIImageView alloc] init];
     _branchIconView.translatesAutoresizingMaskIntoConstraints = NO;
     _branchIconView.contentMode = UIViewContentModeScaleAspectFit;
-    _branchIconView.tintColor = [UIColor systemOrangeColor];
+    _branchIconView.tintColor = [UIColor ppWarning];
     UIImageSymbolConfiguration *branchIconConfig = [UIImageSymbolConfiguration configurationWithPointSize:11.0 weight:UIImageSymbolWeightSemibold];
     _branchIconView.image = [[UIImage systemImageNamed:@"building.2.fill"] imageWithConfiguration:branchIconConfig];
     [_branchBadgeView addSubview:_branchIconView];
 
-    _branchLabel = [self labelWithFont:PPFontBold(11) color:[UIColor systemOrangeColor]];
+    _branchLabel = [self labelWithFont:PPFontBold(11) color:[UIColor ppWarning]];
     _branchLabel.numberOfLines = 2;
     _branchLabel.lineBreakMode = NSLineBreakByWordWrapping;
     [_branchBadgeView addSubview:_branchLabel];
@@ -392,10 +392,10 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     } else {
         UIImageSymbolConfiguration *branchIconConfig = [UIImageSymbolConfiguration configurationWithPointSize:11.0 weight:UIImageSymbolWeightSemibold];
         self.branchIconView.image = [[UIImage systemImageNamed:@"building.2.fill"] imageWithConfiguration:branchIconConfig];
-        self.branchIconView.tintColor = [UIColor systemOrangeColor];
-        self.branchBadgeView.backgroundColor = [[UIColor systemOrangeColor] colorWithAlphaComponent:0.10];
-        self.branchBadgeView.layer.borderColor = [[UIColor systemOrangeColor] colorWithAlphaComponent:0.16].CGColor;
-        self.branchLabel.textColor = [UIColor systemOrangeColor];
+        self.branchIconView.tintColor = [UIColor ppWarning];
+        self.branchBadgeView.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:0.10];
+        self.branchBadgeView.layer.borderColor = [[UIColor ppWarning] colorWithAlphaComponent:0.16].CGColor;
+        self.branchLabel.textColor = [UIColor ppWarning];
         if (branchDisplay.length == 0) {
             branchDisplay = kLang(@"Deliv_BranchPendingAssignment");
         }
@@ -413,7 +413,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     self.accentOrbView.backgroundColor = [statusColor colorWithAlphaComponent:0.10];
 
     BOOL isCash = [order isCashOrder];
-    UIColor *paymentColor = isCash ? UIColor.systemGreenColor : UIColor.systemBlueColor;
+    UIColor *paymentColor = isCash ? [UIColor ppSuccess] : [UIColor ppInfo];
     self.paymentDotView.backgroundColor = paymentColor;
     self.paymentLabel.textColor = paymentColor;
     self.paymentLabel.text = isCash ? kLang(@"CashPayment") : kLang(@"OnlinePayment");
@@ -431,21 +431,21 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 - (UIColor *)colorForStatus:(NSString *)status {
     NSString *lower = [status lowercaseString];
     if ([@[PPDeliveryStatusReadyToShip, PPDeliveryStatusRequested, PPDeliveryStatusAwaitingHandover] containsObject:lower]) {
-        return UIColor.systemOrangeColor;
+        return [UIColor ppWarning];
     }
     if ([lower isEqualToString:PPDeliveryStatusPickedUp] || [lower isEqualToString:PPDeliveryStatusInTransit]) {
-        return UIColor.systemIndigoColor;
+        return [UIColor ppQuickActionCommunity];
     }
     if ([@[PPDeliveryStatusDelivered, PPDeliveryStatusPaymentPending, PPDeliveryStatusPaymentConfirmed, PPDeliveryStatusCompleted] containsObject:lower]) {
-        return UIColor.systemGreenColor;
+        return [UIColor ppSuccess];
     }
     if ([@[PPDeliveryStatusCancelled, PPDeliveryStatusFailed, PPDeliveryStatusReturnedToStore] containsObject:lower]) {
-        return UIColor.systemRedColor;
+        return [UIColor ppError];
     }
     if ([@[@"processing", @"preparing", @"packed", @"confirmed", @"paid"] containsObject:lower]) {
-        return UIColor.systemBlueColor;
+        return [UIColor ppInfo];
     }
-    return UIColor.systemGrayColor;
+    return [UIColor ppTextSecondary];
 }
 
 #pragma mark - Interaction

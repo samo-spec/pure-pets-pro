@@ -31,6 +31,8 @@ static const CGFloat PPBottomSearchParkedInset = 16.0;
 @property (nonatomic, strong) UIActivityIndicatorView *spinner;
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
 @property (nonatomic, strong) id<FIRListenerRegistration> listener;
+@property (nonatomic, assign) NSUInteger listenerGeneration;
+@property (nonatomic, copy) NSString *listenerUID;
 @property (nonatomic, copy) NSArray<PPFulfillmentModel *> *fulfillments;
 @property (nonatomic, copy) NSArray<PPFulfillmentModel *> *filteredFulfillments;
 @property (nonatomic, copy) NSString *searchQuery;
@@ -160,9 +162,9 @@ static const CGFloat PPBottomSearchParkedInset = 16.0;
 
 - (void)updateLiveBackgroundGlowStyle {
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
-    UIColor *champagne = [UIColor colorWithRed:0.98 green:0.82 blue:0.56 alpha:1.0];
-    UIColor *opal = [UIColor colorWithRed:0.55 green:0.88 blue:0.80 alpha:1.0];
-    UIColor *rose = [UIColor colorWithRed:0.86 green:0.54 blue:0.62 alpha:1.0];
+    UIColor *champagne = [UIColor ppPremiumAccent];
+    UIColor *opal = [UIColor ppQuickActionServices];
+    UIColor *rose = [UIColor ppDiscount];
     CGFloat alpha = isDark ? 0.22 : 0.18;
 
     self.liveGlowTopLayer.colors = @[
@@ -681,8 +683,12 @@ UIStackView *summaryStack = [[UIStackView alloc] init];
 #pragma mark - Data
 
 - (void)startListening {
-    NSString *uid = [FIRAuth auth].currentUser.uid;
-    if (!uid) {
+    [self.listener remove];
+    self.listener = nil;
+    NSUInteger generation = ++self.listenerGeneration;
+    NSString *uid = [[FIRAuth auth].currentUser.uid ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    self.listenerUID = uid;
+    if (uid.length == 0) {
         self.fulfillments = @[];
         self.hasLoaded = YES;
         [self updateUIAnimated:NO];
@@ -693,6 +699,8 @@ UIStackView *summaryStack = [[UIStackView alloc] init];
     [self.spinner startAnimating];
     self.listener = [[PPFulfillmentManager sharedManager] observeFulfillmentsForOwnerID:uid onChange:^(NSArray<PPFulfillmentModel *> *fulfillments, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
+        if (!self || generation != self.listenerGeneration) return;
+        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] || ![self.listenerUID isEqualToString:uid]) return;
         [self.spinner stopAnimating];
         [self.refreshControl endRefreshing];
         self.hasLoaded = YES;
@@ -886,6 +894,7 @@ UIStackView *summaryStack = [[UIStackView alloc] init];
 
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
+    self.listenerGeneration += 1;
     [self.listener remove];
 }
 

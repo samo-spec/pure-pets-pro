@@ -127,8 +127,8 @@ typedef NS_ENUM(NSInteger, PPServiceListFilter) {
     self.bgGlowTop.layer.shadowOpacity = isDark ? 0.04 : 0.10;
     self.bgGlowTop.layer.shadowRadius = 70.0;
 
-    self.bgGlowBottom.backgroundColor = [[UIColor systemTealColor] colorWithAlphaComponent:isDark ? 0.03 : 0.06];
-    self.bgGlowBottom.layer.shadowColor = UIColor.systemTealColor.CGColor;
+    self.bgGlowBottom.backgroundColor = [[UIColor ppQuickActionServices] colorWithAlphaComponent:isDark ? 0.03 : 0.06];
+    self.bgGlowBottom.layer.shadowColor = [UIColor ppQuickActionServices].CGColor;
     self.bgGlowBottom.layer.shadowOpacity = isDark ? 0.02 : 0.06;
     self.bgGlowBottom.layer.shadowRadius = 68.0;
 }
@@ -177,8 +177,8 @@ typedef NS_ENUM(NSInteger, PPServiceListFilter) {
     [_statsContainer addSubview:subtitleLabel];
 
     UIView *totalCard       = [self buildStatCard:kLang(@"Serv_Stats_Total")       valueLabel:&_statTotal    color:AppPrimaryClr];
-    UIView *availableCard   = [self buildStatCard:kLang(@"Serv_Stats_Available")   valueLabel:&_statActive   color:UIColor.systemGreenColor];
-    UIView *unavailableCard = [self buildStatCard:kLang(@"Serv_Stats_Unavailable") valueLabel:&_statDisabled color:UIColor.systemOrangeColor];
+    UIView *availableCard   = [self buildStatCard:kLang(@"Serv_Stats_Available")   valueLabel:&_statActive   color:[UIColor ppSuccess]];
+    UIView *unavailableCard = [self buildStatCard:kLang(@"Serv_Stats_Unavailable") valueLabel:&_statDisabled color:[UIColor ppWarning]];
 
     UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[
         totalCard, availableCard, unavailableCard
@@ -591,7 +591,7 @@ typedef NS_ENUM(NSInteger, PPServiceListFilter) {
         [weakSelf editService:s];
         handler(YES);
     }];
-    editAction.backgroundColor = UIColor.systemBlueColor;
+    editAction.backgroundColor = [UIColor ppInfo];
     editAction.image = [UIImage systemImageNamed:@"pencil.circle.fill"];
 
     BOOL isAvailable = s.isAvailable;
@@ -599,7 +599,7 @@ typedef NS_ENUM(NSInteger, PPServiceListFilter) {
         [weakSelf toggleAvailability:s];
         handler(YES);
     }];
-    toggleAction.backgroundColor = isAvailable ? UIColor.systemOrangeColor : UIColor.systemGreenColor;
+    toggleAction.backgroundColor = isAvailable ? [UIColor ppWarning] : [UIColor ppSuccess];
     toggleAction.image = [UIImage systemImageNamed:isAvailable ? @"pause.circle.fill" : @"checkmark.circle.fill"];
 
     return [UISwipeActionsConfiguration configurationWithActions:@[toggleAction, editAction]];

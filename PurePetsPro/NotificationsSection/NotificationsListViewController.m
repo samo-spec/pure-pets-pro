@@ -34,6 +34,8 @@
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> inboxListener;
 @property (nonatomic, copy, nullable) NSDictionary *pendingRoutePayload;
 @property (nonatomic, assign) BOOL didLogMissingPendingRouteMatch;
+@property (nonatomic, strong, nullable) NSError *inboxError;
+@property (nonatomic, copy, nullable) NSString *lastInboxErrorSignature;
 @end
 
 static NSString *PPNotificationsRouteTrimmedString(id value)
@@ -47,6 +49,11 @@ static NSString *PPNotificationsRouteTrimmedString(id value)
     return @"";
 }
 
+static NSString *PPProAuthenticatedNotificationUID(void)
+{
+    return PPNotificationsRouteTrimmedString([FIRAuth auth].currentUser.uid);
+}
+
 static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
 {
     NSString *left = [PPNotificationsRouteTrimmedString(lhs) lowercaseString];
@@ -54,13 +61,19 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
     return left.length > 0 && right.length > 0 && [left isEqualToString:right];
 }
 
+static NSString *PPNotificationsInboxErrorSignature(NSError *error)
+{
+    if (![error isKindOfClass:NSError.class]) return @"";
+    return [NSString stringWithFormat:@"%@:%ld", error.domain ?: @"", (long)error.code];
+}
+
 @implementation NotificationsListViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.uid = UsrMgr.currentUser.uid ?: [FIRAuth auth].currentUser.uid ?: @"";
+    self.uid = PPProAuthenticatedNotificationUID();
 
-    self.view.backgroundColor = AppBackgroundClr ?: UIColor.systemGroupedBackgroundColor;
+    self.view.backgroundColor = AppBackgroundClr;
     self.allNotifications = @[];
     self.filteredNotifications = @[];
     self.isLoading = NO;
@@ -81,6 +94,19 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
     // globe  // plus
     [self  pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:kLang(@"NotificationsTitle") showBack:YES];
     [self pp_updateHeaderMetrics];
+
+    NSString *currentUID = PPProAuthenticatedNotificationUID();
+    if (![self.uid isEqualToString:currentUID] ||
+        (currentUID.length > 0 && !self.inboxListener)) {
+        [self.inboxListener remove];
+        self.inboxListener = nil;
+        self.uid = currentUID;
+        self.allNotifications = @[];
+        self.filteredNotifications = @[];
+        self.isLoading = NO;
+        [self reloadTableAnimated:NO];
+        [self fetchNotificationsShowToast:NO];
+    }
 
 }
 
@@ -138,8 +164,8 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
 }
 
 - (void)pp_updateBackgroundGlowStyle {
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *support = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    UIColor *accent = AppPrimaryClr;
+    UIColor *support = SeconderyTextClr;
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
 
     self.topBackgroundGlowView.backgroundColor = [accent colorWithAlphaComponent:isDark ? 0.050 : 0.075];
@@ -172,7 +198,7 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
     self.refreshControl = [[UIRefreshControl alloc] init];
     self.refreshControl.attributedTitle = [[NSAttributedString alloc] initWithString:kLang(@"PullToRefresh")];
     [self.refreshControl addTarget:self action:@selector(onRefresh) forControlEvents:UIControlEventValueChanged];
-    self.refreshControl.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.refreshControl.tintColor = AppPrimaryClr;
     if (@available(iOS 10.0, *)) {
         self.tableView.refreshControl = self.refreshControl;
     } else {
@@ -212,14 +238,14 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
 
     UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"bell.badge.fill"]];
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    iconView.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    iconView.tintColor = AppPrimaryClr;
     iconView.contentMode = UIViewContentModeScaleAspectFit;
     [iconShell addSubview:iconView];
 
     self.headerTitleLabel = [[UILabel alloc] init];
     self.headerTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.headerTitleLabel.font = [Styling fontBold:30];
-    self.headerTitleLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.headerTitleLabel.textColor = PrimaryTextClr;
     self.headerTitleLabel.textAlignment = [Language alignmentForCurrentLanguage];
     self.headerTitleLabel.numberOfLines = 1;
 
@@ -251,7 +277,7 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
     self.unreadBadgeLabel = [[UILabel alloc] init];
     self.unreadBadgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.unreadBadgeLabel.font = [Styling fontBold:11];
-    self.unreadBadgeLabel.textColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.unreadBadgeLabel.textColor = AppPrimaryClr;
     self.unreadBadgeLabel.textAlignment = NSTextAlignmentCenter;
     [badgeView addSubview:self.unreadBadgeLabel];
 
@@ -270,7 +296,7 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
     self.searchView.minRelevanceScore = 0.45;         // tune for recall/precision
     self.searchView.maxResults = 200;
     self.searchView.delegate = self;
-    self.searchView.backgroundColor = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    self.searchView.backgroundColor = AppForgroundColr;
     self.searchView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     self.searchView.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.08].CGColor;
     self.searchView.clipsToBounds = YES;
@@ -359,7 +385,7 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
     self.emptyTitleLabel = [[UILabel alloc] init];
     self.emptyTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyTitleLabel.font = [Styling fontBold:20];
-    self.emptyTitleLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.emptyTitleLabel.textColor = PrimaryTextClr;
     self.emptyTitleLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyTitleLabel.numberOfLines = 2;
 
@@ -446,6 +472,12 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
         return;
     }
 
+    if (self.inboxError && self.allNotifications.count == 0) {
+        self.emptyTitleLabel.text = kLang(@"FetchError");
+        self.emptySubtitleLabel.text = kLang(@"PullToRefresh");
+        return;
+    }
+
     self.emptyTitleLabel.text = isSearching ? kLang(@"NotificationsNoSearchResults") : kLang(@"NoNotifications");
     self.emptySubtitleLabel.text = isSearching ? kLang(@"NotificationsNoSearchSubtitle") : kLang(@"NotificationsEmptySubtitle");
 }
@@ -496,7 +528,8 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
         [PPToast toast:kLang(@"Loading") style:PPToastStyleInfo haptic:NO duration:1.2 position:PPToastPositionBottom inView:self.view];
     }
 
-    if (self.uid.length == 0) {
+    NSString *currentUID = PPProAuthenticatedNotificationUID();
+    if (currentUID.length == 0) {
         self.isLoading = NO;
         [self.refreshControl endRefreshing];
         self.allNotifications = @[];
@@ -504,21 +537,39 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
         [self reloadTableAnimated:NO];
         return;
     }
+    self.uid = currentUID;
 
     __weak typeof(self) weakSelf = self;
     __block BOOL shouldToastLoaded = showToast;
     // Live listen
 
     [self.inboxListener remove];
-    self.inboxListener = [[NotificationManager shared] observeInboxForUser:self.uid handler:^(NSArray<NotificationModel *> *items) {
+    self.inboxListener = [[NotificationManager shared] observeInboxForUser:self.uid stateHandler:^(NSArray<NotificationModel *> *items, NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
         self.isLoading = NO;
         if (self.refreshControl.isRefreshing) [self.refreshControl endRefreshing];
-        
-        self.allNotifications = items ?: @[];
-        if (self.searchView.textField.text.length == 0) {
-            self.filteredNotifications = self.allNotifications;
+
+        self.inboxError = error;
+        if (error) {
+            NSString *signature = PPNotificationsInboxErrorSignature(error);
+            BOOL shouldSurfaceError = signature.length > 0 && ![signature isEqualToString:self.lastInboxErrorSignature];
+            self.lastInboxErrorSignature = signature;
+            if (shouldSurfaceError) {
+                DLog(@"[NotificationsV2] Pro inbox listener failed | domain=%@ code=%ld", error.domain ?: @"unknown", (long)error.code);
+                [PPToast toast:kLang(@"FetchError") style:PPToastStyleError haptic:YES duration:2.0 position:PPToastPositionBottom inView:self.view];
+            }
+        } else {
+            self.lastInboxErrorSignature = nil;
+        }
+
+        // A degraded listener may still have confirmed items. Keep them visible
+        // instead of replacing the inbox with an indistinguishable empty state.
+        if (!error || items.count > 0 || self.allNotifications.count == 0) {
+            self.allNotifications = items ?: @[];
+            if (self.searchView.textField.text.length == 0) {
+                self.filteredNotifications = self.allNotifications;
+            }
         }
         // update PPS search index with items
         [self.searchView setSearchItems:self.allNotifications stringProvider:^NSString * _Nonnull(id item) {
@@ -531,7 +582,7 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
         [self pp_updateHeaderMetrics];
         [self reloadTableAnimated:YES];
         [self pp_consumePendingRoutePayloadIfPossible];
-        if (shouldToastLoaded) {
+        if (!error && shouldToastLoaded) {
             [PPToast toast:kLang(@"NotificationsLoaded") style:PPToastStyleSuccess haptic:NO duration:1.0 position:PPToastPositionBottom inView:self.view];
             shouldToastLoaded = NO;
         }
@@ -589,21 +640,68 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
         return nil;
     }
 
-    for (NotificationModel *item in self.allNotifications) {
-        if (![item isKindOfClass:NotificationModel.class]) {
-            continue;
+    NSDictionary *payloadMeta = [payload[@"meta"] isKindOfClass:NSDictionary.class] ? payload[@"meta"] : @{};
+    NSString *notificationID = PPNotificationsRouteTrimmedString(payload[@"notificationId"]);
+    if (notificationID.length == 0) notificationID = PPNotificationsRouteTrimmedString(payload[@"nid"] ?: payloadMeta[@"notificationId"]);
+    if (notificationID.length > 0) {
+        for (NotificationModel *item in self.allNotifications) {
+            if (![item isKindOfClass:NotificationModel.class]) continue;
+            NSDictionary *meta = [item.meta isKindOfClass:NSDictionary.class] ? item.meta : @{};
+            if (PPNotificationsRouteStringsEqual(item.nid, notificationID) ||
+                PPNotificationsRouteStringsEqual(meta[@"notificationId"], notificationID)) {
+                return item;
+            }
         }
+    }
 
-        NSDictionary *meta = [item.meta isKindOfClass:NSDictionary.class] ? item.meta : @{};
-        if (PPNotificationsRouteStringsEqual(meta[@"requestId"], payload[@"requestId"]) ||
-            PPNotificationsRouteStringsEqual(meta[@"orderId"], payload[@"orderId"]) ||
-            PPNotificationsRouteStringsEqual(meta[@"orderID"], payload[@"orderId"]) ||
-            PPNotificationsRouteStringsEqual(meta[@"parentOrderId"], payload[@"orderId"]) ||
-            PPNotificationsRouteStringsEqual(meta[@"threadId"], payload[@"threadId"]) ||
-            PPNotificationsRouteStringsEqual(meta[@"threadID"], payload[@"threadID"]) ||
-            PPNotificationsRouteStringsEqual(item.nid, payload[@"notificationId"]) ||
-            PPNotificationsRouteStringsEqual(item.nid, payload[@"nid"])) {
-            return item;
+    NSString *fulfillmentID = PPNotificationsRouteTrimmedString(payload[@"fulfillmentId"] ?: payload[@"fulfillmentID"]);
+    if (fulfillmentID.length == 0) fulfillmentID = PPNotificationsRouteTrimmedString(payloadMeta[@"fulfillmentId"] ?: payloadMeta[@"fulfillmentID"]);
+    if (fulfillmentID.length > 0) {
+        for (NotificationModel *item in self.allNotifications) {
+            if (![item isKindOfClass:NotificationModel.class]) continue;
+            NSDictionary *meta = [item.meta isKindOfClass:NSDictionary.class] ? item.meta : @{};
+            if (PPNotificationsRouteStringsEqual(meta[@"fulfillmentId"], fulfillmentID) ||
+                PPNotificationsRouteStringsEqual(meta[@"fulfillmentID"], fulfillmentID)) {
+                return item;
+            }
+        }
+    }
+
+    NSString *requestID = PPNotificationsRouteTrimmedString(payload[@"requestId"] ?: payloadMeta[@"requestId"]);
+    if (requestID.length > 0) {
+        for (NotificationModel *item in self.allNotifications) {
+            if (![item isKindOfClass:NotificationModel.class]) continue;
+            NSDictionary *meta = [item.meta isKindOfClass:NSDictionary.class] ? item.meta : @{};
+            if (PPNotificationsRouteStringsEqual(meta[@"requestId"], requestID)) {
+                return item;
+            }
+        }
+    }
+
+    NSString *orderID = PPNotificationsRouteTrimmedString(payload[@"orderId"] ?: payload[@"orderID"] ?: payload[@"parentOrderId"] ?: payload[@"parentOrderID"]);
+    if (orderID.length == 0) orderID = PPNotificationsRouteTrimmedString(payloadMeta[@"orderId"] ?: payloadMeta[@"orderID"] ?: payloadMeta[@"parentOrderId"] ?: payloadMeta[@"parentOrderID"]);
+    if (orderID.length > 0) {
+        for (NotificationModel *item in self.allNotifications) {
+            if (![item isKindOfClass:NotificationModel.class]) continue;
+            NSDictionary *meta = [item.meta isKindOfClass:NSDictionary.class] ? item.meta : @{};
+            if (PPNotificationsRouteStringsEqual(meta[@"orderId"], orderID) ||
+                PPNotificationsRouteStringsEqual(meta[@"orderID"], orderID) ||
+                PPNotificationsRouteStringsEqual(meta[@"parentOrderId"], orderID) ||
+                PPNotificationsRouteStringsEqual(meta[@"parentOrderID"], orderID)) {
+                return item;
+            }
+        }
+    }
+
+    NSString *threadID = PPNotificationsRouteTrimmedString(payload[@"threadId"] ?: payload[@"threadID"] ?: payloadMeta[@"threadId"] ?: payloadMeta[@"threadID"]);
+    if (threadID.length > 0) {
+        for (NotificationModel *item in self.allNotifications) {
+            if (![item isKindOfClass:NotificationModel.class]) continue;
+            NSDictionary *meta = [item.meta isKindOfClass:NSDictionary.class] ? item.meta : @{};
+            if (PPNotificationsRouteStringsEqual(meta[@"threadId"], threadID) ||
+                PPNotificationsRouteStringsEqual(meta[@"threadID"], threadID)) {
+                return item;
+            }
         }
     }
 
@@ -752,35 +850,6 @@ static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)
     NotificationModel *m = self.filteredNotifications[indexPath.row];
     [self pp_openNotificationModel:m];
     [tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
-}
-
-- (UISwipeActionsConfiguration *)tableView:(UITableView *)tv trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)ip {
-    if (ip.row >= self.filteredNotifications.count) {
-        return nil;
-    }
-    NotificationModel *m = self.filteredNotifications[ip.row];
-    __weak typeof(self) weakSelf = self;
-
-    UIContextualAction *read = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal title:kLang(@"Read") handler:^(__unused UIContextualAction *action, __unused UIView *view, void (^completionHandler)(BOOL)) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self) { completionHandler(NO); return; }
-        m.isRead = YES;
-        [self pp_updateHeaderMetrics];
-        [self.tableView reloadRowsAtIndexPaths:@[ip] withRowAnimation:UITableViewRowAnimationNone];
-        [[NotificationManager shared] markRead:m forUser:self.uid completion:^(__unused NSError *err) { completionHandler(YES); }];
-    }];
-    read.backgroundColor = AppPrimaryClr ?: UIColor.systemBlueColor;
-
-    UIContextualAction *del = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:kLang(@"Delete") handler:^(__unused UIContextualAction *a, __unused UIView *v, void (^completion)(BOOL)) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self) { completion(NO); return; }
-        [[NotificationManager shared] deleteNotification:m forUser:self.uid completion:^(__unused NSError *err) { completion(YES); }];
-    }];
-
-    NSArray<UIContextualAction *> *actions = m.isRead ? @[del] : @[del, read];
-    UISwipeActionsConfiguration *configuration = [UISwipeActionsConfiguration configurationWithActions:actions];
-    configuration.performsFirstActionWithFullSwipe = NO;
-    return configuration;
 }
 
 #pragma mark - Dealloc

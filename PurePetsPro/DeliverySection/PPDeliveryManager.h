@@ -16,6 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
 extern NSString * const PPDeliveryOrdersDidChangeNotification;
 
 typedef void(^PPDeliveryOrdersBlock)(NSArray<PPDeliveryOrderModel *> * _Nullable orders, NSError * _Nullable error);
+typedef void(^PPDeliveryOrderBlock)(PPDeliveryOrderModel * _Nullable order, NSError * _Nullable error);
 typedef void(^PPDeliveryActionBlock)(BOOL success, NSString * _Nullable message, NSError * _Nullable error);
 
 @interface PPDeliveryManager : NSObject
@@ -34,6 +35,11 @@ typedef void(^PPDeliveryActionBlock)(BOOL success, NSString * _Nullable message,
 /// Filter orders by delivery segment.
 - (NSArray<PPDeliveryOrderModel *> *)ordersForFilter:(PPDeliveryFilter)filter;
 - (NSArray<PPDeliveryOrderModel *> *)ordersForFilter:(PPDeliveryFilter)filter searchText:(nullable NSString *)searchText;
+
+/// Fetches one current delivery record without adding another listener.
+- (void)fetchDeliveryOrderWithID:(NSString *)orderID completion:(PPDeliveryOrderBlock)completion;
+/// Returns the current listener-backed projection, including exact assigned-child state for V1.
+- (nullable PPDeliveryOrderModel *)currentDeliveryOrderWithID:(NSString *)orderID;
 
 // ── Cloud Function Actions ──
 /// Confirm handover and mark package as picked up from store.

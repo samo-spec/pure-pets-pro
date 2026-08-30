@@ -1,31 +1,18 @@
 #import "PPProviderCompaniesBottomSearchBar.h"
 
-static UIColor *PPProviderCompaniesSearchDynamicColor(UIColor *lightColor, UIColor *darkColor)
-{
-    if (@available(iOS 13.0, *)) {
-        return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traits) {
-            return traits.userInterfaceStyle == UIUserInterfaceStyleDark ? darkColor : lightColor;
-        }];
-    }
-    return lightColor;
-}
-
 static UIColor *PPProviderCompaniesSearchSurfaceColor(void)
 {
-    return PPProviderCompaniesSearchDynamicColor([UIColor colorWithWhite:1.0 alpha:0.99],
-                                                  [UIColor colorWithWhite:0.15 alpha:0.99]);
+    return [[UIColor ppSurface] colorWithAlphaComponent:0.99];
 }
 
 static UIColor *PPProviderCompaniesSearchSecondarySurfaceColor(void)
 {
-    return PPProviderCompaniesSearchDynamicColor([UIColor colorWithWhite:0.965 alpha:0.86],
-                                                  [UIColor colorWithWhite:1.0 alpha:0.07]);
+    return [[UIColor ppSecondarySurface] colorWithAlphaComponent:0.86];
 }
 
 static UIColor *PPProviderCompaniesSearchStrokeColor(void)
 {
-    return PPProviderCompaniesSearchDynamicColor([UIColor colorWithWhite:0.0 alpha:0.035],
-                                                  [UIColor colorWithWhite:1.0 alpha:0.06]);
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.35];
 }
 
 static UIFont *PPProviderCompaniesSearchScaledFont(UIFont *font, UIFontTextStyle textStyle)
@@ -342,7 +329,7 @@ static void PPProviderCompaniesSearchApplyContinuousCorners(UIView *view, CGFloa
     self.textField.textAlignment = Language.alignmentForCurrentLanguage;
 
     void (^applyBlock)(void) = ^{
-        UIColor *accent = AppPrimaryClr ?: UIColor.systemRedColor;
+        UIColor *accent = AppPrimaryClr;
         UIColor *surfaceColor = focused
             ? PPProviderCompaniesSearchSurfaceColor()
             : [PPProviderCompaniesSearchSecondarySurfaceColor() colorWithAlphaComponent:0.98];
@@ -360,17 +347,17 @@ static void PPProviderCompaniesSearchApplyContinuousCorners(UIView *view, CGFloa
         self.searchChromeView.layer.shadowRadius = focused ? 13.0 : 9.0;
         self.searchChromeView.layer.shadowOffset = CGSizeMake(0.0, focused ? 6.0 : 3.0);
 
-        self.textField.textColor = AppPrimaryTextClr ?: UIColor.labelColor;
+        self.textField.textColor = AppPrimaryTextClr;
         self.textField.tintColor = accent;
         self.textField.font = PPProviderCompaniesSearchScaledFont([Styling fontMedium:14.5], UIFontTextStyleSubheadline);
         self.textField.attributedPlaceholder = [[NSAttributedString alloc] initWithString:(self.textField.placeholder ?: @"")
                                                                                    attributes:@{
-            NSForegroundColorAttributeName: [SeconderyTextClr ?: UIColor.secondaryLabelColor colorWithAlphaComponent:(focused ? 0.76 : 0.62)],
+            NSForegroundColorAttributeName: [SeconderyTextClr colorWithAlphaComponent:(focused ? 0.76 : 0.62)],
             NSFontAttributeName: PPProviderCompaniesSearchScaledFont([Styling fontMedium:14.5], UIFontTextStyleSubheadline)
         }];
         self.searchIconView.tintColor = focused
             ? accent
-            : [SeconderyTextClr ?: UIColor.secondaryLabelColor colorWithAlphaComponent:0.72];
+            : [SeconderyTextClr colorWithAlphaComponent:0.72];
         if (@available(iOS 13.0, *)) {
             UIImageSymbolWeight weight = focused ? UIImageSymbolWeightBold : UIImageSymbolWeightSemibold;
             self.searchIconView.image = [[UIImage systemImageNamed:@"magnifyingglass"

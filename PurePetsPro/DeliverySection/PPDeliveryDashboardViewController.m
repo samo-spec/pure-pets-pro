@@ -506,7 +506,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
     UIView *heroStageDot = [[UIView alloc] init];
     heroStageDot.translatesAutoresizingMaskIntoConstraints = NO;
-    heroStageDot.backgroundColor = UIColor.systemGreenColor;
+    heroStageDot.backgroundColor = [UIColor ppSuccess];
     heroStageDot.layer.cornerRadius = 5.0;
     [_heroStageView addSubview:heroStageDot];
 
@@ -545,13 +545,13 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
                                              color:AppPrimaryClr];
     _readyCard = [[_PPStatCard alloc] initWithIcon:@"shippingbox.fill"
                                              title:kLang(@"Deliv_ReadyCount")
-                                             color:UIColor.systemOrangeColor];
+                                             color:[UIColor ppWarning]];
     _transitCard = [[_PPStatCard alloc] initWithIcon:@"truck.box.fill"
                                                title:kLang(@"Deliv_InTransitCount")
-                                               color:UIColor.systemIndigoColor];
+                                               color:[UIColor ppQuickActionCommunity]];
     _deliveredCard = [[_PPStatCard alloc] initWithIcon:@"checkmark.circle.fill"
                                                  title:kLang(@"Deliv_DeliveredCount")
-                                                 color:UIColor.systemGreenColor];
+                                                 color:[UIColor ppSuccess]];
 
     UIStackView *topStatsRow = [[UIStackView alloc] initWithArrangedSubviews:@[_totalCard, _readyCard]];
     topStatsRow.translatesAutoresizingMaskIntoConstraints = NO;

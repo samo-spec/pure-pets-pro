@@ -64,30 +64,15 @@
 @implementation PPProviderMarketItemEditorViewController
 
 - (UIColor *)pp_canvasColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.11 green:0.11 blue:0.12 alpha:1.0];
-        }
-        return [UIColor colorWithRed:0.97 green:0.96 blue:0.95 alpha:1.0];
-    }];
+    return [UIColor ppBackground];
 }
 
 - (UIColor *)pp_surfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.17 green:0.17 blue:0.19 alpha:0.92];
-        }
-        return [[UIColor whiteColor] colorWithAlphaComponent:0.85];
-    }];
+    return [UIColor ppElevatedSurface];
 }
 
 - (UIColor *)pp_borderColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-        }
-        return [UIColor colorWithRed:0.25 green:0.17 blue:0.18 alpha:0.06];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
 }
 
 - (instancetype)initForCreate {
@@ -153,8 +138,8 @@
     self.bgGlowTop.layer.shadowOpacity = isDark ? 0.04 : 0.08;
     self.bgGlowTop.layer.shadowRadius = 60.0;
     
-    self.bgGlowBottom.backgroundColor = [[UIColor systemOrangeColor] colorWithAlphaComponent:isDark ? 0.03 : 0.06];
-    self.bgGlowBottom.layer.shadowColor = [UIColor systemOrangeColor].CGColor;
+    self.bgGlowBottom.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:isDark ? 0.03 : 0.06];
+    self.bgGlowBottom.layer.shadowColor = [UIColor ppWarning].CGColor;
     self.bgGlowBottom.layer.shadowOpacity = isDark ? 0.02 : 0.06;
     self.bgGlowBottom.layer.shadowRadius = 70.0;
 }
@@ -1036,7 +1021,7 @@
     UIButton *del = [UIButton buttonWithType:UIButtonTypeCustom];
     del.frame = CGRectMake(cell.contentView.bounds.size.width - 22, 2, 20, 20);
     del.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
-    del.backgroundColor = [UIColor.systemRedColor colorWithAlphaComponent:0.85];
+    del.backgroundColor = [[UIColor ppError] colorWithAlphaComponent:0.85];
     del.layer.cornerRadius = 10; del.clipsToBounds = YES;
     [del setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
     del.tintColor = UIColor.whiteColor;

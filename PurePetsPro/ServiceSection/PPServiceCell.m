@@ -231,26 +231,26 @@ static CGFloat const kVerifDotSize   = 8.0;
 
     // Status badge — provider-facing availability
     if (service.isBlocked) {
-        [self applyBadge:kLang(@"statusBlocked") color:UIColor.systemRedColor];
+        [self applyBadge:kLang(@"statusBlocked") color:[UIColor ppError]];
     } else if (service.isDisabled) {
-        [self applyBadge:kLang(@"statusDisabled") color:UIColor.systemRedColor];
+        [self applyBadge:kLang(@"statusDisabled") color:[UIColor ppError]];
     } else if (!service.isAvailable) {
-        [self applyBadge:kLang(@"Serv_Unavailable") color:UIColor.systemOrangeColor];
+        [self applyBadge:kLang(@"Serv_Unavailable") color:[UIColor ppWarning]];
     } else {
-        [self applyBadge:kLang(@"Serv_Available") color:UIColor.systemGreenColor];
+        [self applyBadge:kLang(@"Serv_Available") color:[UIColor ppSuccess]];
     }
 
     // Verification dot
     NSString *v = [service.verificationStatus lowercaseString] ?: @"";
     if ([v isEqualToString:@"verified"]) {
         self.verifDot.hidden = NO;
-        self.verifDot.backgroundColor = UIColor.systemGreenColor;
+        self.verifDot.backgroundColor = [UIColor ppSuccess];
     } else if ([v isEqualToString:@"pending"] || [v isEqualToString:@"pending_review"]) {
         self.verifDot.hidden = NO;
-        self.verifDot.backgroundColor = UIColor.systemOrangeColor;
+        self.verifDot.backgroundColor = [UIColor ppWarning];
     } else if ([v isEqualToString:@"rejected"] || [v isEqualToString:@"blocked"]) {
         self.verifDot.hidden = NO;
-        self.verifDot.backgroundColor = UIColor.systemRedColor;
+        self.verifDot.backgroundColor = [UIColor ppError];
     } else {
         self.verifDot.hidden = YES;
     }

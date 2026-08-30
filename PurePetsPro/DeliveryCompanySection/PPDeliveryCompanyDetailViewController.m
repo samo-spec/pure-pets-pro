@@ -241,11 +241,11 @@ typedef NS_ENUM(NSInteger, PPDCDetailAction) {
     UIView *pickup = [self routeRowWithIcon:@"shippingbox.fill"
                                       title:kLang(@"DeliveryCompany_Pickup")
                                        text:self.request.pickupSummary
-                                      color:UIColor.systemOrangeColor];
+                                      color:[UIColor ppWarning]];
     UIView *dropoff = [self routeRowWithIcon:@"mappin.and.ellipse"
                                        title:kLang(@"DeliveryCompany_Dropoff")
                                         text:self.request.dropoffSummary
-                                       color:UIColor.systemGreenColor];
+                                       color:[UIColor ppSuccess]];
     [surface addSubview:pickup];
     [surface addSubview:dropoff];
     [NSLayoutConstraint activateConstraints:@[
@@ -487,8 +487,8 @@ typedef NS_ENUM(NSInteger, PPDCDetailAction) {
         [button setTitle:action[@"title"] forState:UIControlStateNormal];
         BOOL destructive = [action[@"destructive"] boolValue];
         BOOL primary = [action[@"primary"] boolValue];
-        button.backgroundColor = primary ? AppPrimaryClr : (destructive ? [UIColor.systemRedColor colorWithAlphaComponent:0.10] : AppBackgroundClr);
-        [button setTitleColor:primary ? UIColor.whiteColor : (destructive ? UIColor.systemRedColor : PrimaryTextClr) forState:UIControlStateNormal];
+        button.backgroundColor = primary ? AppPrimaryClr : (destructive ? [[UIColor ppError] colorWithAlphaComponent:0.10] : AppBackgroundClr);
+        [button setTitleColor:primary ? UIColor.whiteColor : (destructive ? [UIColor ppError] : PrimaryTextClr) forState:UIControlStateNormal];
         if (primary) {
             button.layer.shadowColor = [AppPrimaryClr colorWithAlphaComponent:0.22].CGColor;
             button.layer.shadowOpacity = 1.0;

@@ -10,6 +10,7 @@
 #import "PPNotificationsManager.h"
 #import "NotificationModel.h"
 #import "NotificationManager.h"
+#import "NotificationManager+Targets.h"
 #import "PPAlertHelper.h"
 #import "PPHUD.h"
 #import "PPToast.h"
@@ -42,6 +43,15 @@ static NSString *PPProHubFirstStringForKeys(NSDictionary *source, NSArray<NSStri
     return @"";
 }
 
+static NSString *PPProHubNormalizedNotificationType(NSDictionary *payload)
+{
+    NSString *type = [PPProHubFirstStringForKeys(PPProHubSafeDictionary(payload),
+                                                 @[@"notificationType", @"type", @"eventKey", @"notificationEvent", @"route"]) lowercaseString];
+    type = [type stringByReplacingOccurrencesOfString:@"." withString:@"_"];
+    type = [type stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
+    return [type stringByReplacingOccurrencesOfString:@" " withString:@"_"];
+}
+
 static NSString *PPProHubLocalizedValueFromDictionary(NSDictionary *source, NSArray<NSString *> *arKeys, NSArray<NSString *> *enKeys)
 {
     NSArray<NSString *> *primaryKeys = Language.isRTL ? arKeys : enKeys;
@@ -63,6 +73,12 @@ static NSString *PPProHubLocalizedNestedValue(id nestedValue)
 static BOOL PPProHubStringEquals(NSString *lhs, NSString *rhs)
 {
     return [PPProHubTrimmedString(lhs) caseInsensitiveCompare:PPProHubTrimmedString(rhs)] == NSOrderedSame;
+}
+
+static NSString *PPProHubInboxErrorSignature(NSError *error)
+{
+    if (![error isKindOfClass:NSError.class]) return @"";
+    return [NSString stringWithFormat:@"%@:%ld", error.domain ?: @"", (long)error.code];
 }
 
 static BOOL PPProHubStringHasPrefix(NSString *value, NSString *prefix)
@@ -106,7 +122,16 @@ static NSString *PPProHubLocalizedNotificationTitle(NSString *rawTitle, NSDictio
     NSString *type = [[PPProHubFirstStringForKeys(safePayload, @[@"notificationType", @"type", @"key", @"eventKey"]) lowercaseString] copy];
 
     NSString *titleKey = PPProHubFirstStringForKeys(safePayload, @[@"titleLocalizationKey", @"titleKey", @"titleLocKey"]);
-    if (titleKey.length > 0) return kLang(titleKey);
+    if (titleKey.length > 0) {
+        NSString *localizedTitle = kLang(titleKey);
+        if ([titleKey isEqualToString:@"pp_pro_notification_order_cancelled_title_format"]) {
+            NSString *orderReference = PPProHubFirstStringForKeys(safePayload, @[@"orderNumber", @"parentOrderNumber", @"orderReference", @"orderId", @"parentOrderId"]);
+            return orderReference.length > 0
+                ? [NSString stringWithFormat:localizedTitle, orderReference]
+                : kLang(@"pp_pro_notification_order_cancelled_title");
+        }
+        return localizedTitle;
+    }
 
     NSString *localized = PPProHubLocalizedValueFromDictionary(safePayload,
                                                               @[@"titleAr", @"title_ar", @"arTitle", @"titleArabic", @"title_arabic"],
@@ -128,6 +153,13 @@ static NSString *PPProHubLocalizedNotificationTitle(NSString *rawTitle, NSDictio
         [type isEqualToString:@"delivery_request_closed"] ||
         PPProHubStringEquals(rawTitle, @"Delivery Request Closed")) {
         return kLang(@"pp_pro_notification_delivery_request_closed_title");
+    }
+
+    if ([type isEqualToString:@"provider_order_cancelled"] ||
+        [type isEqualToString:@"provider.order.cancelled"]) {
+        NSString *orderReference = PPProHubFirstStringForKeys(safePayload, @[@"orderNumber", @"parentOrderNumber", @"orderReference", @"orderId", @"parentOrderId"]);
+        NSString *format = kLang(@"pp_pro_notification_order_cancelled_title_format");
+        return orderReference.length > 0 ? [NSString stringWithFormat:format, orderReference] : kLang(@"pp_pro_notification_order_cancelled_title");
     }
 
     if ([type isEqualToString:@"provider_new_fulfillment"] ||
@@ -171,6 +203,11 @@ static NSString *PPProHubLocalizedNotificationBody(NSString *rawBody, NSString *
         PPProHubStringEquals(rawTitle, @"Delivery Request Closed") ||
         PPProHubStringEquals(rawBody, @"This delivery request is no longer available.")) {
         return kLang(@"pp_pro_notification_delivery_request_closed_body");
+    }
+
+    if ([type isEqualToString:@"provider_order_cancelled"] ||
+        [type isEqualToString:@"provider.order.cancelled"]) {
+        return kLang(@"pp_pro_notification_order_cancelled_body");
     }
 
     if ([type isEqualToString:@"provider_new_fulfillment"] ||
@@ -220,21 +257,21 @@ static UIColor *PPProHubInboxAccentColor(NSDictionary *payload)
     NSString *status = [[PPProHubTrimmedString(payload[@"status"]) lowercaseString] copy];
 
     if ([type isEqualToString:@"chat"]) {
-        return AppPrimaryClr ?: UIColor.systemPurpleColor;
+        return AppPrimaryClr;
     }
     if ([status containsString:@"deliver"] || [status containsString:@"paid"]) {
-        return UIColor.systemGreenColor;
+        return [UIColor ppSuccess];
     }
     if ([status containsString:@"ship"]) {
-        return UIColor.systemBlueColor;
+        return [UIColor ppInfo];
     }
     if ([status containsString:@"fail"] || [status containsString:@"cancel"]) {
-        return UIColor.systemRedColor;
+        return [UIColor ppError];
     }
     if ([type isEqualToString:@"delivery"] || [status containsString:@"ready"]) {
-        return UIColor.systemOrangeColor;
+        return [UIColor ppWarning];
     }
-    return UIColor.systemPurpleColor;
+    return [UIColor ppQuickActionAnimals];
 }
 
 static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
@@ -270,6 +307,7 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
 @property (nonatomic, strong) UIColor *accentColor;
 @property (nonatomic, strong, nullable) NSDate *timestamp;
 @property (nonatomic, copy) NSDictionary *payload;
+@property (nonatomic, strong, nullable) NotificationModel *notificationModel;
 @end
 
 @implementation PPProHubNotificationItem
@@ -326,21 +364,21 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
     _titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _titleLabel.font = PPFontBold(16.0);
-    _titleLabel.textColor = UIColor.labelColor;
+    _titleLabel.textColor = [UIColor ppTextPrimary];
     _titleLabel.numberOfLines = 2;
     [_cardView addSubview:_titleLabel];
 
     _subtitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _subtitleLabel.font = PPFontMedium(13.0);
-    _subtitleLabel.textColor = UIColor.secondaryLabelColor;
+    _subtitleLabel.textColor = [UIColor ppTextSecondary];
     _subtitleLabel.numberOfLines = 2;
     [_cardView addSubview:_subtitleLabel];
 
     _metaLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _metaLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _metaLabel.font = PPFontMedium(12.0);
-    _metaLabel.textColor = UIColor.tertiaryLabelColor;
+    _metaLabel.textColor = [UIColor ppTextTertiary];
     _metaLabel.numberOfLines = 1;
     [_cardView addSubview:_metaLabel];
 
@@ -407,7 +445,7 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
         self.metaLabel.text = item.categoryTitle.length > 0 ? item.categoryTitle : dateText;
     }
 
-    UIColor *accent = item.accentColor ?: AppPrimaryClr ?: UIColor.systemOrangeColor;
+    UIColor *accent = item.accentColor ?: AppPrimaryClr;
     self.iconContainerView.backgroundColor = [accent colorWithAlphaComponent:0.14];
     self.iconView.tintColor = accent;
     if (@available(iOS 13.0, *)) {
@@ -426,12 +464,15 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UILabel *emptyTitleLabel;
 @property (nonatomic, strong) UILabel *emptySubtitleLabel;
+@property (nonatomic, strong) UIButton *emptyRetryButton;
 @property (nonatomic, strong) NSArray<PPProHubNotificationItem *> *items;
 @property (nonatomic, strong) NSArray<PPProHubNotificationItem *> *inboxItems;
 @property (nonatomic, strong) NSArray<PPProHubNotificationItem *> *deliveredItems;
 @property (nonatomic, strong) NSDateFormatter *dateFormatter;
 @property (nonatomic, copy) NSString *uid;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> inboxListener;
+@property (nonatomic, strong, nullable) NSError *inboxError;
+@property (nonatomic, copy, nullable) NSString *lastInboxErrorSignature;
 - (void)reloadNotifications;
 @end
 
@@ -476,7 +517,7 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
 
     UIImageView *emptyIconView = [[UIImageView alloc] initWithFrame:CGRectZero];
     emptyIconView.translatesAutoresizingMaskIntoConstraints = NO;
-    emptyIconView.tintColor = UIColor.secondaryLabelColor;
+    emptyIconView.tintColor = [UIColor ppTextSecondary];
     if (@available(iOS 13.0, *)) {
         UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:42.0 weight:UIImageSymbolWeightRegular];
         emptyIconView.image = [UIImage systemImageNamed:@"bell.slash.fill" withConfiguration:config];
@@ -486,7 +527,7 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
     self.emptyTitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     self.emptyTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyTitleLabel.font = PPFontBold(20.0);
-    self.emptyTitleLabel.textColor = UIColor.labelColor;
+    self.emptyTitleLabel.textColor = [UIColor ppTextPrimary];
     self.emptyTitleLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyTitleLabel.text = kLang(@"notifications_inbox_empty_title") ?: @"No notifications yet";
     [emptyView addSubview:self.emptyTitleLabel];
@@ -494,11 +535,22 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
     self.emptySubtitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     self.emptySubtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptySubtitleLabel.font = PPFontMedium(14.0);
-    self.emptySubtitleLabel.textColor = UIColor.secondaryLabelColor;
+    self.emptySubtitleLabel.textColor = [UIColor ppTextSecondary];
     self.emptySubtitleLabel.textAlignment = NSTextAlignmentCenter;
     self.emptySubtitleLabel.numberOfLines = 0;
     self.emptySubtitleLabel.text = kLang(@"notifications_inbox_empty_subtitle") ?: @"Order updates and alerts will show up here.";
     [emptyView addSubview:self.emptySubtitleLabel];
+
+    self.emptyRetryButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.emptyRetryButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.emptyRetryButton.hidden = YES;
+    self.emptyRetryButton.titleLabel.font = PPFontMedium(15.0);
+    [self.emptyRetryButton setTitle:kLang(@"Retry") forState:UIControlStateNormal];
+    [self.emptyRetryButton setTitleColor:AppPrimaryClr forState:UIControlStateNormal];
+    self.emptyRetryButton.accessibilityLabel = kLang(@"Retry");
+    self.emptyRetryButton.accessibilityHint = kLang(@"PullToRefresh");
+    [self.emptyRetryButton addTarget:self action:@selector(pp_retryInbox) forControlEvents:UIControlEventTouchUpInside];
+    [emptyView addSubview:self.emptyRetryButton];
 
     [NSLayoutConstraint activateConstraints:@[
         [emptyIconView.centerXAnchor constraintEqualToAnchor:emptyView.centerXAnchor],
@@ -511,6 +563,10 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
         [self.emptySubtitleLabel.topAnchor constraintEqualToAnchor:self.emptyTitleLabel.bottomAnchor constant:8.0],
         [self.emptySubtitleLabel.leadingAnchor constraintEqualToAnchor:emptyView.leadingAnchor constant:34.0],
         [self.emptySubtitleLabel.trailingAnchor constraintEqualToAnchor:emptyView.trailingAnchor constant:-34.0],
+
+        [self.emptyRetryButton.topAnchor constraintEqualToAnchor:self.emptySubtitleLabel.bottomAnchor constant:16.0],
+        [self.emptyRetryButton.centerXAnchor constraintEqualToAnchor:emptyView.centerXAnchor],
+        [self.emptyRetryButton.heightAnchor constraintGreaterThanOrEqualToConstant:44.0],
     ]];
     self.tableView.backgroundView = emptyView;
 
@@ -590,11 +646,7 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
 
 - (NSString *)pp_currentUID
 {
-    NSString *uid = PPProHubTrimmedString(UsrMgr.currentUser.uid);
-    if (uid.length == 0) {
-        uid = PPProHubTrimmedString([FIRAuth auth].currentUser.uid);
-    }
-    return uid ?: @"";
+    return PPProHubTrimmedString([FIRAuth auth].currentUser.uid);
 }
 
 - (void)pp_startInboxListenerIfNeeded
@@ -608,6 +660,8 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
     self.inboxListener = nil;
     self.uid = resolvedUID ?: @"";
     self.inboxItems = @[];
+    self.inboxError = nil;
+    self.lastInboxErrorSignature = nil;
 
     if (self.uid.length == 0) {
         [self pp_applyMergedNotificationItems];
@@ -615,21 +669,70 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
     }
 
     __weak typeof(self) weakSelf = self;
-    self.inboxListener = [[NotificationManager shared] observeInboxForUser:self.uid handler:^(NSArray<NotificationModel *> *items) {
+    self.inboxListener = [[NotificationManager shared] observeInboxForUser:self.uid stateHandler:^(NSArray<NotificationModel *> *items, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
-            NSMutableArray<PPProHubNotificationItem *> *mappedItems = [NSMutableArray arrayWithCapacity:items.count];
-            for (NotificationModel *model in items ?: @[]) {
-                PPProHubNotificationItem *item = [strongSelf pp_itemFromNotificationModel:model];
-                if (item) {
-                    [mappedItems addObject:item];
+            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:strongSelf.uid]) return;
+
+            strongSelf.inboxError = error;
+            if (error) {
+                NSString *signature = PPProHubInboxErrorSignature(error);
+                BOOL shouldSurfaceError = signature.length > 0 && ![signature isEqualToString:strongSelf.lastInboxErrorSignature];
+                strongSelf.lastInboxErrorSignature = signature;
+                if (shouldSurfaceError) {
+                    [PPToast toast:kLang(@"FetchError")
+                             style:PPToastStyleError
+                            haptic:YES
+                          duration:2.0
+                          position:PPToastPositionBottom
+                            inView:strongSelf.view];
                 }
+            } else {
+                strongSelf.lastInboxErrorSignature = nil;
             }
-            strongSelf.inboxItems = mappedItems.copy;
+
+            // An error callback supplies no trustworthy replacement snapshot.
+            // Preserve confirmed V2 inbox content while showing the explicit
+            // error/retry state when no content has ever arrived.
+            if (!error || items.count > 0 || strongSelf.inboxItems.count == 0) {
+                NSMutableArray<PPProHubNotificationItem *> *mappedItems = [NSMutableArray arrayWithCapacity:items.count];
+                for (NotificationModel *model in items ?: @[]) {
+                    PPProHubNotificationItem *item = [strongSelf pp_itemFromNotificationModel:model];
+                    if (item) {
+                        [mappedItems addObject:item];
+                    }
+                }
+                strongSelf.inboxItems = mappedItems.copy;
+            }
             [strongSelf pp_applyMergedNotificationItems];
         });
     }];
+}
+
+- (void)pp_retryInbox
+{
+    // The listener API intentionally does not retry terminal listener errors
+    // itself. Recreating this listener is a safe, user-directed retry that
+    // keeps the canonical V2 inbox as the only notification authority.
+    [self.inboxListener remove];
+    self.inboxListener = nil;
+    self.inboxError = nil;
+    self.lastInboxErrorSignature = nil;
+    [self reloadNotifications];
+}
+
+- (void)pp_updateEmptyInboxPresentation
+{
+    BOOL shouldShowRetry = self.inboxError != nil && self.items.count == 0;
+    if (shouldShowRetry) {
+        self.emptyTitleLabel.text = kLang(@"FetchError");
+        self.emptySubtitleLabel.text = kLang(@"PullToRefresh");
+    } else {
+        self.emptyTitleLabel.text = kLang(@"notifications_inbox_empty_title");
+        self.emptySubtitleLabel.text = kLang(@"notifications_inbox_empty_subtitle");
+    }
+    self.emptyRetryButton.hidden = !shouldShowRetry;
 }
 
 - (PPProHubNotificationItem *)pp_itemFromNotificationModel:(NotificationModel *)model
@@ -686,6 +789,7 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
     item.accentColor = PPProHubInboxAccentColor(payload);
     item.timestamp = model.createdAt ?: [NSDate date];
     item.payload = payload.copy;
+    item.notificationModel = model;
     return item;
 }
 
@@ -736,6 +840,7 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
     }];
 
     self.items = merged ?: @[];
+    [self pp_updateEmptyInboxPresentation];
     [self.tableView reloadData];
     self.tableView.backgroundView.hidden = (self.items.count > 0);
 }
@@ -762,11 +867,39 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
     if (indexPath.row >= (NSInteger)self.items.count) return;
 
     PPProHubNotificationItem *item = self.items[indexPath.row];
+    if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:(self.uid ?: @"")]) {
+        [self reloadNotifications];
+        return;
+    }
     NSDictionary *payload = item.payload ?: @{};
     NSString *orderID = PPProHubTrimmedString(payload[@"orderId"]);
-    NSString *type = [[PPProHubTrimmedString(payload[@"type"]) lowercaseString] copy];
+    NSString *type = PPProHubNormalizedNotificationType(payload);
     NSString *route = [[PPProHubTrimmedString(payload[@"route"]) lowercaseString] copy];
     NSString *requestID = PPProHubTrimmedString(payload[@"requestId"]);
+
+    NotificationModel *inboxModel = item.notificationModel;
+    if (inboxModel && !inboxModel.isRead) {
+        inboxModel.isRead = YES;
+        [[NotificationManager shared] markRead:inboxModel forUser:self.uid completion:nil];
+    }
+
+    if ([type isEqualToString:@"provider_order_cancelled"]) {
+        __weak typeof(self) weakSelf = self;
+        [NotificationManager routePayload:payload
+                 fromNavigationController:self.navigationController
+                                presenter:self
+                               completion:^(BOOL handled) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf || handled) return;
+            [PPToast toast:kLang(@"Notification_RequestSummaryUnavailable")
+                     style:PPToastStyleInfo
+                    haptic:NO
+                  duration:1.8
+                  position:PPToastPositionBottom
+                    inView:strongSelf.view];
+        }];
+        return;
+    }
 
     if (requestID.length > 0 &&
         ([type hasPrefix:@"company_delivery"] || [route isEqualToString:@"fleet_partner"])) {
@@ -960,10 +1093,10 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
         isDark = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark);
     }
 
-    UIColor *primaryColor = AppPrimaryClr ?: UIColor.systemPurpleColor;
+    UIColor *primaryColor = AppPrimaryClr;
     UIColor *secondaryColor = AppSecondaryClr;
     if (!secondaryColor) secondaryColor = [primaryColor colorWithAlphaComponent:1.0];
-    UIColor *bottomFadeColor = isDark ? UIColor.blackColor : [UIColor colorWithRed:0.98 green:0.66 blue:0.46 alpha:1.0];
+    UIColor *bottomFadeColor = isDark ? UIColor.blackColor : [UIColor ppPremiumAccent];
 
     [self pp_applyGlowView:self.backgroundTopGlowView
                      color:AppSurfColor

@@ -57,15 +57,15 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
     PPAlertAppearance *appearance = [[self alloc] init];
     switch (type) {
         case PPAlertTypeSuccess:
-            appearance.accentColor = UIColor.systemGreenColor;
+            appearance.accentColor = [UIColor ppSuccess];
             appearance.iconSystemName = @"checkmark.seal.fill";
             break;
         case PPAlertTypeError:
-            appearance.accentColor = UIColor.systemRedColor;
+            appearance.accentColor = [UIColor ppError];
             appearance.iconSystemName = @"xmark.seal.fill";
             break;
         case PPAlertTypeWarning:
-            appearance.accentColor = UIColor.systemOrangeColor;
+            appearance.accentColor = [UIColor ppWarning];
             appearance.iconSystemName = @"exclamationmark.triangle.fill";
             break;
         case PPAlertTypeInfo:
@@ -443,7 +443,7 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
             borderColor = UIColor.clearColor;
             break;
         case PPAlertActionStyleDestructive:
-            backgroundColor = UIColor.systemRedColor;
+            backgroundColor = [UIColor ppError];
             titleColor = UIColor.whiteColor;
             borderColor = UIColor.clearColor;
             break;

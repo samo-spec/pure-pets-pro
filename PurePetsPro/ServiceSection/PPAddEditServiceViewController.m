@@ -33,34 +33,19 @@ static NSString * const kTagAvailable   = @"serviceAvailable";
 #pragma mark - Colors (matching profile VC design)
 
 - (UIColor *)pp_canvasColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.11 green:0.11 blue:0.12 alpha:1.0];
-        }
-        return [UIColor colorWithRed:0.969 green:0.961 blue:0.949 alpha:1.0];
-    }];
+    return [UIColor ppBackground];
 }
 
 - (UIColor *)pp_surfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.17 green:0.17 blue:0.19 alpha:0.92];
-        }
-        return [[UIColor whiteColor] colorWithAlphaComponent:0.82];
-    }];
+    return [UIColor ppElevatedSurface];
 }
 
 - (UIColor *)pp_borderColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *tc) {
-        if (tc.userInterfaceStyle == UIUserInterfaceStyleDark) {
-            return [UIColor colorWithRed:0.85 green:0.80 blue:0.78 alpha:0.10];
-        }
-        return [UIColor colorWithRed:0.25 green:0.17 blue:0.18 alpha:0.08];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
 }
 
 - (UIColor *)pp_brandColor {
-    return AppPrimaryClr ?: [UIColor systemOrangeColor];
+    return AppPrimaryClr;
 }
 
 #pragma mark - Init
@@ -149,14 +134,14 @@ static NSString * const kTagAvailable   = @"serviceAvailable";
 - (void)pp_updateGlowsForCurrentStyle {
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
 
-    self.bgGlowTop.backgroundColor = [UIColor colorWithRed:0.93 green:0.80 blue:0.69 alpha:isDark ? 0.06 : 0.12];
-    self.bgGlowTop.layer.shadowColor = [UIColor colorWithRed:0.98 green:0.82 blue:0.60 alpha:1.0].CGColor;
+    self.bgGlowTop.backgroundColor = [[UIColor ppPremiumAccent] colorWithAlphaComponent:isDark ? 0.06 : 0.12];
+    self.bgGlowTop.layer.shadowColor = [UIColor ppPremiumAccent].CGColor;
     self.bgGlowTop.layer.shadowOpacity = isDark ? 0.04 : 0.10;
     self.bgGlowTop.layer.shadowRadius = 64.0;
     self.bgGlowTop.layer.shadowOffset = CGSizeZero;
 
-    self.bgGlowBottom.backgroundColor = [UIColor colorWithRed:0.72 green:0.45 blue:0.42 alpha:isDark ? 0.03 : 0.06];
-    self.bgGlowBottom.layer.shadowColor = [UIColor colorWithRed:0.68 green:0.27 blue:0.33 alpha:1.0].CGColor;
+    self.bgGlowBottom.backgroundColor = [[UIColor ppDiscount] colorWithAlphaComponent:isDark ? 0.03 : 0.06];
+    self.bgGlowBottom.layer.shadowColor = [UIColor ppDiscount].CGColor;
     self.bgGlowBottom.layer.shadowOpacity = isDark ? 0.03 : 0.08;
     self.bgGlowBottom.layer.shadowRadius = 72.0;
     self.bgGlowBottom.layer.shadowOffset = CGSizeZero;
@@ -217,7 +202,7 @@ static NSString * const kTagAvailable   = @"serviceAvailable";
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.font = [Styling fontBold:24];
-    titleLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    titleLabel.textColor = PrimaryTextClr;
     titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     titleLabel.text = self.isEditing ? kLang(@"EditService") : kLang(@"AddService");
     titleLabel.numberOfLines = 1;
@@ -228,7 +213,7 @@ static NSString * const kTagAvailable   = @"serviceAvailable";
     UILabel *subtitleLabel = [[UILabel alloc] init];
     subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     subtitleLabel.font = [Styling fontMedium:13];
-    subtitleLabel.textColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    subtitleLabel.textColor = SeconderyTextClr;
     subtitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     subtitleLabel.numberOfLines = 2;
     subtitleLabel.text = self.isEditing ? kLang(@"Serv_Edit_Subtitle") : kLang(@"Serv_Add_Subtitle");
@@ -345,7 +330,7 @@ static NSString * const kTagAvailable   = @"serviceAvailable";
     UILabel *titleLbl = [[UILabel alloc] init];
     titleLbl.translatesAutoresizingMaskIntoConstraints = NO;
     titleLbl.font = [Styling fontBold:14];
-    titleLbl.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    titleLbl.textColor = PrimaryTextClr;
     titleLbl.text = title;
     titleLbl.textAlignment = Language.alignmentForCurrentLanguage;
     [container addSubview:titleLbl];
@@ -353,7 +338,7 @@ static NSString * const kTagAvailable   = @"serviceAvailable";
     UILabel *subtitleLbl = [[UILabel alloc] init];
     subtitleLbl.translatesAutoresizingMaskIntoConstraints = NO;
     subtitleLbl.font = [Styling fontMedium:11];
-    subtitleLbl.textColor = [UIColor.secondaryLabelColor colorWithAlphaComponent:0.9];
+    subtitleLbl.textColor = [[UIColor ppTextSecondary] colorWithAlphaComponent:0.9];
     subtitleLbl.text = subtitle;
     subtitleLbl.textAlignment = Language.alignmentForCurrentLanguage;
     subtitleLbl.numberOfLines = 2;
@@ -451,10 +436,10 @@ static NSString * const kTagAvailable   = @"serviceAvailable";
     cell.layoutMargins = UIEdgeInsetsMake(0, kCardH + 16, 0, kCardH + 16);
 
     cell.textLabel.font = [Styling fontBold:14.5];
-    cell.textLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    cell.textLabel.textColor = PrimaryTextClr;
     cell.textLabel.textAlignment = Language.alignmentForCurrentLanguage;
     cell.detailTextLabel.font = [Styling fontMedium:13.5];
-    cell.detailTextLabel.textColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    cell.detailTextLabel.textColor = SeconderyTextClr;
 }
 
 - (void)tableView:(UITableView *)tableView didEndDisplayingCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {

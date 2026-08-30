@@ -19,6 +19,7 @@
 #import "PPToast.h"
 #import "PPUserMessagesViewController.h"
 #import "PPFirebaseCompat.h"
+#import "AppDelegate.h"
 
 static NSString * const kUsersCollection = @"UsersCol"; // ✅ your collection name
 
@@ -64,6 +65,7 @@ static NSString *PPProNotificationTargetsNestedStringForKeys(NSDictionary *sourc
 static NSString *PPProNotificationTargetsNormalizedString(id value)
 {
     NSString *clean = [[PPProNotificationTargetsTrimmedString(value) lowercaseString] copy];
+    clean = [clean stringByReplacingOccurrencesOfString:@"." withString:@"_"];
     clean = [clean stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
     clean = [clean stringByReplacingOccurrencesOfString:@" " withString:@"_"];
     return clean;
@@ -256,6 +258,7 @@ static void PPProNotificationTargetsComplete(BOOL handled, void (^completion)(BO
     NSString *fulfillmentID = PPProNotificationTargetsFirstStringForKeys(safePayload, @[@"fulfillmentId", @"fulfillmentID"]);
     NSString *status = PPProNotificationTargetsNormalizedString(PPProNotificationTargetsFirstStringForKeys(safePayload, @[@"status"]));
     if (fulfillmentID.length > 0 ||
+        [type isEqualToString:@"provider_order_cancelled"] ||
         [type isEqualToString:@"provider_new_fulfillment"] ||
         [type isEqualToString:@"fulfillment_order"] ||
         [status isEqualToString:@"new_request"]) {
@@ -303,7 +306,13 @@ fromNavigationController:(UINavigationController *)navigationController
           completion:(void (^)(BOOL handled))completion
 {
     NSDictionary *safePayload = PPProNotificationTargetsSafeDictionary(payload);
-    if (!navigationController || safePayload.count == 0) {
+    if (![AppDelegate pp_isNotificationPayloadRoutable:safePayload]) {
+        NSLog(@"[NotificationRoute] Rejected malformed or cross-app notification payload.");
+        PPProNotificationTargetsComplete(NO, completion);
+        return;
+    }
+    NSString *routeUID = [FIRAuth auth].currentUser.uid ?: @"";
+    if (!navigationController || safePayload.count == 0 || routeUID.length == 0) {
         NSLog(@"[NotificationRoute] Missing navigation controller or payload.");
         PPProNotificationTargetsComplete(NO, completion);
         return;
@@ -319,6 +328,10 @@ fromNavigationController:(UINavigationController *)navigationController
                 return;
             }
             dispatch_async(dispatch_get_main_queue(), ^{
+                if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:routeUID]) {
+                    PPProNotificationTargetsComplete(NO, completion);
+                    return;
+                }
                 [[NSNotificationCenter defaultCenter] postNotificationName:PPProCompanyDeliveryNotificationTappedNotification
                                                                     object:requestID
                                                                   userInfo:safePayload];
@@ -337,6 +350,10 @@ fromNavigationController:(UINavigationController *)navigationController
             FIRDocumentReference *reference = [[[FIRFirestore firestore] collectionWithPath:@"FulfillmentOrders"] documentWithPath:fulfillmentID];
             [reference getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
+                    if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:routeUID]) {
+                        PPProNotificationTargetsComplete(NO, completion);
+                        return;
+                    }
                     if (error || !snapshot.exists || !snapshot.data) {
                         NSLog(@"[NotificationRoute] Fulfillment fetch failed for %@: %@", fulfillmentID, error.localizedDescription ?: @"missing document");
                         [PPHUD showError:kLang(@"Notification_RequestSummaryUnavailable") ?: @"Request details unavailable"];
@@ -368,6 +385,10 @@ fromNavigationController:(UINavigationController *)navigationController
             FIRDocumentReference *reference = [[[FIRFirestore firestore] collectionWithPath:@"Orders"] documentWithPath:orderID];
             [reference getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
+                    if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:routeUID]) {
+                        PPProNotificationTargetsComplete(NO, completion);
+                        return;
+                    }
                     if (error || !snapshot.exists || !snapshot.data) {
                         NSLog(@"[NotificationRoute] Order fetch failed for %@: %@", orderID, error.localizedDescription ?: @"missing document");
                         [PPHUD showError:kLang(@"order_support_unavailable_no_order") ?: @"Order unavailable"];
@@ -399,6 +420,10 @@ fromNavigationController:(UINavigationController *)navigationController
             FIRDocumentReference *reference = [[[FIRFirestore firestore] collectionWithPath:@"Chats"] documentWithPath:threadID];
             [reference getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
+                    if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:routeUID]) {
+                        PPProNotificationTargetsComplete(NO, completion);
+                        return;
+                    }
                     if (error || !snapshot.exists || !snapshot.data) {
                         NSLog(@"[NotificationRoute] Chat fetch failed for %@: %@", threadID, error.localizedDescription ?: @"missing document");
                         [PPHUD showError:kLang(@"ch_provider_support_error") ?: @"Unable to load chat"];

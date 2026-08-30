@@ -13,6 +13,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 typedef void(^PPNotifPage)(NSArray<NotificationModel *> *items, FIRDocumentSnapshot *_Nullable lastDoc, NSError *_Nullable err);
+typedef void(^PPInboxObserverStateHandler)(NSArray<NotificationModel *> *items, NSError *_Nullable error);
 
 @interface NotificationManager : NSObject
 + (instancetype)shared;
@@ -25,6 +26,14 @@ typedef void(^PPNotifPage)(NSArray<NotificationModel *> *items, FIRDocumentSnaps
 - (id<FIRListenerRegistration> _Nullable)observeInboxForUser:(NSString *)uid
                                                      handler:(void(^)(NSArray<NotificationModel *> *items))handler;
 
+/// Error-aware dashboard observer. It waits for every inbox source authorized for
+/// the current account to answer once, preserves each source's last confirmed data
+/// across listener replacement, and emits every subsequent merged update. Any
+/// configured source failure or cache-only snapshot is reported as degraded while
+/// confirmed items remain available. Existing items-only callers remain compatible.
+- (id<FIRListenerRegistration> _Nullable)observeInboxForUser:(NSString *)uid
+                                                stateHandler:(PPInboxObserverStateHandler)handler;
+
 - (void)stopListening;
 
 - (void)fetchInboxPageForUser:(NSString *)uid
@@ -34,7 +43,6 @@ typedef void(^PPNotifPage)(NSArray<NotificationModel *> *items, FIRDocumentSnaps
 
 // writes
 - (void)markRead:(NotificationModel *)model forUser:(NSString *_Nullable)uid completion:(void(^_Nullable)(NSError * _Nullable err ))completion;
-- (void)deleteNotification:(NotificationModel *)model forUser:(NSString *)uid completion:(void(^)(NSError *_Nullable err))completion;
 
 // send (compose)
 - (void)sendToUser:(NSString *)uid model:(NotificationModel *)model completion:(void(^)(NSError *_Nullable err))completion;

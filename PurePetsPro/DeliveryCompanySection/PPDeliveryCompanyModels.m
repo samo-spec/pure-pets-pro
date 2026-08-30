@@ -122,23 +122,23 @@ UIColor *PPDeliveryCompanyStatusColor(NSString *status) {
     NSString *value = PPDCString(status).lowercaseString;
     if ([value isEqualToString:PPDeliveryCompanyStatusCompleted] ||
         [value isEqualToString:PPDeliveryCompanyStatusDelivered]) {
-        return UIColor.systemGreenColor;
+        return [UIColor ppSuccess];
     }
     if ([value isEqualToString:PPDeliveryCompanyStatusAccepted] ||
         [value isEqualToString:PPDeliveryCompanyStatusAssigned]) {
-        return UIColor.systemBlueColor;
+        return [UIColor ppInfo];
     }
     if ([value isEqualToString:PPDeliveryCompanyStatusPickedUp] ||
         [value isEqualToString:PPDeliveryCompanyStatusInTransit]) {
-        return UIColor.systemOrangeColor;
+        return [UIColor ppWarning];
     }
     if ([value isEqualToString:PPDeliveryCompanyStatusRejected] ||
         [value isEqualToString:PPDeliveryCompanyStatusCancelled] ||
         [value isEqualToString:PPDeliveryCompanyStatusFailed] ||
         [value isEqualToString:PPDeliveryCompanyStatusExpired]) {
-        return UIColor.systemRedColor;
+        return [UIColor ppError];
     }
-    return [UIColor colorWithRed:0.48 green:0.38 blue:0.82 alpha:1.0];
+    return [UIColor ppQuickActionAnimals];
 }
 
 NSString *PPDeliveryCompanyFilterTitle(PPDeliveryCompanyDashboardFilter filter) {

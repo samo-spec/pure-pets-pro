@@ -119,7 +119,7 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 
     UIView *grabber = [[UIView alloc] init];
     grabber.translatesAutoresizingMaskIntoConstraints = NO;
-    grabber.backgroundColor = [[UIColor labelColor] colorWithAlphaComponent:0.12];
+    grabber.backgroundColor = [[UIColor ppTextPrimary] colorWithAlphaComponent:0.12];
     grabber.layer.cornerRadius = 2.5;
     [_sheetView addSubview:grabber];
 
@@ -235,7 +235,7 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:item[@"icon"]
                                                                      withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightSemibold]]];
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    iconView.tintColor = [item[@"destructive"] boolValue] ? UIColor.systemRedColor : AppPrimaryClr;
+    iconView.tintColor = [item[@"destructive"] boolValue] ? [UIColor ppError] : AppPrimaryClr;
     iconView.userInteractionEnabled = NO;
     [iconPlate addSubview:iconView];
 
@@ -243,7 +243,7 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.text = item[@"title"];
     titleLabel.font = [Styling fontBold:15];
-    titleLabel.textColor = [item[@"destructive"] boolValue] ? UIColor.systemRedColor : PrimaryTextClr;
+    titleLabel.textColor = [item[@"destructive"] boolValue] ? [UIColor ppError] : PrimaryTextClr;
     titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     titleLabel.userInteractionEnabled = NO;
     [button addSubview:titleLabel];
@@ -1166,8 +1166,8 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     BOOL enabled = self.hasEdits;
     self.saveButton.enabled = enabled;
     self.saveButton.alpha = enabled ? 1.0 : 0.58;
-    self.saveButton.backgroundColor = enabled ? AppPrimaryClr : [[AppPrimaryClr ?: UIColor.systemBlueColor colorWithAlphaComponent:0.42] copy];
-    self.saveFootnoteLabel.textColor = enabled ? SeconderyTextClr : UIColor.tertiaryLabelColor;
+    self.saveButton.backgroundColor = enabled ? AppPrimaryClr : [[AppPrimaryClr colorWithAlphaComponent:0.42] copy];
+    self.saveFootnoteLabel.textColor = enabled ? SeconderyTextClr : [UIColor ppTextTertiary];
 }
 
 - (void)pp_saveProfile {
@@ -1427,27 +1427,15 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 }
 
 - (UIColor *)pp_surfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
-            ? [UIColor colorWithWhite:0.13 alpha:0.96]
-            : [UIColor colorWithWhite:1.0 alpha:0.90];
-    }];
+    return [UIColor ppElevatedSurface];
 }
 
 - (UIColor *)pp_innerSurfaceColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
-            ? [UIColor colorWithWhite:0.17 alpha:0.98]
-            : [UIColor colorWithWhite:0.97 alpha:0.98];
-    }];
+    return [UIColor ppSurface];
 }
 
 - (UIColor *)pp_borderColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
-            ? [UIColor colorWithWhite:1.0 alpha:0.08]
-            : [UIColor colorWithWhite:0.0 alpha:0.06];
-    }];
+    return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
 }
 
 - (UILabel *)pp_label:(NSString *)text font:(UIFont *)font color:(UIColor *)color lines:(NSInteger)lines {

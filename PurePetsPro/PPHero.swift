@@ -19,13 +19,8 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
         static let maxTouchTilt: CGFloat = 0.009
     }
 
-    /// Pure Pets raspberry. Override this if a different brand accent is needed.
-    @objc public var accentColor: UIColor = UIColor(
-        displayP3Red: 0.773,
-        green: 0.114,
-        blue: 0.353,
-        alpha: 1
-    ) {
+    /// Pure Pets raspberry from the shared PPDesignTokens bridge.
+    @objc public var accentColor: UIColor = UIColor.ppPrimary ?? .systemPink {
         didSet { applyPalette() }
     }
 
@@ -225,16 +220,9 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
         let isActionDock = visualRole == .actionDock
         depthGesture.isEnabled = !isActionDock
 
-        func p3(_ red: CGFloat,
-                _ green: CGFloat,
-                _ blue: CGFloat,
-                _ alpha: CGFloat = 1) -> UIColor {
-            UIColor(
-                displayP3Red: red,
-                green: green,
-                blue: blue,
-                alpha: alpha
-            )
+        func token(_ color: UIColor?, alpha: CGFloat = 1) -> UIColor {
+            guard let color = color else { return .clear }
+            return color.resolvedColor(with: traits).withAlphaComponent(alpha)
         }
 
         let brand = accentColor.resolvedColor(with: traits)
@@ -252,23 +240,23 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
         if isDark {
             // Ink, graphite and a trace of black cherry. Alpha is deliberate:
             // the system material must remain visible beneath the color wash.
-            canvasTop = p3(0.052, 0.056, 0.068, isActionDock ? 0.76 : 0.88)
-            canvasMiddle = p3(0.036, 0.040, 0.052, isActionDock ? 0.72 : 0.84)
-            canvasBottom = p3(0.024, 0.027, 0.036, isActionDock ? 0.74 : 0.86)
+            canvasTop = token(UIColor.ppSurface, alpha: isActionDock ? 0.76 : 0.88)
+            canvasMiddle = token(UIColor.ppBackground, alpha: isActionDock ? 0.72 : 0.84)
+            canvasBottom = token(UIColor.ppMineralBeige, alpha: isActionDock ? 0.74 : 0.86)
 
             auroraBrand = brand
-            auroraCool = p3(0.18, 0.70, 0.69)
-            auroraWarm = p3(0.96, 0.58, 0.31)
+            auroraCool = token(UIColor.ppQuickActionServices)
+            auroraWarm = token(UIColor.ppPremiumAccent)
         } else {
             // Porcelain and mineral white. There is no gray endpoint, which is
             // what previously made the lower half look dirty.
-            canvasTop = p3(1.000, 0.997, 0.989, isActionDock ? 0.74 : 0.88)
-            canvasMiddle = p3(0.982, 0.990, 0.986, isActionDock ? 0.70 : 0.84)
-            canvasBottom = p3(0.958, 0.976, 0.971, isActionDock ? 0.72 : 0.82)
+            canvasTop = token(UIColor.ppElevatedSurface, alpha: isActionDock ? 0.74 : 0.88)
+            canvasMiddle = token(UIColor.ppSurface, alpha: isActionDock ? 0.70 : 0.84)
+            canvasBottom = token(UIColor.ppWarmPorcelain, alpha: isActionDock ? 0.72 : 0.82)
 
             auroraBrand = brand
-            auroraCool = p3(0.20, 0.79, 0.76)
-            auroraWarm = p3(1.00, 0.73, 0.40)
+            auroraCool = token(UIColor.ppQuickActionServices)
+            auroraWarm = token(UIColor.ppPremiumAccent)
         }
 
         // MARK: - Material
@@ -362,7 +350,7 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
 
         edgeView.layer.borderColor = isDark
             ? UIColor.white.withAlphaComponent(edgeAlpha).cgColor
-            : p3(0.42, 0.52, 0.50, edgeAlpha).cgColor
+            : token(UIColor.ppQuickActionServices, alpha: edgeAlpha).cgColor
 
         // MARK: - Premium particles
 

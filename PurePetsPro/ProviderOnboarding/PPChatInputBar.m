@@ -14,29 +14,28 @@
 
 static inline UIColor *PPChatInputBarBackgroundColor(void)
 {
-    if (@available(iOS 13.0, *)) return UIColor.systemBackgroundColor;
-    return AppBackgroundClr ?: UIColor.whiteColor;
+    if (@available(iOS 13.0, *)) return [UIColor ppSurface];
+    return AppBackgroundClr;
 }
 
 static inline UIColor *PPChatInputBarSurfaceColor(void)
 {
-    return AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    return AppForgroundColr;
 }
 
 static inline UIColor *PPChatInputBarMatteColor(void)
 {
-    if (@available(iOS 13.0, *)) return UIColor.secondarySystemGroupedBackgroundColor;
-    return [UIColor colorWithWhite:0.96 alpha:1.0];
+    return [UIColor ppBackground];
 }
 
 static inline UIColor *PPChatInputBarPrimaryTextColor(void)
 {
-    return PrimaryTextClr ?: UIColor.labelColor;
+    return PrimaryTextClr;
 }
 
 static inline UIColor *PPChatInputBarSecondaryTextColor(void)
 {
-    return SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    return SeconderyTextClr;
 }
 
 static inline CGFloat PPChatInputBarMinimumFittingHeight(void)
@@ -72,7 +71,7 @@ static inline CGFloat PPChatInputBarNormalizedPower(float averagePower)
     self = [super initWithFrame:frame];
     if (self) {
         _samples = @[];
-        _barColor = AppPrimaryClr ?: UIColor.systemTealColor;
+        _barColor = AppPrimaryClr;
         _idleColor = [PPChatInputBarSecondaryTextColor() colorWithAlphaComponent:0.22];
         self.backgroundColor = UIColor.clearColor;
         self.opaque = NO;
@@ -204,7 +203,7 @@ static inline CGFloat PPChatInputBarNormalizedPower(float averagePower)
     self.surfaceView.layer.cornerRadius = 26.0;
     self.surfaceView.layer.cornerCurve = kCACornerCurveContinuous;
     self.surfaceView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    self.surfaceView.layer.borderColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.14].CGColor;
+    self.surfaceView.layer.borderColor = [(AppPrimaryClr) colorWithAlphaComponent:0.14].CGColor;
     self.surfaceView.layer.shadowColor = UIColor.blackColor.CGColor;
     self.surfaceView.layer.shadowOffset = CGSizeMake(0.0, 10.0);
     self.surfaceView.layer.shadowRadius = 24.0;
@@ -235,7 +234,7 @@ static inline CGFloat PPChatInputBarNormalizedPower(float averagePower)
     self.textView.delegate = self;
     self.textView.font = [Styling fontMedium:15.0];
     self.textView.textColor = PPChatInputBarPrimaryTextColor();
-    self.textView.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.textView.tintColor = AppPrimaryClr;
     self.textView.backgroundColor = UIColor.clearColor;
     self.textView.textAlignment = Language.alignmentForCurrentLanguage;
     self.textView.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
@@ -255,7 +254,7 @@ static inline CGFloat PPChatInputBarNormalizedPower(float averagePower)
 {
     self.attachmentButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.attachmentButton.translatesAutoresizingMaskIntoConstraints = NO;
-    self.attachmentButton.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.attachmentButton.tintColor = AppPrimaryClr;
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightMedium];
     UIImage *recordIcon = [[UIImage systemImageNamed:@"mic.fill"] imageByApplyingSymbolConfiguration:config];
     [self.attachmentButton setImage:recordIcon forState:UIControlStateNormal];
@@ -268,7 +267,7 @@ static inline CGFloat PPChatInputBarNormalizedPower(float averagePower)
 {
     self.sendHaloView = [[UIView alloc] init];
     self.sendHaloView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.sendHaloView.backgroundColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.10];
+    self.sendHaloView.backgroundColor = [(AppPrimaryClr) colorWithAlphaComponent:0.10];
     self.sendHaloView.layer.cornerRadius = 21.0;
     self.sendHaloView.layer.cornerCurve = kCACornerCurveContinuous;
     self.sendHaloView.alpha = 0.0;
@@ -318,7 +317,7 @@ static inline CGFloat PPChatInputBarNormalizedPower(float averagePower)
 {
     self.recordingDotView = [[UIView alloc] init];
     self.recordingDotView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.recordingDotView.backgroundColor = UIColor.systemRedColor;
+    self.recordingDotView.backgroundColor = [UIColor ppError];
     self.recordingDotView.layer.cornerRadius = 4.0;
     self.recordingDotView.alpha = 0.0;
     self.recordingDotView.hidden = YES;
@@ -338,7 +337,7 @@ static inline CGFloat PPChatInputBarNormalizedPower(float averagePower)
     self.recordingWaveformView.translatesAutoresizingMaskIntoConstraints = NO;
     self.recordingWaveformView.alpha = 0.0;
     self.recordingWaveformView.hidden = YES;
-    self.recordingWaveformView.barColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.recordingWaveformView.barColor = AppPrimaryClr;
     self.recordingWaveformView.idleColor = [PPChatInputBarSecondaryTextColor() colorWithAlphaComponent:0.18];
     [self.surfaceView addSubview:self.recordingWaveformView];
 
@@ -528,8 +527,8 @@ static inline CGFloat PPChatInputBarNormalizedPower(float averagePower)
     BOOL enabled = (hasText && self.inputEnabled && !self.sending) || self.recordingActive;
     self.sendButton.enabled = enabled || self.sending;
 
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *recordAccent = UIColor.systemRedColor;
+    UIColor *accent = AppPrimaryClr;
+    UIColor *recordAccent = [UIColor ppError];
     UIImageSymbolConfiguration *sendConfig = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightBold];
     UIImageSymbolConfiguration *micConfig = [UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightMedium];
     UIImage *sendIcon = [[UIImage systemImageNamed:@"paperplane.fill"] imageByApplyingSymbolConfiguration:sendConfig];
@@ -824,8 +823,8 @@ static inline CGFloat PPChatInputBarNormalizedPower(float averagePower)
     self.recordingHintLabel.hidden = NO;
     self.placeholderLabel.hidden = active || self.textView.text.length > 0;
 
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *recordColor = UIColor.systemRedColor;
+    UIColor *accent = AppPrimaryClr;
+    UIColor *recordColor = [UIColor ppError];
     void (^updates)(void) = ^{
         self.textView.alpha = active ? 0.0 : 1.0;
         self.placeholderLabel.alpha = active ? 0.0 : 1.0;

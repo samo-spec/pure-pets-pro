@@ -75,7 +75,7 @@
 - (void)setupPlanHeader {
     NSString *planName = [self localizedPlanName:self.service.subscriptionPlan ?: @"free"];
     BOOL isActive = self.service.subscriptionActive;
-    UIColor *accentColor = isActive ? UIColor.systemGreenColor : UIColor.systemOrangeColor;
+    UIColor *accentColor = isActive ? [UIColor ppSuccess] : [UIColor ppWarning];
 
     UIView *card = [UIView new];
     card.translatesAutoresizingMaskIntoConstraints = NO;

@@ -27,29 +27,28 @@ static NSString *PPChatTrimmedString(id value)
 
 static UIColor *PPChatBackgroundColor(void)
 {
-    if (@available(iOS 13.0, *)) return UIColor.systemBackgroundColor;
-    return AppBackgroundClr ?: UIColor.whiteColor;
+    if (@available(iOS 13.0, *)) return [UIColor ppSurface];
+    return AppBackgroundClr;
 }
 
 static UIColor *PPChatSurfaceColor(void)
 {
-    return AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    return AppForgroundColr;
 }
 
 static UIColor *PPChatMatteColor(void)
 {
-    if (@available(iOS 13.0, *)) return UIColor.secondarySystemGroupedBackgroundColor;
-    return [UIColor colorWithWhite:0.96 alpha:1.0];
+    return [UIColor ppBackground];
 }
 
 static UIColor *PPChatPrimaryTextColor(void)
 {
-    return PrimaryTextClr ?: UIColor.labelColor;
+    return PrimaryTextClr;
 }
 
 static UIColor *PPChatSecondaryTextColor(void)
 {
-    return SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    return SeconderyTextClr;
 }
 
 static NSString *PPChatInitialForName(NSString *name)
@@ -74,10 +73,10 @@ static NSString *PPChatLocalizedParticipantType(NSString *participantType)
 static UIColor *PPChatParticipantTypeColor(NSString *participantType)
 {
     if ([participantType isEqualToString:PPChatParticipantTypeConsole]) {
-        return UIColor.systemIndigoColor;
+        return [UIColor ppQuickActionCommunity];
     }
     if ([participantType isEqualToString:PPChatParticipantTypeProvider]) {
-        return AppPrimaryClr ?: UIColor.systemTealColor;
+        return AppPrimaryClr;
     }
     return PPChatSecondaryTextColor();
 }
@@ -174,7 +173,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     self.avatarView.layer.cornerRadius = 25.0;
     self.avatarView.layer.cornerCurve = kCACornerCurveContinuous;
     self.avatarView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    self.avatarView.layer.borderColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.16].CGColor;
+    self.avatarView.layer.borderColor = [(AppPrimaryClr) colorWithAlphaComponent:0.16].CGColor;
     self.avatarView.clipsToBounds = YES;
     [self.surfaceView addSubview:self.avatarView];
 
@@ -188,7 +187,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     self.avatarLabel = [[UILabel alloc] init];
     self.avatarLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.avatarLabel.font = [Styling fontBold:16.0];
-    self.avatarLabel.textColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.avatarLabel.textColor = AppPrimaryClr;
     self.avatarLabel.textAlignment = NSTextAlignmentCenter;
     [self.avatarView addSubview:self.avatarLabel];
 
@@ -229,7 +228,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     self.badgeLabel.font = [Styling fontBold:11.0];
     self.badgeLabel.textAlignment = NSTextAlignmentCenter;
     self.badgeLabel.textColor = UIColor.whiteColor;
-    self.badgeLabel.backgroundColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.badgeLabel.backgroundColor = AppPrimaryClr;
     self.badgeLabel.layer.cornerRadius = 12.0;
     self.badgeLabel.layer.cornerCurve = kCACornerCurveContinuous;
     self.badgeLabel.clipsToBounds = YES;
@@ -350,8 +349,8 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     BOOL unread = unreadCount > 0;
     self.badgeLabel.hidden = !unread;
     self.badgeLabel.text = unreadCount > 99 ? @"99+" : [NSString stringWithFormat:@"%ld", (long)unreadCount];
-    self.titleLabel.textColor = unread ? (AppPrimaryClr ?: UIColor.systemTealColor) : PPChatPrimaryTextColor();
-    self.surfaceView.layer.borderColor = (unread ? [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.26] : [PPChatSecondaryTextColor() colorWithAlphaComponent:0.10]).CGColor;
+    self.titleLabel.textColor = unread ? (AppPrimaryClr) : PPChatPrimaryTextColor();
+    self.surfaceView.layer.borderColor = (unread ? [(AppPrimaryClr) colorWithAlphaComponent:0.26] : [PPChatSecondaryTextColor() colorWithAlphaComponent:0.10]).CGColor;
     self.accessibilityLabel = [NSString stringWithFormat:@"%@, %@, %@", name, PPChatLocalizedParticipantType(participantType), message];
 }
 
@@ -480,7 +479,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 {
     if (self.ambientTopGlowView) return;
 
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
+    UIColor *accent = AppPrimaryClr;
     UIView *topGlow = [[UIView alloc] init];
     topGlow.translatesAutoresizingMaskIntoConstraints = NO;
     topGlow.userInteractionEnabled = NO;
@@ -555,7 +554,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     surface.layer.cornerRadius = 30.0;
     surface.layer.cornerCurve = kCACornerCurveContinuous;
     surface.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    surface.layer.borderColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.16].CGColor;
+    surface.layer.borderColor = [(AppPrimaryClr) colorWithAlphaComponent:0.16].CGColor;
     surface.layer.shadowColor = UIColor.blackColor.CGColor;
     surface.layer.shadowOffset = CGSizeMake(0.0, 18.0);
     surface.layer.shadowRadius = 34.0;
@@ -587,7 +586,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     UILabel *eyebrow = [[UILabel alloc] init];
     eyebrow.translatesAutoresizingMaskIntoConstraints = NO;
     eyebrow.font = [Styling fontBold:11.0];
-    eyebrow.textColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    eyebrow.textColor = AppPrimaryClr;
     eyebrow.textAlignment = Language.alignmentForCurrentLanguage;
     eyebrow.text = kLang(@"ch_provider_support_eyebrow");
     [surface addSubview:eyebrow];
@@ -627,7 +626,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22.0 weight:UIImageSymbolWeightSemibold];
     UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"message.badge.fill" withConfiguration:config] ?: [UIImage systemImageNamed:@"message.fill" withConfiguration:config]];
     icon.translatesAutoresizingMaskIntoConstraints = NO;
-    icon.tintColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    icon.tintColor = AppPrimaryClr;
     [mark addSubview:icon];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -976,16 +975,16 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     self.headerLatestValueLabel.text = latestDate ? [self.dateFormatter stringFromDate:latestDate] : @"--";
     if (self.hasError) {
         self.headerStatusLabel.text = kLang(@"ch_provider_support_offline");
-        self.headerStatusLabel.textColor = UIColor.systemOrangeColor;
-        self.headerStatusLabel.backgroundColor = [UIColor.systemOrangeColor colorWithAlphaComponent:0.12];
+        self.headerStatusLabel.textColor = [UIColor ppWarning];
+        self.headerStatusLabel.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:0.12];
     } else if (self.isLoading) {
         self.headerStatusLabel.text = kLang(@"ch_provider_support_syncing");
-        self.headerStatusLabel.textColor = AppPrimaryClr ?: UIColor.systemTealColor;
-        self.headerStatusLabel.backgroundColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.10];
+        self.headerStatusLabel.textColor = AppPrimaryClr;
+        self.headerStatusLabel.backgroundColor = [(AppPrimaryClr) colorWithAlphaComponent:0.10];
     } else {
         self.headerStatusLabel.text = kLang(@"ch_provider_support_live");
-        self.headerStatusLabel.textColor = AppPrimaryClr ?: UIColor.systemTealColor;
-        self.headerStatusLabel.backgroundColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.10];
+        self.headerStatusLabel.textColor = AppPrimaryClr;
+        self.headerStatusLabel.backgroundColor = [(AppPrimaryClr) colorWithAlphaComponent:0.10];
     }
 }
 

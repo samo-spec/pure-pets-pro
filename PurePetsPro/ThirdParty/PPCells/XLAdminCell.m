@@ -52,9 +52,9 @@ static const CGFloat PPCellHMargin     = 10.0;
 
     if (self.surfaceView) return;
 
-    UIColor *accent  = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *accentDarker = AppPrimaryClrDarker ?: accent;
-    UIColor *surface = [UIColor colorNamed:@"AppForgroundColr2"] ?: UIColor.secondarySystemBackgroundColor;
+    UIColor *accent  = AppPrimaryClr;
+    UIColor *accentDarker = AppPrimaryClrDarker;
+    UIColor *surface = [UIColor ppElevatedSurface];
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
 
     // ── Surface card ──
@@ -136,14 +136,14 @@ static const CGFloat PPCellHMargin     = 10.0;
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.font = [Styling fontBold:16];
-    self.titleLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.titleLabel.textColor = PrimaryTextClr;
     self.titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     self.titleLabel.numberOfLines = 2;
 
     self.subtitleLabel = [[UILabel alloc] init];
     self.subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.subtitleLabel.font = [Styling fontMedium:12];
-    self.subtitleLabel.textColor = SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    self.subtitleLabel.textColor = SeconderyTextClr;
     self.subtitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     self.subtitleLabel.numberOfLines = 2;
 
@@ -178,7 +178,7 @@ static const CGFloat PPCellHMargin     = 10.0;
     self.badgeLabel.font = [Styling fontBold:11.0];
     self.badgeLabel.textColor = UIColor.whiteColor;
     self.badgeLabel.textAlignment = NSTextAlignmentCenter;
-    self.badgeLabel.backgroundColor = [UIColor colorWithRed:1.0 green:0.23 blue:0.188 alpha:1.0]; // Signal Red #FF3B30
+    self.badgeLabel.backgroundColor = [UIColor ppError];
     self.badgeLabel.textInsets = UIEdgeInsetsMake(3.0, 6.5, 3.0, 6.5);
     self.badgeLabel.layer.cornerRadius = 9.5;
     self.badgeLabel.clipsToBounds = YES;
@@ -260,8 +260,8 @@ static const CGFloat PPCellHMargin     = 10.0;
 }
 
 - (void)pp_applyGradientTheme {
-    UIColor *accent  = AppPrimaryClr ?: UIColor.systemTealColor;
-    UIColor *surface = AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    UIColor *accent  = AppPrimaryClr;
+    UIColor *surface = AppForgroundColr;
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
     BOOL supportCard = [self pp_isSupportDeskCard];
 
@@ -294,12 +294,12 @@ static const CGFloat PPCellHMargin     = 10.0;
 
     // Icon chip
     self.iconSurfaceView.backgroundColor = supportCard
-        ? [(PrimaryTextClr ?: UIColor.labelColor) colorWithAlphaComponent:isDark ? 0.14 : 0.07]
+        ? [(PrimaryTextClr) colorWithAlphaComponent:isDark ? 0.14 : 0.07]
         : [accent colorWithAlphaComponent:isDark ? 0.14 : 0.10];
     self.iconSurfaceView.layer.borderColor = [accent colorWithAlphaComponent:supportCard ? 0.18 : 0.12].CGColor;
 
     // Chevron
-    UIColor *accentDarker = AppPrimaryClrDarker ?: accent;
+    UIColor *accentDarker = AppPrimaryClrDarker;
     self.chevronPill.backgroundColor = [accentDarker colorWithAlphaComponent:supportCard ? (isDark ? 0.16 : 0.10) : (isDark ? 0.18 : 0.12)];
     self.chevronView.tintColor = supportCard ? accent : accentDarker;
     self.eyebrowLabel.textColor = accent;
@@ -331,10 +331,10 @@ static const CGFloat PPCellHMargin     = 10.0;
     self.textStack.spacing = supportCard ? 3.0 : 4.0;
     self.titleLabel.font = supportCard ? [Styling fontBold:18] : [Styling fontBold:16];
     self.subtitleLabel.font = supportCard ? [Styling fontMedium:12.5] : [Styling fontMedium:12];
-    self.titleLabel.textColor = PrimaryTextClr ?: UIColor.labelColor;
+    self.titleLabel.textColor = PrimaryTextClr;
     self.subtitleLabel.textColor = supportCard
-        ? [(SeconderyTextClr ?: UIColor.secondaryLabelColor) colorWithAlphaComponent:0.82]
-        : (SeconderyTextClr ?: UIColor.secondaryLabelColor);
+        ? [(SeconderyTextClr) colorWithAlphaComponent:0.82]
+        : (SeconderyTextClr);
     self.iconSurfaceView.layer.cornerRadius = supportCard ? 18.0 : PPCellIconCorner;
     self.surfaceView.layer.cornerRadius = supportCard ? 26.0 : PPCellCorner;
     self.surfaceGradient.cornerRadius = supportCard ? 26.0 : PPCellCorner;
@@ -384,10 +384,10 @@ static const CGFloat PPCellHMargin     = 10.0;
 
 - (void)pp_applyInteraction:(BOOL)pressed animated:(BOOL)animated {
     CGFloat scale = pressed ? 0.975 : 1.0;
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
+    UIColor *accent = AppPrimaryClr;
     BOOL supportCard = [self pp_isSupportDeskCard];
     UIColor *idleIconSurface = supportCard
-        ? [(PrimaryTextClr ?: UIColor.labelColor) colorWithAlphaComponent:self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark ? 0.14 : 0.07]
+        ? [(PrimaryTextClr) colorWithAlphaComponent:self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark ? 0.14 : 0.07]
         : [accent colorWithAlphaComponent:self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark ? 0.14 : 0.10];
 
     void (^changes)(void) = ^{

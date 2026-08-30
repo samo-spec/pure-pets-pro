@@ -110,7 +110,10 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
         return kPPProNotifCategoryDeliveryKey;
     }
 
-    if ([effectiveType hasPrefix:@"order"] ||
+    if ([route isEqualToString:@"fulfillment_order"] ||
+        [effectiveType hasPrefix:@"order"] ||
+        [effectiveType isEqualToString:@"provider_order_cancelled"] ||
+        [effectiveType isEqualToString:@"provider.order.cancelled"] ||
         [effectiveType isEqualToString:@"provider_new_fulfillment"] ||
         [effectiveType containsString:@"fulfillment"]) {
         return kPPProNotifCategoryOrdersKey;
@@ -509,7 +512,7 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
 
 - (void)pp_applyTheme
 {
-    UIColor *accent = self.accentColor ?: AppPrimaryClr ?: UIColor.systemBlueColor;
+    UIColor *accent = self.accentColor ?: AppPrimaryClr;
     UIColor *resolvedAccent = [accent resolvedColorWithTraitCollection:self.traitCollection];
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
     BOOL reduceTransparency = UIAccessibilityIsReduceTransparencyEnabled();
@@ -530,10 +533,10 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
         return dark ? [UIColor colorWithWhite:0.035 alpha:0.74] : [UIColor colorWithWhite:1.0 alpha:0.70];
     }];
 
-    self.titleLabel.textColor = UIColor.labelColor;
-    self.subtitleLabel.textColor = [UIColor.secondaryLabelColor colorWithAlphaComponent:isDark ? 0.86 : 0.82];
+    self.titleLabel.textColor = [UIColor ppTextPrimary];
+    self.subtitleLabel.textColor = [[UIColor ppTextSecondary] colorWithAlphaComponent:isDark ? 0.86 : 0.82];
     self.iconView.tintColor = resolvedAccent;
-    self.chevronView.tintColor = [UIColor.tertiaryLabelColor colorWithAlphaComponent:isDark ? 0.84 : 0.72];
+    self.chevronView.tintColor = [[UIColor ppTextTertiary] colorWithAlphaComponent:isDark ? 0.84 : 0.72];
 
     self.surfaceView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     self.surfaceView.layer.borderColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *trait) {
@@ -591,7 +594,7 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
 - (void)configureWithTitle:(NSString *)title subtitle:(NSString *)subtitle iconName:(NSString *)iconName accentColor:(UIColor *)accentColor
 {
     self.iconName = iconName;
-    self.accentColor = accentColor ?: AppPrimaryClr ?: UIColor.systemBlueColor;
+    self.accentColor = accentColor ?: AppPrimaryClr;
 
     NSString *trimmedTitle = PPProNoticeTrimmedString(title);
     NSString *trimmedSubtitle = PPProNoticeTrimmedString(subtitle);
@@ -862,7 +865,7 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
                         title:title
                      subtitle:subtitle
                      iconName:@"shippingbox.fill"
-                  accentColor:AppPrimaryClr ?: UIColor.systemBlueColor];
+                  accentColor:AppPrimaryClr];
 }
 
 - (void)showDeliveryNotificationWithOrderId:(NSString *)orderId title:(NSString *)title subtitle:(NSString *)subtitle
@@ -877,7 +880,7 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
                         title:title
                      subtitle:subtitle
                      iconName:@"bicycle"
-                  accentColor:UIColor.systemOrangeColor];
+                  accentColor:[UIColor ppWarning]];
 }
 
 - (void)showCompanyDeliveryNotificationWithPayload:(NSDictionary<NSString *,id> *)payload
@@ -893,7 +896,7 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
                         title:title
                      subtitle:subtitle
                      iconName:@"truck.box.fill"
-                  accentColor:AppPrimaryClr ?: UIColor.systemBlueColor];
+                  accentColor:AppPrimaryClr];
 }
 
 - (void)showNotificationWithTitle:(NSString *)title subtitle:(NSString *)subtitle iconName:(NSString *)iconName accentColor:(UIColor *)accentColor

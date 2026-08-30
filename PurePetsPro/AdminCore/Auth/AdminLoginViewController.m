@@ -63,25 +63,25 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
+    self.view.backgroundColor = [UIColor ppSurface];
     if (@available(iOS 13.0, *)) {
-        self.view.backgroundColor = [UIColor secondarySystemBackgroundColor];
+        self.view.backgroundColor = [UIColor ppElevatedSurface];
     }
     
     UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"exclamationmark.triangle.fill"]];
-    iconView.tintColor = [UIColor systemOrangeColor];
+    iconView.tintColor = [UIColor ppWarning];
     iconView.contentMode = UIViewContentModeScaleAspectFit;
     
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.text = kLang(@"StatusAccessDenied");
     titleLabel.font = [UIFont boldSystemFontOfSize:22];
-    titleLabel.textColor = [UIColor labelColor];
+    titleLabel.textColor = [UIColor ppTextPrimary];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     
     UILabel *msgLabel = [[UILabel alloc] init];
     msgLabel.text = kLang(@"StatusNoPartnerAccess");
     msgLabel.font = [UIFont systemFontOfSize:16];
-    msgLabel.textColor = [UIColor secondaryLabelColor];
+    msgLabel.textColor = [UIColor ppTextSecondary];
     msgLabel.textAlignment = NSTextAlignmentCenter;
     msgLabel.numberOfLines = 0;
     
@@ -181,7 +181,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 #pragma mark - Base Styling
 
 - (UIColor *)pp_loginBaseBackgroundColor {
-    return UIColor.systemBackgroundColor;
+    return [UIColor ppSurface];
 }
 
 #pragma mark - UI Hosting
@@ -251,7 +251,9 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 }
 
 - (void)proLoginSurfaceDidTapPhoneContinue:(PPProLoginSurfaceController *)controller {
-    (void)controller;
+    if (controller.countryCode.length > 0) {
+        self.countryCode = controller.countryCode;
+    }
     [self pp_handlePhoneSignIn];
 }
 
@@ -698,7 +700,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     [PPHUD showIndeterminateIn:self.view title:kLang(@"ProLoginGoogleConnecting") subtitle:nil];
     PPAdminSetLoginInProgress(YES);
 
-    GIDSignIn.sharedInstance.configuration = [[GIDConfiguration alloc] initWithClientID:clientID];
+    // GIDSignIn.sharedInstance.configuration removed to preserve App Check
 
     __weak typeof(self) weakSelf = self;
     [GIDSignIn.sharedInstance signInWithPresentingViewController:self

@@ -11,10 +11,17 @@
 #import "PPChatInputBar.h"
 #import "PPToast.h"
 
+@import Firebase;
+@import FirebaseAuth;
+@import FirebaseFirestore;
+@import FirebaseFunctions;
+@import FirebaseMessaging;
+
 #import "PPFirebaseCompat.h"
 #import "UIImageView+WebCache.h"
 #import <FirebaseFirestore/FirebaseFirestore.h>
 #import <FirebaseAuth/FirebaseAuth.h>
+ 
 #import <AVFoundation/AVFoundation.h>
 #import <math.h>
 #import <IQKeyboardManager/IQKeyboardManager.h>
@@ -131,29 +138,28 @@ static NSString *PPMessageCountText(NSInteger count)
 
 static UIColor *PPMessageBackgroundColor(void)
 {
-    if (@available(iOS 13.0, *)) return UIColor.systemBackgroundColor;
-    return AppBackgroundClr ?: UIColor.whiteColor;
+    if (@available(iOS 13.0, *)) return [UIColor ppSurface];
+    return AppBackgroundClr;
 }
 
 static UIColor *PPMessageSurfaceColor(void)
 {
-    return AppForgroundColr ?: UIColor.secondarySystemBackgroundColor;
+    return AppForgroundColr;
 }
 
 static UIColor *PPMessageMatteColor(void)
 {
-    if (@available(iOS 13.0, *)) return UIColor.secondarySystemGroupedBackgroundColor;
-    return [UIColor colorWithWhite:0.96 alpha:1.0];
+    return [UIColor ppBackground];
 }
 
 static UIColor *PPMessagePrimaryTextColor(void)
 {
-    return PrimaryTextClr ?: UIColor.labelColor;
+    return PrimaryTextClr;
 }
 
 static UIColor *PPMessageSecondaryTextColor(void)
 {
-    return SeconderyTextClr ?: UIColor.secondaryLabelColor;
+    return SeconderyTextClr;
 }
 
 static NSString *PPMessageInitialForName(NSString *name)
@@ -178,10 +184,10 @@ static NSString *PPMessageLocalizedParticipantType(NSString *participantType)
 static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 {
     if ([participantType isEqualToString:PPChatParticipantTypeConsole]) {
-        return UIColor.systemIndigoColor;
+        return [UIColor ppQuickActionCommunity];
     }
     if ([participantType isEqualToString:PPChatParticipantTypeProvider]) {
-        return AppPrimaryClr ?: UIColor.systemTealColor;
+        return AppPrimaryClr;
     }
     return PPMessageSecondaryTextColor();
 }
@@ -199,7 +205,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     self = [super initWithFrame:frame];
     if (self) {
         _samples = @[];
-        _activeColor = AppPrimaryClr ?: UIColor.systemTealColor;
+        _activeColor = AppPrimaryClr;
         _inactiveColor = [PPMessageSecondaryTextColor() colorWithAlphaComponent:0.22];
         self.backgroundColor = UIColor.clearColor;
         self.opaque = NO;
@@ -458,7 +464,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     self.bubbleLeadingConstraint.active = !isOutgoing;
     self.bubbleTrailingConstraint.active = isOutgoing;
 
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
+    UIColor *accent = AppPrimaryClr;
     if (isOutgoing) {
         self.bubbleView.backgroundColor = accent;
         self.bubbleView.layer.borderColor = [accent colorWithAlphaComponent:0.08].CGColor;
@@ -657,7 +663,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 {
     if (self.ambientTopGlowView) return;
 
-    UIColor *accent = AppPrimaryClr ?: UIColor.systemTealColor;
+    UIColor *accent = AppPrimaryClr;
     UIView *topGlow = [[UIView alloc] init];
     topGlow.translatesAutoresizingMaskIntoConstraints = NO;
     topGlow.userInteractionEnabled = NO;
@@ -755,7 +761,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     surface.layer.cornerRadius = 28.0;
     surface.layer.cornerCurve = kCACornerCurveContinuous;
     surface.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    surface.layer.borderColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.14].CGColor;
+    surface.layer.borderColor = [(AppPrimaryClr) colorWithAlphaComponent:0.14].CGColor;
     surface.layer.shadowColor = UIColor.blackColor.CGColor;
     surface.layer.shadowOffset = CGSizeMake(0.0, 14.0);
     surface.layer.shadowRadius = 26.0;
@@ -803,14 +809,14 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     avatarSurface.layer.cornerRadius = 29.0;
     avatarSurface.layer.cornerCurve = kCACornerCurveContinuous;
     avatarSurface.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    avatarSurface.layer.borderColor = [(AppPrimaryClr ?: UIColor.systemTealColor) colorWithAlphaComponent:0.18].CGColor;
+    avatarSurface.layer.borderColor = [(AppPrimaryClr) colorWithAlphaComponent:0.18].CGColor;
     avatarSurface.clipsToBounds = YES;
     [surface addSubview:avatarSurface];
 
     self.conversationAvatarFallbackLabel = [[UILabel alloc] init];
     self.conversationAvatarFallbackLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.conversationAvatarFallbackLabel.font = [Styling fontBold:20.0];
-    self.conversationAvatarFallbackLabel.textColor = AppPrimaryClr ?: UIColor.systemTealColor;
+    self.conversationAvatarFallbackLabel.textColor = AppPrimaryClr;
     self.conversationAvatarFallbackLabel.textAlignment = NSTextAlignmentCenter;
     [avatarSurface addSubview:self.conversationAvatarFallbackLabel];
 
@@ -1178,26 +1184,12 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     NSString *currentUID = [FIRAuth auth].currentUser.uid;
     if (!currentUID.length || self.chatThread.ID.length == 0) return;
 
-    FIRCollectionReference *messagesRef =
-    [[[[FIRFirestore firestore] collectionWithPath:@"Chats"]
-      documentWithPath:self.chatThread.ID]
-     collectionWithPath:@"Messages"];
-
-    for (NSDictionary *message in self.messages.copy) {
-        if (![self pp_messageIsUnread:message currentUID:currentUID]) continue;
-        NSString *messageID = PPMessageTrimmedString(message[@"ID"]);
-        if (messageID.length == 0) continue;
-        NSInteger currentStatus = PPMessageStatusValue(message[@"status"]);
-        BOOL needsDeliveredAt = currentStatus < PPMessageStatusDelivered;
-        NSMutableDictionary *updates = [@{
-            @"status": @(PPMessageStatusRead),
-            @"readAt": [FIRFieldValue fieldValueForServerTimestamp]
-        } mutableCopy];
-        if (needsDeliveredAt) {
-            updates[@"deliveredAt"] = [FIRFieldValue fieldValueForServerTimestamp];
-        }
-        [[messagesRef documentWithPath:messageID] updateData:updates];
-    }
+    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"chatMessageCommand"];
+    callable.timeoutInterval = 30.0;
+    [callable callWithObject:@{
+        @"action": @"mark_read",
+        @"threadId": self.chatThread.ID
+    } completion:nil];
 }
 
 - (void)pp_startObservingThread
@@ -1261,6 +1253,11 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 
 - (void)pp_sendMessage
 {
+    NSString *conversationType = PPMessageTrimmedString(self.chatThread.conversationType);
+    if (self.chatThread.supportThread || [conversationType isEqualToString:@"support"] || [conversationType isEqualToString:@"user_support"]) {
+        [PPToast toast:kLang(@"Deliv_CannotChatProvider")];
+        return;
+    }
     NSString *text = PPMessageTrimmedString(self.chatInputBar.textView.text);
     if (text.length == 0) return;
 
@@ -1270,23 +1267,26 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 
     [self pp_setSendInFlight:YES];
 
-    FIRCollectionReference *messagesRef =
-    [[[[FIRFirestore firestore] collectionWithPath:@"Chats"]
-      documentWithPath:self.chatThread.ID]
-     collectionWithPath:@"Messages"];
-
     NSString *messageID = [[NSUUID UUID] UUIDString];
     NSDictionary *payload = @{
-        @"text": text,
-        @"senderID": senderID,
+        @"action": @"send",
+        @"threadId": self.chatThread.ID,
+        @"messageId": messageID,
         @"receiverID": receiverID,
-        @"ID": messageID,
-        @"status": @(PPMessageStatusSent),
-        @"timestamp": [FIRTimestamp timestamp]
+        @"text": text,
+        @"message": @{
+            @"text": text,
+            @"type": @0,
+            @"sourceApp": @"pro_ios",
+            @"sourcePlatform": @"ios"
+        }
     };
 
     __weak typeof(self) weakSelf = self;
-    [[messagesRef documentWithPath:messageID] setData:payload completion:^(NSError * _Nullable error) {
+    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"chatMessageCommand"];
+    callable.timeoutInterval = 30.0;
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        (void)result;
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
@@ -1299,6 +1299,11 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 
 - (void)pp_sendVoiceRecordingAtURL:(NSURL *)fileURL duration:(NSTimeInterval)duration waveformSamples:(NSArray<NSNumber *> *)waveformSamples
 {
+    NSString *conversationType = PPMessageTrimmedString(self.chatThread.conversationType);
+    if (self.chatThread.supportThread || [conversationType isEqualToString:@"support"] || [conversationType isEqualToString:@"user_support"]) {
+        [PPToast toast:kLang(@"Deliv_CannotChatProvider")];
+        return;
+    }
     if (fileURL.path.length == 0 || duration <= 0) return;
 
     NSString *senderID = [FIRAuth auth].currentUser.uid ?: @"";
@@ -1379,30 +1384,31 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
                     waveformSamples:(NSArray<NSNumber *> *)waveformSamples
                        localFileURL:(NSURL *)localFileURL
 {
-    FIRCollectionReference *messagesRef =
-    [[[[FIRFirestore firestore] collectionWithPath:@"Chats"]
-      documentWithPath:self.chatThread.ID]
-     collectionWithPath:@"Messages"];
-
-    NSMutableDictionary *payload = [@{
-        @"ID": messageID,
+    NSMutableDictionary *messagePayload = [@{
         @"text": kLang(@"ch_provider_voice_message"),
-        @"senderID": senderID,
-        @"receiverID": receiverID,
-        @"status": @(PPMessageStatusSent),
         @"type": @2,
         @"fileURL": urlString ?: @"",
         @"mimeType": @"audio/mp4",
         @"fileSize": @(fileSize),
         @"mediaDuration": @(duration),
-        @"timestamp": [FIRTimestamp timestamp]
+        @"sourceApp": @"pro_ios",
+        @"sourcePlatform": @"ios"
     } mutableCopy];
-    if (waveformSamples.count > 0) {
-        payload[@"waveform"] = waveformSamples;
-    }
+    if (waveformSamples.count > 0) messagePayload[@"waveform"] = waveformSamples;
+    NSDictionary *payload = @{
+        @"action": @"send",
+        @"threadId": self.chatThread.ID,
+        @"messageId": messageID,
+        @"receiverID": receiverID,
+        @"text": kLang(@"ch_provider_voice_message"),
+        @"message": messagePayload
+    };
 
     __weak typeof(self) weakSelf = self;
-    [[messagesRef documentWithPath:messageID] setData:payload completion:^(NSError * _Nullable error) {
+    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"chatMessageCommand"];
+    callable.timeoutInterval = 30.0;
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        (void)result;
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
@@ -1413,22 +1419,9 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
                 return;
             }
             [NSFileManager.defaultManager removeItemAtURL:localFileURL error:nil];
-            [strongSelf pp_updateThreadPreviewWithLastMessage:kLang(@"ch_provider_voice_message") senderID:senderID];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"forceReloadThreads" object:nil];
         });
     }];
-}
-
-- (void)pp_updateThreadPreviewWithLastMessage:(NSString *)lastMessage senderID:(NSString *)senderID
-{
-    if (self.chatThread.ID.length == 0 || senderID.length == 0) return;
-
-    FIRDocumentReference *threadRef = [[[FIRFirestore firestore] collectionWithPath:@"Chats"] documentWithPath:self.chatThread.ID];
-    [threadRef updateData:@{
-        @"lastMessage": lastMessage ?: @"",
-        @"senderID": senderID,
-        @"timestamp": [FIRFieldValue fieldValueForServerTimestamp],
-        @"lastMessageAt": [FIRFieldValue fieldValueForServerTimestamp]
-    } completion:nil];
 }
 
 - (void)pp_scrollToBottomAnimated:(BOOL)animated

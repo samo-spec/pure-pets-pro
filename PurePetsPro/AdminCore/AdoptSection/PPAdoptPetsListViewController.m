@@ -82,6 +82,8 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     if ([self.traitCollection hasDifferentColorAppearanceComparedToTraitCollection:previousTraitCollection]) {
         self.view.backgroundColor = [self pp_canvasColor];
         [self updateBackdropStyle];
+        // Border/shadow CGColors do not follow appearance changes on their own.
+        PPStyleCardSurface(self.heroSurfaceView, PPCornerHero);
     }
 }
 
@@ -96,7 +98,7 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 }
 
 - (UIColor *)pp_borderColor {
-    return [SeconderyTextClr colorWithAlphaComponent:0.09];
+    return PPHairlineColor();
 }
 
 - (UIColor *)pp_accentColor {
@@ -153,28 +155,18 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 - (void)buildHero {
     self.heroSurfaceView = [UIView new];
     self.heroSurfaceView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.heroSurfaceView.backgroundColor = [self pp_surfaceColor];
-    self.heroSurfaceView.layer.cornerRadius = 30.0;
-    self.heroSurfaceView.layer.cornerCurve = kCACornerCurveContinuous;
-    self.heroSurfaceView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    self.heroSurfaceView.layer.borderColor = [self pp_borderColor].CGColor;
-    self.heroSurfaceView.layer.shadowColor = [UIColor colorWithWhite:0.0 alpha:0.08].CGColor;
-    self.heroSurfaceView.layer.shadowOpacity = 0.07;
-    self.heroSurfaceView.layer.shadowRadius = 24.0;
-    self.heroSurfaceView.layer.shadowOffset = CGSizeMake(0, 14.0);
+    PPStyleCardSurface(self.heroSurfaceView, PPCornerHero);
     [self.view addSubview:self.heroSurfaceView];
 
     UIView *accentLine = [UIView new];
     accentLine.translatesAutoresizingMaskIntoConstraints = NO;
     accentLine.backgroundColor = [self pp_accentColor];
-    accentLine.layer.cornerRadius = 2.5;
+    PPApplyContinuousCorners(accentLine, 2.5);
     [self.heroSurfaceView addSubview:accentLine];
 
     UIView *iconSurface = [UIView new];
     iconSurface.translatesAutoresizingMaskIntoConstraints = NO;
-    iconSurface.backgroundColor = [[self pp_accentColor] colorWithAlphaComponent:0.10];
-    iconSurface.layer.cornerRadius = 22.0;
-    iconSurface.layer.cornerCurve = kCACornerCurveContinuous;
+    PPStyleAccentPlate(iconSurface, PPCornerCard, 0.10);
     [self.heroSurfaceView addSubview:iconSurface];
 
     UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"heart.text.square.fill"]];
@@ -183,18 +175,27 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     iconView.contentMode = UIViewContentModeScaleAspectFit;
     [iconSurface addSubview:iconView];
 
-    self.eyebrowLabel = [self labelWithFont:[Styling fontBold:11.0] color:[self pp_accentColor] lines:1];
+    self.eyebrowLabel = [self labelWithFont:[Styling fontBold:PPFontCaption1] color:[self pp_accentColor] lines:1];
     self.eyebrowLabel.text = [kLang(@"AdoptPro_ListEyebrow") uppercaseString];
+    // Hero has no fixed height, so the eyebrow may scale. Line count is kept at
+    // 1 on purpose: the hero pushes the table down as it grows.
+    PPEnableDynamicType(self.eyebrowLabel, UIFontTextStyleCaption1);
     [self.heroSurfaceView addSubview:self.eyebrowLabel];
 
+    // Base size kept at 30pt: the nearest type token (33pt) would enlarge the
+    // hero title and force the shrink-to-fit path immediately.
     self.titleLabel = [self labelWithFont:[Styling fontBold:30.0] color:PrimaryTextClr lines:2];
     self.titleLabel.text = kLang(@"AdoptPro_ListTitle");
+    // Shrink-to-fit is intentionally preserved so the scaled title stays inside
+    // the hero instead of pushing the list off-screen on small devices.
     self.titleLabel.adjustsFontSizeToFitWidth = YES;
     self.titleLabel.minimumScaleFactor = 0.82;
+    PPEnableDynamicType(self.titleLabel, UIFontTextStyleLargeTitle);
     [self.heroSurfaceView addSubview:self.titleLabel];
 
-    self.subtitleLabel = [self labelWithFont:[Styling fontRegular:14.0] color:SeconderyTextClr lines:2];
+    self.subtitleLabel = [self labelWithFont:[Styling fontRegular:PPFontSubheadline] color:SeconderyTextClr lines:2];
     self.subtitleLabel.text = kLang(@"AdoptPro_ListSubtitle");
+    PPEnableDynamicType(self.subtitleLabel, UIFontTextStyleSubheadline);
     [self.heroSurfaceView addSubview:self.subtitleLabel];
 
     UIStackView *metricStack = [[UIStackView alloc] init];
@@ -221,13 +222,15 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     self.filterControl.translatesAutoresizingMaskIntoConstraints = NO;
     self.filterControl.selectedSegmentIndex = PPAdoptPetsFilterAll;
     self.filterControl.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
-    self.filterControl.selectedSegmentTintColor = [[self pp_accentColor] colorWithAlphaComponent:0.18];
+    self.filterControl.selectedSegmentTintColor = AppPrimaryClrWithAlpha(0.18);
+    // Segment titles stay at a fixed size: four segments inside one control row
+    // have no horizontal room to grow without truncating every label.
     [self.filterControl setTitleTextAttributes:@{
-        NSFontAttributeName: [Styling fontBold:11.0],
+        NSFontAttributeName: [Styling fontBold:PPFontCaption1],
         NSForegroundColorAttributeName: SeconderyTextClr
     } forState:UIControlStateNormal];
     [self.filterControl setTitleTextAttributes:@{
-        NSFontAttributeName: [Styling fontBold:11.0],
+        NSFontAttributeName: [Styling fontBold:PPFontCaption1],
         NSForegroundColorAttributeName: [self pp_accentColor]
     } forState:UIControlStateSelected];
     [self.filterControl addTarget:self action:@selector(filterChanged:) forControlEvents:UIControlEventValueChanged];
@@ -269,12 +272,13 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
         [metricStack.topAnchor constraintEqualToAnchor:self.subtitleLabel.bottomAnchor constant:18.0],
         [metricStack.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
         [metricStack.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
-        [metricStack.heightAnchor constraintEqualToConstant:58.0],
+        // Relaxed from a fixed 58pt so the scaled metric type can grow.
+        [metricStack.heightAnchor constraintGreaterThanOrEqualToConstant:58.0],
 
         [self.filterControl.topAnchor constraintEqualToAnchor:metricStack.bottomAnchor constant:14.0],
         [self.filterControl.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
         [self.filterControl.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
-        [self.filterControl.heightAnchor constraintEqualToConstant:36.0],
+        [self.filterControl.heightAnchor constraintEqualToConstant:PPTouchTargetMin],
         [self.filterControl.bottomAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:-20.0],
     ]];
 }
@@ -293,14 +297,17 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 - (UIView *)metricViewWithTitle:(NSString *)title value:(NSString *)value {
     UIView *view = [UIView new];
     view.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.055];
-    view.layer.cornerRadius = 18.0;
-    view.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(view, PPCornerMedium);
 
-    UILabel *caption = [self labelWithFont:[Styling fontMedium:10.5] color:[SeconderyTextClr colorWithAlphaComponent:0.78] lines:1];
+    UILabel *caption = [self labelWithFont:[Styling fontMedium:PPFontCaption2] color:[SeconderyTextClr colorWithAlphaComponent:0.78] lines:1];
     caption.text = title;
-    UILabel *valueLabel = [self labelWithFont:[Styling fontBold:20.0] color:PrimaryTextClr lines:1];
+    UILabel *valueLabel = [self labelWithFont:[Styling fontBold:PPFontTitle2] color:PrimaryTextClr lines:1];
     valueLabel.text = value;
     valueLabel.tag = 9151;
+    // Safe to scale: the metric stack height is now a minimum, and the bottom
+    // padding constraint below forces the plate to grow with the text.
+    PPEnableDynamicType(caption, UIFontTextStyleCaption2);
+    PPEnableDynamicType(valueLabel, UIFontTextStyleTitle2);
 
     [view addSubview:caption];
     [view addSubview:valueLabel];
@@ -311,6 +318,7 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
         [valueLabel.leadingAnchor constraintEqualToAnchor:caption.leadingAnchor],
         [valueLabel.trailingAnchor constraintEqualToAnchor:caption.trailingAnchor],
         [valueLabel.topAnchor constraintEqualToAnchor:caption.bottomAnchor constant:3.0],
+        [valueLabel.bottomAnchor constraintLessThanOrEqualToAnchor:view.bottomAnchor constant:-9.0],
     ]];
     return view;
 }
@@ -325,7 +333,7 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     self.tableView.showsVerticalScrollIndicator = NO;
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 104.0;
-    self.tableView.contentInset = UIEdgeInsetsMake(8.0, 0, 24.0, 0);
+    self.tableView.contentInset = UIEdgeInsetsMake(PPSpaceSM, 0, PPSpaceXL, 0);
     [self.tableView registerClass:PPAdoptPetCell.class forCellReuseIdentifier:@"PPAdoptPetCell"];
     [self.view addSubview:self.tableView];
 
@@ -345,9 +353,8 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 
     UIView *iconShell = [UIView new];
     iconShell.translatesAutoresizingMaskIntoConstraints = NO;
-    iconShell.backgroundColor = [[self pp_accentColor] colorWithAlphaComponent:0.10];
-    iconShell.layer.cornerRadius = 28.0;
-    iconShell.layer.cornerCurve = kCACornerCurveContinuous;
+    // 28pt keeps the 56pt shell perfectly circular, so no radius token applies.
+    PPStyleAccentPlate(iconShell, 28.0, 0.10);
     [self.emptyStateView addSubview:iconShell];
 
     UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"heart.circle.fill"]];
@@ -355,14 +362,16 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     icon.tintColor = [self pp_accentColor];
     [iconShell addSubview:icon];
 
-    self.emptyTitleLabel = [self labelWithFont:[Styling fontBold:21.0] color:PrimaryTextClr lines:2];
+    self.emptyTitleLabel = [self labelWithFont:[Styling fontBold:PPFontTitle2] color:PrimaryTextClr lines:2];
     self.emptyTitleLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyTitleLabel.text = kLang(@"AdoptPro_EmptyTitle");
+    PPEnableDynamicType(self.emptyTitleLabel, UIFontTextStyleTitle2);
     [self.emptyStateView addSubview:self.emptyTitleLabel];
 
-    self.emptySubtitleLabel = [self labelWithFont:[Styling fontRegular:14.0] color:SeconderyTextClr lines:3];
+    self.emptySubtitleLabel = [self labelWithFont:[Styling fontRegular:PPFontSubheadline] color:SeconderyTextClr lines:3];
     self.emptySubtitleLabel.textAlignment = NSTextAlignmentCenter;
     self.emptySubtitleLabel.text = kLang(@"AdoptPro_EmptySubtitle");
+    PPEnableDynamicType(self.emptySubtitleLabel, UIFontTextStyleSubheadline);
     [self.emptyStateView addSubview:self.emptySubtitleLabel];
 
     self.emptyActionButton = [self filledButtonWithTitle:kLang(@"AdoptPro_AddListing") selector:@selector(addTapped)];
@@ -373,8 +382,12 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     self.loadingIndicator.color = [self pp_accentColor];
     [self.view addSubview:self.loadingIndicator];
 
-    self.stateLabel = [self labelWithFont:[Styling fontMedium:13.0] color:SeconderyTextClr lines:2];
+    self.stateLabel = [self labelWithFont:[Styling fontMedium:PPFontFootnote] color:SeconderyTextClr lines:2];
     self.stateLabel.textAlignment = NSTextAlignmentCenter;
+    PPEnableDynamicType(self.stateLabel, UIFontTextStyleFootnote);
+    if (PPIsAccessibilityTextSize()) {
+        self.stateLabel.numberOfLines = 4;
+    }
     [self.view addSubview:self.stateLabel];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -400,7 +413,8 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
         [self.emptySubtitleLabel.trailingAnchor constraintEqualToAnchor:self.emptyStateView.trailingAnchor],
         [self.emptyActionButton.topAnchor constraintEqualToAnchor:self.emptySubtitleLabel.bottomAnchor constant:18.0],
         [self.emptyActionButton.centerXAnchor constraintEqualToAnchor:self.emptyStateView.centerXAnchor],
-        [self.emptyActionButton.heightAnchor constraintEqualToConstant:46.0],
+        // Minimum instead of fixed so the scaled title never clips vertically.
+        [self.emptyActionButton.heightAnchor constraintGreaterThanOrEqualToConstant:PPButtonHeightMD],
         [self.emptyActionButton.widthAnchor constraintGreaterThanOrEqualToConstant:156.0],
         [self.emptyActionButton.bottomAnchor constraintEqualToAnchor:self.emptyStateView.bottomAnchor],
 
@@ -417,9 +431,9 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     button.translatesAutoresizingMaskIntoConstraints = NO;
     button.backgroundColor = [self pp_accentColor];
     button.tintColor = UIColor.whiteColor;
-    button.layer.cornerRadius = 23.0;
-    button.layer.cornerCurve = kCACornerCurveContinuous;
-    button.titleLabel.font = [Styling fontBold:15.0];
+    PPApplyContinuousCorners(button, PPCornerCard);
+    button.titleLabel.font = PPScaledFont([Styling fontBold:PPFontCallout], UIFontTextStyleCallout);
+    button.titleLabel.adjustsFontForContentSizeCategory = YES;
     [button setTitle:title forState:UIControlStateNormal];
     [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [button addTarget:self action:selector forControlEvents:UIControlEventTouchUpInside];
@@ -433,19 +447,16 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     btn.translatesAutoresizingMaskIntoConstraints = NO;
     btn.tintColor = [self pp_accentColor];
     btn.backgroundColor = AppForgroundColr;
-    btn.layer.cornerRadius = 22.0;
-    btn.layer.cornerCurve = kCACornerCurveContinuous;
-    btn.layer.shadowColor = (AppShadowColor).CGColor;
-    btn.layer.shadowOpacity = 0.08;
-    btn.layer.shadowRadius = 14.0;
-    btn.layer.shadowOffset = CGSizeMake(0, 7.0);
+    PPApplyContinuousCorners(btn, PPCornerCard);
+    PPApplyCardShadow(btn);
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:17.0 weight:UIImageSymbolWeightSemibold];
     [btn setImage:[UIImage systemImageNamed:@"plus" withConfiguration:config] forState:UIControlStateNormal];
     btn.accessibilityLabel = kLang(@"AdoptPro_AddListing");
+    btn.accessibilityTraits = UIAccessibilityTraitButton;
     [btn addTarget:self action:@selector(addTapped) forControlEvents:UIControlEventTouchUpInside];
     [NSLayoutConstraint activateConstraints:@[
-        [btn.widthAnchor constraintEqualToConstant:44.0],
-        [btn.heightAnchor constraintEqualToConstant:44.0],
+        [btn.widthAnchor constraintEqualToConstant:PPTouchTargetMin],
+        [btn.heightAnchor constraintEqualToConstant:PPTouchTargetMin],
     ]];
     return btn;
 }
@@ -553,6 +564,10 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 - (void)prepareEntranceState {
     if (self.didPrepareEntrance || self.didPlayEntrance) return;
     self.didPrepareEntrance = YES;
+    if (PPMotionReduced()) {
+        // Never hide content that will not be animated back in.
+        return;
+    }
     self.heroSurfaceView.alpha = 0.0;
     self.heroSurfaceView.transform = CGAffineTransformMakeTranslation(0, 14.0);
     self.tableView.alpha = 0.0;
@@ -562,31 +577,33 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 - (void)runEntranceIfNeeded {
     if (self.didPlayEntrance) return;
     self.didPlayEntrance = YES;
-    if (UIAccessibilityIsReduceMotionEnabled()) {
+    if (PPMotionReduced()) {
         self.heroSurfaceView.alpha = 1.0;
         self.heroSurfaceView.transform = CGAffineTransformIdentity;
         self.tableView.alpha = 1.0;
         self.emptyStateView.alpha = 1.0;
         return;
     }
-    [UIView animateWithDuration:0.48 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+    [UIView animateWithDuration:PPAnimDurationSlow delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
         self.heroSurfaceView.alpha = 1.0;
         self.heroSurfaceView.transform = CGAffineTransformIdentity;
     } completion:nil];
-    [UIView animateWithDuration:0.36 delay:0.10 options:UIViewAnimationOptionCurveEaseOut animations:^{
+    [UIView animateWithDuration:PPAnimDurationSlow delay:0.10 options:UIViewAnimationOptionCurveEaseOut animations:^{
         self.tableView.alpha = 1.0;
         self.emptyStateView.alpha = 1.0;
     } completion:nil];
 }
 
 - (void)playCellEntranceAnimation {
-    if (UIAccessibilityIsReduceMotionEnabled()) return;
+    if (PPMotionReduced()) return;
     NSArray<UITableViewCell *> *cells = self.tableView.visibleCells;
     for (NSUInteger idx = 0; idx < cells.count; idx++) {
         UITableViewCell *cell = cells[idx];
         cell.alpha = 0.0;
         cell.transform = CGAffineTransformMakeTranslation(0, 14.0);
-        [UIView animateWithDuration:0.40 delay:0.025 * idx options:UIViewAnimationOptionCurveEaseOut animations:^{
+        // Cap the cumulative stagger so long lists never feel gated.
+        NSTimeInterval delay = MIN(0.025 * (NSTimeInterval)idx, 0.28);
+        [UIView animateWithDuration:PPAnimDurationSlow delay:delay options:UIViewAnimationOptionCurveEaseOut animations:^{
             cell.alpha = 1.0;
             cell.transform = CGAffineTransformIdentity;
         } completion:nil];
@@ -603,10 +620,18 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     PPAdoptPetCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PPAdoptPetCell" forIndexPath:indexPath];
     PPAdoptPetModel *pet = self.adoptPets[indexPath.row];
     [cell configureWithAdoptPet:pet];
+    // Reused cells must never inherit a half-finished entrance state.
+    cell.alpha = 1.0;
+    cell.transform = CGAffineTransformIdentity;
+    // The row reads as one tappable summary; the cell already composes its
+    // accessibilityLabel from its localized title/status text.
+    cell.isAccessibilityElement = YES;
+    cell.accessibilityTraits = UIAccessibilityTraitButton;
     return cell;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:!PPMotionReduced()];
     PPAdoptPetModel *pet = self.adoptPets[indexPath.row];
     [PPFunc pp_playTapEffect];
     PPAdoptPetDetailViewController *vc = [PPAdoptPetDetailViewController new];

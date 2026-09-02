@@ -277,6 +277,77 @@ static inline void PPTapFeedbackUp(UIView *view) {
     } completion:nil];
 }
 
+#pragma mark - Dynamic Type, motion and surface helpers
+
+// Pro screens historically sized type with fixed-point `Styling fontBold:` /
+// `fontMedium:` values, which freezes the UI at the design size and ignores the
+// user's text-size preference.  These helpers make Dynamic Type, Reduce Motion
+// and card styling one-line adoptions so screens stop hand-rolling them.
+
+/// Scales a fixed-size brand font for the current content size category.
+static inline UIFont * _Nullable PPScaledFont(UIFont * _Nullable base, UIFontTextStyle style) {
+    if (!base) { return nil; }
+    return [[UIFontMetrics metricsForTextStyle:style] scaledFontForFont:base];
+}
+
+/// Keeps the label's existing brand font but makes it scale with Dynamic Type.
+/// Safe to call on any label already configured through `Styling`.
+static inline void PPEnableDynamicType(UILabel * _Nullable label, UIFontTextStyle style) {
+    if (!label || !label.font) { return; }
+    label.font = PPScaledFont(label.font, style);
+    label.adjustsFontForContentSizeCategory = YES;
+}
+
+/// Same contract for editable/button text.
+static inline void PPEnableDynamicTypeForTextField(UITextField * _Nullable field, UIFontTextStyle style) {
+    if (!field || !field.font) { return; }
+    field.font = PPScaledFont(field.font, style);
+    field.adjustsFontForContentSizeCategory = YES;
+}
+
+static inline BOOL PPIsAccessibilityTextSize(void) {
+    return UIContentSizeCategoryIsAccessibilityCategory(UIApplication.sharedApplication.preferredContentSizeCategory);
+}
+
+static inline BOOL PPMotionReduced(void) {
+    return UIAccessibilityIsReduceMotionEnabled();
+}
+
+/// Reduce-Motion-safe animation: applies the change instantly when the user has
+/// asked for less motion instead of skipping the state change entirely.
+static inline void PPAnimateRespectingMotion(NSTimeInterval duration,
+                                             void (^ _Nonnull animations)(void),
+                                             void (^ _Nullable completion)(BOOL)) {
+    if (PPMotionReduced()) {
+        animations();
+        if (completion) { completion(YES); }
+        return;
+    }
+    [UIView animateWithDuration:duration
+                          delay:0
+                        options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState
+                     animations:animations
+                     completion:completion];
+}
+
+/// Canonical Pro card surface: token fill, hairline border, continuous corners
+/// and the card shadow — replacing per-screen copies of the same four settings.
+static inline void PPStyleCardSurface(UIView * _Nullable view, CGFloat radius) {
+    if (!view) { return; }
+    view.backgroundColor = [UIColor ppElevatedSurface];
+    PPApplyContinuousCorners(view, radius);
+    view.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    view.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+    PPApplyCardShadow(view);
+}
+
+/// Accent-tinted plate used behind glyphs across Pro surfaces.
+static inline void PPStyleAccentPlate(UIView * _Nullable view, CGFloat radius, CGFloat alpha) {
+    if (!view) { return; }
+    view.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:alpha];
+    PPApplyContinuousCorners(view, radius);
+}
+
 NS_ASSUME_NONNULL_END
 
 #endif /* PPDesignTokens_h */

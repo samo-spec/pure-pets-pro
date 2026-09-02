@@ -2,6 +2,7 @@
 #import "NotificationsListViewController.h"
 #import "PPToast.h"
 #import "NotificationManager.h"   // replace with your manager
+#import "NotificationManager+Targets.h"
 #import "NotificationModel.h"     // your notification model
 #import "NotificationCell.h"
 #import "PPFirebaseCompat.h"
@@ -10,21 +11,65 @@
 #import "PPS.h"
 #import "PPProInAppNotificationPresenter.h"
 
+/// Triage lens.
+///
+/// The inbox is an unbounded live stream — the reference account carries 203
+/// unread — and it previously offered no way to narrow it: no category control,
+/// no unread view, no grouping. The only filter was free-text search. A `Filter`
+/// affordance was clearly intended (`-onFilterTapped` exists with a localized
+/// `PPS_Filter` string) but the `PPS` buttons that would trigger it are disabled,
+/// so it has always been unreachable.
+///
+/// These lenses are local presentation state. They never fetch, never re-derive a
+/// permission, and never change what the listener observes. The category cases map
+/// onto `PPProNotificationTargetKind`, which Objective-C already computes to route
+/// the tap, so a lens can never disagree with a row's icon or its destination.
+typedef NS_ENUM(NSInteger, PPNotificationLens) {
+    PPNotificationLensInbox = 0,
+    PPNotificationLensUnread,
+    PPNotificationLensOrders,
+    PPNotificationLensDelivery,
+    PPNotificationLensChat,
+    PPNotificationLensUpdates,
+};
+
+/// One day's worth of rows. Section grouping comes free from `createdAt`, which
+/// is already the listener's sort key, and turns a 203-row wall into something
+/// with structure.
+@interface PPNotificationDaySection : NSObject
+@property (nonatomic, strong) NSDate *day;
+@property (nonatomic, copy) NSString *title;
+@property (nonatomic, copy) NSArray<NotificationModel *> *items;
+@end
+
+@implementation PPNotificationDaySection
+@end
+
 @interface NotificationsListViewController () <UITableViewDataSource, UITableViewDelegate, PPSDelegate>
 
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSArray<NotificationModel *> *allNotifications;
 @property (nonatomic, strong) NSArray<NotificationModel *> *filteredNotifications;
+@property (nonatomic, copy) NSArray<PPNotificationDaySection *> *daySections;
+@property (nonatomic, assign) PPNotificationLens lens;
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
 
 @property (nonatomic, strong) PPS *searchView;              // the PPS instance
 @property (nonatomic, strong) UIView *searchContainer;      // wrapper for header
+@property (nonatomic, strong) UIView *commandBar;           // pinned identity + lens rail
+@property (nonatomic, strong) UIScrollView *lensRail;
+@property (nonatomic, strong) UIStackView *lensStack;
+@property (nonatomic, strong) NSArray<UIButton *> *lensButtons;
 @property (nonatomic, strong) UILabel *headerTitleLabel;
 @property (nonatomic, strong) UILabel *headerSubtitleLabel;
 @property (nonatomic, strong) UILabel *unreadBadgeLabel;
+@property (nonatomic, strong) UIView *unreadBadgeView;
 @property (nonatomic, strong) UIView *emptyStateView;
 @property (nonatomic, strong) UILabel *emptyTitleLabel;
 @property (nonatomic, strong) UILabel *emptySubtitleLabel;
+@property (nonatomic, strong) UIView *emptyIconShellView;
+@property (nonatomic, strong) UIImageView *emptyIconImageView;
+@property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, strong) UIView *topBackgroundGlowView;
 @property (nonatomic, strong) UIView *bottomBackgroundGlowView;
 
@@ -34,8 +79,35 @@
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> inboxListener;
 @property (nonatomic, copy, nullable) NSDictionary *pendingRoutePayload;
 @property (nonatomic, assign) BOOL didLogMissingPendingRouteMatch;
+@property (nonatomic, assign) BOOL pendingOpenNewestUnreadNotification;
+@property (nonatomic, assign) BOOL hasReceivedInboxSnapshot;
+@property (nonatomic, assign) BOOL hasAppeared;
 @property (nonatomic, strong, nullable) NSError *inboxError;
 @property (nonatomic, copy, nullable) NSString *lastInboxErrorSignature;
+@property (nonatomic, copy, nullable) NSArray<NotificationModel *> *searchResults;
+
+- (void)pp_setupBackgroundGlows;
+- (void)pp_updateBackgroundGlowStyle;
+- (void)setupCommandBar;
+- (void)setupTableView;
+- (void)setupSearchView;
+- (void)setupEmptyStateView;
+- (void)pp_updateLensChips;
+- (void)pp_lensChipTapped:(UIButton *)sender;
+- (void)pp_updateTableHeaderLayout;
+- (void)pp_recomputeVisibleNotifications;
+- (void)pp_rebuildDaySections;
+- (void)pp_updateHeaderMetrics;
+- (void)pp_updateEmptyState;
+- (void)pp_setLoadingIndicatorActive:(BOOL)active;
+- (void)pp_playEntranceIfNeeded;
+- (void)fetchNotificationsShowToast:(BOOL)showToast;
+- (void)pp_consumePendingRoutePayloadIfPossible;
+- (void)pp_consumePendingOpenNewestUnreadNotificationIfPossible;
+- (void)pp_markNotificationReadIfNeeded:(NotificationModel *)model;
+- (void)pp_openNotificationModel:(NotificationModel *)model;
+- (void)pp_pushNotificationDetailForModel:(NotificationModel *)model;
+- (void)reloadTableAnimated:(BOOL)animated;
 @end
 
 static NSString *PPNotificationsRouteTrimmedString(id value)
@@ -69,6 +141,14 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
 
 @implementation NotificationsListViewController
 
+/// Dynamic Type bridge — `Styling fontBold:`/`fontMedium:` return fixed-size
+/// fonts, so this screen previously ignored the user's text-size setting.
+static UIFont *PPNotificationsScaledFont(UIFont *base, UIFontTextStyle style)
+{
+    if (!base) { return nil; }
+    return [[UIFontMetrics metricsForTextStyle:style] scaledFontForFont:base];
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.uid = PPProAuthenticatedNotificationUID();
@@ -77,12 +157,17 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
     self.allNotifications = @[];
     self.filteredNotifications = @[];
     self.isLoading = NO;
+    self.pendingOpenNewestUnreadNotification = NO;
+    self.hasReceivedInboxSnapshot = NO;
+    self.hasAppeared = NO;
 
     [self pp_setupBackgroundGlows];
+    [self setupCommandBar];
     [self setupTableView];
     [self setupSearchView];
     [self setupEmptyStateView];
     [self pp_updateHeaderMetrics];
+    [self pp_recomputeVisibleNotifications];
     [self pp_updateEmptyState];
     [self fetchNotificationsShowToast:YES];
 }
@@ -102,8 +187,11 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
         self.inboxListener = nil;
         self.uid = currentUID;
         self.allNotifications = @[];
-        self.filteredNotifications = @[];
+        self.searchResults = nil;
         self.isLoading = NO;
+        self.pendingOpenNewestUnreadNotification = NO;
+        self.hasReceivedInboxSnapshot = NO;
+        [self pp_recomputeVisibleNotifications];
         [self reloadTableAnimated:NO];
         [self fetchNotificationsShowToast:NO];
     }
@@ -112,8 +200,16 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
+    self.hasAppeared = YES;
     [self pp_playEntranceIfNeeded];
+
+    // A targeted system/push route takes precedence over Command Focus's
+    // broadest-unread request so two detail controllers can never be pushed.
+    BOOL hasSpecificRoutePayload = self.pendingRoutePayload.count > 0;
     [self pp_consumePendingRoutePayloadIfPossible];
+    if (!hasSpecificRoutePayload) {
+        [self pp_consumePendingOpenNewestUnreadNotificationIfPossible];
+    }
 }
 
 - (void)viewDidLayoutSubviews {
@@ -127,6 +223,13 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
         if ([self.traitCollection hasDifferentColorAppearanceComparedToTraitCollection:previousTraitCollection]) {
             [self pp_updateBackgroundGlowStyle];
         }
+    }
+    // Dynamic Type can change while this screen is on-screen; the manually framed
+    // table header must be re-measured or it clips the grown text.
+    if (previousTraitCollection &&
+        ![self.traitCollection.preferredContentSizeCategory isEqualToString:previousTraitCollection.preferredContentSizeCategory]) {
+        [self pp_updateTableHeaderLayout];
+        [self.tableView reloadData];
     }
 }
 
@@ -190,8 +293,18 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
     self.tableView.showsVerticalScrollIndicator = NO;
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
     self.tableView.rowHeight = UITableViewAutomaticDimension;
-    self.tableView.estimatedRowHeight = 104.0;
-    self.tableView.contentInset = UIEdgeInsetsMake(0, 0, 24.0, 0);
+    // Tuned to the real card geometry (insets + icon plate + 3-label stack); the
+    // previous 104 under-estimated it and amplified scroll-offset jumps.
+    self.tableView.estimatedRowHeight = 132.0;
+    // The table used to be pinned to `view.bottomAnchor` with a flat 24pt content
+    // inset and no `contentInsetAdjustmentBehavior`, so the last row rendered
+    // underneath the tab bar — visible as content bleeding through the floating
+    // bar. `hidesBottomBarWhenPushed` is not set at any of this controller's push
+    // sites, so it always lives inside the tab bar container and must respect the
+    // bottom safe area.
+    self.tableView.contentInset = UIEdgeInsetsMake(0, 0, PPSpaceBase, 0);
+    self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAlways;
+    self.tableView.sectionHeaderTopPadding = 0.0;
     [self.tableView registerClass:NotificationCell.class forCellReuseIdentifier:[NotificationCell reuseId]];
 
     // refresh
@@ -207,12 +320,13 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
 
     [self.view addSubview:self.tableView];
 
-    // constraints
+    // constraints — the lens rail is persistent chrome above the scroll area, so
+    // filters stay reachable at row 200 instead of scrolling away with the header.
     [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.tableView.topAnchor constraintEqualToAnchor:self.commandBar.bottomAnchor],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
 
     self.tableView.tableHeaderView = nil;
@@ -220,66 +334,224 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
 
 
 
-- (void)setupSearchView {
-    CGFloat searchHeight = 52.0;
-    self.searchContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 214.0)];
-    self.searchContainer.backgroundColor = UIColor.clearColor;
-    self.searchContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+/// Pinned identity + lens rail.
+///
+/// Replaces the 214pt scrolling hero (`PPHero` + large title + explanatory
+/// subtitle + count pill + 52pt search field), which consumed roughly the top
+/// 40% of the viewport before a single notification was visible, and scrolled
+/// away exactly when a 203-row list made navigation controls most useful.
+///
+/// The explanatory subtitle (`NotificationsInboxSubtitle`) is deliberately not
+/// repeated here: it is a one-time orientation sentence, not per-visit
+/// information. It is still shown where it genuinely helps — the loading and
+/// empty states in `-pp_updateEmptyState`.
+- (void)setupCommandBar {
+    self.lens = PPNotificationLensInbox;
 
-    PPHero *heroSurface = [[PPHero alloc] init];
-    heroSurface.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.searchContainer addSubview:heroSurface];
-
-    UIView *iconShell = [[UIView alloc] init];
-    iconShell.translatesAutoresizingMaskIntoConstraints = NO;
-    iconShell.layer.cornerRadius = 24.0;
-    iconShell.layer.cornerCurve = kCACornerCurveContinuous;
-    [heroSurface addSubview:iconShell];
-
-    UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"bell.badge.fill"]];
-    iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    iconView.tintColor = AppPrimaryClr;
-    iconView.contentMode = UIViewContentModeScaleAspectFit;
-    [iconShell addSubview:iconView];
+    UIView *bar = [[UIView alloc] init];
+    bar.translatesAutoresizingMaskIntoConstraints = NO;
+    bar.backgroundColor = UIColor.clearColor;
+    bar.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [self.view addSubview:bar];
+    self.commandBar = bar;
 
     self.headerTitleLabel = [[UILabel alloc] init];
     self.headerTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.headerTitleLabel.font = [Styling fontBold:30];
+    self.headerTitleLabel.font = PPNotificationsScaledFont([Styling fontBold:PPFontTitle2], UIFontTextStyleTitle2);
+    self.headerTitleLabel.adjustsFontForContentSizeCategory = YES;
     self.headerTitleLabel.textColor = PrimaryTextClr;
     self.headerTitleLabel.textAlignment = [Language alignmentForCurrentLanguage];
-    self.headerTitleLabel.numberOfLines = 1;
+    self.headerTitleLabel.numberOfLines = 2;
+    [bar addSubview:self.headerTitleLabel];
 
-    self.headerSubtitleLabel = [[UILabel alloc] init];
-    self.headerSubtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.headerSubtitleLabel.font = [Styling fontMedium:13];
-    self.headerSubtitleLabel.textColor = [SeconderyTextClr colorWithAlphaComponent:0.86];
-    self.headerSubtitleLabel.textAlignment = [Language alignmentForCurrentLanguage];
-    self.headerSubtitleLabel.numberOfLines = 2;
-
-    UIStackView *copyStack = [[UIStackView alloc] initWithArrangedSubviews:@[
-        self.headerTitleLabel,
-        self.headerSubtitleLabel
-    ]];
-    copyStack.translatesAutoresizingMaskIntoConstraints = NO;
-    copyStack.axis = UILayoutConstraintAxisVertical;
-    copyStack.alignment = UIStackViewAlignmentFill;
-    copyStack.spacing = 5.0;
-    copyStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    [heroSurface addSubview:copyStack];
-
+    // The count is the one live figure that belongs in persistent chrome.
     UIView *badgeView = [[UIView alloc] init];
     badgeView.translatesAutoresizingMaskIntoConstraints = NO;
-    badgeView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
-    badgeView.layer.cornerRadius = 16.0;
-    badgeView.layer.cornerCurve = kCACornerCurveContinuous;
-    [heroSurface addSubview:badgeView];
+    badgeView.backgroundColor = AppPrimaryClrWithAlpha(0.10);
+    PPApplyContinuousCorners(badgeView, PPCornerSmall);
+    [bar addSubview:badgeView];
+    self.unreadBadgeView = badgeView;
 
     self.unreadBadgeLabel = [[UILabel alloc] init];
     self.unreadBadgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.unreadBadgeLabel.font = [Styling fontBold:11];
+    self.unreadBadgeLabel.font = PPNotificationsScaledFont([Styling fontBold:PPFontCaption1], UIFontTextStyleCaption1);
+    self.unreadBadgeLabel.adjustsFontForContentSizeCategory = YES;
     self.unreadBadgeLabel.textColor = AppPrimaryClr;
     self.unreadBadgeLabel.textAlignment = NSTextAlignmentCenter;
+    self.unreadBadgeLabel.numberOfLines = 1;
     [badgeView addSubview:self.unreadBadgeLabel];
+
+    UIScrollView *rail = [[UIScrollView alloc] init];
+    rail.translatesAutoresizingMaskIntoConstraints = NO;
+    rail.showsHorizontalScrollIndicator = NO;
+    rail.alwaysBounceHorizontal = YES;
+    rail.clipsToBounds = NO;
+    rail.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [bar addSubview:rail];
+    self.lensRail = rail;
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.alignment = UIStackViewAlignmentCenter;
+    stack.spacing = PPSpaceSM;
+    stack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [rail addSubview:stack];
+    self.lensStack = stack;
+
+    NSArray<NSNumber *> *lenses = @[
+        @(PPNotificationLensInbox),
+        @(PPNotificationLensUnread),
+        @(PPNotificationLensOrders),
+        @(PPNotificationLensDelivery),
+        @(PPNotificationLensChat),
+        @(PPNotificationLensUpdates),
+    ];
+    NSMutableArray<UIButton *> *buttons = [NSMutableArray array];
+    for (NSNumber *boxed in lenses) {
+        UIButton *chip = [UIButton buttonWithType:UIButtonTypeSystem];
+        chip.translatesAutoresizingMaskIntoConstraints = NO;
+        chip.tag = boxed.integerValue;
+        chip.titleLabel.font = PPNotificationsScaledFont([Styling fontMedium:PPFontSubheadline], UIFontTextStyleSubheadline);
+        chip.titleLabel.adjustsFontForContentSizeCategory = YES;
+        chip.titleLabel.numberOfLines = 1;
+        chip.contentEdgeInsets = UIEdgeInsetsMake(0, PPSpaceMD, 0, PPSpaceMD);
+        PPApplyContinuousCorners(chip, PPCornerSmall);
+        chip.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+        [chip addTarget:self action:@selector(pp_lensChipTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [chip.heightAnchor constraintGreaterThanOrEqualToConstant:PPTouchTargetMin - 8.0].active = YES;
+        [stack addArrangedSubview:chip];
+        [buttons addObject:chip];
+    }
+    self.lensButtons = buttons.copy;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [bar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [bar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [bar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+
+        [self.headerTitleLabel.topAnchor constraintEqualToAnchor:bar.topAnchor constant:PPSpaceMD],
+        [self.headerTitleLabel.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor constant:PPSpaceBase],
+
+        [badgeView.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.headerTitleLabel.trailingAnchor constant:PPSpaceSM],
+        [badgeView.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor constant:-PPSpaceBase],
+        [badgeView.centerYAnchor constraintEqualToAnchor:self.headerTitleLabel.centerYAnchor],
+        [badgeView.heightAnchor constraintGreaterThanOrEqualToConstant:28.0],
+
+        [self.unreadBadgeLabel.leadingAnchor constraintEqualToAnchor:badgeView.leadingAnchor constant:PPSpaceMD],
+        [self.unreadBadgeLabel.trailingAnchor constraintEqualToAnchor:badgeView.trailingAnchor constant:-PPSpaceMD],
+        [self.unreadBadgeLabel.topAnchor constraintEqualToAnchor:badgeView.topAnchor constant:PPSpaceXS],
+        [self.unreadBadgeLabel.bottomAnchor constraintEqualToAnchor:badgeView.bottomAnchor constant:-PPSpaceXS],
+
+        [rail.topAnchor constraintEqualToAnchor:self.headerTitleLabel.bottomAnchor constant:PPSpaceMD],
+        [rail.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor],
+        [rail.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor],
+        [rail.bottomAnchor constraintEqualToAnchor:bar.bottomAnchor constant:-PPSpaceMD],
+
+        [stack.topAnchor constraintEqualToAnchor:rail.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:rail.bottomAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:rail.leadingAnchor constant:PPSpaceBase],
+        [stack.trailingAnchor constraintEqualToAnchor:rail.trailingAnchor constant:-PPSpaceBase],
+        [stack.heightAnchor constraintEqualToAnchor:rail.heightAnchor],
+    ]];
+
+    [self pp_updateLensChips];
+}
+
+- (NSString *)pp_titleForLens:(PPNotificationLens)lens {
+    switch (lens) {
+        case PPNotificationLensInbox:    return kLang(@"Inbox");
+        case PPNotificationLensUnread:   return kLang(@"Unread");
+        case PPNotificationLensOrders:   return kLang(@"notifications_inbox_category_orders");
+        case PPNotificationLensDelivery: return kLang(@"notifications_inbox_category_delivery");
+        case PPNotificationLensChat:     return kLang(@"notifications_inbox_category_chat");
+        case PPNotificationLensUpdates:  return kLang(@"notifications_inbox_category_updates");
+    }
+    return kLang(@"Inbox");
+}
+
+/// Whether a notification belongs to a lens. Category membership is decided by
+/// `+targetKindForPayload:` — the same classification the row's icon and the tap's
+/// destination use — so the three can never disagree.
+- (BOOL)pp_notification:(NotificationModel *)model matchesLens:(PPNotificationLens)lens {
+    if (![model isKindOfClass:NotificationModel.class]) return NO;
+    if (lens == PPNotificationLensInbox) return YES;
+    if (lens == PPNotificationLensUnread) return !model.isRead;
+
+    NSDictionary *payload = [NotificationManager routingPayloadForNotificationModel:model];
+    PPProNotificationTargetKind kind = [NotificationManager targetKindForPayload:payload];
+    switch (lens) {
+        case PPNotificationLensOrders:
+            return kind == PPProNotificationTargetKindFulfillment;
+        case PPNotificationLensDelivery:
+            return kind == PPProNotificationTargetKindDeliveryOrder
+                || kind == PPProNotificationTargetKindCompanyDelivery;
+        case PPNotificationLensChat:
+            return kind == PPProNotificationTargetKindChat;
+        case PPNotificationLensUpdates:
+            return kind == PPProNotificationTargetKindUnknown;
+        default:
+            return YES;
+    }
+}
+
+- (NSUInteger)pp_countForLens:(PPNotificationLens)lens {
+    NSUInteger count = 0;
+    for (NotificationModel *item in self.allNotifications) {
+        if ([self pp_notification:item matchesLens:lens]) count += 1;
+    }
+    return count;
+}
+
+- (void)pp_updateLensChips {
+    for (UIButton *chip in self.lensButtons) {
+        PPNotificationLens lens = (PPNotificationLens)chip.tag;
+        BOOL selected = (lens == self.lens);
+        NSUInteger count = [self pp_countForLens:lens];
+        NSString *title = [self pp_titleForLens:lens];
+        // Counts are appended numerically rather than through a new format string,
+        // so the rail introduces no untranslated copy.
+        NSString *label = count > 0 ? [NSString stringWithFormat:@"%@ · %lu", title, (unsigned long)count] : title;
+
+        [chip setTitle:label forState:UIControlStateNormal];
+        [chip setTitleColor:selected ? UIColor.whiteColor : PrimaryTextClr forState:UIControlStateNormal];
+        chip.backgroundColor = selected ? AppPrimaryClr : AppForgroundColr;
+        chip.layer.borderWidth = selected ? 0.0 : 1.0 / UIScreen.mainScreen.scale;
+        chip.layer.borderColor = PPHairlineColor().CGColor;
+        chip.accessibilityLabel = label;
+        chip.accessibilityTraits = selected
+            ? (UIAccessibilityTraitButton | UIAccessibilityTraitSelected)
+            : UIAccessibilityTraitButton;
+        // An empty lens is still shown — hiding it would make the taxonomy
+        // unstable between refreshes — but it is not offered as a destination.
+        chip.enabled = (count > 0 || selected || lens == PPNotificationLensInbox);
+        chip.alpha = chip.enabled ? 1.0 : 0.45;
+    }
+}
+
+- (void)pp_lensChipTapped:(UIButton *)sender {
+    PPNotificationLens next = (PPNotificationLens)sender.tag;
+    if (next == self.lens) return;
+    self.lens = next;
+    [[UISelectionFeedbackGenerator new] selectionChanged];
+    [self pp_updateLensChips];
+    [self pp_recomputeVisibleNotifications];
+    [self reloadTableAnimated:YES];
+    if (self.daySections.count > 0) {
+        [self.tableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]
+                              atScrollPosition:UITableViewScrollPositionTop
+                                      animated:!UIAccessibilityIsReduceMotionEnabled()];
+    }
+}
+
+- (void)setupSearchView {
+    CGFloat searchHeight = 52.0;
+    // Only the search field scrolls now. Identity and the lens rail live in the
+    // pinned command bar, so this header is 76pt instead of 214pt and the first
+    // notification is visible on first paint.
+    self.searchContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 76.0)];
+    self.searchContainer.backgroundColor = UIColor.clearColor;
+    self.searchContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth;
 
     // PPS instance
     self.searchView = [[PPS alloc] initWithFrame:CGRectZero];
@@ -311,41 +583,12 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
 
     [self.searchContainer addSubview:self.searchView];
 
-    // layout inside container
     [NSLayoutConstraint activateConstraints:@[
-        [heroSurface.topAnchor constraintEqualToAnchor:self.searchContainer.topAnchor constant:16.0],
-        [heroSurface.leadingAnchor constraintEqualToAnchor:self.searchContainer.leadingAnchor constant:16.0],
-        [heroSurface.trailingAnchor constraintEqualToAnchor:self.searchContainer.trailingAnchor constant:-16.0],
-        [heroSurface.heightAnchor constraintGreaterThanOrEqualToConstant:112.0],
-
-        [iconShell.trailingAnchor constraintEqualToAnchor:heroSurface.trailingAnchor constant:-20.0],
-        [iconShell.centerYAnchor constraintEqualToAnchor:heroSurface.centerYAnchor],
-        [iconShell.widthAnchor constraintEqualToConstant:48.0],
-        [iconShell.heightAnchor constraintEqualToConstant:48.0],
-
-        [iconView.centerXAnchor constraintEqualToAnchor:iconShell.centerXAnchor],
-        [iconView.centerYAnchor constraintEqualToAnchor:iconShell.centerYAnchor],
-        [iconView.widthAnchor constraintEqualToConstant:21.0],
-        [iconView.heightAnchor constraintEqualToConstant:21.0],
-
-        [copyStack.topAnchor constraintEqualToAnchor:heroSurface.topAnchor constant:36.0],
-        [copyStack.leadingAnchor constraintEqualToAnchor:heroSurface.leadingAnchor constant:22.0],
-        [copyStack.trailingAnchor constraintLessThanOrEqualToAnchor:iconShell.leadingAnchor constant:-16.0],
-
-        [badgeView.topAnchor constraintEqualToAnchor:copyStack.bottomAnchor constant:12.0],
-        [badgeView.leadingAnchor constraintEqualToAnchor:copyStack.leadingAnchor],
-        [badgeView.heightAnchor constraintEqualToConstant:32.0],
-        [badgeView.bottomAnchor constraintLessThanOrEqualToAnchor:heroSurface.bottomAnchor constant:-18.0],
-
-        [self.unreadBadgeLabel.leadingAnchor constraintEqualToAnchor:badgeView.leadingAnchor constant:14.0],
-        [self.unreadBadgeLabel.trailingAnchor constraintEqualToAnchor:badgeView.trailingAnchor constant:-14.0],
-        [self.unreadBadgeLabel.centerYAnchor constraintEqualToAnchor:badgeView.centerYAnchor],
-
-        [self.searchView.topAnchor constraintEqualToAnchor:heroSurface.bottomAnchor constant:14.0],
-        [self.searchView.leadingAnchor constraintEqualToAnchor:self.searchContainer.leadingAnchor constant:16.0],
-        [self.searchView.trailingAnchor constraintEqualToAnchor:self.searchContainer.trailingAnchor constant:-16.0],
+        [self.searchView.topAnchor constraintEqualToAnchor:self.searchContainer.topAnchor constant:PPSpaceSM],
+        [self.searchView.leadingAnchor constraintEqualToAnchor:self.searchContainer.leadingAnchor constant:PPSpaceBase],
+        [self.searchView.trailingAnchor constraintEqualToAnchor:self.searchContainer.trailingAnchor constant:-PPSpaceBase],
         [self.searchView.heightAnchor constraintEqualToConstant:searchHeight],
-        [self.searchView.bottomAnchor constraintEqualToAnchor:self.searchContainer.bottomAnchor constant:-12.0]
+        [self.searchView.bottomAnchor constraintEqualToAnchor:self.searchContainer.bottomAnchor constant:-PPSpaceMD]
     ]];
 
     // assign as tableHeaderView (works nicely with inset grouped)
@@ -371,30 +614,42 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
 
     UIView *iconShell = [[UIView alloc] init];
     iconShell.translatesAutoresizingMaskIntoConstraints = NO;
-    iconShell.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
-    iconShell.layer.cornerRadius = 34.0;
-    iconShell.layer.cornerCurve = kCACornerCurveContinuous;
+    iconShell.backgroundColor = AppPrimaryClrWithAlpha(0.08);
+    PPApplyContinuousCorners(iconShell, 34.0);
     [emptyView addSubview:iconShell];
+    self.emptyIconShellView = iconShell;
 
     UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"bell.slash.fill"]];
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    iconView.tintColor = [AppPrimaryClr colorWithAlphaComponent:0.82];
+    iconView.tintColor = AppPrimaryClrWithAlpha(0.82);
     iconView.contentMode = UIViewContentModeScaleAspectFit;
     [iconShell addSubview:iconView];
+    self.emptyIconImageView = iconView;
+
+    // A real loading affordance. This screen had no spinner at all: the loading
+    // state was a text swap on the same empty view as "no notifications", so a
+    // slow first paint was indistinguishable from an empty inbox.
+    self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    self.loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+    self.loadingIndicator.color = AppPrimaryClr;
+    self.loadingIndicator.hidesWhenStopped = YES;
+    [iconShell addSubview:self.loadingIndicator];
 
     self.emptyTitleLabel = [[UILabel alloc] init];
     self.emptyTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.emptyTitleLabel.font = [Styling fontBold:20];
+    self.emptyTitleLabel.font = PPNotificationsScaledFont([Styling fontBold:PPFontTitle2], UIFontTextStyleTitle2);
+    self.emptyTitleLabel.adjustsFontForContentSizeCategory = YES;
     self.emptyTitleLabel.textColor = PrimaryTextClr;
     self.emptyTitleLabel.textAlignment = NSTextAlignmentCenter;
-    self.emptyTitleLabel.numberOfLines = 2;
+    self.emptyTitleLabel.numberOfLines = 3;
 
     self.emptySubtitleLabel = [[UILabel alloc] init];
     self.emptySubtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.emptySubtitleLabel.font = [Styling fontMedium:13];
-    self.emptySubtitleLabel.textColor = [SeconderyTextClr colorWithAlphaComponent:0.82];
+    self.emptySubtitleLabel.font = PPNotificationsScaledFont([Styling fontMedium:13], UIFontTextStyleSubheadline);
+    self.emptySubtitleLabel.adjustsFontForContentSizeCategory = YES;
+    self.emptySubtitleLabel.textColor = SeconderyTextClr;
     self.emptySubtitleLabel.textAlignment = NSTextAlignmentCenter;
-    self.emptySubtitleLabel.numberOfLines = 3;
+    self.emptySubtitleLabel.numberOfLines = 4;
 
     UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[
         iconShell,
@@ -414,6 +669,8 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
         [iconView.centerYAnchor constraintEqualToAnchor:iconShell.centerYAnchor],
         [iconView.widthAnchor constraintEqualToConstant:27.0],
         [iconView.heightAnchor constraintEqualToConstant:27.0],
+        [self.loadingIndicator.centerXAnchor constraintEqualToAnchor:iconShell.centerXAnchor],
+        [self.loadingIndicator.centerYAnchor constraintEqualToAnchor:iconShell.centerYAnchor],
         [stack.centerXAnchor constraintEqualToAnchor:emptyView.centerXAnchor],
         [stack.centerYAnchor constraintEqualToAnchor:emptyView.centerYAnchor constant:54.0],
         [stack.leadingAnchor constraintGreaterThanOrEqualToAnchor:emptyView.leadingAnchor constant:36.0],
@@ -434,8 +691,8 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
     CGSize targetSize = CGSizeMake(width, UILayoutFittingCompressedSize.height);
     CGFloat height = [self.searchContainer systemLayoutSizeFittingSize:targetSize
                                          withHorizontalFittingPriority:UILayoutPriorityRequired
-                                               verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height + 18.0;
-    height = MAX(height, 214.0);
+                                               verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
+    height = MAX(height, 76.0);
 
     CGRect frame = self.searchContainer.frame;
     if (fabs(frame.size.width - width) > 0.5 || fabs(frame.size.height - height) > 0.5) {
@@ -443,6 +700,90 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
         self.searchContainer.frame = frame;
         self.tableView.tableHeaderView = self.searchContainer;
     }
+}
+
+/// The one place the visible set is derived.
+///
+/// Lens and search used to be unable to coexist: `-searchView:didChangeText:`
+/// assigned `filteredNotifications = allNotifications` on an empty query, and the
+/// listener callback did the same, so any other narrowing would have been silently
+/// discarded on the next keystroke or snapshot. Composing both here — and having
+/// every caller route through it — makes that class of desync unrepresentable.
+- (void)pp_recomputeVisibleNotifications {
+    NSString *query = self.searchView.textField.text ?: @"";
+    NSArray<NotificationModel *> *base = self.allNotifications ?: @[];
+
+    NSMutableArray<NotificationModel *> *lensed = [NSMutableArray arrayWithCapacity:base.count];
+    for (NotificationModel *item in base) {
+        if ([self pp_notification:item matchesLens:self.lens]) [lensed addObject:item];
+    }
+
+    if (query.length == 0) {
+        self.filteredNotifications = lensed.copy;
+        [self pp_rebuildDaySections];
+        return;
+    }
+
+    // Search results arrive asynchronously from PPS; intersect them with the lens
+    // rather than replacing it.
+    NSMutableSet<NSString *> *allowed = [NSMutableSet setWithCapacity:lensed.count];
+    for (NotificationModel *item in lensed) {
+        if (item.nid.length > 0) [allowed addObject:item.nid];
+    }
+    NSMutableArray<NotificationModel *> *result = [NSMutableArray array];
+    for (NotificationModel *item in self.searchResults ?: @[]) {
+        if ([item isKindOfClass:NotificationModel.class] && [allowed containsObject:item.nid]) {
+            [result addObject:item];
+        }
+    }
+    self.filteredNotifications = result.copy;
+    [self pp_rebuildDaySections];
+}
+
+/// Groups the visible rows by calendar day.
+///
+/// `createdAt` is already the listener's sort key, so this adds structure without
+/// adding data. Section titles use `NSDateFormatter.doesRelativeDateFormatting`,
+/// which yields the system's own localized "Today"/"Yesterday" — no new
+/// localization keys, and correct in every locale the device supports.
+- (void)pp_rebuildDaySections {
+    NSArray<NotificationModel *> *items = self.filteredNotifications ?: @[];
+    if (items.count == 0) {
+        self.daySections = @[];
+        return;
+    }
+
+    NSCalendar *calendar = NSCalendar.currentCalendar;
+    NSDateFormatter *formatter = [NSDateFormatter new];
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:[Language currentLanguageCode] ?: @"en"];
+    formatter.dateStyle = NSDateFormatterMediumStyle;
+    formatter.timeStyle = NSDateFormatterNoStyle;
+    formatter.doesRelativeDateFormatting = YES;
+
+    NSMutableArray<PPNotificationDaySection *> *sections = [NSMutableArray array];
+    PPNotificationDaySection *current = nil;
+    NSMutableArray<NotificationModel *> *bucket = nil;
+
+    for (NotificationModel *item in items) {
+        NSDate *day = [calendar startOfDayForDate:item.createdAt ?: [NSDate date]];
+        if (!current || ![calendar isDate:current.day inSameDayAsDate:day]) {
+            if (current) { current.items = bucket.copy; [sections addObject:current]; }
+            current = [PPNotificationDaySection new];
+            current.day = day;
+            current.title = [formatter stringFromDate:day];
+            bucket = [NSMutableArray array];
+        }
+        [bucket addObject:item];
+    }
+    if (current) { current.items = bucket.copy; [sections addObject:current]; }
+    self.daySections = sections.copy;
+}
+
+- (NotificationModel * _Nullable)pp_notificationAtIndexPath:(NSIndexPath *)indexPath {
+    if (indexPath.section < 0 || indexPath.section >= (NSInteger)self.daySections.count) return nil;
+    PPNotificationDaySection *section = self.daySections[indexPath.section];
+    if (indexPath.row < 0 || indexPath.row >= (NSInteger)section.items.count) return nil;
+    return section.items[indexPath.row];
 }
 
 - (void)pp_updateHeaderMetrics {
@@ -453,12 +794,16 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
     }
 
     self.headerTitleLabel.text = kLang(@"Inbox");
-    self.headerSubtitleLabel.text = kLang(@"NotificationsInboxSubtitle");
     if (unreadCount > 0) {
         self.unreadBadgeLabel.text = [NSString stringWithFormat:kLang(@"NotificationsUnreadFormat"), (unsigned long)unreadCount];
+        self.unreadBadgeView.backgroundColor = AppPrimaryClrWithAlpha(0.10);
+        self.unreadBadgeLabel.textColor = AppPrimaryClr;
     } else {
         self.unreadBadgeLabel.text = kLang(@"NotificationsAllRead");
+        self.unreadBadgeView.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.08];
+        self.unreadBadgeLabel.textColor = SeconderyTextClr;
     }
+    [self pp_updateLensChips];
 }
 
 - (void)pp_updateEmptyState {
@@ -466,36 +811,65 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
     BOOL shouldShowEmpty = (self.filteredNotifications.count == 0);
     self.emptyStateView.hidden = !shouldShowEmpty;
 
-    if (self.isLoading && self.allNotifications.count == 0) {
+    BOOL isFirstLoad = (self.isLoading && self.allNotifications.count == 0);
+    // `inboxError` is also raised for cache-only snapshots while valid data is
+    // still rendered, so the error state is only claimed when nothing loaded.
+    BOOL isErrored = (self.inboxError != nil && self.allNotifications.count == 0);
+
+    [self pp_setLoadingIndicatorActive:isFirstLoad];
+
+    if (isFirstLoad) {
         self.emptyTitleLabel.text = kLang(@"Loading");
         self.emptySubtitleLabel.text = kLang(@"NotificationsInboxSubtitle");
         return;
     }
 
-    if (self.inboxError && self.allNotifications.count == 0) {
+    if (isErrored) {
+        self.emptyIconImageView.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill"];
         self.emptyTitleLabel.text = kLang(@"FetchError");
         self.emptySubtitleLabel.text = kLang(@"PullToRefresh");
         return;
     }
 
+    self.emptyIconImageView.image = [UIImage systemImageNamed:isSearching ? @"magnifyingglass" : @"bell.slash.fill"];
     self.emptyTitleLabel.text = isSearching ? kLang(@"NotificationsNoSearchResults") : kLang(@"NoNotifications");
     self.emptySubtitleLabel.text = isSearching ? kLang(@"NotificationsNoSearchSubtitle") : kLang(@"NotificationsEmptySubtitle");
+
+    // A lens that filters to zero is not an empty inbox, and saying "no
+    // notifications yet" there would be false. Name the lens instead, reusing its
+    // own already-localized title.
+    if (!isSearching && self.lens != PPNotificationLensInbox && self.allNotifications.count > 0) {
+        self.emptyIconImageView.image = [UIImage systemImageNamed:@"line.3.horizontal.decrease.circle"];
+        self.emptyTitleLabel.text = [self pp_titleForLens:self.lens];
+        self.emptySubtitleLabel.text = kLang(@"NotificationsAllRead");
+    }
+}
+
+/// While loading, the spinner takes the icon shell so the state reads as work in
+/// progress rather than as an empty inbox.
+- (void)pp_setLoadingIndicatorActive:(BOOL)active {
+    self.emptyIconImageView.hidden = active;
+    if (active) {
+        [self.loadingIndicator startAnimating];
+    } else {
+        [self.loadingIndicator stopAnimating];
+    }
 }
 
 - (void)pp_playEntranceIfNeeded {
     if (self.didPlayEntrance || UIAccessibilityIsReduceMotionEnabled()) return;
     self.didPlayEntrance = YES;
 
-    self.searchContainer.alpha = 0.0;
-    self.searchContainer.transform = CGAffineTransformMakeTranslation(0, 14.0);
+    self.commandBar.alpha = 0.0;
+    self.commandBar.transform = CGAffineTransformMakeTranslation(0, 14.0);
     [UIView animateWithDuration:0.48
                           delay:0.02
          usingSpringWithDamping:0.92
           initialSpringVelocity:0.20
                         options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState
                      animations:^{
-        self.searchContainer.alpha = 1.0;
-        self.searchContainer.transform = CGAffineTransformIdentity;
+        self.commandBar.alpha = 1.0;
+        self.commandBar.transform = CGAffineTransformIdentity;
     } completion:nil];
 }
 
@@ -521,6 +895,7 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
 - (void)fetchNotificationsShowToast:(BOOL)showToast {
     if (self.isLoading) return;
     self.isLoading = YES;
+    self.hasReceivedInboxSnapshot = NO;
     DLog(@"Fetching notifications...");
     [self pp_updateEmptyState];
 
@@ -533,7 +908,8 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
         self.isLoading = NO;
         [self.refreshControl endRefreshing];
         self.allNotifications = @[];
-        self.filteredNotifications = @[];
+        self.searchResults = nil;
+        [self pp_recomputeVisibleNotifications];
         [self reloadTableAnimated:NO];
         return;
     }
@@ -548,6 +924,7 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
         self.isLoading = NO;
+        self.hasReceivedInboxSnapshot = YES;
         if (self.refreshControl.isRefreshing) [self.refreshControl endRefreshing];
 
         self.inboxError = error;
@@ -567,9 +944,6 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
         // instead of replacing the inbox with an indistinguishable empty state.
         if (!error || items.count > 0 || self.allNotifications.count == 0) {
             self.allNotifications = items ?: @[];
-            if (self.searchView.textField.text.length == 0) {
-                self.filteredNotifications = self.allNotifications;
-            }
         }
         // update PPS search index with items
         [self.searchView setSearchItems:self.allNotifications stringProvider:^NSString * _Nonnull(id item) {
@@ -580,8 +954,13 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
         }];
 
         [self pp_updateHeaderMetrics];
+        [self pp_recomputeVisibleNotifications];
         [self reloadTableAnimated:YES];
+        BOOL hasSpecificRoutePayload = self.pendingRoutePayload.count > 0;
         [self pp_consumePendingRoutePayloadIfPossible];
+        if (!hasSpecificRoutePayload) {
+            [self pp_consumePendingOpenNewestUnreadNotificationIfPossible];
+        }
         if (!error && shouldToastLoaded) {
             [PPToast toast:kLang(@"NotificationsLoaded") style:PPToastStyleSuccess haptic:NO duration:1.0 position:PPToastPositionBottom inView:self.view];
             shouldToastLoaded = NO;
@@ -732,15 +1111,60 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
     [self pp_openNotificationModel:match];
 }
 
+/// Command Focus cannot truthfully name an unread record before the inbox has
+/// loaded. It therefore requests the latest unread item only after this
+/// controller receives the authenticated, manager-sorted snapshot.
+- (void)pp_openNewestUnreadNotificationWhenReady
+{
+    self.pendingOpenNewestUnreadNotification = YES;
+    [self pp_consumePendingOpenNewestUnreadNotificationIfPossible];
+}
+
+- (void)pp_consumePendingOpenNewestUnreadNotificationIfPossible
+{
+    if (!self.pendingOpenNewestUnreadNotification ||
+        !self.hasReceivedInboxSnapshot ||
+        !self.hasAppeared) {
+        return;
+    }
+
+    self.pendingOpenNewestUnreadNotification = NO;
+    for (NotificationModel *item in self.allNotifications) {
+        if ([item isKindOfClass:NotificationModel.class] && !item.isRead) {
+            [self pp_openNotificationModel:item];
+            return;
+        }
+    }
+    // The dashboard count may have changed between snapshots. In that case the
+    // expected safe result is the inbox itself, never a stale or fabricated row.
+}
+
 - (void)pp_markNotificationReadIfNeeded:(NotificationModel *)model
 {
     if (![model isKindOfClass:NotificationModel.class] || model.isRead) {
         return;
     }
 
+    // Optimistic, but no longer unaccountable. Every call site previously passed
+    // `completion:nil`, so a rejected `userNotificationInboxReadAck` /
+    // `staffNotificationInboxReadAck` left the row permanently showing as read
+    // with no rollback and nothing surfaced. The local flip is kept for
+    // responsiveness and reverted if the server refuses.
     model.isRead = YES;
     [self pp_updateHeaderMetrics];
-    [[NotificationManager shared] markRead:model forUser:self.uid completion:nil];
+    [self pp_recomputeVisibleNotifications];
+
+    __weak typeof(self) weakSelf = self;
+    [[NotificationManager shared] markRead:model forUser:self.uid completion:^(NSError * _Nullable error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || !error) return;
+        model.isRead = NO;
+        [self pp_updateHeaderMetrics];
+        [self pp_recomputeVisibleNotifications];
+        [self reloadTableAnimated:NO];
+        DLog(@"[NotificationsV2] read-ack rejected | domain=%@ code=%ld", error.domain ?: @"unknown", (long)error.code);
+        [PPToast toast:kLang(@"FetchError") style:PPToastStyleError haptic:YES duration:2.0 position:PPToastPositionBottom inView:self.view];
+    }];
 }
 
 - (void)pp_openNotificationModel:(NotificationModel *)model
@@ -766,7 +1190,40 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
         return;
     }
 
+    // Route to the thing the notification is *about*.
+    //
+    // Every non-company-delivery row used to push `NotificationDetailViewController`
+    // — a screen that restates the notification — even though
+    // `NotificationManager+Targets` already knew how to open the fulfillment, the
+    // delivery order or the chat thread, and was already doing exactly that for
+    // push deep-links. Tapping "New order #PP-…" now opens the order.
+    //
+    // No new authorization: `+routePayload:` performs the same ownership/scope
+    // checks and pushes the same controllers as the push path, and reports whether
+    // it handled the payload. The detail screen remains the honest fallback for a
+    // notification with no concrete target.
+    NSDictionary *routingPayload = [NotificationManager routingPayloadForNotificationModel:model];
+    if ([NotificationManager payloadHasDirectTarget:routingPayload]) {
+        __weak typeof(self) weakSelf = self;
+        [NotificationManager routePayload:routingPayload
+                fromNavigationController:self.navigationController
+                               presenter:self
+                              completion:^(BOOL handled) {
+            if (handled) return;
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            [self pp_pushNotificationDetailForModel:model];
+        }];
+        return;
+    }
+
+    [self pp_pushNotificationDetailForModel:model];
+}
+
+- (void)pp_pushNotificationDetailForModel:(NotificationModel *)model
+{
     NotificationDetailViewController *vc = [[NotificationDetailViewController alloc] initWithModel:model userID:self.uid];
+    vc.hidesBottomBarWhenPushed = YES;
     [self.navigationController pushViewController:vc animated:YES];
 }
 
@@ -775,8 +1232,8 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
 - (void)searchView:(PPS *)view didChangeText:(NSString *)text {
     // PPS has filterAsyncForText:completion:
     if (text.length == 0) {
-        // restore all
-        self.filteredNotifications = self.allNotifications;
+        self.searchResults = nil;
+        [self pp_recomputeVisibleNotifications];
         [self reloadTableAnimated:YES];
         return;
     }
@@ -785,8 +1242,11 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
     [view filterAsyncForText:text completion:^(NSString * _Nonnull query, NSArray * _Nonnull results) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
-        // results are objects preserved from items array (NotificationModel)
-        self.filteredNotifications = results ?: @[];
+        // results are objects preserved from items array (NotificationModel).
+        // They are intersected with the active lens in pp_recomputeVisibleNotifications
+        // rather than replacing it.
+        self.searchResults = results ?: @[];
+        [self pp_recomputeVisibleNotifications];
         [self reloadTableAnimated:YES];
     }];
 }
@@ -803,6 +1263,9 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
     [self.tableView reloadData];
 
     if (!animated || self.filteredNotifications.count == 0) return;
+    // Reduce Motion was honoured by the header entrance but not here, so the
+    // row stagger still ran. It is now gated the same way.
+    if (UIAccessibilityIsReduceMotionEnabled()) return;
 
     NSArray *cells = [self.tableView visibleCells];
     CGFloat delay = 0.0;
@@ -820,36 +1283,86 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
             cell.alpha = 1.0;
             cell.transform = CGAffineTransformIdentity;
         } completion:nil];
-        delay += 0.035;
+        // Capped so a full screen of rows never feels slow to settle.
+        delay = MIN(delay + 0.035, 0.28);
     }
 }
 
 #pragma mark - UITableViewDataSource
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 1;
+    return (NSInteger)self.daySections.count;
 }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.filteredNotifications.count;
+    if (section < 0 || section >= (NSInteger)self.daySections.count) return 0;
+    return (NSInteger)self.daySections[section].items.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    NotificationModel *m = self.filteredNotifications[indexPath.row];
     NotificationCell *cell = [tableView dequeueReusableCellWithIdentifier:[NotificationCell reuseId] forIndexPath:indexPath];
-    [cell configure:m];
-
+    NotificationModel *m = [self pp_notificationAtIndexPath:indexPath];
+    if (m) { [cell configure:m]; }
     return cell;
+}
+
+/// Sticky day header. The title is the system's own relative date formatting, so
+/// this adds structure to a 203-row list without adding copy or a new key.
+- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
+    if (section < 0 || section >= (NSInteger)self.daySections.count) return nil;
+
+    UIView *container = [[UIView alloc] init];
+    container.backgroundColor = UIColor.clearColor;
+    container.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+
+    UIView *pill = [[UIView alloc] init];
+    pill.translatesAutoresizingMaskIntoConstraints = NO;
+    pill.backgroundColor = AppForgroundColr;
+    pill.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    pill.layer.borderColor = PPHairlineColor().CGColor;
+    PPApplyContinuousCorners(pill, PPCornerSmall);
+    [container addSubview:pill];
+
+    UILabel *label = [[UILabel alloc] init];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = self.daySections[section].title;
+    label.font = PPNotificationsScaledFont([Styling fontBold:PPFontCaption1], UIFontTextStyleCaption1);
+    label.adjustsFontForContentSizeCategory = YES;
+    label.textColor = SeconderyTextClr;
+    label.numberOfLines = 1;
+    label.textAlignment = [Language alignmentForCurrentLanguage];
+    [pill addSubview:label];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [pill.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:PPSpaceBase],
+        [pill.trailingAnchor constraintLessThanOrEqualToAnchor:container.trailingAnchor constant:-PPSpaceBase],
+        [pill.topAnchor constraintEqualToAnchor:container.topAnchor constant:PPSpaceSM],
+        [pill.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-PPSpaceXS],
+        [label.leadingAnchor constraintEqualToAnchor:pill.leadingAnchor constant:PPSpaceMD],
+        [label.trailingAnchor constraintEqualToAnchor:pill.trailingAnchor constant:-PPSpaceMD],
+        [label.topAnchor constraintEqualToAnchor:pill.topAnchor constant:PPSpaceXS],
+        [label.bottomAnchor constraintEqualToAnchor:pill.bottomAnchor constant:-PPSpaceXS],
+    ]];
+    return container;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    return UITableViewAutomaticDimension;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView estimatedHeightForHeaderInSection:(NSInteger)section {
+    return 40.0;
 }
 
 #pragma mark - UITableViewDelegate
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (self.filteredNotifications.count == 0 || indexPath.row >= self.filteredNotifications.count) {
-        [tableView deselectRowAtIndexPath:indexPath animated:YES];
-        return;
-    }
-    NotificationModel *m = self.filteredNotifications[indexPath.row];
+    NotificationModel *m = [self pp_notificationAtIndexPath:indexPath];
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (!m) { return; }
     [self pp_openNotificationModel:m];
-    [tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationNone];
+    // Marking read can move a row out of the active lens (the unread view in
+    // particular), so the section model is rebuilt instead of a now-stale index
+    // path being reloaded in place.
+    [self reloadTableAnimated:NO];
 }
 
 #pragma mark - Dealloc

@@ -17,6 +17,8 @@ typedef NS_ENUM(NSInteger, PPUserCachePolicy) {
 
 @class UserModel;
 @class LOTAnimationView;
+@class FIRUser;
+@protocol FIRListenerRegistration;
 
 NS_ASSUME_NONNULL_BEGIN
 

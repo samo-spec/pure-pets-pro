@@ -56,6 +56,9 @@ static NSString * const kPPKeyBaseButton = @"__base_button";
                                              title:(NSString * _Nullable)title
                                           showBack:(BOOL)showBack;
 - (void)onBack;
+- (void)pp_navBarAddLeftButton:(UIButton *)btn key:(NSString *)key;
+- (void)pp_navBarAddRightButton:(UIButton *)btn key:(NSString *)key;
+- (void)pp_navBarAddActionButton:(UIButton *)button key:(NSString *)key;
 /// ===== Extra controls (optional) =====
 - (void)pp_navBarSetTitle:(NSString * _Nullable)titleString;
 - (void)pp_navBarSetVisible:(BOOL)visible animated:(BOOL)animated;

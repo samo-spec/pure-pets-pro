@@ -68,6 +68,7 @@ typedef NS_ENUM(NSInteger, OnlineStatus) {
 
 #pragma mark - Roles
 @property (nonatomic, assign) UserRole role;
+@property (nonatomic, copy, nullable) NSString *roleSummary;
 @property (nonatomic, assign) BOOL isAdmin;
 @property (nonatomic, assign) BOOL isSuperAdmin;
 @property (nonatomic, assign) BOOL isBlocked;

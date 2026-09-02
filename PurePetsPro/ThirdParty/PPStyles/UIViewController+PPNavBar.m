@@ -57,7 +57,32 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
     vc.navigationItem.rightBarButtonItems = nil;
 }
 
+@interface PPNavBarContainer : UIView
+@end
 
+@implementation PPNavBarContainer
+
+- (BOOL)pointInside:(CGPoint)point withEvent:(UIEvent *)event {
+    if (self.isHidden || self.alpha < 0.01) { return NO; }
+    for (UIView *v in self.subviews) {
+        if (v.hidden || v.alpha < 0.01 || !v.userInteractionEnabled) { continue; }
+        CGPoint pInSub = [v convertPoint:point fromView:self];
+        if ([v pointInside:pInSub withEvent:event]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    UIView *hit = [super hitTest:point withEvent:event];
+    if (hit == self) {
+        return nil;
+    }
+    return hit;
+}
+
+@end
 
 @implementation UIViewController (PPNavBar)
 
@@ -89,7 +114,7 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
         return bar;
     }
     
-    bar = [UIView new];
+    bar = [PPNavBarContainer new];
     bar.translatesAutoresizingMaskIntoConstraints = NO;
     bar.backgroundColor = UIColor.clearColor;
     bar.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
@@ -385,10 +410,29 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
 #pragma mark - Default back
 
 - (void)onBack {
-    if (self.navigationController) {
+    if (self.navigationController && self.navigationController.viewControllers.count > 1) {
         [self.navigationController popViewControllerAnimated:YES];
-    } else {
+    } else if (self.presentingViewController || self.navigationController.presentingViewController) {
         [self dismissViewControllerAnimated:YES completion:nil];
+    } else if (self.navigationController) {
+        [self.navigationController popViewControllerAnimated:YES];
+    }
+}
+
+- (void)pp_navBarAddLeftButton:(UIButton *)btn key:(NSString *)key {
+    [self _pp_addLeftButton:btn key:key];
+}
+
+- (void)pp_navBarAddRightButton:(UIButton *)btn key:(NSString *)key {
+    [self _pp_addRightButton:btn key:key];
+}
+
+- (void)pp_navBarAddActionButton:(UIButton *)button key:(NSString *)key {
+    BOOL isRTL = PPIsRTL(self);
+    if (isRTL) {
+        [self _pp_addLeftButton:button key:key];
+    } else {
+        [self _pp_addRightButton:button key:key];
     }
 }
 

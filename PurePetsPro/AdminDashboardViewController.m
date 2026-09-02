@@ -123,8 +123,11 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
     return PPSafeString(payload[@"chatId"]);
 }
 
-@interface AdminDashboardViewController ()<TOCropViewControllerDelegate, PPProCommandCenterSurfaceControllerDelegate>
+@interface AdminDashboardViewController ()<TOCropViewControllerDelegate, PPProCommandCenterSurfaceControllerDelegate, UINavigationControllerDelegate>
 @property (nonatomic, strong) UIButton *addPhotoButton;
+@property (nonatomic, strong) PPProPriorityNotificationCard *priorityNotificationCard;
+@property (nonatomic, strong) PPProPriorityFulfillmentCard *priorityFulfillmentCard;
+@property (nonatomic, strong) PPProQuickActionsDeckView *quickActionsDeckView;
 @property (nonatomic, strong) PPQuickActionsView *quickActionsView;
 
 @property (nonatomic, strong) UIImageView *avatarIMV;
@@ -262,7 +265,9 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 - (void)pp_refreshPulseAfterInvalidActionTarget;
 - (void)pp_finishCommandCenterActionNavigation;
 - (void)pp_routeCommandCenterRoute:(NSString *)route;
-- (void)pp_presentCommandCenterMoreMenu;
+- (void)pp_pushCommandCenterMenuMap;
+- (void)pp_pushCommandCenterMore;
+- (void)pp_syncDockSelectionWithTopViewController;
 - (nullable UserModel *)pp_activeDashboardUser;
 - (BOOL)pp_canAccessPermission:(NSString *)permKey;
 - (BOOL)pp_canManageDelivery;
@@ -310,10 +315,7 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 - (void)pp_configureDashboardAppearance;
 - (void)pp_buildDashboardHeaderIfNeeded;
 - (void)pp_refreshQuickActions;
-- (NSArray<PPQuickActionItem *> *)pp_dashboardQuickActions;
-- (NSArray<PPDashboardQuickActionRailItem *> *)pp_dashboardQuickActionsRail;
-- (NSArray<PPDashboardQuickActionRailItem *> *)pp_dashboardRailActions:(NSArray<PPDashboardQuickActionRailItem *> *)railActions
-                                              excludingGridActions:(NSArray<PPQuickActionItem *> *)gridActions;
+- (NSArray<PPProQuickActionData *> *)pp_buildProQuickActionsDeck;
 - (void)pp_startQuickActionSignalObserversForUser:(UserModel *)user;
 - (void)pp_stopQuickActionSignalObservers;
 - (void)pp_startPendingOrdersObserverForUID:(NSString *)uid;
@@ -1722,6 +1724,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_updateNotificationsRowBadge {
+    [self.priorityNotificationCard updateUnreadCount:self.inboxUnreadCount];
     XLFormRowDescriptor *notificationsRow = [self.form formRowWithTag:@"notificationsInbox"];
     if (notificationsRow) {
         NSMutableDictionary *dict = [notificationsRow.value mutableCopy] ?: [NSMutableDictionary dictionary];
@@ -1882,6 +1885,14 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         [self reloadFormRow:supportChatsRow];
     }
     [self pp_refreshQuickActions];
+    // Sync official tab bar badge (support + inbox)
+    NSInteger combinedBadge = self.inboxUnreadCount + self.supportChatsUnreadThreadsCount;
+    if ([self.tabBarController isKindOfClass:NSClassFromString(@"PPProRootTabBarController")]) {
+        PPProRootTabBarController *tabBar = (PPProRootTabBarController *)self.tabBarController;
+        [tabBar updateNotificationBadge:combinedBadge];
+    }
+    // Ensure snapshot reflects support count for menu/more tabs
+    [self pp_refreshCommandCenterSnapshot];
 }
 
 - (NSArray<NSNumber *> *)pp_providerTypeDisplayOrder {
@@ -2817,56 +2828,50 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         [self.addPhotoButton.bottomAnchor constraintEqualToAnchor:avatarSurface.bottomAnchor constant:-2.0],
     ]];
 
-    self.quickActionsView = [[PPQuickActionsView alloc] init];
-    self.quickActionsView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.quickActionsView.backgroundColorForButton = [AppForgroundColr colorWithAlphaComponent:0.62];
-    self.quickActionsView.tintColorForIcon = accentColor;
-    self.quickActionsView.cornerRadius = 24.0;
-    self.quickActionsView.buttonHeight = 58.0;
-    [self.headerRoot addSubview:self.quickActionsView];
-
-    self.quickActionsRailStyle = [self pp_isDeliveryCompanyOnlyDashboardForUser:[self pp_activeDashboardUser]] && self.isDeliveryCompanyMode
-        ? PPDashboardQuickActionRailStyleDeliveryMember
-        : PPDashboardQuickActionRailStyleOwner;
-
-    self.quickActionsRailContainer = [[UIView alloc] init];
-    self.quickActionsRailContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.quickActionsRailContainer.backgroundColor = UIColor.clearColor;
-    [self.headerRoot addSubview:self.quickActionsRailContainer];
-
-    self.quickActionsRailView = [[PPQuickActionsRailView alloc] init];
-    self.quickActionsRailView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.quickActionsRailView.tintColorForIcons = accentColor;
-    self.quickActionsRailView.style = self.quickActionsRailStyle;
-    self.quickActionsRailView.titleKey = @"DashboardQuickActions_Title";
-    self.quickActionsRailView.subtitleKey = @"DashboardQuickActions_Subtitle";
-    self.quickActionsRailView.trailingTitleKey = @"DashboardQuickActions_ViewAll";
+    PPProPriorityNotificationCard *priorityCard = [[PPProPriorityNotificationCard alloc] initWithFrame:CGRectZero];
+    priorityCard.translatesAutoresizingMaskIntoConstraints = NO;
     __weak typeof(self) weakSelf = self;
-    self.quickActionsRailView.trailingHandler = ^{
+    priorityCard.actionHandler = ^{
+        NotificationsListViewController *vc = [[NotificationsListViewController alloc] init];
+        [weakSelf.navigationController pushViewController:vc animated:YES];
+    };
+    [self.headerRoot addSubview:priorityCard];
+    self.priorityNotificationCard = priorityCard;
+    [self.priorityNotificationCard updateUnreadCount:self.inboxUnreadCount];
+
+    PPProPriorityFulfillmentCard *fulfillmentCard = [[PPProPriorityFulfillmentCard alloc] initWithFrame:CGRectZero];
+    fulfillmentCard.translatesAutoresizingMaskIntoConstraints = NO;
+    fulfillmentCard.actionHandler = ^{
+        PPFulfillmentListViewController *vc = [[PPFulfillmentListViewController alloc] init];
+        [weakSelf.navigationController pushViewController:vc animated:YES];
+    };
+    [self.headerRoot addSubview:fulfillmentCard];
+    self.priorityFulfillmentCard = fulfillmentCard;
+    [self.priorityFulfillmentCard updateWithFulfillmentModel:self.actionableFulfillments.firstObject pendingCount:self.fulfillmentNewRequestsCount];
+
+    self.quickActionsDeckView = [[PPProQuickActionsDeckView alloc] initWithFrame:CGRectZero];
+    self.quickActionsDeckView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.quickActionsDeckView.titleKey = @"DashboardQuickActions_Title";
+    self.quickActionsDeckView.subtitleKey = @"DashboardQuickActions_Subtitle";
+    self.quickActionsDeckView.trailingTitleKey = @"DashboardQuickActions_ViewAll";
+    self.quickActionsDeckView.trailingHandler = ^{
         [weakSelf pp_openProfileSettings];
     };
-    [self.quickActionsRailContainer addSubview:self.quickActionsRailView];
+    [self.headerRoot addSubview:self.quickActionsDeckView];
 
     [NSLayoutConstraint activateConstraints:@[
-        
-        [self.quickActionsView.topAnchor constraintEqualToAnchor:heroShadowView.bottomAnchor constant:14.0],
-        [self.quickActionsView.leadingAnchor constraintEqualToAnchor:self.headerRoot.leadingAnchor constant:PPAdminDashboardHorizontalInset],
-        [self.quickActionsView.trailingAnchor constraintEqualToAnchor:self.headerRoot.trailingAnchor constant:-PPAdminDashboardHorizontalInset],
+        [self.priorityNotificationCard.topAnchor constraintEqualToAnchor:heroShadowView.bottomAnchor constant:14.0],
+        [self.priorityNotificationCard.leadingAnchor constraintEqualToAnchor:self.headerRoot.leadingAnchor constant:PPAdminDashboardHorizontalInset],
+        [self.priorityNotificationCard.trailingAnchor constraintEqualToAnchor:self.headerRoot.trailingAnchor constant:-PPAdminDashboardHorizontalInset],
 
-        
-        [self.quickActionsRailContainer.topAnchor constraintEqualToAnchor:self.quickActionsView.bottomAnchor constant:8.0],
-        [self.quickActionsRailContainer.leadingAnchor constraintEqualToAnchor:self.headerRoot.leadingAnchor constant:PPAdminDashboardHorizontalInset],
-        [self.quickActionsRailContainer.trailingAnchor constraintEqualToAnchor:self.headerRoot.trailingAnchor constant:-PPAdminDashboardHorizontalInset],
-        [self.quickActionsRailContainer.bottomAnchor constraintEqualToAnchor:self.headerRoot.bottomAnchor constant:-12],
-        
-        
-        [self.quickActionsRailView.topAnchor constraintEqualToAnchor:self.quickActionsRailContainer.topAnchor],
-        [self.quickActionsRailView.leadingAnchor constraintEqualToAnchor:self.quickActionsRailContainer.leadingAnchor],
-        [self.quickActionsRailView.trailingAnchor constraintEqualToAnchor:self.quickActionsRailContainer.trailingAnchor],
-        [self.quickActionsRailView.bottomAnchor constraintEqualToAnchor:self.quickActionsRailContainer.bottomAnchor],
-        [self.quickActionsRailView.heightAnchor constraintEqualToConstant:188.0],
+        [self.priorityFulfillmentCard.topAnchor constraintEqualToAnchor:self.priorityNotificationCard.bottomAnchor constant:14.0],
+        [self.priorityFulfillmentCard.leadingAnchor constraintEqualToAnchor:self.headerRoot.leadingAnchor constant:PPAdminDashboardHorizontalInset],
+        [self.priorityFulfillmentCard.trailingAnchor constraintEqualToAnchor:self.headerRoot.trailingAnchor constant:-PPAdminDashboardHorizontalInset],
 
-     
+        [self.quickActionsDeckView.topAnchor constraintEqualToAnchor:self.priorityFulfillmentCard.bottomAnchor constant:16.0],
+        [self.quickActionsDeckView.leadingAnchor constraintEqualToAnchor:self.headerRoot.leadingAnchor constant:PPAdminDashboardHorizontalInset],
+        [self.quickActionsDeckView.trailingAnchor constraintEqualToAnchor:self.headerRoot.trailingAnchor constant:-PPAdminDashboardHorizontalInset],
+        [self.quickActionsDeckView.bottomAnchor constraintEqualToAnchor:self.headerRoot.bottomAnchor constant:-16.0],
     ]];
 
     self.tableView.tableHeaderView = self.headerRoot;
@@ -2874,9 +2879,9 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     [self pp_updateDashboardHeroLiveState];
 }
 
-- (NSArray<PPQuickActionItem *> *)pp_dashboardQuickActions {
+- (NSArray<PPProQuickActionData *> *)pp_buildProQuickActionsDeck {
     __weak typeof(self) weakSelf = self;
-    NSMutableArray<PPQuickActionItem *> *items = [NSMutableArray array];
+    NSMutableArray<PPProQuickActionData *> *items = [NSMutableArray array];
     UserModel *dashboardUser = [self pp_activeDashboardUser];
 
     BOOL canManageServices = [self pp_canManageServices];
@@ -2887,13 +2892,17 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     BOOL canManageAdoption = [self pp_canManageAdoption];
     PPDeliveryCompanyProfile *profile = self.deliveryCompanyContext;
 
+    // 1. Active Delivery Trip (Featured for Driver)
     PPDeliveryCompanyRequest *activeRequest = (self.isDeliveryCompanyMode && profile.isDriver) ? [self pp_activeDeliveryCompanyRequest] : nil;
     if (activeRequest.requestID.length > 0) {
-        [items addObject:[PPQuickActionItem itemWithTitleKey:@"DeliveryCompany_DashboardShell_ContinueActive"
-                                                subtitleKey:@"DeliveryCompany_DashboardShell_ContinueActiveSubtitle"
-                                                   iconName:@"location.fill"
-                                                      width:0
-                                                    handler:^{
+        [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"DeliveryCompany_DashboardShell_ContinueActive"
+                                                           subtitleKey:@"DeliveryCompany_DashboardShell_ContinueActiveSubtitle"
+                                                              iconName:@"location.fill"
+                                                             badgeText:nil
+                                                            isFeatured:YES
+                                                    showsBreathingDot:YES
+                                                             domainKey:@"active_route"
+                                                               handler:^{
             [PPFunc pp_playTapEffect];
             PPDeliveryCompanyDetailViewController *controller =
                 [[PPDeliveryCompanyDetailViewController alloc] initWithRequestID:activeRequest.requestID
@@ -2902,130 +2911,70 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         }]];
     }
 
+    // 2. Fulfillment Orders & Requests
     if (canManageServices || canManageMarketplace) {
         NSInteger pendingCount = self.fulfillmentNewRequestsCount;
-        PPQuickActionItem *fulfillmentItem = [PPQuickActionItem itemWithTitleKey:@"Fulfillment_Title"
-                                                                     subtitleKey:@"Fulfillment_EmptySubtitle"
-                                                                        iconName:@"shippingbox.fill"
-                                                                           width:0
-                                                                         handler:^{
+        NSString *badge = pendingCount > 0 ? [NSString stringWithFormat:@"%ld", (long)pendingCount] : nil;
+        BOOL breathing = (pendingCount > 0) || self.hasUnseenFulfillmentQuickAction;
+        [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"Fulfillment_Title"
+                                                           subtitleKey:@"Fulfillment_EmptySubtitle"
+                                                              iconName:@"shippingbox.fill"
+                                                             badgeText:badge
+                                                            isFeatured:NO
+                                                    showsBreathingDot:breathing
+                                                             domainKey:@"fulfillment"
+                                                               handler:^{
             [PPFunc pp_playTapEffect];
             [weakSelf pp_markQuickActionKindSeen:PPAdminQuickActionSignalFulfillment];
             PPFulfillmentListViewController *vc = [[PPFulfillmentListViewController alloc] init];
             [weakSelf.navigationController pushViewController:vc animated:YES];
-        }];
-        fulfillmentItem.showsBreathingDot = (pendingCount > 0) || self.hasUnseenFulfillmentQuickAction;
-        fulfillmentItem.badgeText = pendingCount > 0 ? [NSString stringWithFormat:@"%ld", (long)pendingCount] : nil;
-        [items addObject:fulfillmentItem];
+        }]];
     }
 
+    // 3. Delivery Company Workspace
     if ([self pp_isDeliveryCompanyOnlyDashboardForUser:dashboardUser] && self.isDeliveryCompanyMode) {
-        PPDeliveryCompanyProfile *profile = self.deliveryCompanyContext;
-        [items addObject:[PPQuickActionItem itemWithTitleKey:(profile.isDriver
-                                                                  ? @"DeliveryCompany_DashboardShell_MyAssigned"
-                                                                  : @"DeliveryCompany_Title")
-                                                subtitleKey:(profile.isDriver
-                                                                  ? @"DeliveryCompany_DashboardShell_MyAssignedSubtitle"
-                                                                  : @"DeliveryCompany_DashboardShell_OpenCompanySubtitle")
-                                                   iconName:@"truck.box.fill"
-                                                      width:0
-                                                    handler:^{
-            [weakSelf pp_openDeliveryCompanyDashboard];
-        }]];
-
-        PPDeliveryCompanyRequest *activeRequest = profile.isDriver ? [self pp_activeDeliveryCompanyRequest] : nil;
-        if (activeRequest.requestID.length > 0) {
-            [items addObject:[PPQuickActionItem itemWithTitleKey:@"DeliveryCompany_DashboardShell_ContinueActive"
-                                                    subtitleKey:@"DeliveryCompany_DashboardShell_ContinueActiveSubtitle"
-                                                       iconName:@"location.fill"
-                                                          width:0
-                                                        handler:^{
-                [PPFunc pp_playTapEffect];
-                PPDeliveryCompanyDetailViewController *controller =
-                    [[PPDeliveryCompanyDetailViewController alloc] initWithRequestID:activeRequest.requestID
-                                                                             profile:profile];
-                [weakSelf.navigationController pushViewController:controller animated:YES];
+        if (profile.isDriver) {
+            NSInteger assignedCount = [self pp_deliveryCompanyCountForStatuses:@[PPDeliveryCompanyStatusAssigned]];
+            NSInteger inTransitCount = [self pp_deliveryCompanyCountForStatuses:@[PPDeliveryCompanyStatusPickedUp, PPDeliveryCompanyStatusInTransit]];
+            NSString *badge = (assignedCount + inTransitCount) > 0 ? [NSString stringWithFormat:@"%ld", (long)(assignedCount + inTransitCount)] : nil;
+            [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"DeliveryCompany_DashboardShell_MyAssigned"
+                                                               subtitleKey:@"DeliveryCompany_DashboardShell_MyAssignedSubtitle"
+                                                                  iconName:@"truck.box.fill"
+                                                                 badgeText:badge
+                                                                isFeatured:NO
+                                                        showsBreathingDot:NO
+                                                                 domainKey:@"delivery"
+                                                                   handler:^{
+                [weakSelf pp_openDeliveryCompanyDashboard];
             }]];
-        } else if (profile.canViewMembers) {
-            [items addObject:[PPQuickActionItem itemWithTitleKey:@"DeliveryCompany_Tab_Members"
-                                                    subtitleKey:@"DeliveryCompany_Dashboard_MembersShortcutSubtitle"
-                                                       iconName:@"person.3.fill"
-                                                          width:0
-                                                        handler:^{
-                [weakSelf pp_openDeliveryCompanyMembers];
+        } else {
+            NSInteger offeredCount = [self pp_deliveryCompanyCountForStatuses:@[PPDeliveryCompanyStatusOffered]];
+            NSString *badge = offeredCount > 0 ? [NSString stringWithFormat:@"%ld", (long)offeredCount] : nil;
+            [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"DeliveryCompany_Title"
+                                                               subtitleKey:@"DeliveryCompany_DashboardShell_OpenCompanySubtitle"
+                                                                  iconName:@"truck.box.fill"
+                                                                 badgeText:badge
+                                                                isFeatured:NO
+                                                        showsBreathingDot:offeredCount > 0
+                                                                 domainKey:@"delivery"
+                                                                   handler:^{
+                [weakSelf pp_openDeliveryCompanyDashboard];
             }]];
         }
 
-        [items addObject:[PPQuickActionItem itemWithTitleKey:@"Notifications"
-                                                subtitleKey:@"NoNewNotifications"
-                                                   iconName:@"bell.badge.fill"
-                                                      width:0
-                                                    handler:^{
-            [PPFunc pp_playTapEffect];
-            NotificationsListViewController *controller = [[NotificationsListViewController alloc] init];
-            [weakSelf.navigationController pushViewController:controller animated:YES];
-        }]];
-
-        [items addObject:[PPQuickActionItem itemWithTitleKey:@"ProfileSettings"
-                                                subtitleKey:@"ProfileSettingsSubtitle"
-                                                   iconName:@"person.crop.circle.fill"
-                                                      width:0
-                                                    handler:^{
-            [weakSelf pp_openProfileSettings];
-        }]];
-        return items.copy;
-    }
-
-
-    if (canManageMarketplace) {
-        [items addObject:[PPQuickActionItem itemWithTitleKey:@"Market_Title"
-                                                 subtitleKey:@"Market_EmptySubtitle"
-                                                    iconName:@"bag.fill"
-                                                       width:0
-                                                     handler:^{
-            [PPFunc pp_playTapEffect];
-            PPProviderMarketItemsViewController *vc = [[PPProviderMarketItemsViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];
-    }
-
-    if (canManagePharmacy) {
-        [items addObject:[PPQuickActionItem itemWithTitleKey:@"Pharmacy_Manage_Title"
-                                                 subtitleKey:@"Pharmacy_Manage_Subtitle"
-                                                    iconName:@"pills.fill"
-                                                       width:0
-                                                     handler:^{
-            [PPFunc pp_playTapEffect];
-            PPPharmacyMedicinesViewController *vc = [[PPPharmacyMedicinesViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];
-    }
-
-    if (canManageServices) {
-       /* [items addObject:[PPQuickActionItem itemWithTitleKey:@"ManageServices"
-                                                 subtitleKey:@"ProviderTypeServiceSubtitle"
-                                                    iconName:@"scissors"
-                                                       width:0
-                                                     handler:^{
-            [PPFunc pp_playTapEffect];
-            PPServicesListViewController *vc = [[PPServicesListViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];*/
-    }
-
-    if (canManageVets) {
-        [items addObject:[PPQuickActionItem itemWithTitleKey:@"Vet_Manage_Title"
-                                                 subtitleKey:@"Vet_Manage_Subtitle"
-                                                    iconName:@"cross.case.fill"
-                                                       width:0
-                                                     handler:^{
-            [PPFunc pp_playTapEffect];
-            PPVetsListViewController *vc = [[PPVetsListViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];
-    }
-
-    if ([self pp_hasDeliveryCompanyWorkspaceForUser:dashboardUser]) {
+        if (profile.canViewMembers) {
+            [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"DeliveryCompany_Tab_Members"
+                                                               subtitleKey:@"DeliveryCompany_Dashboard_MembersShortcutSubtitle"
+                                                                  iconName:@"person.3.fill"
+                                                                 badgeText:nil
+                                                                isFeatured:NO
+                                                        showsBreathingDot:NO
+                                                                 domainKey:@"delivery"
+                                                                   handler:^{
+                [weakSelf pp_openDeliveryCompanyMembers];
+            }]];
+        }
+    } else if ([self pp_hasDeliveryCompanyWorkspaceForUser:dashboardUser]) {
         BOOL hasVerifiedCompany = self.isDeliveryCompanyMode && profile.companyID.length > 0;
         NSString *titleKey = hasVerifiedCompany
             ? (profile.isDriver ? @"DeliveryCompany_DashboardShell_MyAssigned" : @"DeliveryCompany_Title")
@@ -3034,11 +2983,14 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
             ? (profile.isDriver ? @"DeliveryCompany_DashboardShell_MyAssignedSubtitle" : @"DeliveryCompany_DashboardShell_OpenCompanySubtitle")
             : @"DeliveryCompany_SetupEntry_Subtitle";
         NSString *iconName = hasVerifiedCompany ? @"truck.box.fill" : @"building.2.crop.circle";
-        [items addObject:[PPQuickActionItem itemWithTitleKey:titleKey
-                                                 subtitleKey:subtitleKey
-                                                    iconName:iconName
-                                                       width:0
-                                                     handler:^{
+        [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:titleKey
+                                                           subtitleKey:subtitleKey
+                                                              iconName:iconName
+                                                             badgeText:nil
+                                                            isFeatured:NO
+                                                    showsBreathingDot:NO
+                                                             domainKey:@"delivery"
+                                                               handler:^{
             [PPFunc pp_playTapEffect];
             if (weakSelf.isDeliveryCompanyMode) {
                 [weakSelf pp_openDeliveryCompanyDashboard];
@@ -3049,58 +3001,120 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         }]];
     }
 
-    if (canManageDelivery) {
-        PPQuickActionItem *deliveryItem = [PPQuickActionItem itemWithTitleKey:@"DeliveryManagement"
-                                                                  subtitleKey:@"DeliveryManagementSubtitle"
-                                                                     iconName:@"shippingbox.fill"
-                                                                        width:0
-                                                                      handler:^{
+    // 4. Marketplace & Store Branches
+    if (canManageMarketplace) {
+        [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"Market_Title"
+                                                           subtitleKey:@"Market_EmptySubtitle"
+                                                              iconName:@"bag.fill"
+                                                             badgeText:nil
+                                                            isFeatured:NO
+                                                    showsBreathingDot:NO
+                                                             domainKey:@"market"
+                                                               handler:^{
+            [PPFunc pp_playTapEffect];
+            PPProviderMarketItemsViewController *vc = [[PPProviderMarketItemsViewController alloc] init];
+            [weakSelf.navigationController pushViewController:vc animated:YES];
+        }]];
+    }
+
+    // 5. Pharmacy & Medicines
+    if (canManagePharmacy) {
+        [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"Pharmacy_Manage_Title"
+                                                           subtitleKey:@"Pharmacy_Manage_Subtitle"
+                                                              iconName:@"pills.fill"
+                                                             badgeText:nil
+                                                            isFeatured:NO
+                                                    showsBreathingDot:NO
+                                                             domainKey:@"pharmacy"
+                                                               handler:^{
+            [PPFunc pp_playTapEffect];
+            PPPharmacyMedicinesViewController *vc = [[PPPharmacyMedicinesViewController alloc] init];
+            [weakSelf.navigationController pushViewController:vc animated:YES];
+        }]];
+    }
+
+    // 6. Veterinary Clinic
+    if (canManageVets) {
+        [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"Vet_Manage_Title"
+                                                           subtitleKey:@"Vet_Manage_Subtitle"
+                                                              iconName:@"cross.case.fill"
+                                                             badgeText:nil
+                                                            isFeatured:NO
+                                                    showsBreathingDot:NO
+                                                             domainKey:@"vets"
+                                                               handler:^{
+            [PPFunc pp_playTapEffect];
+            PPVetsListViewController *vc = [[PPVetsListViewController alloc] init];
+            [weakSelf.navigationController pushViewController:vc animated:YES];
+        }]];
+    }
+
+    // 7. Delivery Management
+    if (canManageDelivery && !([self pp_isDeliveryCompanyOnlyDashboardForUser:dashboardUser] && self.isDeliveryCompanyMode)) {
+        [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"DeliveryManagement"
+                                                           subtitleKey:@"DeliveryManagementSubtitle"
+                                                              iconName:@"shippingbox.fill"
+                                                             badgeText:nil
+                                                            isFeatured:NO
+                                                    showsBreathingDot:self.hasUnseenDeliveryQuickAction
+                                                             domainKey:@"delivery"
+                                                               handler:^{
             [PPFunc pp_playTapEffect];
             [weakSelf pp_markQuickActionKindSeen:PPAdminQuickActionSignalDelivery];
             PPDeliveryDashboardViewController *vc = [[PPDeliveryDashboardViewController alloc] init];
             [weakSelf.navigationController pushViewController:vc animated:YES];
-        }];
-        deliveryItem.showsBreathingDot = self.hasUnseenDeliveryQuickAction;
-        [items addObject:deliveryItem];
+        }]];
     }
 
+    // 8. Adoption
     if (canManageAdoption) {
-        [items addObject:[PPQuickActionItem itemWithTitleKey:@"AdoptPetsTitle"
-                                                 subtitleKey:@"AdoptPetsSubtitle"
-                                                    iconName:@"heart.fill"
-                                                       width:0
-                                                     handler:^{
+        [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"AdoptPetsTitle"
+                                                           subtitleKey:@"AdoptPetsSubtitle"
+                                                              iconName:@"heart.fill"
+                                                             badgeText:nil
+                                                            isFeatured:NO
+                                                    showsBreathingDot:NO
+                                                             domainKey:@"adoption"
+                                                               handler:^{
             [PPFunc pp_playTapEffect];
             PPAdoptPetsListViewController *vc = [[PPAdoptPetsListViewController alloc] init];
             [weakSelf.navigationController pushViewController:vc animated:YES];
         }]];
     }
 
-    [items addObject:[PPQuickActionItem itemWithTitleKey:@"Notifications"
-                                             subtitleKey:@"NoNewNotifications"
-                                                iconName:@"bell.badge.fill"
-                                                   width:0
-                                                 handler:^{
+    // 9. Notifications / Inbox
+    NSString *unreadBadge = self.inboxUnreadCount > 0 ? [NSString stringWithFormat:@"%ld", (long)self.inboxUnreadCount] : nil;
+    [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"Notifications"
+                                                       subtitleKey:@"NoNewNotifications"
+                                                          iconName:@"bell.badge.fill"
+                                                         badgeText:unreadBadge
+                                                        isFeatured:NO
+                                                showsBreathingDot:self.inboxUnreadCount > 0
+                                                         domainKey:@"notifications"
+                                                           handler:^{
         [PPFunc pp_playTapEffect];
         NotificationsListViewController *vc = [[NotificationsListViewController alloc] init];
         [weakSelf.navigationController pushViewController:vc animated:YES];
     }]];
 
-    if (items.count > PPAdminDashboardMaxQuickActionCount) {
-        return [items subarrayWithRange:NSMakeRange(0, PPAdminDashboardMaxQuickActionCount)];
-    }
+    // 10. Profile Settings
+    [items addObject:[[PPProQuickActionData alloc] initWithTitleKey:@"ProfileSettings"
+                                                       subtitleKey:@"ProfileSettingsSubtitle"
+                                                          iconName:@"person.crop.circle.fill"
+                                                         badgeText:nil
+                                                        isFeatured:NO
+                                                showsBreathingDot:NO
+                                                         domainKey:@"general"
+                                                           handler:^{
+        [weakSelf pp_openProfileSettings];
+    }]];
+
     return items.copy;
 }
 
 - (void)pp_refreshQuickActions {
-    NSArray<PPQuickActionItem *> *gridActions = [self pp_dashboardQuickActions];
-    NSArray<PPDashboardQuickActionRailItem *> *railActions = [self pp_dashboardQuickActionsRail];
-    NSArray<PPDashboardQuickActionRailItem *> *filteredRailActions = [self pp_dashboardRailActions:railActions
-                                                                              excludingGridActions:gridActions];
-
-    [self.quickActionsView setActions:gridActions];
-    [self quickActionsRailView].actions = filteredRailActions;
-    [[self quickActionsRailView] reloadActions];
+    NSArray<PPProQuickActionData *> *deckActions = [self pp_buildProQuickActionsDeck];
+    [self.quickActionsDeckView setActions:deckActions];
 
     // Dynamically update the Fulfillment List row descriptor's badge in the form
     XLFormRowDescriptor *fulfillmentRow = [self.form formRowWithTag:@"fulfillmentOrders"];
@@ -3115,313 +3129,6 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         [self reloadFormRow:fulfillmentRow];
     }
     [self pp_refreshCommandCenterSnapshot];
-}
-
-- (NSString *)pp_dashboardActionSignatureWithTitleKey:(NSString *)titleKey iconName:(NSString *)iconName {
-    NSString *title = [[titleKey ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] lowercaseString];
-    NSString *icon = [[iconName ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] lowercaseString];
-    if (title.length == 0 && icon.length == 0) {
-        return @"";
-    }
-    return [NSString stringWithFormat:@"%@|%@", title, icon];
-}
-
-- (NSArray<PPDashboardQuickActionRailItem *> *)pp_dashboardRailActions:(NSArray<PPDashboardQuickActionRailItem *> *)railActions
-                                              excludingGridActions:(NSArray<PPQuickActionItem *> *)gridActions {
-    if (railActions.count == 0 || gridActions.count == 0) {
-        return railActions ?: @[];
-    }
-
-    NSMutableSet<NSString *> *gridSignatures = [NSMutableSet set];
-    for (PPQuickActionItem *gridItem in gridActions) {
-        NSString *signature = [self pp_dashboardActionSignatureWithTitleKey:gridItem.titleKey iconName:gridItem.iconName];
-        if (signature.length > 0) {
-            [gridSignatures addObject:signature];
-        }
-    }
-
-    if (gridSignatures.count == 0) {
-        return railActions ?: @[];
-    }
-
-    NSMutableArray<PPDashboardQuickActionRailItem *> *filtered = [NSMutableArray arrayWithCapacity:railActions.count];
-    for (PPDashboardQuickActionRailItem *railItem in railActions) {
-        NSString *signature = [self pp_dashboardActionSignatureWithTitleKey:railItem.titleKey iconName:railItem.iconName];
-        if (signature.length == 0 || ![gridSignatures containsObject:signature]) {
-            [filtered addObject:railItem];
-        }
-    }
-    return filtered.copy;
-}
-
-- (NSArray<PPDashboardQuickActionRailItem *> *)pp_dashboardQuickActionsRail {
-    __weak typeof(self) weakSelf = self;
-    NSMutableArray<PPDashboardQuickActionRailItem *> *items = [NSMutableArray array];
-    UserModel *dashboardUser = [self pp_activeDashboardUser];
-
-    if ([self pp_isDeliveryCompanyOnlyDashboardForUser:dashboardUser] && self.isDeliveryCompanyMode) {
-        PPDeliveryCompanyProfile *profile = self.deliveryCompanyContext;
-
-        if (profile.isDriver) {
-            PPDeliveryCompanyRequest *activeRequest = [self pp_activeDeliveryCompanyRequest];
-            if (activeRequest.requestID.length > 0) {
-                [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"DeliveryCompany_DashboardShell_ContinueActive"
-                                                         subtitleKey:@"DeliveryCompany_DashboardShell_ContinueActiveSubtitle"
-                                                            iconName:@"location.fill"
-                                                          badgeText:nil
-                                                             enabled:YES
-                                                            chevron:YES
-                                                             handler:^{
-                    [PPFunc pp_playTapEffect];
-                    PPDeliveryCompanyDetailViewController *controller =
-                        [[PPDeliveryCompanyDetailViewController alloc] initWithRequestID:activeRequest.requestID
-                                                                             profile:profile];
-                    [weakSelf.navigationController pushViewController:controller animated:YES];
-                }]];
-            }
-
-            NSInteger assignedCount = [self pp_deliveryCompanyCountForStatuses:@[PPDeliveryCompanyStatusAssigned]];
-            NSInteger inTransitCount = [self pp_deliveryCompanyCountForStatuses:@[PPDeliveryCompanyStatusPickedUp, PPDeliveryCompanyStatusInTransit]];
-            NSString *badge = (assignedCount + inTransitCount) > 0 ? [NSString stringWithFormat:@"%ld", (long)(assignedCount + inTransitCount)] : nil;
-
-            [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"DeliveryCompany_DashboardShell_MyAssigned"
-                                                     subtitleKey:@"DeliveryCompany_DashboardShell_MyAssignedSubtitle"
-                                                        iconName:@"truck.box.fill"
-                                                      badgeText:badge
-                                                         enabled:YES
-                                                        chevron:YES
-                                                         handler:^{
-                [weakSelf pp_openDeliveryCompanyDashboard];
-            }]];
-        } else {
-            NSInteger offeredCount = [self pp_deliveryCompanyCountForStatuses:@[PPDeliveryCompanyStatusOffered]];
-            NSString *badge = offeredCount > 0 ? [NSString stringWithFormat:@"%ld", (long)offeredCount] : nil;
-
-            [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"DeliveryCompany_Title"
-                                                     subtitleKey:@"DeliveryCompany_DashboardShell_OpenCompanySubtitle"
-                                                        iconName:@"truck.box.fill"
-                                                      badgeText:badge
-                                                         enabled:YES
-                                                        chevron:YES
-                                                         handler:^{
-                [weakSelf pp_openDeliveryCompanyDashboard];
-            }]];
-        }
-
-        if (profile.canViewMembers) {
-            [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"DeliveryCompany_Tab_Members"
-                                                     subtitleKey:@"DeliveryCompany_Dashboard_MembersShortcutSubtitle"
-                                                        iconName:@"person.3.fill"
-                                                      badgeText:nil
-                                                         enabled:YES
-                                                        chevron:YES
-                                                         handler:^{
-                [weakSelf pp_openDeliveryCompanyMembers];
-            }]];
-        }
-
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"Notifications"
-                                                 subtitleKey:@"NoNewNotifications"
-                                                    iconName:@"bell.badge.fill"
-                                                  badgeText:nil
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            [PPFunc pp_playTapEffect];
-            NotificationsListViewController *controller = [[NotificationsListViewController alloc] init];
-            [weakSelf.navigationController pushViewController:controller animated:YES];
-        }]];
-
-        NSString *supportChatsBadge = self.supportChatsUnreadThreadsCount > 0 ? [NSString stringWithFormat:@"%ld", (long)self.supportChatsUnreadThreadsCount] : nil;
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"DashboardQuickActions_SupportTitle"
-                                                 subtitleKey:@"DashboardQuickActions_SupportSubtitle"
-                                                    iconName:@"message.badge.fill"
-                                                  badgeText:supportChatsBadge
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            [weakSelf pp_openSupportChats];
-        }]];
-
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"ProfileSettings"
-                                                 subtitleKey:@"ProfileSettingsSubtitle"
-                                                    iconName:@"person.crop.circle.fill"
-                                                  badgeText:nil
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            [weakSelf pp_openProfileSettings];
-        }]];
-
-        return items.copy;
-    }
-
-    BOOL canManageServices = [self pp_canManageServices];
-    BOOL canManageMarketplace = [self pp_canManageMarketplace];
-    BOOL canManagePharmacy = [self pp_canManagePharmacy];
-    BOOL canManageDelivery = [self pp_canManageDelivery];
-    BOOL canManageVets = [self pp_canManageVets];
-    BOOL canManageAdoption = [self pp_canManageAdoption];
-    PPDeliveryCompanyProfile *profile = self.deliveryCompanyContext;
-    BOOL hasProviderWorkspace = [self pp_hasDeliveryCompanyWorkspaceForUser:dashboardUser] ||
-        canManageServices || canManageMarketplace || canManageDelivery || canManageVets || canManagePharmacy || canManageAdoption;
-
-    if (canManageMarketplace) {
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"MarketplaceBranches_Manage"
-                                                 subtitleKey:@"MarketplaceBranches_ProfileRowSubtitle"
-                                                    iconName:@"building.2.crop.circle"
-                                                  badgeText:nil
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            PPMarketplaceBranchesViewController *vc = [[PPMarketplaceBranchesViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];
-    }
-
-    if (hasProviderWorkspace) {
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"DashboardQuickActions_CompanyProfileTitle"
-                                                 subtitleKey:@"DashboardQuickActions_CompanyProfileSubtitle"
-                                                    iconName:@"building.2.fill"
-                                                  badgeText:nil
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            [weakSelf pp_openProfileSettings];
-        }]];
-
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"ProfileSettings_EditProviderProfile"
-                                                 subtitleKey:@"DashboardQuickActions_EditProfileSubtitle"
-                                                    iconName:@"square.and.pencil"
-                                                  badgeText:nil
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            [weakSelf pp_openProviderProfileEditor];
-        }]];
-    }
-
-    if (canManageServices || canManageMarketplace) {
-        NSInteger pendingCount = [self pp_pendingOrdersCount];
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"Fulfillment_Title"
-                                                 subtitleKey:@"DashboardQuickActions_OrdersSubtitle"
-                                                    iconName:@"shippingbox.fill"
-                                                  badgeText:(pendingCount > 0 ? [NSString stringWithFormat:@"%ld", (long)pendingCount] : nil)
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            [PPFunc pp_playTapEffect];
-            [weakSelf pp_markQuickActionKindSeen:PPAdminQuickActionSignalFulfillment];
-            PPFulfillmentListViewController *vc = [[PPFulfillmentListViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];
-    }
-
-    if (canManageMarketplace) {
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"Market_Title"
-                                                 subtitleKey:@"DashboardQuickActions_InventorySubtitle"
-                                                    iconName:@"bag.fill"
-                                                  badgeText:nil
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            PPProviderMarketItemsViewController *vc = [[PPProviderMarketItemsViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];
-    }
-
-    if (canManageDelivery) {
-        NSInteger deliveryCount = [self pp_dashboardHeroDeliveryActionCount];
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"DeliveryManagement"
-                                                 subtitleKey:@"DashboardQuickActions_DeliverySettingsSubtitle"
-                                                    iconName:@"shippingbox.fill"
-                                                  badgeText:(deliveryCount > 0 ? [NSString stringWithFormat:@"%ld", (long)deliveryCount] : nil)
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            [weakSelf pp_markQuickActionKindSeen:PPAdminQuickActionSignalDelivery];
-            PPDeliveryDashboardViewController *vc = [[PPDeliveryDashboardViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];
-    }
-
-    if ([self pp_hasDeliveryCompanyWorkspaceForUser:dashboardUser] && profile.canViewMembers) {
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"DeliveryCompany_Tab_Members"
-                                                 subtitleKey:@"DashboardQuickActions_TeamSubtitle"
-                                                    iconName:@"person.3.fill"
-                                                  badgeText:nil
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            [weakSelf pp_openDeliveryCompanyMembers];
-        }]];
-    }
-
-    if (canManageVets) {
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"Vet_Manage_Title"
-                                                 subtitleKey:@"Vet_Manage_Subtitle"
-                                                    iconName:@"cross.case.fill"
-                                                  badgeText:nil
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            PPVetsListViewController *vc = [[PPVetsListViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];
-    }
-
-    if (canManagePharmacy) {
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"Pharmacy_Manage_Title"
-                                                 subtitleKey:@"Pharmacy_Manage_Subtitle"
-                                                    iconName:@"pills.fill"
-                                                  badgeText:nil
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            PPPharmacyMedicinesViewController *vc = [[PPPharmacyMedicinesViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];
-    }
-
-    if (canManageAdoption) {
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"AdoptPetsTitle"
-                                                 subtitleKey:@"AdoptPetsSubtitle"
-                                                    iconName:@"heart.fill"
-                                                  badgeText:nil
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            PPAdoptPetsListViewController *vc = [[PPAdoptPetsListViewController alloc] init];
-            [weakSelf.navigationController pushViewController:vc animated:YES];
-        }]];
-    }
-
-    [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"Notifications"
-                                             subtitleKey:@"NoNewNotifications"
-                                                iconName:@"bell.badge.fill"
-                                              badgeText:nil
-                                                 enabled:YES
-                                                chevron:YES
-                                                 handler:^{
-        [PPFunc pp_playTapEffect];
-        NotificationsListViewController *controller = [[NotificationsListViewController alloc] init];
-        [weakSelf.navigationController pushViewController:controller animated:YES];
-    }]];
-
-    if (hasProviderWorkspace) {
-        NSString *supportChatsBadge = self.supportChatsUnreadThreadsCount > 0 ? [NSString stringWithFormat:@"%ld", (long)self.supportChatsUnreadThreadsCount] : nil;
-        [items addObject:[PPDashboardQuickActionRailItem itemWithTitleKey:@"DashboardQuickActions_SupportTitle"
-                                                 subtitleKey:@"DashboardQuickActions_SupportSubtitle"
-                                                    iconName:@"message.badge.fill"
-                                                  badgeText:supportChatsBadge
-                                                     enabled:YES
-                                                    chevron:YES
-                                                     handler:^{
-            [weakSelf pp_openSupportChats];
-        }]];
-    }
-
-    return items.copy;
 }
 
 - (void)pp_startQuickActionSignalObserversForUser:(UserModel *)user {
@@ -3715,6 +3422,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 
 - (void)pp_applyFulfillmentQuickActionSignals:(NSSet<NSString *> *)signals {
     self.fulfillmentQuickActionSignals = signals ?: [NSSet set];
+    [self.priorityFulfillmentCard updateWithFulfillmentModel:self.actionableFulfillments.firstObject pendingCount:self.fulfillmentNewRequestsCount];
     [self pp_refreshQuickActionUnseenFlags];
 }
 
@@ -4153,7 +3861,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         }
     } completion:nil];
 
-NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickActionsView ?: [UIView new], self.subscriptionFooterCard ?: [UIView new]];
+NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorityNotificationCard ?: [UIView new], self.priorityFulfillmentCard ?: [UIView new], self.quickActionsView ?: [UIView new], self.subscriptionFooterCard ?: [UIView new]];
     [headerViews enumerateObjectsUsingBlock:^(UIView *view, NSUInteger idx, __unused BOOL *stop) {
         view.alpha = 0.0;
         view.transform = CGAffineTransformMakeTranslation(0, 18);
@@ -4169,7 +3877,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickAc
     }];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.08 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self quickActionsRailView] ? [[self quickActionsRailView] animateEntrance] : nil;
+        [self.quickActionsDeckView animateEntrance];
         [self pp_animateVisibleCellsModern];
     });
 }
@@ -4382,6 +4090,17 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickAc
                                                                                         workspaceRouteTag:workspaceRouteTag
                                                                                    workspaceActionTitle:workspaceActionTitle
                                                                                                 priority:priority];
+
+    // Notifications are read-only navigation, not a lifecycle mutation. The inbox
+    // resolves the newest unread model from its authenticated live snapshot.
+    if ([signalIdentifier isEqualToString:@"notifications"]) {
+        target.actionKind = @"notification.openNewestUnread";
+        target.interactionKind = @"primary";
+        target.primaryActionTitle = kLang(@"PulseCommand_OpenNewestUnreadAlert");
+        target.workspaceActionTitle = kLang(@"PulseCommand_ViewAllNotifications");
+        target.isPrimaryActionPermitted = target.workspaceRouteTag.length > 0;
+        return target;
+    }
 
     if ([signalIdentifier isEqualToString:@"fulfillment"]) {
         PPFulfillmentModel *model = [self pp_highestPriorityActionableFulfillment];
@@ -4688,6 +4407,35 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickAc
 
     if ([target.interactionKind isEqualToString:@"quickAction"]) {
         [self pp_executeCommandCenterQuickActionTarget:target];
+        return;
+    }
+
+    if ([target.actionKind isEqualToString:@"notification.openNewestUnread"]) {
+        // This is read-only navigation. The existing XLForm route remains the
+        // permission-aware owner, then the inbox selects the newest unread item
+        // from its authenticated, newest-first live snapshot.
+        XLFormRowDescriptor *inboxRow = [self.form formRowWithTag:@"notificationsInbox"];
+        if (!inboxRow.action.formBlock) {
+            [self pp_refreshPulseAfterInvalidActionTarget];
+            return;
+        }
+
+        [self pp_routeCommandCenterRoute:@"notificationsInbox"];
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+
+            UIViewController *topController = strongSelf.navigationController.topViewController;
+            if (![topController isKindOfClass:NotificationsListViewController.class]) {
+                [strongSelf pp_refreshPulseAfterInvalidActionTarget];
+                return;
+            }
+
+            NotificationsListViewController *inbox = (NotificationsListViewController *)topController;
+            [inbox pp_openNewestUnreadNotificationWhenReady];
+            [strongSelf pp_finishCommandCenterActionNavigation];
+        });
         return;
     }
 
@@ -5217,55 +4965,56 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickAc
 
     BOOL animated = self.didCompleteInitialDashboardLoad && self.view.window != nil;
     [surface applySnapshot:snapshot animated:animated];
+
+    // Official root UITabBar badge sync (replaces custom dock badge)
+    NSInteger combinedBadge = self.inboxUnreadCount + (hasProviderWorkspace ? self.supportChatsUnreadThreadsCount : 0);
+    if ([self.tabBarController isKindOfClass:NSClassFromString(@"PPProRootTabBarController")]) {
+        PPProRootTabBarController *tabBar = (PPProRootTabBarController *)self.tabBarController;
+        [tabBar updateNotificationBadge:combinedBadge];
+    }
 }
 
-- (void)pp_presentCommandCenterMoreMenu {
-    UIAlertController *menu = [UIAlertController alertControllerWithTitle:kLang(@"PulseCommand_More_Title")
-                                                                   message:kLang(@"PulseCommand_More_Subtitle")
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    __weak typeof(self) weakSelf = self;
-    void (^addFormRoute)(NSString *, NSString *) = ^(NSString *route, NSString *titleKey) {
-        if (![weakSelf.form formRowWithTag:route]) {
-            return;
-        }
-        [menu addAction:[UIAlertAction actionWithTitle:kLang(titleKey)
-                                                 style:UIAlertActionStyleDefault
-                                               handler:^(__unused UIAlertAction *action) {
-            [weakSelf pp_routeCommandCenterRoute:route];
-        }]];
-    };
+- (void)pp_pushCommandCenterMenuMap {
+    UINavigationController *navigationController = self.navigationController;
+    PPProCommandCenterSurfaceController *surface = self.commandCenterSurfaceController;
+    if (!navigationController || !surface) return;
+    if ([navigationController.topViewController.restorationIdentifier isEqualToString:@"PPProCommandCenterMenuMap"]) return;
 
-    addFormRoute(@"providerSupportChats", @"ch_provider_support_chats_title");
-    addFormRoute(@"fulfillmentOrders", @"Fulfillment_Title");
-    addFormRoute(@"branchesManagement", @"MarketplaceBranches_Manage");
-    addFormRoute(@"deliveryCompanyMembers", @"DeliveryCompany_Tab_Members");
-    addFormRoute(@"notificationSettings", @"NotificationSettings");
-    addFormRoute(@"profileSettings", @"ProfileSettings");
+    UIViewController *destination = [surface makeCommandCenterMenuMapViewController];
+    [navigationController pushViewController:destination animated:YES];
+}
 
-    UserModel *user = [self pp_activeDashboardUser];
-    BOOL hasProviderWorkspace = [self pp_hasNonDeliveryCompanyWorkspaceForUser:user] ||
-        [self pp_hasDeliveryCompanyWorkspaceForUser:user];
-    if (hasProviderWorkspace) {
-        [menu addAction:[UIAlertAction actionWithTitle:kLang(@"ProfileSettings_EditProviderProfile")
-                                                 style:UIAlertActionStyleDefault
-                                               handler:^(__unused UIAlertAction *action) {
-            [weakSelf pp_routeCommandCenterRoute:@"__providerEditor"];
-        }]];
-        [menu addAction:[UIAlertAction actionWithTitle:kLang(@"ProviderSubscriptionCardTitle")
-                                                 style:UIAlertActionStyleDefault
-                                               handler:^(__unused UIAlertAction *action) {
-            [weakSelf pp_routeCommandCenterRoute:@"__subscription"];
-        }]];
-    }
+- (void)pp_pushCommandCenterMore {
+    UINavigationController *navigationController = self.navigationController;
+    PPProCommandCenterSurfaceController *surface = self.commandCenterSurfaceController;
+    if (!navigationController || !surface) return;
+    if ([navigationController.topViewController.restorationIdentifier isEqualToString:@"PPProCommandCenterMore"]) return;
 
-    [menu addAction:[UIAlertAction actionWithTitle:kLang(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
-    UIPopoverPresentationController *popover = menu.popoverPresentationController;
-    if (popover) {
-        popover.sourceView = self.view;
-        popover.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMaxY(self.view.bounds) - 1.0, 1.0, 1.0);
-        popover.permittedArrowDirections = 0;
-    }
-    [self presentViewController:menu animated:YES completion:nil];
+    UIViewController *destination = [surface makeCommandCenterMoreViewController];
+    [navigationController pushViewController:destination animated:YES];
+}
+
+// Mirrors a UITabBarController's selectedIndex onto the custom SwiftUI dock:
+// the selected lane reflects whatever is on top of the navigation stack, and
+// reverts to Pulse once the user navigates back to the dashboard root.
+- (void)pp_syncDockSelectionWithTopViewController {
+    PPProCommandCenterSurfaceController *surface = self.commandCenterSurfaceController;
+    if (!surface) return;
+    NSString *identifier = self.navigationController.topViewController.restorationIdentifier;
+    [surface syncSelectedDockTabForTopRestorationIdentifier:identifier];
+}
+
+#pragma mark - UINavigationControllerDelegate
+
+- (void)navigationController:(UINavigationController *)navigationController
+       didShowViewController:(UIViewController *)viewController
+                    animated:(BOOL)animated {
+    (void)viewController;
+    (void)animated;
+    (void)navigationController;
+    // Any push or pop (including the interactive back-swipe) re-syncs the dock
+    // so its selected lane never lies about the current destination.
+    [self pp_syncDockSelectionWithTopViewController];
 }
 
 - (void)pp_routeCommandCenterRoute:(NSString *)route {
@@ -5295,8 +5044,23 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.quickAc
         return;
     }
 
+    if ([route isEqualToString:@"__menuMap"]) {
+        [self pp_pushCommandCenterMenuMap];
+        return;
+    }
+
+    if ([route isEqualToString:@"__dockPopToRoot"]) {
+        // UITabBarController re-select behavior: pop the active dock lane back
+        // to the Pulse root. No-op when already at root.
+        if (self.navigationController.viewControllers.count > 1) {
+            [self.navigationController popToRootViewControllerAnimated:YES];
+        }
+        [self pp_syncDockSelectionWithTopViewController];
+        return;
+    }
+
     if ([route isEqualToString:@"__more"]) {
-        [self pp_presentCommandCenterMoreMenu];
+        [self pp_pushCommandCenterMore];
         return;
     }
 
@@ -6005,6 +5769,13 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
     // reattached by the shared PPNavBar lifecycle hook.
     [self pp_removeNavBar];
     [self.navigationController setNavigationBarHidden:YES animated:animated];
+
+    // Own the navigation delegate so the custom SwiftUI dock tracks the stack
+    // like a UITabBarController: returning to this dashboard root reselects
+    // Pulse. Assigning here (rather than once) keeps ownership after any pushed
+    // destination that may have set itself as delegate.
+    self.navigationController.delegate = self;
+    [self pp_syncDockSelectionWithTopViewController];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -6016,6 +5787,12 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
     // returning to this dashboard hides it again in viewWillAppear:.
     if (self.navigationController.topViewController != self) {
         [self.navigationController setNavigationBarHidden:NO animated:animated];
+        // Sync one last time so the dock reflects the destination we are
+        // pushing before we relinquish the navigation delegate.
+        [self pp_syncDockSelectionWithTopViewController];
+        if (self.navigationController.delegate == (id<UINavigationControllerDelegate>)self) {
+            self.navigationController.delegate = nil;
+        }
     }
 }
 

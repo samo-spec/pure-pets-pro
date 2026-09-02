@@ -19,6 +19,9 @@ static NSString * const kPPProviderSupportChatsEmpty = @"ch_provider_support_emp
 static NSString * const kPPProviderSupportChatsError = @"ch_provider_support_error";
 static NSString * const kPPConversationTypeProviderChat = @"provider_chat";
 
+// The table header is content-driven but never collapses below its design height.
+static const CGFloat kPPProviderSupportHeaderMinHeight = 214.0;
+
 static NSString *PPChatTrimmedString(id value)
 {
     if (![value isKindOfClass:NSString.class]) return @"";
@@ -133,7 +136,9 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 @property (nonatomic, strong) UILabel *badgeLabel;
 @property (nonatomic, strong) UIImageView *chevronView;
 @property (nonatomic, copy) NSString *representedParticipantID;
+@property (nonatomic, assign) BOOL ppHasUnread;
 - (void)configureWithThread:(ChatThreadModel *)thread unreadCount:(NSInteger)unreadCount dateFormatter:(NSDateFormatter *)formatter;
+- (void)pp_applyBorderTint;
 @end
 
 @implementation PPProviderSupportChatCell
@@ -156,24 +161,18 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 
     self.surfaceView = [[UIView alloc] init];
     self.surfaceView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.surfaceView.backgroundColor = PPChatSurfaceColor();
-    self.surfaceView.layer.cornerRadius = 24.0;
-    self.surfaceView.layer.cornerCurve = kCACornerCurveContinuous;
-    self.surfaceView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    self.surfaceView.layer.borderColor = [PPChatSecondaryTextColor() colorWithAlphaComponent:0.10].CGColor;
-    self.surfaceView.layer.shadowColor = UIColor.blackColor.CGColor;
-    self.surfaceView.layer.shadowOffset = CGSizeMake(0.0, 10.0);
-    self.surfaceView.layer.shadowRadius = 24.0;
-    self.surfaceView.layer.shadowOpacity = 0.07;
+    // Token card surface: elevated fill + hairline border + continuous corners + card shadow.
+    // The resting/unread border tint is re-applied by -pp_applyBorderTint.
+    PPStyleCardSurface(self.surfaceView, PPCornerCard);
     [self.contentView addSubview:self.surfaceView];
 
     self.avatarView = [[UIView alloc] init];
     self.avatarView.translatesAutoresizingMaskIntoConstraints = NO;
     self.avatarView.backgroundColor = [PPChatMatteColor() colorWithAlphaComponent:0.86];
-    self.avatarView.layer.cornerRadius = 25.0;
-    self.avatarView.layer.cornerCurve = kCACornerCurveContinuous;
+    // 25pt keeps the fixed 50x50 plate a true circle, so it stays off the radius token scale.
+    PPApplyContinuousCorners(self.avatarView, 25.0);
     self.avatarView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    self.avatarView.layer.borderColor = [(AppPrimaryClr) colorWithAlphaComponent:0.16].CGColor;
+    self.avatarView.layer.borderColor = AppPrimaryClrWithAlpha(0.16).CGColor;
     self.avatarView.clipsToBounds = YES;
     [self.surfaceView addSubview:self.avatarView];
 
@@ -186,25 +185,27 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 
     self.avatarLabel = [[UILabel alloc] init];
     self.avatarLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.avatarLabel.font = [Styling fontBold:16.0];
+    self.avatarLabel.font = [Styling fontBold:PPFontHeadline];
     self.avatarLabel.textColor = AppPrimaryClr;
     self.avatarLabel.textAlignment = NSTextAlignmentCenter;
+    // No Dynamic Type: the initial sits inside a hard 50x50 circular plate.
     [self.avatarView addSubview:self.avatarLabel];
 
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.font = [Styling fontBold:18.0];
+    self.titleLabel.font = [Styling fontBold:PPFontTitle3];
     self.titleLabel.textColor = PPChatPrimaryTextColor();
     self.titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     self.titleLabel.numberOfLines = 1;
+    PPEnableDynamicType(self.titleLabel, UIFontTextStyleTitle3);
     [self.surfaceView addSubview:self.titleLabel];
 
     self.typeLabel = [[UILabel alloc] init];
     self.typeLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.typeLabel.font = [Styling fontBold:10.5];
     self.typeLabel.textAlignment = NSTextAlignmentCenter;
-    self.typeLabel.layer.cornerRadius = 9.0;
-    self.typeLabel.layer.cornerCurve = kCACornerCurveContinuous;
+    // No Dynamic Type: fixed 18pt pill with no vertical inset to give back.
+    PPApplyContinuousCorners(self.typeLabel, 9.0);
     self.typeLabel.clipsToBounds = YES;
     [self.surfaceView addSubview:self.typeLabel];
 
@@ -214,6 +215,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     self.messageLabel.textColor = PPChatSecondaryTextColor();
     self.messageLabel.textAlignment = Language.alignmentForCurrentLanguage;
     self.messageLabel.numberOfLines = 2;
+    PPEnableDynamicType(self.messageLabel, UIFontTextStyleFootnote);
     [self.surfaceView addSubview:self.messageLabel];
 
     self.dateLabel = [[UILabel alloc] init];
@@ -221,34 +223,43 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     self.dateLabel.font = [Styling fontMedium:11.5];
     self.dateLabel.textColor = [PPChatSecondaryTextColor() colorWithAlphaComponent:0.72];
     self.dateLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    // No Dynamic Type: capped at 86pt in the same line as the title, so scaling
+    // would either truncate the timestamp or starve the name beside it.
     [self.surfaceView addSubview:self.dateLabel];
 
     self.badgeLabel = [[UILabel alloc] init];
     self.badgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.badgeLabel.font = [Styling fontBold:11.0];
+    self.badgeLabel.font = [Styling fontBold:PPFontCaption1];
     self.badgeLabel.textAlignment = NSTextAlignmentCenter;
     self.badgeLabel.textColor = UIColor.whiteColor;
     self.badgeLabel.backgroundColor = AppPrimaryClr;
-    self.badgeLabel.layer.cornerRadius = 12.0;
-    self.badgeLabel.layer.cornerCurve = kCACornerCurveContinuous;
+    // No Dynamic Type: fixed 24x24 circular unread badge.
+    PPApplyContinuousCorners(self.badgeLabel, 12.0);
     self.badgeLabel.clipsToBounds = YES;
     [self.surfaceView addSubview:self.badgeLabel];
 
     BOOL isRTL = Language.languageVal == 1;
-    UIImageSymbolConfiguration *chevronConfig = [UIImageSymbolConfiguration configurationWithPointSize:12.0 weight:UIImageSymbolWeightSemibold];
+    UIImageSymbolConfiguration *chevronConfig = [UIImageSymbolConfiguration configurationWithPointSize:PPFontFootnote weight:UIImageSymbolWeightSemibold];
     self.chevronView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:isRTL ? @"chevron.left" : @"chevron.right" withConfiguration:chevronConfig]];
     self.chevronView.translatesAutoresizingMaskIntoConstraints = NO;
     self.chevronView.tintColor = [PPChatSecondaryTextColor() colorWithAlphaComponent:0.55];
+    self.chevronView.isAccessibilityElement = NO;
     [self.surfaceView addSubview:self.chevronView];
 
+    // The row reads as a single VoiceOver button; the composed label is built in
+    // -configureWithThread: from the already-localized row values.
+    self.isAccessibilityElement = YES;
+    self.accessibilityTraits = UIAccessibilityTraitButton;
+    [self pp_applyBorderTint];
+
     [NSLayoutConstraint activateConstraints:@[
-        [self.surfaceView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6.0],
-        [self.surfaceView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:20.0],
-        [self.surfaceView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-20.0],
-        [self.surfaceView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6.0],
+        [self.surfaceView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:PPSpaceMDHalf],
+        [self.surfaceView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:PPSpaceLG],
+        [self.surfaceView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-PPSpaceLG],
+        [self.surfaceView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-PPSpaceMDHalf],
         [self.surfaceView.heightAnchor constraintGreaterThanOrEqualToConstant:108.0],
 
-        [self.avatarView.leadingAnchor constraintEqualToAnchor:self.surfaceView.leadingAnchor constant:16.0],
+        [self.avatarView.leadingAnchor constraintEqualToAnchor:self.surfaceView.leadingAnchor constant:PPSpaceBase],
         [self.avatarView.centerYAnchor constraintEqualToAnchor:self.surfaceView.centerYAnchor],
         [self.avatarView.widthAnchor constraintEqualToConstant:50.0],
         [self.avatarView.heightAnchor constraintEqualToConstant:50.0],
@@ -261,16 +272,16 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
         [self.avatarLabel.centerXAnchor constraintEqualToAnchor:self.avatarView.centerXAnchor],
         [self.avatarLabel.centerYAnchor constraintEqualToAnchor:self.avatarView.centerYAnchor],
 
-        [self.dateLabel.topAnchor constraintEqualToAnchor:self.surfaceView.topAnchor constant:16.0],
+        [self.dateLabel.topAnchor constraintEqualToAnchor:self.surfaceView.topAnchor constant:PPSpaceBase],
         [self.dateLabel.trailingAnchor constraintEqualToAnchor:self.chevronView.leadingAnchor constant:-10.0],
         [self.dateLabel.widthAnchor constraintLessThanOrEqualToConstant:86.0],
 
-        [self.chevronView.trailingAnchor constraintEqualToAnchor:self.surfaceView.trailingAnchor constant:-16.0],
+        [self.chevronView.trailingAnchor constraintEqualToAnchor:self.surfaceView.trailingAnchor constant:-PPSpaceBase],
         [self.chevronView.centerYAnchor constraintEqualToAnchor:self.surfaceView.centerYAnchor],
         [self.chevronView.widthAnchor constraintEqualToConstant:0.0],
         [self.chevronView.heightAnchor constraintEqualToConstant:0.0],
 
-        [self.titleLabel.topAnchor constraintEqualToAnchor:self.surfaceView.topAnchor constant:16.0],
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.surfaceView.topAnchor constant:PPSpaceBase],
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.avatarView.trailingAnchor constant:14.0],
         [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.dateLabel.leadingAnchor constant:-10.0],
 
@@ -291,6 +302,25 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
         [self.badgeLabel.widthAnchor constraintGreaterThanOrEqualToConstant:24.0],
         [self.badgeLabel.heightAnchor constraintEqualToConstant:24.0],
     ]];
+}
+
+// Border tints are CGColor snapshots, so they are re-applied whenever the unread
+// state or the light/dark appearance changes.
+- (void)pp_applyBorderTint
+{
+    UIColor *tint = self.ppHasUnread
+        ? AppPrimaryClrWithAlpha(0.26)
+        : [PPChatSecondaryTextColor() colorWithAlphaComponent:0.10];
+    self.surfaceView.layer.borderColor = tint.CGColor;
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection
+{
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (previousTraitCollection.userInterfaceStyle != self.traitCollection.userInterfaceStyle) {
+        [self pp_applyBorderTint];
+        self.avatarView.layer.borderColor = AppPrimaryClrWithAlpha(0.16).CGColor;
+    }
 }
 
 - (void)prepareForReuse
@@ -350,19 +380,29 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     self.badgeLabel.hidden = !unread;
     self.badgeLabel.text = unreadCount > 99 ? @"99+" : [NSString stringWithFormat:@"%ld", (long)unreadCount];
     self.titleLabel.textColor = unread ? (AppPrimaryClr) : PPChatPrimaryTextColor();
-    self.surfaceView.layer.borderColor = (unread ? [(AppPrimaryClr) colorWithAlphaComponent:0.26] : [PPChatSecondaryTextColor() colorWithAlphaComponent:0.10]).CGColor;
-    self.accessibilityLabel = [NSString stringWithFormat:@"%@, %@, %@", name, PPChatLocalizedParticipantType(participantType), message];
+    self.ppHasUnread = unread;
+    [self pp_applyBorderTint];
+    // Let the name wrap instead of truncating once the user is on an accessibility text size.
+    self.titleLabel.numberOfLines = PPIsAccessibilityTextSize() ? 2 : 1;
+    NSMutableArray<NSString *> *voiceOverParts = [NSMutableArray arrayWithObjects:name,
+                                                  PPChatLocalizedParticipantType(participantType),
+                                                  message, nil];
+    if (self.dateLabel.text.length > 0) [voiceOverParts addObject:self.dateLabel.text];
+    if (unread && self.badgeLabel.text.length > 0) [voiceOverParts addObject:self.badgeLabel.text];
+    self.isAccessibilityElement = YES;
+    self.accessibilityTraits = UIAccessibilityTraitButton;
+    self.accessibilityLabel = [voiceOverParts componentsJoinedByString:@", "];
 }
 
 - (void)setHighlighted:(BOOL)highlighted animated:(BOOL)animated
 {
     [super setHighlighted:highlighted animated:animated];
-    CGFloat scale = highlighted ? 0.982 : 1.0;
+    CGFloat scale = highlighted ? PPTapCardScaleDown : 1.0;
     void (^changes)(void) = ^{
         self.surfaceView.transform = CGAffineTransformMakeScale(scale, scale);
     };
-    if (animated && !UIAccessibilityIsReduceMotionEnabled()) {
-        [UIView animateWithDuration:highlighted ? 0.10 : 0.24
+    if (animated && !PPMotionReduced()) {
+        [UIView animateWithDuration:highlighted ? PPAnimDurationFast : PPAnimDurationNormal
                               delay:0.0
                             options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction
                          animations:changes
@@ -380,7 +420,10 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 @property (nonatomic, strong) UIImageView *emptyIconView;
 @property (nonatomic, strong) UILabel *emptyTitleLabel;
 @property (nonatomic, strong) UILabel *emptySubtitleLabel;
+@property (nonatomic, strong) UIStackView *emptyContentStack;
+@property (nonatomic, strong) UIActivityIndicatorView *loadingIndicatorView;
 @property (nonatomic, strong) UIView *tableHeaderView;
+@property (nonatomic, weak) UIView *headerSurfaceView;
 @property (nonatomic, strong) UILabel *headerActiveValueLabel;
 @property (nonatomic, strong) UILabel *headerUnreadValueLabel;
 @property (nonatomic, strong) UILabel *headerLatestValueLabel;
@@ -408,6 +451,8 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *participantTypesByID;
 - (void)pp_prepareEntranceState;
 - (void)pp_mergeUnreadCountsAndRefresh;
+- (void)pp_registerAccessibilityObservers;
+- (void)pp_updateTableHeaderHeight;
 @end
 
 @implementation PPProviderSupportChatsViewController
@@ -436,6 +481,12 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     [self pp_configureEmptyState];
     [self pp_updateEmptyState];
     [self pp_prepareEntranceState];
+    [self pp_registerAccessibilityObservers];
+}
+
+- (void)dealloc
+{
+    [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
 - (void)viewWillAppear:(BOOL)animated
@@ -479,22 +530,22 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 {
     if (self.ambientTopGlowView) return;
 
-    UIColor *accent = AppPrimaryClr;
     UIView *topGlow = [[UIView alloc] init];
     topGlow.translatesAutoresizingMaskIntoConstraints = NO;
     topGlow.userInteractionEnabled = NO;
-    topGlow.backgroundColor = [accent colorWithAlphaComponent:0.10];
-    topGlow.layer.cornerRadius = 150.0;
-    topGlow.layer.cornerCurve = kCACornerCurveContinuous;
+    topGlow.accessibilityElementsHidden = YES;
+    topGlow.backgroundColor = AppPrimaryClrWithAlpha(0.10);
+    // 150/180pt radii keep the 300/360pt decorative plates perfectly circular.
+    PPApplyContinuousCorners(topGlow, 150.0);
     [self.view insertSubview:topGlow atIndex:0];
     self.ambientTopGlowView = topGlow;
 
     UIView *bottomGlow = [[UIView alloc] init];
     bottomGlow.translatesAutoresizingMaskIntoConstraints = NO;
     bottomGlow.userInteractionEnabled = NO;
+    bottomGlow.accessibilityElementsHidden = YES;
     bottomGlow.backgroundColor = [PPChatPrimaryTextColor() colorWithAlphaComponent:0.035];
-    bottomGlow.layer.cornerRadius = 180.0;
-    bottomGlow.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(bottomGlow, 180.0);
     [self.view insertSubview:bottomGlow atIndex:0];
     self.ambientBottomGlowView = bottomGlow;
 
@@ -526,14 +577,14 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.showsVerticalScrollIndicator = NO;
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
-    self.tableView.contentInset = UIEdgeInsetsMake(12.0, 0.0, 32.0, 0.0);
+    self.tableView.contentInset = UIEdgeInsetsMake(PPSpaceMD, 0.0, PPSpaceXXL, 0.0);
     [self.tableView registerClass:PPProviderSupportChatCell.class forCellReuseIdentifier:@"PPProviderSupportChatCell"];
     [self.view addSubview:self.tableView];
 
     UIView *header = [self pp_makeHeaderView];
+    self.tableHeaderView = header;
     self.tableView.tableHeaderView = header;
-    [header layoutIfNeeded];
-    header.frame = CGRectMake(0.0, 0.0, UIScreen.mainScreen.bounds.size.width, 214.0);
+    [self pp_updateTableHeaderHeight];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
@@ -543,31 +594,56 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     ]];
 }
 
+// The header used to be pinned to a hard 214pt frame, which clipped its copy at
+// large text sizes.  It now measures its own content and keeps 214pt as a floor,
+// so the default-size layout is byte-for-byte what it was before.
+- (void)pp_updateTableHeaderHeight
+{
+    UIView *header = self.tableHeaderView;
+    if (!header) return;
+
+    CGFloat width = self.view.bounds.size.width > 0.0 ? self.view.bounds.size.width : UIScreen.mainScreen.bounds.size.width;
+    CGSize fitting = [header systemLayoutSizeFittingSize:CGSizeMake(width, 0.0)
+                          withHorizontalFittingPriority:UILayoutPriorityRequired
+                                verticalFittingPriority:UILayoutPriorityFittingSizeLevel];
+    CGFloat height = MAX(kPPProviderSupportHeaderMinHeight, ceil(fitting.height));
+    if (fabs(header.frame.size.height - height) < 0.5 && fabs(header.frame.size.width - width) < 0.5) return;
+
+    CGAffineTransform restoreTransform = header.transform;
+    header.transform = CGAffineTransformIdentity;
+    header.frame = CGRectMake(0.0, 0.0, width, height);
+    header.transform = restoreTransform;
+    // Re-assigning is what commits the new height to the table.
+    self.tableView.tableHeaderView = header;
+}
+
 - (UIView *)pp_makeHeaderView
 {
-    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, UIScreen.mainScreen.bounds.size.width, 214.0)];
+    UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, UIScreen.mainScreen.bounds.size.width, kPPProviderSupportHeaderMinHeight)];
     container.backgroundColor = UIColor.clearColor;
 
     UIView *surface = [[UIView alloc] init];
     surface.translatesAutoresizingMaskIntoConstraints = NO;
     surface.backgroundColor = [PPChatSurfaceColor() colorWithAlphaComponent:0.70];
-    surface.layer.cornerRadius = 30.0;
-    surface.layer.cornerCurve = kCACornerCurveContinuous;
+    // Translucent hero plate: keeps its own alpha fill so the material below stays
+    // visible, so only the radius/border/shadow come from the token scale.
+    PPApplyContinuousCorners(surface, PPCornerHero);
     surface.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    surface.layer.borderColor = [(AppPrimaryClr) colorWithAlphaComponent:0.16].CGColor;
-    surface.layer.shadowColor = UIColor.blackColor.CGColor;
+    surface.layer.borderColor = AppPrimaryClrWithAlpha(0.16).CGColor;
+    surface.layer.shadowColor = AppShadowColor.CGColor;
     surface.layer.shadowOffset = CGSizeMake(0.0, 18.0);
     surface.layer.shadowRadius = 34.0;
     surface.layer.shadowOpacity = 0.07;
     surface.clipsToBounds = NO;
     [container addSubview:surface];
+    self.headerSurfaceView = surface;
 
     UIView *materialHost = [[UIView alloc] init];
     materialHost.translatesAutoresizingMaskIntoConstraints = NO;
     materialHost.clipsToBounds = YES;
-    materialHost.layer.cornerRadius = 30.0;
-    materialHost.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(materialHost, PPCornerHero);
     materialHost.userInteractionEnabled = NO;
+    materialHost.accessibilityElementsHidden = YES;
     [surface addSubview:materialHost];
 
     if (@available(iOS 13.0, *)) {
@@ -585,10 +661,12 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 
     UILabel *eyebrow = [[UILabel alloc] init];
     eyebrow.translatesAutoresizingMaskIntoConstraints = NO;
-    eyebrow.font = [Styling fontBold:11.0];
+    eyebrow.font = [Styling fontBold:PPFontCaption1];
     eyebrow.textColor = AppPrimaryClr;
     eyebrow.textAlignment = Language.alignmentForCurrentLanguage;
     eyebrow.text = kLang(@"ch_provider_support_eyebrow");
+    eyebrow.numberOfLines = 2;
+    PPEnableDynamicType(eyebrow, UIFontTextStyleCaption1);
     [surface addSubview:eyebrow];
 
     UILabel *title = [[UILabel alloc] init];
@@ -596,8 +674,10 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     title.font = [Styling fontBold:32.0];
     title.textColor = PPChatPrimaryTextColor();
     title.textAlignment = Language.alignmentForCurrentLanguage;
-    title.numberOfLines = 2;
+    title.numberOfLines = 0;
     title.text = kLang(kPPProviderSupportChatsTitle);
+    title.accessibilityTraits = UIAccessibilityTraitHeader;
+    PPEnableDynamicType(title, UIFontTextStyleLargeTitle);
     [surface addSubview:title];
 
     UILabel *subtitle = [[UILabel alloc] init];
@@ -605,28 +685,28 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     subtitle.font = [Styling fontMedium:13.5];
     subtitle.textColor = [PPChatSecondaryTextColor() colorWithAlphaComponent:0.86];
     subtitle.textAlignment = Language.alignmentForCurrentLanguage;
-    subtitle.numberOfLines = 2;
+    subtitle.numberOfLines = 0;
     subtitle.text = kLang(@"ch_provider_support_premium_subtitle");
     if (subtitle.text.length == 0 || [subtitle.text isEqualToString:@"ch_provider_support_premium_subtitle"]) {
         subtitle.text = kLang(kPPProviderSupportChatsSubtitle);
     }
+    PPEnableDynamicType(subtitle, UIFontTextStyleFootnote);
     [surface addSubview:subtitle];
 
     UIView *mark = [[UIView alloc] init];
     mark.translatesAutoresizingMaskIntoConstraints = NO;
     mark.backgroundColor = [PPChatMatteColor() colorWithAlphaComponent:0.84];
-    mark.layer.cornerRadius = 26.0;
-    mark.layer.cornerCurve = kCACornerCurveContinuous;
-    mark.layer.shadowColor = UIColor.blackColor.CGColor;
-    mark.layer.shadowOffset = CGSizeMake(0.0, 10.0);
-    mark.layer.shadowRadius = 22.0;
-    mark.layer.shadowOpacity = 0.06;
+    // 26pt squircle on a fixed 64x64 glyph plate — kept off the token scale on purpose.
+    PPApplyContinuousCorners(mark, 26.0);
+    PPApplyCardShadow(mark);
+    mark.isAccessibilityElement = NO;
     [surface addSubview:mark];
 
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22.0 weight:UIImageSymbolWeightSemibold];
     UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"message.badge.fill" withConfiguration:config] ?: [UIImage systemImageNamed:@"message.fill" withConfiguration:config]];
     icon.translatesAutoresizingMaskIntoConstraints = NO;
     icon.tintColor = AppPrimaryClr;
+    icon.isAccessibilityElement = NO;
     [mark addSubview:icon];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -640,11 +720,11 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
         [materialHost.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor],
         [materialHost.bottomAnchor constraintEqualToAnchor:surface.bottomAnchor],
 
-        [eyebrow.topAnchor constraintEqualToAnchor:surface.topAnchor constant:24.0],
+        [eyebrow.topAnchor constraintEqualToAnchor:surface.topAnchor constant:PPSpaceXL],
         [eyebrow.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor constant:22.0],
-        [eyebrow.trailingAnchor constraintLessThanOrEqualToAnchor:mark.leadingAnchor constant:-16.0],
+        [eyebrow.trailingAnchor constraintLessThanOrEqualToAnchor:mark.leadingAnchor constant:-PPSpaceBase],
 
-        [title.topAnchor constraintEqualToAnchor:eyebrow.bottomAnchor constant:8.0],
+        [title.topAnchor constraintEqualToAnchor:eyebrow.bottomAnchor constant:PPSpaceSM],
         [title.leadingAnchor constraintEqualToAnchor:eyebrow.leadingAnchor],
         [title.trailingAnchor constraintEqualToAnchor:mark.leadingAnchor constant:-18.0],
 
@@ -652,10 +732,15 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
         [subtitle.leadingAnchor constraintEqualToAnchor:eyebrow.leadingAnchor],
         [subtitle.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor constant:-22.0],
 
-        [mark.topAnchor constraintEqualToAnchor:surface.topAnchor constant:24.0],
+        [mark.topAnchor constraintEqualToAnchor:surface.topAnchor constant:PPSpaceXL],
         [mark.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor constant:-22.0],
         [mark.widthAnchor constraintEqualToConstant:64.0],
         [mark.heightAnchor constraintEqualToConstant:64.0],
+
+        // Bottom pins let the header measure its own content instead of trusting a
+        // hard-coded height, which is what makes the scaled copy safe.
+        [surface.bottomAnchor constraintGreaterThanOrEqualToAnchor:subtitle.bottomAnchor constant:PPSpaceXL],
+        [surface.bottomAnchor constraintGreaterThanOrEqualToAnchor:mark.bottomAnchor constant:PPSpaceXL],
 
         [icon.centerXAnchor constraintEqualToAnchor:mark.centerXAnchor],
         [icon.centerYAnchor constraintEqualToAnchor:mark.centerYAnchor],
@@ -669,41 +754,59 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     self.emptyStateView = [[UIView alloc] init];
     self.emptyStateView.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyStateView.backgroundColor = PPChatMatteColor();
-    self.emptyStateView.layer.cornerRadius = 26.0;
-    self.emptyStateView.layer.cornerCurve = kCACornerCurveContinuous;
+    // Recessed matte placeholder: it keeps its own fill rather than the elevated
+    // card surface, so only the radius comes from the token scale.
+    PPApplyContinuousCorners(self.emptyStateView, PPCornerCard);
     self.emptyStateView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     self.emptyStateView.layer.borderColor = [PPChatSecondaryTextColor() colorWithAlphaComponent:0.08].CGColor;
     [self.view addSubview:self.emptyStateView];
+
+    // Loading honesty: the placeholder now shows a real spinner while the chats
+    // listener is still warming up, driven by the existing isLoading flag.
+    self.loadingIndicatorView = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    self.loadingIndicatorView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.loadingIndicatorView.hidesWhenStopped = YES;
+    self.loadingIndicatorView.color = AppPrimaryClr;
+    self.loadingIndicatorView.isAccessibilityElement = NO;
 
     self.emptyTitleLabel = [[UILabel alloc] init];
     self.emptyTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyTitleLabel.font = [Styling fontBold:17.0];
     self.emptyTitleLabel.textColor = PPChatPrimaryTextColor();
     self.emptyTitleLabel.textAlignment = NSTextAlignmentCenter;
-    self.emptyTitleLabel.numberOfLines = 2;
-    [self.emptyStateView addSubview:self.emptyTitleLabel];
+    self.emptyTitleLabel.numberOfLines = 0;
+    PPEnableDynamicType(self.emptyTitleLabel, UIFontTextStyleHeadline);
 
     self.emptySubtitleLabel = [[UILabel alloc] init];
     self.emptySubtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptySubtitleLabel.font = [Styling fontMedium:13.0];
     self.emptySubtitleLabel.textColor = PPChatSecondaryTextColor();
     self.emptySubtitleLabel.textAlignment = NSTextAlignmentCenter;
-    self.emptySubtitleLabel.numberOfLines = 3;
-    [self.emptyStateView addSubview:self.emptySubtitleLabel];
+    self.emptySubtitleLabel.numberOfLines = 0;
+    PPEnableDynamicType(self.emptySubtitleLabel, UIFontTextStyleFootnote);
+
+    // A stack keeps the card content growable and lets the stopped spinner
+    // collapse instead of leaving a hole above the title.
+    self.emptyContentStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.loadingIndicatorView,
+                                                                            self.emptyTitleLabel,
+                                                                            self.emptySubtitleLabel]];
+    self.emptyContentStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.emptyContentStack.axis = UILayoutConstraintAxisVertical;
+    self.emptyContentStack.alignment = UIStackViewAlignmentFill;
+    self.emptyContentStack.spacing = PPSpaceSM;
+    self.emptyContentStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.emptyContentStack setCustomSpacing:PPSpaceMD afterView:self.loadingIndicatorView];
+    [self.emptyStateView addSubview:self.emptyContentStack];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.emptyStateView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:26.0],
         [self.emptyStateView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-26.0],
         [self.emptyStateView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:46.0],
 
-        [self.emptyTitleLabel.topAnchor constraintEqualToAnchor:self.emptyStateView.topAnchor constant:24.0],
-        [self.emptyTitleLabel.leadingAnchor constraintEqualToAnchor:self.emptyStateView.leadingAnchor constant:22.0],
-        [self.emptyTitleLabel.trailingAnchor constraintEqualToAnchor:self.emptyStateView.trailingAnchor constant:-22.0],
-
-        [self.emptySubtitleLabel.topAnchor constraintEqualToAnchor:self.emptyTitleLabel.bottomAnchor constant:8.0],
-        [self.emptySubtitleLabel.leadingAnchor constraintEqualToAnchor:self.emptyStateView.leadingAnchor constant:22.0],
-        [self.emptySubtitleLabel.trailingAnchor constraintEqualToAnchor:self.emptyStateView.trailingAnchor constant:-22.0],
-        [self.emptySubtitleLabel.bottomAnchor constraintEqualToAnchor:self.emptyStateView.bottomAnchor constant:-24.0],
+        [self.emptyContentStack.topAnchor constraintEqualToAnchor:self.emptyStateView.topAnchor constant:PPSpaceXL],
+        [self.emptyContentStack.leadingAnchor constraintEqualToAnchor:self.emptyStateView.leadingAnchor constant:22.0],
+        [self.emptyContentStack.trailingAnchor constraintEqualToAnchor:self.emptyStateView.trailingAnchor constant:-22.0],
+        [self.emptyContentStack.bottomAnchor constraintEqualToAnchor:self.emptyStateView.bottomAnchor constant:-PPSpaceXL],
     ]];
 }
 
@@ -898,16 +1001,65 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
         self.emptyTitleLabel.text = kLang(kPPProviderSupportChatsEmpty);
         self.emptySubtitleLabel.text = kLang(@"ch_provider_support_empty_subtitle");
     }
+
+    // Reduce Motion users are never given a perpetual spinner — the already
+    // localized loading copy above carries the same state for them.
+    BOOL shouldSpin = showEmpty && self.isLoading && !self.hasError && !PPMotionReduced();
+    if (shouldSpin) {
+        [self.loadingIndicatorView startAnimating];
+    } else {
+        [self.loadingIndicatorView stopAnimating];
+    }
 }
 
 #pragma mark - Motion
+
+- (void)pp_registerAccessibilityObservers
+{
+    [NSNotificationCenter.defaultCenter addObserver:self
+                                           selector:@selector(pp_reduceMotionStatusDidChange)
+                                               name:UIAccessibilityReduceMotionStatusDidChangeNotification
+                                             object:nil];
+}
+
+// Reduce Motion can be switched on while this screen is already on screen, so the
+// perpetual ambient drift has to be torn down immediately when that happens.
+- (void)pp_reduceMotionStatusDidChange
+{
+    if (PPMotionReduced()) {
+        [self pp_stopAmbientMotion];
+        self.tableView.tableHeaderView.alpha = 1.0;
+        self.tableView.tableHeaderView.transform = CGAffineTransformIdentity;
+        self.emptyStateView.alpha = 1.0;
+        self.emptyStateView.transform = CGAffineTransformIdentity;
+    } else if (self.viewIfLoaded.window) {
+        [self pp_startAmbientMotionIfNeeded];
+    }
+    [self pp_updateEmptyState];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection
+{
+    [super traitCollectionDidChange:previousTraitCollection];
+
+    if (![previousTraitCollection.preferredContentSizeCategory isEqualToString:self.traitCollection.preferredContentSizeCategory]) {
+        // Scaled header copy needs a re-measure, and the rows re-lay out at the new size.
+        [self pp_updateTableHeaderHeight];
+        [self.tableView reloadData];
+    }
+    if (previousTraitCollection.userInterfaceStyle != self.traitCollection.userInterfaceStyle) {
+        // CGColor snapshots do not follow light/dark switches on their own.
+        self.emptyStateView.layer.borderColor = [PPChatSecondaryTextColor() colorWithAlphaComponent:0.08].CGColor;
+        self.headerSurfaceView.layer.borderColor = AppPrimaryClrWithAlpha(0.16).CGColor;
+    }
+}
 
 - (void)pp_prepareEntranceState
 {
     if (self.didPrepareEntranceAnimation || self.didRunEntranceAnimation) return;
     self.didPrepareEntranceAnimation = YES;
 
-    if (UIAccessibilityIsReduceMotionEnabled()) {
+    if (PPMotionReduced()) {
         self.tableView.tableHeaderView.alpha = 1.0;
         self.tableView.tableHeaderView.transform = CGAffineTransformIdentity;
         self.emptyStateView.alpha = 1.0;
@@ -924,7 +1076,8 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 
 - (void)pp_startAmbientMotionIfNeeded
 {
-    if (self.ambientMotionRunning || UIAccessibilityIsReduceMotionEnabled()) return;
+    // Never start perpetual/repeating motion under Reduce Motion.
+    if (self.ambientMotionRunning || PPMotionReduced()) return;
     self.ambientMotionRunning = YES;
     [self.ambientTopGlowView.layer removeAllAnimations];
     [self.ambientBottomGlowView.layer removeAllAnimations];
@@ -980,11 +1133,11 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     } else if (self.isLoading) {
         self.headerStatusLabel.text = kLang(@"ch_provider_support_syncing");
         self.headerStatusLabel.textColor = AppPrimaryClr;
-        self.headerStatusLabel.backgroundColor = [(AppPrimaryClr) colorWithAlphaComponent:0.10];
+        self.headerStatusLabel.backgroundColor = AppPrimaryClrWithAlpha(0.10);
     } else {
         self.headerStatusLabel.text = kLang(@"ch_provider_support_live");
         self.headerStatusLabel.textColor = AppPrimaryClr;
-        self.headerStatusLabel.backgroundColor = [(AppPrimaryClr) colorWithAlphaComponent:0.10];
+        self.headerStatusLabel.backgroundColor = AppPrimaryClrWithAlpha(0.10);
     }
 }
 
@@ -1004,7 +1157,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 {
     if (self.didRunEntranceAnimation) return;
     self.didRunEntranceAnimation = YES;
-    if (UIAccessibilityIsReduceMotionEnabled()) {
+    if (PPMotionReduced()) {
         self.tableView.tableHeaderView.alpha = 1.0;
         self.tableView.tableHeaderView.transform = CGAffineTransformIdentity;
         self.emptyStateView.alpha = 1.0;
@@ -1026,14 +1179,17 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 
 - (void)pp_animateVisibleRowsIfNeeded
 {
-    if (self.didAnimateRows || UIAccessibilityIsReduceMotionEnabled()) return;
+    if (self.didAnimateRows || PPMotionReduced()) return;
     NSArray<UITableViewCell *> *cells = self.tableView.visibleCells;
     if (cells.count == 0) return;
     self.didAnimateRows = YES;
     [cells enumerateObjectsUsingBlock:^(UITableViewCell *cell, NSUInteger idx, __unused BOOL *stop) {
         cell.contentView.alpha = 0.0;
         cell.contentView.transform = CGAffineTransformMakeTranslation(0.0, 18.0);
-        [UIView animateWithDuration:0.42 delay:MIN(idx, 6) * 0.035 usingSpringWithDamping:0.88 initialSpringVelocity:0.28 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
+        // Stagger is clamped at 6 steps (6 x 0.035 = 0.21s) so the last visible row
+        // never waits noticeably longer than the first.
+        NSTimeInterval staggerDelay = MIN(idx, 6) * 0.035;
+        [UIView animateWithDuration:0.42 delay:staggerDelay usingSpringWithDamping:0.88 initialSpringVelocity:0.28 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionBeginFromCurrentState animations:^{
             cell.contentView.alpha = 1.0;
             cell.contentView.transform = CGAffineTransformIdentity;
         } completion:nil];

@@ -83,6 +83,7 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     UIButton *dismissButton = [UIButton buttonWithType:UIButtonTypeCustom];
     dismissButton.translatesAutoresizingMaskIntoConstraints = NO;
     dismissButton.backgroundColor = UIColor.clearColor;
+    dismissButton.accessibilityLabel = kLang(@"Cancel");
     [dismissButton addTarget:self action:@selector(pp_dismissSelf) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:dismissButton];
 
@@ -93,20 +94,19 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
             ? [UIColor colorWithWhite:0.12 alpha:0.98]
             : [UIColor colorWithWhite:1.0 alpha:0.98];
     }];
-    _sheetView.layer.cornerRadius = 30.0;
-    _sheetView.layer.cornerCurve = kCACornerCurveContinuous;
-    _sheetView.layer.shadowColor = UIColor.blackColor.CGColor;
-    _sheetView.layer.shadowOpacity = 0.16;
-    _sheetView.layer.shadowRadius = 28.0;
-    _sheetView.layer.shadowOffset = CGSizeMake(0.0, -8.0);
+    PPApplyContinuousCorners(_sheetView, PPCornerHero);
+    // Bottom sheet keeps its upward shadow direction; color/opacity/radius now come from tokens.
+    _sheetView.layer.shadowColor = AppShadowColor.CGColor;
+    _sheetView.layer.shadowOpacity = PPShadowElevatedOpacity;
+    _sheetView.layer.shadowRadius = PPShadowElevatedRadius;
+    _sheetView.layer.shadowOffset = CGSizeMake(0.0, -PPSpaceSM);
     [self.view addSubview:_sheetView];
 
     if (@available(iOS 13.0, *)) {
         UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial]];
         blurView.translatesAutoresizingMaskIntoConstraints = NO;
         blurView.userInteractionEnabled = NO;
-        blurView.layer.cornerRadius = 30.0;
-        blurView.layer.cornerCurve = kCACornerCurveContinuous;
+        PPApplyContinuousCorners(blurView, PPCornerHero);
         blurView.clipsToBounds = YES;
         [_sheetView addSubview:blurView];
         [NSLayoutConstraint activateConstraints:@[
@@ -126,18 +126,21 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.text = kLang(@"ProfileSettings_SheetTitle");
-    titleLabel.font = [Styling fontBold:18];
+    titleLabel.font = [Styling fontBold:PPFontTitle3];
     titleLabel.textColor = PrimaryTextClr;
+    titleLabel.numberOfLines = 2;
     titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    PPEnableDynamicType(titleLabel, UIFontTextStyleTitle3);
     [_sheetView addSubview:titleLabel];
 
     UILabel *subtitleLabel = [[UILabel alloc] init];
     subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     subtitleLabel.text = kLang(@"ProfileSettings_SheetSubtitle");
-    subtitleLabel.font = [Styling fontMedium:12];
+    subtitleLabel.font = [Styling fontMedium:PPFontFootnote];
     subtitleLabel.textColor = SeconderyTextClr;
     subtitleLabel.numberOfLines = 2;
     subtitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    PPEnableDynamicType(subtitleLabel, UIFontTextStyleFootnote);
     [_sheetView addSubview:subtitleLabel];
 
     _stackView = [[UIStackView alloc] init];
@@ -158,9 +161,9 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
             ? [UIColor colorWithWhite:1.0 alpha:0.06]
             : [UIColor colorWithWhite:0.0 alpha:0.035];
     }];
-    cancelButton.layer.cornerRadius = 18.0;
-    cancelButton.layer.cornerCurve = kCACornerCurveContinuous;
-    cancelButton.titleLabel.font = [Styling fontBold:15];
+    PPApplyContinuousCorners(cancelButton, PPCornerMedium);
+    cancelButton.titleLabel.font = [Styling fontBold:PPFontCallout];
+    PPEnableDynamicType(cancelButton.titleLabel, UIFontTextStyleCallout);
     [cancelButton setTitle:kLang(@"Cancel") forState:UIControlStateNormal];
     [cancelButton setTitleColor:PrimaryTextClr forState:UIControlStateNormal];
     [cancelButton addTarget:self action:@selector(pp_dismissSelf) forControlEvents:UIControlEventTouchUpInside];
@@ -201,7 +204,7 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
         [cancelButton.topAnchor constraintEqualToAnchor:_stackView.bottomAnchor constant:14.0],
         [cancelButton.leadingAnchor constraintEqualToAnchor:_stackView.leadingAnchor],
         [cancelButton.trailingAnchor constraintEqualToAnchor:_stackView.trailingAnchor],
-        [cancelButton.heightAnchor constraintEqualToConstant:54.0],
+        [cancelButton.heightAnchor constraintGreaterThanOrEqualToConstant:54.0],
         [cancelButton.bottomAnchor constraintEqualToAnchor:_sheetView.bottomAnchor constant:-16.0],
     ]];
 
@@ -217,18 +220,16 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
             ? [UIColor colorWithWhite:1.0 alpha:0.05]
             : [UIColor colorWithWhite:0.0 alpha:0.028];
     }];
-    button.layer.cornerRadius = 22.0;
-    button.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(button, PPCornerCard);
     button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentFill;
     button.contentEdgeInsets = UIEdgeInsetsZero;
-    [button.heightAnchor constraintEqualToConstant:74.0].active = YES;
+    // Grows instead of clipping when the user raises the text size.
+    [button.heightAnchor constraintGreaterThanOrEqualToConstant:74.0].active = YES;
     [button addTarget:self action:@selector(pp_actionTapped:) forControlEvents:UIControlEventTouchUpInside];
 
     UIView *iconPlate = [[UIView alloc] init];
     iconPlate.translatesAutoresizingMaskIntoConstraints = NO;
-    iconPlate.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
-    iconPlate.layer.cornerRadius = 18.0;
-    iconPlate.layer.cornerCurve = kCACornerCurveContinuous;
+    PPStyleAccentPlate(iconPlate, PPCornerMedium, 0.10);
     iconPlate.userInteractionEnabled = NO;
     [button addSubview:iconPlate];
 
@@ -242,28 +243,39 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.text = item[@"title"];
-    titleLabel.font = [Styling fontBold:15];
+    titleLabel.font = [Styling fontBold:PPFontCallout];
     titleLabel.textColor = [item[@"destructive"] boolValue] ? [UIColor ppError] : PrimaryTextClr;
+    titleLabel.numberOfLines = 2;
     titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     titleLabel.userInteractionEnabled = NO;
+    PPEnableDynamicType(titleLabel, UIFontTextStyleCallout);
     [button addSubview:titleLabel];
 
     UILabel *subtitleLabel = [[UILabel alloc] init];
     subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     subtitleLabel.text = item[@"subtitle"];
-    subtitleLabel.font = [Styling fontMedium:12];
+    subtitleLabel.font = [Styling fontMedium:PPFontFootnote];
     subtitleLabel.textColor = SeconderyTextClr;
     subtitleLabel.numberOfLines = 2;
     subtitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     subtitleLabel.userInteractionEnabled = NO;
+    PPEnableDynamicType(subtitleLabel, UIFontTextStyleFootnote);
     [button addSubview:subtitleLabel];
 
     UIImageView *chevron = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:Language.isRTL ? @"chevron.left" : @"chevron.right"
                                                                       withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightBold]]];
     chevron.translatesAutoresizingMaskIntoConstraints = NO;
-    chevron.tintColor = [PrimaryTextClr colorWithAlphaComponent:0.35];
+    chevron.tintColor = AppTertiaryTextClr;
     chevron.userInteractionEnabled = NO;
     [button addSubview:chevron];
+
+    // The row is drawn from plain subviews, so VoiceOver needs one composed element.
+    NSMutableArray<NSString *> *spokenParts = [NSMutableArray array];
+    if (titleLabel.text.length) [spokenParts addObject:titleLabel.text];
+    if (subtitleLabel.text.length) [spokenParts addObject:subtitleLabel.text];
+    button.isAccessibilityElement = YES;
+    button.accessibilityTraits = UIAccessibilityTraitButton;
+    button.accessibilityLabel = [spokenParts componentsJoinedByString:@", "];
 
     [NSLayoutConstraint activateConstraints:@[
         [iconPlate.leadingAnchor constraintEqualToAnchor:button.leadingAnchor constant:14.0],
@@ -280,7 +292,8 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 
         [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:4.0],
         [subtitleLabel.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
-        [subtitleLabel.trailingAnchor constraintEqualToAnchor:titleLabel.trailingAnchor],
+        [subtitleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:chevron.leadingAnchor constant:-10.0],
+        [subtitleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:button.bottomAnchor constant:-14.0],
 
         [chevron.trailingAnchor constraintEqualToAnchor:button.trailingAnchor constant:-16.0],
         [chevron.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
@@ -297,6 +310,8 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 - (void)pp_prepareEntranceState {
     if (_didRunEntrance || _didPrepareEntrance) return;
     _didPrepareEntrance = YES;
+    // Reduce Motion: skip staging so there is no entrance left to animate.
+    if (PPMotionReduced()) return;
     _sheetView.transform = CGAffineTransformMakeTranslation(0.0, 28.0);
     _sheetView.alpha = 0.0;
 }
@@ -304,6 +319,12 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 - (void)pp_runEntranceIfNeeded {
     if (_didRunEntrance) return;
     _didRunEntrance = YES;
+    if (PPMotionReduced()) {
+        _dimmingView.alpha = 1.0;
+        _sheetView.alpha = 1.0;
+        _sheetView.transform = CGAffineTransformIdentity;
+        return;
+    }
     [UIView animateWithDuration:0.22 delay:0.0 options:UIViewAnimationOptionCurveEaseOut animations:^{
         self->_dimmingView.alpha = 1.0;
     } completion:nil];
@@ -354,6 +375,7 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 @property (nonatomic, strong) UIView *providerSectionCard;
 @property (nonatomic, strong) UIImageView *providerCoverImageView;
 @property (nonatomic, strong) UIView *providerCoverFallbackView;
+@property (nonatomic, strong) UIActivityIndicatorView *providerLoadingIndicator;
 @property (nonatomic, strong) UIImageView *providerLogoView;
 @property (nonatomic, strong) UILabel *providerStatusPillLabel;
 @property (nonatomic, strong) UILabel *providerPreviewTitleLabel;
@@ -430,14 +452,15 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     self.saveButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.saveButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.saveButton.backgroundColor = AppPrimaryClr;
-    self.saveButton.layer.cornerRadius = 16.0;
-    self.saveButton.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(self.saveButton, PPCorner16);
+    // Dynamic Type intentionally skipped: this pill lives inside the fixed-height
+    // navigation bar chrome, so a scaled title would clip rather than reflow.
     self.saveButton.titleLabel.font = [Styling fontBold:13];
     [self.saveButton setTitle:kLang(@"Save") forState:UIControlStateNormal];
     [self.saveButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.saveButton.tintColor = UIColor.whiteColor;
     self.saveButton.contentEdgeInsets = UIEdgeInsetsMake(0, 16, 0, 16);
-    [self.saveButton.heightAnchor constraintEqualToConstant:34.0].active = YES;
+    [self.saveButton.heightAnchor constraintEqualToConstant:PPTouchTargetMin].active = YES;
     [self.saveButton addTarget:self action:@selector(pp_saveProfile) forControlEvents:UIControlEventTouchUpInside];
     [PPButtonHelper attachTapAnimationToButton:self.saveButton style:PPButtonAnimationStyleDefault];
     [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:self.saveButton title:kLang(@"ProfileSettings") showBack:YES];
@@ -490,6 +513,8 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     [self.contentStack addArrangedSubview:[self pp_buildSectionHeaderWithTitle:kLang(@"ProfileSettings_SettingsSectionTitle")
                                                                       subtitle:kLang(@"ProfileSettings_SettingsSectionSubtitle")]];
     [self.contentStack addArrangedSubview:[self pp_buildSettingsSection]];
+
+    [self pp_applySectionCardStyling];
 }
 
 - (UIView *)pp_buildHeroCard {
@@ -498,54 +523,57 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
      self.heroCard.accentColor = AppPrimaryClr;
 
     UILabel *eyebrow = [self pp_label:kLang(@"ProfileSettings_Eyebrow")
-                                 font:[Styling fontBold:11]
+                                 font:[Styling fontBold:PPFontCaption1]
                                 color:AppPrimaryClr
-                                lines:1];
+                                lines:1
+                            textStyle:UIFontTextStyleCaption1];
     [self.heroCard addSubview:eyebrow];
 
     UIView *avatarHalo = [[UIView alloc] init];
     avatarHalo.translatesAutoresizingMaskIntoConstraints = NO;
-    avatarHalo.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
-    avatarHalo.layer.cornerRadius = 44.0;
-    avatarHalo.layer.cornerCurve = kCACornerCurveContinuous;
+    PPStyleAccentPlate(avatarHalo, 44.0, 0.10);
     [self.heroCard addSubview:avatarHalo];
 
     self.heroAvatarView = [[UIImageView alloc] init];
     self.heroAvatarView.translatesAutoresizingMaskIntoConstraints = NO;
     self.heroAvatarView.clipsToBounds = YES;
     self.heroAvatarView.contentMode = UIViewContentModeScaleAspectFill;
-    self.heroAvatarView.layer.cornerRadius = 36.0;
-    self.heroAvatarView.layer.cornerCurve = kCACornerCurveContinuous;
-    self.heroAvatarView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
+    PPApplyContinuousCorners(self.heroAvatarView, 36.0);
+    self.heroAvatarView.backgroundColor = AppPrimaryClrWithAlpha(0.08);
     [avatarHalo addSubview:self.heroAvatarView];
 
     self.heroNameLabel = [self pp_label:@""
                                    font:[Styling fontBold:28]
                                   color:PrimaryTextClr
-                                  lines:2];
+                                  lines:2
+                              textStyle:UIFontTextStyleTitle1];
     [self.heroCard addSubview:self.heroNameLabel];
 
     self.heroSubtitleLabel = [self pp_label:@""
                                        font:[Styling fontMedium:13]
                                       color:SeconderyTextClr
-                                      lines:2];
+                                      lines:2
+                                  textStyle:UIFontTextStyleFootnote];
     [self.heroCard addSubview:self.heroSubtitleLabel];
 
+    // Dynamic Type intentionally skipped on the role pill: it is a fixed-height
+    // badge whose padding comes from literal spaces in the text, so a scaled
+    // font would clip horizontally instead of reflowing.
     self.heroRolePillLabel = [self pp_label:@""
-                                       font:[Styling fontBold:11]
+                                       font:[Styling fontBold:PPFontCaption1]
                                       color:AppPrimaryClr
                                       lines:1];
     self.heroRolePillLabel.textAlignment = NSTextAlignmentCenter;
-    self.heroRolePillLabel.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
-    self.heroRolePillLabel.layer.cornerRadius = 12.0;
-    self.heroRolePillLabel.layer.cornerCurve = kCACornerCurveContinuous;
+    self.heroRolePillLabel.backgroundColor = AppPrimaryClrWithAlpha(0.10);
+    PPApplyContinuousCorners(self.heroRolePillLabel, PPCornerSmall);
     self.heroRolePillLabel.clipsToBounds = YES;
     [self.heroCard addSubview:self.heroRolePillLabel];
 
     self.heroMetaLabel = [self pp_label:@""
-                                   font:[Styling fontMedium:12]
+                                   font:[Styling fontMedium:PPFontFootnote]
                                   color:SeconderyTextClr
-                                  lines:2];
+                                  lines:2
+                              textStyle:UIFontTextStyleFootnote];
     [self.heroCard addSubview:self.heroMetaLabel];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -591,8 +619,10 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     UIView *container = [[UIView alloc] init];
     container.translatesAutoresizingMaskIntoConstraints = NO;
 
-    UILabel *titleLabel = [self pp_label:title font:[Styling fontBold:16] color:PrimaryTextClr lines:1];
-    UILabel *subtitleLabel = [self pp_label:subtitle font:[Styling fontMedium:12] color:SeconderyTextClr lines:2];
+    UILabel *titleLabel = [self pp_label:title font:[Styling fontBold:PPFontHeadline] color:PrimaryTextClr lines:2
+                               textStyle:UIFontTextStyleHeadline];
+    UILabel *subtitleLabel = [self pp_label:subtitle font:[Styling fontMedium:PPFontFootnote] color:SeconderyTextClr lines:2
+                                  textStyle:UIFontTextStyleFootnote];
     [container addSubview:titleLabel];
     [container addSubview:subtitleLabel];
 
@@ -613,9 +643,6 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 - (UIView *)pp_buildAccountSection {
     self.accountSectionCard = [[UIView alloc] init];
     self.accountSectionCard.translatesAutoresizingMaskIntoConstraints = NO;
-    self.accountSectionCard.backgroundColor = [self pp_surfaceColor];
-    self.accountSectionCard.layer.cornerRadius = 28.0;
-    self.accountSectionCard.layer.cornerCurve = kCACornerCurveContinuous;
 
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -643,9 +670,10 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
                                                autocapitalizationType:UITextAutocapitalizationTypeNone]];
 
     self.saveFootnoteLabel = [self pp_label:kLang(@"ProfileSettings_SaveHint")
-                                       font:[Styling fontMedium:11]
+                                       font:[Styling fontMedium:PPFontCaption1]
                                       color:SeconderyTextClr
-                                      lines:2];
+                                      lines:2
+                                  textStyle:UIFontTextStyleCaption1];
     [stack addArrangedSubview:self.saveFootnoteLabel];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -668,14 +696,11 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     UIView *shell = [[UIView alloc] init];
     shell.translatesAutoresizingMaskIntoConstraints = NO;
     shell.backgroundColor = [self pp_innerSurfaceColor];
-    shell.layer.cornerRadius = 22.0;
-    shell.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(shell, PPCornerCard);
 
     UIView *iconPlate = [[UIView alloc] init];
     iconPlate.translatesAutoresizingMaskIntoConstraints = NO;
-    iconPlate.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
-    iconPlate.layer.cornerRadius = 18.0;
-    iconPlate.layer.cornerCurve = kCACornerCurveContinuous;
+    PPStyleAccentPlate(iconPlate, PPCornerMedium, 0.10);
     [shell addSubview:iconPlate];
 
     UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:icon
@@ -684,7 +709,8 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     iconView.tintColor = AppPrimaryClr;
     [iconPlate addSubview:iconView];
 
-    UILabel *titleLabel = [self pp_label:title font:[Styling fontBold:13] color:SeconderyTextClr lines:1];
+    UILabel *titleLabel = [self pp_label:title font:[Styling fontBold:13] color:SeconderyTextClr lines:1
+                               textStyle:UIFontTextStyleFootnote];
     [shell addSubview:titleLabel];
 
     UITextField *field = [[UITextField alloc] init];
@@ -692,7 +718,7 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     field.font = [Styling fontMedium:17];
     field.textColor = PrimaryTextClr;
     field.textAlignment = Language.alignmentForCurrentLanguage;
-    field.adjustsFontForContentSizeCategory = YES;
+    PPEnableDynamicTypeForTextField(field, UIFontTextStyleHeadline);
     field.autocorrectionType = UITextAutocorrectionTypeNo;
     field.autocapitalizationType = capitalization;
     field.keyboardType = keyboard;
@@ -733,16 +759,12 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 - (UIView *)pp_buildProviderPreviewSection {
     self.providerSectionCard = [[UIView alloc] init];
     self.providerSectionCard.translatesAutoresizingMaskIntoConstraints = NO;
-    self.providerSectionCard.backgroundColor = [self pp_surfaceColor];
-    self.providerSectionCard.layer.cornerRadius = 30.0;
-    self.providerSectionCard.layer.cornerCurve = kCACornerCurveContinuous;
     self.providerSectionCard.clipsToBounds = YES;
 
     UIView *coverContainer = [[UIView alloc] init];
     coverContainer.translatesAutoresizingMaskIntoConstraints = NO;
     coverContainer.clipsToBounds = YES;
-    coverContainer.layer.cornerRadius = 24.0;
-    coverContainer.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(coverContainer, PPCornerCard);
     [self.providerSectionCard addSubview:coverContainer];
 
     self.providerCoverImageView = [[UIImageView alloc] init];
@@ -753,8 +775,15 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 
     self.providerCoverFallbackView = [[UIView alloc] init];
     self.providerCoverFallbackView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.providerCoverFallbackView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
+    self.providerCoverFallbackView.backgroundColor = AppPrimaryClrWithAlpha(0.08);
     [coverContainer addSubview:self.providerCoverFallbackView];
+
+    // Honest loading: the placeholder plate spins until the provider state resolves.
+    self.providerLoadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    self.providerLoadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+    self.providerLoadingIndicator.color = AppPrimaryClr;
+    self.providerLoadingIndicator.hidesWhenStopped = YES;
+    [self.providerCoverFallbackView addSubview:self.providerLoadingIndicator];
 
     UIView *coverShade = [[UIView alloc] init];
     coverShade.translatesAutoresizingMaskIntoConstraints = NO;
@@ -764,40 +793,41 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     UIView *logoHalo = [[UIView alloc] init];
     logoHalo.translatesAutoresizingMaskIntoConstraints = NO;
     logoHalo.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.92];
-    logoHalo.layer.cornerRadius = 34.0;
-    logoHalo.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(logoHalo, 34.0);
     [coverContainer addSubview:logoHalo];
 
     self.providerLogoView = [[UIImageView alloc] init];
     self.providerLogoView.translatesAutoresizingMaskIntoConstraints = NO;
     self.providerLogoView.clipsToBounds = YES;
     self.providerLogoView.contentMode = UIViewContentModeScaleAspectFill;
-    self.providerLogoView.layer.cornerRadius = 28.0;
-    self.providerLogoView.layer.cornerCurve = kCACornerCurveContinuous;
-    self.providerLogoView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.12];
+    PPApplyContinuousCorners(self.providerLogoView, 28.0);
+    self.providerLogoView.backgroundColor = AppPrimaryClrWithAlpha(0.12);
     [logoHalo addSubview:self.providerLogoView];
 
+    // Dynamic Type intentionally skipped on the status pill: fixed-height badge
+    // over the cover art, padded by literal spaces, so scaling would clip it.
     self.providerStatusPillLabel = [self pp_label:@""
-                                             font:[Styling fontBold:11]
+                                             font:[Styling fontBold:PPFontCaption1]
                                             color:UIColor.whiteColor
                                             lines:1];
     self.providerStatusPillLabel.textAlignment = NSTextAlignmentCenter;
     self.providerStatusPillLabel.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.28];
-    self.providerStatusPillLabel.layer.cornerRadius = 12.0;
-    self.providerStatusPillLabel.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(self.providerStatusPillLabel, PPCornerSmall);
     self.providerStatusPillLabel.clipsToBounds = YES;
     [coverContainer addSubview:self.providerStatusPillLabel];
 
     self.providerPreviewTitleLabel = [self pp_label:kLang(@"ProfileSettings_ProviderPreviewShownInUsersApp")
                                                font:[Styling fontBold:17]
                                               color:PrimaryTextClr
-                                              lines:2];
+                                              lines:2
+                                          textStyle:UIFontTextStyleHeadline];
     [self.providerSectionCard addSubview:self.providerPreviewTitleLabel];
 
     self.providerPreviewSubtitleLabel = [self pp_label:@""
-                                                  font:[Styling fontMedium:12]
+                                                  font:[Styling fontMedium:PPFontFootnote]
                                                  color:SeconderyTextClr
-                                                 lines:3];
+                                                 lines:3
+                                             textStyle:UIFontTextStyleFootnote];
     [self.providerSectionCard addSubview:self.providerPreviewSubtitleLabel];
 
     UIStackView *rowsStack = [[UIStackView alloc] init];
@@ -812,17 +842,18 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     [rowsStack addArrangedSubview:[self pp_makeKeyValueRowWithTitle:kLang(@"ProfileSettings_ProviderPreviewCoverTitle") valueLabel:&_providerCoverValueLabel]];
 
     self.providerPlanCaptionLabel = [self pp_label:@""
-                                              font:[Styling fontMedium:12]
+                                              font:[Styling fontMedium:PPFontFootnote]
                                              color:SeconderyTextClr
-                                             lines:3];
+                                             lines:3
+                                         textStyle:UIFontTextStyleFootnote];
     [self.providerSectionCard addSubview:self.providerPlanCaptionLabel];
 
     self.providerCTAButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.providerCTAButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.providerCTAButton.backgroundColor = AppPrimaryClr;
-    self.providerCTAButton.layer.cornerRadius = 19.0;
-    self.providerCTAButton.layer.cornerCurve = kCACornerCurveContinuous;
-    self.providerCTAButton.titleLabel.font = [Styling fontBold:15];
+    PPApplyContinuousCorners(self.providerCTAButton, PPCornerMedium);
+    self.providerCTAButton.titleLabel.font = [Styling fontBold:PPFontCallout];
+    PPEnableDynamicType(self.providerCTAButton.titleLabel, UIFontTextStyleCallout);
     [self.providerCTAButton setTitle:kLang(@"ProfileSettings_EditProviderProfile") forState:UIControlStateNormal];
     [self.providerCTAButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     [self.providerCTAButton setImage:[UIImage systemImageNamed:@"arrow.up.forward.app.fill"
@@ -831,7 +862,7 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     self.providerCTAButton.tintColor = UIColor.whiteColor;
     self.providerCTAButton.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     self.providerCTAButton.contentEdgeInsets = UIEdgeInsetsMake(0, 18, 0, 18);
-    [self.providerCTAButton.heightAnchor constraintEqualToConstant:52.0].active = YES;
+    [self.providerCTAButton.heightAnchor constraintGreaterThanOrEqualToConstant:PPButtonHeightLG].active = YES;
     [self.providerCTAButton addTarget:self action:@selector(pp_openProviderProfileEditor) forControlEvents:UIControlEventTouchUpInside];
     [PPButtonHelper attachTapAnimationToButton:self.providerCTAButton style:PPButtonAnimationStyleDefault];
     [self.providerSectionCard addSubview:self.providerCTAButton];
@@ -851,6 +882,9 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
         [self.providerCoverFallbackView.leadingAnchor constraintEqualToAnchor:coverContainer.leadingAnchor],
         [self.providerCoverFallbackView.trailingAnchor constraintEqualToAnchor:coverContainer.trailingAnchor],
         [self.providerCoverFallbackView.bottomAnchor constraintEqualToAnchor:coverContainer.bottomAnchor],
+
+        [self.providerLoadingIndicator.centerXAnchor constraintEqualToAnchor:self.providerCoverFallbackView.centerXAnchor],
+        [self.providerLoadingIndicator.centerYAnchor constraintEqualToAnchor:self.providerCoverFallbackView.centerYAnchor],
 
         [coverShade.topAnchor constraintEqualToAnchor:coverContainer.topAnchor],
         [coverShade.leadingAnchor constraintEqualToAnchor:coverContainer.leadingAnchor],
@@ -900,27 +934,22 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 - (UIView *)pp_buildSettingsSection {
     self.settingsSectionCard = [[UIView alloc] init];
     self.settingsSectionCard.translatesAutoresizingMaskIntoConstraints = NO;
-    self.settingsSectionCard.backgroundColor = [self pp_surfaceColor];
-    self.settingsSectionCard.layer.cornerRadius = 28.0;
-    self.settingsSectionCard.layer.cornerCurve = kCACornerCurveContinuous;
 
     UIButton *rowButton = [UIButton buttonWithType:UIButtonTypeSystem];
     rowButton.translatesAutoresizingMaskIntoConstraints = NO;
     rowButton.backgroundColor = [self pp_innerSurfaceColor];
-    rowButton.layer.cornerRadius = 22.0;
-    rowButton.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(rowButton, PPCornerCard);
     rowButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentFill;
     rowButton.contentEdgeInsets = UIEdgeInsetsZero;
-    [rowButton.heightAnchor constraintEqualToConstant:82.0].active = YES;
+    // Grows instead of clipping when the user raises the text size.
+    [rowButton.heightAnchor constraintGreaterThanOrEqualToConstant:82.0].active = YES;
     [rowButton addTarget:self action:@selector(pp_showMoreActions) forControlEvents:UIControlEventTouchUpInside];
     [PPButtonHelper attachTapAnimationToButton:rowButton style:PPButtonAnimationStyleDefault];
     [self.settingsSectionCard addSubview:rowButton];
 
     UIView *iconPlate = [[UIView alloc] init];
     iconPlate.translatesAutoresizingMaskIntoConstraints = NO;
-    iconPlate.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
-    iconPlate.layer.cornerRadius = 20.0;
-    iconPlate.layer.cornerCurve = kCACornerCurveContinuous;
+    PPStyleAccentPlate(iconPlate, 20.0, 0.10);
     iconPlate.userInteractionEnabled = NO;
     [rowButton addSubview:iconPlate];
 
@@ -932,25 +961,35 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     [iconPlate addSubview:iconView];
 
     UILabel *titleLabel = [self pp_label:kLang(@"ProfileSettings_SettingsRowTitle")
-                                    font:[Styling fontBold:15]
+                                    font:[Styling fontBold:PPFontCallout]
                                    color:PrimaryTextClr
-                                   lines:1];
+                                   lines:2
+                               textStyle:UIFontTextStyleCallout];
     titleLabel.userInteractionEnabled = NO;
     [rowButton addSubview:titleLabel];
 
     UILabel *subtitleLabel = [self pp_label:kLang(@"ProfileSettings_SettingsRowSubtitle")
-                                       font:[Styling fontMedium:12]
+                                       font:[Styling fontMedium:PPFontFootnote]
                                       color:SeconderyTextClr
-                                      lines:2];
+                                      lines:2
+                                  textStyle:UIFontTextStyleFootnote];
     subtitleLabel.userInteractionEnabled = NO;
     [rowButton addSubview:subtitleLabel];
 
     UIImageView *chevron = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:Language.isRTL ? @"chevron.left" : @"chevron.right"
                                                                       withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightBold]]];
     chevron.translatesAutoresizingMaskIntoConstraints = NO;
-    chevron.tintColor = [PrimaryTextClr colorWithAlphaComponent:0.35];
+    chevron.tintColor = AppTertiaryTextClr;
     chevron.userInteractionEnabled = NO;
     [rowButton addSubview:chevron];
+
+    // The row is drawn from plain subviews, so VoiceOver needs one composed element.
+    NSMutableArray<NSString *> *spokenParts = [NSMutableArray array];
+    if (titleLabel.text.length) [spokenParts addObject:titleLabel.text];
+    if (subtitleLabel.text.length) [spokenParts addObject:subtitleLabel.text];
+    rowButton.isAccessibilityElement = YES;
+    rowButton.accessibilityTraits = UIAccessibilityTraitButton;
+    rowButton.accessibilityLabel = [spokenParts componentsJoinedByString:@", "];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.settingsSectionCard.heightAnchor constraintGreaterThanOrEqualToConstant:118.0],
@@ -973,7 +1012,8 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 
         [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:4.0],
         [subtitleLabel.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
-        [subtitleLabel.trailingAnchor constraintEqualToAnchor:titleLabel.trailingAnchor],
+        [subtitleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:chevron.leadingAnchor constant:-12.0],
+        [subtitleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:rowButton.bottomAnchor constant:-16.0],
 
         [chevron.trailingAnchor constraintEqualToAnchor:rowButton.trailingAnchor constant:-16.0],
         [chevron.centerYAnchor constraintEqualToAnchor:rowButton.centerYAnchor],
@@ -986,17 +1026,22 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     UIView *row = [[UIView alloc] init];
     row.translatesAutoresizingMaskIntoConstraints = NO;
     row.backgroundColor = [self pp_innerSurfaceColor];
-    row.layer.cornerRadius = 18.0;
-    row.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(row, PPCornerMedium);
 
-    UILabel *titleLabel = [self pp_label:title font:[Styling fontBold:12] color:SeconderyTextClr lines:1];
+    UILabel *titleLabel = [self pp_label:title font:[Styling fontBold:PPFontFootnote] color:SeconderyTextClr lines:1
+                               textStyle:UIFontTextStyleFootnote];
     UILabel *valueLabel = [self pp_label:@""
-                                    font:[Styling fontMedium:14]
+                                    font:[Styling fontMedium:PPFontSubheadline]
                                    color:PrimaryTextClr
-                                   lines:2];
+                                   lines:2
+                               textStyle:UIFontTextStyleSubheadline];
     valueLabel.textAlignment = Language.alignmentForCurrentLanguage;
     [row addSubview:titleLabel];
     [row addSubview:valueLabel];
+
+    // Title + value read as one element; the value is refreshed with the content.
+    row.isAccessibilityElement = YES;
+    row.accessibilityLabel = title;
 
     [NSLayoutConstraint activateConstraints:@[
         [row.heightAnchor constraintGreaterThanOrEqualToConstant:58.0],
@@ -1109,6 +1154,10 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     self.providerEmailValueLabel.text = email.length ? email : @"—";
     self.providerPhoneValueLabel.text = phone.length ? phone : @"—";
     self.providerCoverValueLabel.text = [NSString stringWithFormat:kLang(@"ProfileSettings_ProviderPreviewCoverCountFormat"), (unsigned long)self.coverImageURLs.count];
+    [self pp_syncRowAccessibilityValueForLabel:self.providerNameValueLabel];
+    [self pp_syncRowAccessibilityValueForLabel:self.providerEmailValueLabel];
+    [self pp_syncRowAccessibilityValueForLabel:self.providerPhoneValueLabel];
+    [self pp_syncRowAccessibilityValueForLabel:self.providerCoverValueLabel];
     self.providerStatusPillLabel.text = status;
     self.providerPreviewSubtitleLabel.text = workspace.length
         ? [NSString stringWithFormat:kLang(@"ProfileSettings_ProviderPreviewWorkspaceFormat"), workspace]
@@ -1131,6 +1180,16 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
         self.providerCoverImageView.hidden = YES;
         self.providerCoverFallbackView.hidden = NO;
         self.providerCoverImageView.image = nil;
+    }
+
+    // The placeholder plate keeps spinning until the provider state observation
+    // has produced either a state or an error.  This is the system loading
+    // control (not decorative motion), so it is not suppressed by Reduce Motion.
+    BOOL providerStateResolved = (self.providerState != nil) || (self.providerStateError != nil);
+    if (providerStateResolved || self.providerCoverFallbackView.hidden) {
+        [self.providerLoadingIndicator stopAnimating];
+    } else {
+        [self.providerLoadingIndicator startAnimating];
     }
 }
 
@@ -1421,9 +1480,21 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 #pragma mark - Helpers
 
 - (void)pp_applyStaticColors {
-    self.accountSectionCard.backgroundColor = [self pp_surfaceColor];
+    // Re-runs the card styling so token fills *and* the resolved border CGColor
+    // follow light/dark appearance changes.
+    [self pp_applySectionCardStyling];
+}
+
+- (void)pp_applySectionCardStyling {
+    // Canonical Pro card surface: token fill + hairline border + card shadow.
+    PPStyleCardSurface(self.accountSectionCard, PPCornerHero);
+    PPStyleCardSurface(self.settingsSectionCard, PPCornerHero);
+    // The provider card clips its cover art, so a drop shadow would be clipped
+    // away: fill + hairline border + continuous corners only.
     self.providerSectionCard.backgroundColor = [self pp_surfaceColor];
-    self.settingsSectionCard.backgroundColor = [self pp_surfaceColor];
+    PPApplyContinuousCorners(self.providerSectionCard, PPCornerHero);
+    self.providerSectionCard.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    self.providerSectionCard.layer.borderColor = [self pp_borderColor].CGColor;
 }
 
 - (UIColor *)pp_surfaceColor {
@@ -1448,6 +1519,23 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     label.textAlignment = Language.alignmentForCurrentLanguage;
     label.adjustsFontForContentSizeCategory = YES;
     return label;
+}
+
+/// Same label, but the brand font is wrapped in the matching text style so it
+/// actually scales with the user's text-size preference.  Only used where the
+/// label's container can grow.
+- (UILabel *)pp_label:(NSString *)text
+                 font:(UIFont *)font
+                color:(UIColor *)color
+                lines:(NSInteger)lines
+            textStyle:(UIFontTextStyle)textStyle {
+    UILabel *label = [self pp_label:text font:font color:color lines:lines];
+    PPEnableDynamicType(label, textStyle);
+    return label;
+}
+
+- (void)pp_syncRowAccessibilityValueForLabel:(UILabel *)valueLabel {
+    valueLabel.superview.accessibilityValue = valueLabel.text;
 }
 
 - (NSString *)pp_displayNameForUser:(UserModel *)user {
@@ -1587,6 +1675,8 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 - (void)pp_prepareEntranceState {
     if (self.didPrepareEntrance || self.didRunEntrance) return;
     self.didPrepareEntrance = YES;
+    // Reduce Motion: nothing is staged, so there is no entrance left to animate.
+    if (PPMotionReduced()) return;
     self.heroCard.alpha = 0.0;
     self.heroCard.transform = CGAffineTransformMakeTranslation(0.0, 12.0);
     self.accountSectionCard.alpha = 0.0;
@@ -1598,7 +1688,7 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 - (void)pp_runEntranceIfNeeded {
     if (self.didRunEntrance) return;
     self.didRunEntrance = YES;
-    if (UIAccessibilityIsReduceMotionEnabled()) {
+    if (PPMotionReduced()) {
         self.heroCard.alpha = 1.0;
         self.heroCard.transform = CGAffineTransformIdentity;
         self.accountSectionCard.alpha = 1.0;

@@ -1,5 +1,12 @@
 #import "PPProviderApplicationManager.h"
 #import "PPFirebaseCompat.h"
+#if __has_include(<FirebaseAppCheck/FirebaseAppCheck.h>)
+#import <FirebaseAppCheck/FirebaseAppCheck.h>
+#define PP_FIREBASE_APP_CHECK_IMPORTED 1
+#elif __has_include(<FirebaseAppCheck/FirebaseAppCheck-Swift.h>)
+#import <FirebaseAppCheck/FirebaseAppCheck-Swift.h>
+#define PP_FIREBASE_APP_CHECK_IMPORTED 1
+#endif
 #import "FUManager.h"
 #import "Language.h"
 #import "UserManager.h"
@@ -624,6 +631,7 @@ static BOOL PPProviderBool(id value) {
         didRefreshAuth:(BOOL)didRefreshAuth
             completion:(void(^)(NSDictionary * _Nullable response, NSError * _Nullable error))completion;
 - (void)pp_refreshAuthSessionWithCompletion:(void(^)(BOOL refreshed))completion;
+- (void)pp_refreshAppCheckTokenWithCompletion:(void(^)(BOOL refreshed))completion;
 - (NSError *)pp_friendlyProviderPlansError:(NSError *)error;
 @end
 
@@ -969,14 +977,52 @@ static BOOL PPProviderBool(id value) {
         return;
     }
 
+    // An "unauthenticated" rejection from a callable can originate from EITHER
+    // layer: the Firebase Auth ID token OR the App Check token (the submit
+    // callables run with enforceAppCheck = true, and the iOS SDK surfaces an
+    // App Check rejection as FIRFunctionsErrorCodeUnauthenticated). The previous
+    // implementation only force-refreshed the ID token, so a transient App Check
+    // failure could never be recovered and was mislabeled as a sign-in problem.
+    // Refresh both layers, then allow the single retry if either produced a
+    // fresh token.
+    __weak typeof(self) weakSelf = self;
     [authUser getIDTokenForcingRefresh:YES completion:^(NSString * _Nullable token, NSError * _Nullable error) {
-        BOOL refreshed = (token.length > 0 && error == nil);
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (completion) {
-                completion(refreshed);
-            }
-        });
+        BOOL idTokenRefreshed = (token.length > 0 && error == nil);
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) { completion(idTokenRefreshed); }
+            });
+            return;
+        }
+        [strongSelf pp_refreshAppCheckTokenWithCompletion:^(BOOL appCheckRefreshed) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) {
+                    completion(idTokenRefreshed || appCheckRefreshed);
+                }
+            });
+        }];
     }];
+}
+
+// Force-refreshes the App Check token so a transient App Check failure (expired
+// or not-yet-minted attestation) can be recovered by the single submit retry.
+// Reports NO gracefully when FirebaseAppCheck is unavailable at compile time or
+// no default app exists, so the caller still retries on a fresh ID token.
+- (void)pp_refreshAppCheckTokenWithCompletion:(void(^)(BOOL refreshed))completion {
+#if defined(PP_FIREBASE_APP_CHECK_IMPORTED)
+    FIRAppCheck *appCheck = [FIRAppCheck appCheck];
+    if (!appCheck) {
+        if (completion) { completion(NO); }
+        return;
+    }
+    [appCheck tokenForcingRefresh:YES completion:^(FIRAppCheckToken * _Nullable token, NSError * _Nullable error) {
+        BOOL refreshed = (token.token.length > 0 && error == nil);
+        if (completion) { completion(refreshed); }
+    }];
+#else
+    if (completion) { completion(NO); }
+#endif
 }
 
 - (NSError *)pp_friendlyProviderPlansError:(NSError *)error {

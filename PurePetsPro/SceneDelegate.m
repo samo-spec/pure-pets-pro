@@ -9,6 +9,8 @@
 #import "PPProInAppNotificationPresenter.h"
 #import "PPStaffAuth.h"
 #import "AppManager.h"
+#import "AdminDashboardViewController.h"
+#import "PurePetsPro-Swift.h"
 #import <QuartzCore/QuartzCore.h>
 @import GoogleSignIn;
 
@@ -331,11 +333,19 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      }
 
      self.currentRoot = AppRootDashboard;
-     AdminDashboardViewController *dashboard =
-          [[AdminDashboardViewController alloc] initWithDeliveryCompanyProfile:profile];
-     PPNavigationController *navigationController = [[PPNavigationController alloc] initWithRootViewController:dashboard];
+     // Official root UITabBarController (replaces single UINavigationController)
+     PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
+     // Force view load so tabs exist before injecting profile
+     [tabBar loadViewIfNeeded];
+     if ([tabBar.viewControllers.firstObject isKindOfClass:UINavigationController.class]) {
+          UINavigationController *dashNav = (UINavigationController *)tabBar.viewControllers.firstObject;
+          if ([dashNav.viewControllers.firstObject isKindOfClass:AdminDashboardViewController.class]) {
+               AdminDashboardViewController *dashboard = (AdminDashboardViewController *)dashNav.viewControllers.firstObject;
+               [dashboard configureDeliveryCompanyProfile:profile];
+          }
+     }
      UIViewController *oldRoot = self.window.rootViewController;
-     self.window.rootViewController = navigationController;
+     self.window.rootViewController = tabBar;
      PPProApplyThemeToWindow(self.window);
      [self.window makeKeyAndVisible];
 
@@ -400,14 +410,26 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           }
 
           [PPDeliveryCompanyService.shared storeVerifiedProfile:profile];
-          UINavigationController *navigationController =
-               [self.window.rootViewController isKindOfClass:UINavigationController.class]
-               ? (UINavigationController *)self.window.rootViewController
-               : nil;
-          AdminDashboardViewController *dashboard =
-               [navigationController.viewControllers.firstObject isKindOfClass:AdminDashboardViewController.class]
-               ? (AdminDashboardViewController *)navigationController.viewControllers.firstObject
-               : nil;
+          UINavigationController *navigationController = nil;
+          AdminDashboardViewController *dashboard = nil;
+          if ([self.window.rootViewController isKindOfClass:UINavigationController.class]) {
+               navigationController = (UINavigationController *)self.window.rootViewController;
+               if ([navigationController.viewControllers.firstObject isKindOfClass:AdminDashboardViewController.class]) {
+                    dashboard = (AdminDashboardViewController *)navigationController.viewControllers.firstObject;
+               }
+          } else if ([self.window.rootViewController isKindOfClass:UITabBarController.class]) {
+               UITabBarController *tabBar = (UITabBarController *)self.window.rootViewController;
+               for (UIViewController *vc in tabBar.viewControllers) {
+                    if ([vc isKindOfClass:UINavigationController.class]) {
+                         UINavigationController *nav = (UINavigationController *)vc;
+                         if ([nav.viewControllers.firstObject isKindOfClass:AdminDashboardViewController.class]) {
+                              navigationController = nav;
+                              dashboard = (AdminDashboardViewController *)nav.viewControllers.firstObject;
+                              break;
+                         }
+                    }
+               }
+          }
           if (self.currentRoot != AppRootDashboard || !dashboard) {
                [self showDashboardWithDeliveryCompanyProfile:profile animated:YES];
                return;
@@ -427,10 +449,27 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           return;
      }
 
-     UINavigationController *navigationController =
-          [self.window.rootViewController isKindOfClass:UINavigationController.class]
-          ? (UINavigationController *)self.window.rootViewController
-          : nil;
+     UINavigationController *navigationController = nil;
+     if ([self.window.rootViewController isKindOfClass:UINavigationController.class]) {
+          navigationController = (UINavigationController *)self.window.rootViewController;
+     } else if ([self.window.rootViewController isKindOfClass:UITabBarController.class]) {
+          UITabBarController *tabBar = (UITabBarController *)self.window.rootViewController;
+          // Prefer the dashboard tab for company delivery detail
+          for (UIViewController *vc in tabBar.viewControllers) {
+               if ([vc isKindOfClass:UINavigationController.class]) {
+                    UINavigationController *nav = (UINavigationController *)vc;
+                    if ([nav.viewControllers.firstObject isKindOfClass:AdminDashboardViewController.class]) {
+                         navigationController = nav;
+                         // Ensure dashboard tab is selected before pushing
+                         tabBar.selectedViewController = nav;
+                         break;
+                    }
+               }
+          }
+          if (!navigationController && [tabBar.selectedViewController isKindOfClass:UINavigationController.class]) {
+               navigationController = (UINavigationController *)tabBar.selectedViewController;
+          }
+     }
      if (!navigationController) {
           return;
      }
@@ -508,6 +547,29 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      UIViewController *root = self.window.rootViewController;
      if ([root isKindOfClass:UITabBarController.class]) {
           UITabBarController *tabBarController = (UITabBarController *)root;
+          // Prefer the Notifications tab specifically when using official root tab bar
+          for (UIViewController *vc in tabBarController.viewControllers) {
+               if ([vc isKindOfClass:UINavigationController.class]) {
+                    UINavigationController *nav = (UINavigationController *)vc;
+                    for (UIViewController *child in nav.viewControllers) {
+                         if ([child isKindOfClass:NotificationsListViewController.class]) {
+                              // Ensure that tab is selected for visible routing
+                              if (tabBarController.selectedViewController != nav) {
+                                   tabBarController.selectedViewController = nav;
+                              }
+                              return nav;
+                         }
+                    }
+                    // Fallback: check if nav's root is NotificationsListViewController
+                    if ([nav.viewControllers.firstObject isKindOfClass:NotificationsListViewController.class]) {
+                         if (tabBarController.selectedViewController != nav) {
+                              tabBarController.selectedViewController = nav;
+                         }
+                         return nav;
+                    }
+               }
+          }
+          // Fallback to selected controller (legacy behavior)
           UIViewController *selectedController = tabBarController.selectedViewController;
           if ([selectedController isKindOfClass:UINavigationController.class]) {
                return (UINavigationController *)selectedController;
@@ -571,6 +633,14 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
      self.currentRoot = target;
      
+     if (target == AppRootDashboard) {
+          PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
+          self.window.rootViewController = tabBar;
+          PPProApplyThemeToWindow(self.window);
+          [self.window makeKeyAndVisible];
+          [self pp_consumePendingNotificationRouteIfPossible];
+          return;
+     }
      UIViewController *root;
      switch (target) {
           case AppRootSplash:    root = [SplashViewController new]; break;
@@ -584,6 +654,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                root = statusController;
                break;
           }
+          default: root = [SplashViewController new]; break;
      }
      
      PPNavigationController *nav = [[PPNavigationController alloc] initWithRootViewController:root];
@@ -598,11 +669,12 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
 
 - (void)pp_setRootDashboardWithUser:(UserModel *)model animated:(BOOL)animated {
-     AdminDashboardViewController *dash = [[AdminDashboardViewController alloc] init];
-     PPNavigationController *nav = [[PPNavigationController alloc] initWithRootViewController:dash];
+     PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
      
      UIViewController *old = self.window.rootViewController;
-     self.window.rootViewController = nav;
+     self.window.rootViewController = tabBar;
+     PPProApplyThemeToWindow(self.window);
+     [self.window makeKeyAndVisible];
      if (animated && old) {
           [old.presentedViewController dismissViewControllerAnimated:NO completion:nil];
           [UIView transitionWithView:self.window duration:0.25
@@ -693,6 +765,22 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
      self.currentRoot = target;
      
+     if (target == AppRootDashboard) {
+          PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
+          UIViewController *old = self.window.rootViewController;
+          self.window.rootViewController = tabBar;
+          PPProApplyThemeToWindow(self.window);
+          [self.window makeKeyAndVisible];
+          if (animated && old) {
+               [old.presentedViewController dismissViewControllerAnimated:NO completion:nil];
+               [UIView transitionWithView:self.window
+                                 duration:0.25
+                                  options:UIViewAnimationOptionTransitionCrossDissolve|UIViewAnimationOptionAllowAnimatedContent
+                               animations:nil
+                               completion:nil];
+          }
+          return;
+     }
      UIViewController *root;
      switch (target) {
           case AppRootSplash:    root = [SplashViewController new]; break;
@@ -741,6 +829,11 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 #pragma mark - Language
 
 - (void)reloadRootViewControllerForLanguageChange {
+     if ([self.window.rootViewController isKindOfClass:NSClassFromString(@"PPProRootTabBarController")]) {
+          PPProRootTabBarController *tabBar = (PPProRootTabBarController *)self.window.rootViewController;
+          [tabBar refreshForLanguageChange];
+          return;
+     }
      //UISemanticContentAttribute attr = [Language semanticAttributeForCurrentLanguage];
      //[UIView appearance].semanticContentAttribute = attr;
      //[UINavigationBar appearance].semanticContentAttribute = attr;

@@ -146,6 +146,8 @@ static NSString * const PPProThemePreferenceDark = @"dark";
 #import "PPTextField.h"
 #import "PPSubtitleSwitchCell.h"
 #import "PPQuickActionsView.h"
+#import "PPProPriorityNotificationCard.h"
+#import "PPProPriorityFulfillmentCard.h"
 #import "PPQuickActionsRailView.h"
 #import "PPParallax.h"
 #import "PPHUD.h"

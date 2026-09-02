@@ -1517,4 +1517,40 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
     });
 }
 
+#pragma mark - KVC Safety
+
+- (NSString *)roleSummary {
+    if (_roleSummary.length > 0) {
+        return _roleSummary;
+    }
+    if (self.isSuperAdmin) {
+        return @"Super Admin";
+    }
+    if (self.isAdmin) {
+        return @"Admin";
+    }
+    if (self.isOwner) {
+        return @"Owner";
+    }
+    if (self.isVet) {
+        return @"Veterinarian";
+    }
+    if (self.canDelivery) {
+        return @"Delivery Partner";
+    }
+    if (self.canOfferServices) {
+        return @"Service Provider";
+    }
+    return @"";
+}
+
+- (id)valueForUndefinedKey:(NSString *)key {
+    NSLog(@"[UserModel] Warning: valueForUndefinedKey called for key: %@", key);
+    return nil;
+}
+
+- (void)setValue:(id)value forUndefinedKey:(NSString *)key {
+    NSLog(@"[UserModel] Warning: setValue:forUndefinedKey called for key: %@", key);
+}
+
 @end

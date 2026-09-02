@@ -10,6 +10,7 @@
 @property (nonatomic, strong) UIView *statusLine;
 @property (nonatomic, strong) UILabel *routeEyebrowLabel;
 @property (nonatomic, strong) UILabel *orderLabel;
+@property (nonatomic, strong) UIView *statusPill;
 @property (nonatomic, strong) UILabel *statusLabel;
 @property (nonatomic, strong) UILabel *pickupLabel;
 @property (nonatomic, strong) UILabel *dropoffLabel;
@@ -27,46 +28,55 @@
         self.contentView.backgroundColor = UIColor.clearColor;
         self.selectionStyle = UITableViewCellSelectionStyleNone;
         self.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+        self.isAccessibilityElement = YES;
+        self.accessibilityTraits = UIAccessibilityTraitButton;
 
         self.surface = [[UIView alloc] init];
         self.surface.translatesAutoresizingMaskIntoConstraints = NO;
-        self.surface.backgroundColor = AppForgroundColr;
-        self.surface.layer.cornerRadius = 28.0;
-        self.surface.layer.cornerCurve = kCACornerCurveContinuous;
-        self.surface.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-        self.surface.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.06].CGColor;
-        self.surface.layer.shadowColor = [UIColor.blackColor colorWithAlphaComponent:0.08].CGColor;
-        self.surface.layer.shadowOpacity = 1.0;
-        self.surface.layer.shadowRadius = 24.0;
-        self.surface.layer.shadowOffset = CGSizeMake(0.0, 12.0);
+        PPStyleCardSurface(self.surface, PPCornerHero);
         [self.contentView addSubview:self.surface];
 
         self.glowView = [[UIView alloc] init];
         self.glowView.translatesAutoresizingMaskIntoConstraints = NO;
-        self.glowView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.05];
-        self.glowView.layer.cornerRadius = 54.0;
-        self.glowView.layer.cornerCurve = kCACornerCurveContinuous;
+        self.glowView.backgroundColor = AppPrimaryClrWithAlpha(0.05);
+        // Circular ambient glow: radius stays half of its 108pt box.
+        PPApplyContinuousCorners(self.glowView, 54.0);
         [self.surface addSubview:self.glowView];
 
         self.statusLine = [[UIView alloc] init];
         self.statusLine.translatesAutoresizingMaskIntoConstraints = NO;
-        self.statusLine.layer.cornerRadius = 3.0;
+        PPApplyContinuousCorners(self.statusLine, 3.0);
         [self.surface addSubview:self.statusLine];
 
-        self.routeEyebrowLabel = [self label:PPFontBold(10) color:[SeconderyTextClr colorWithAlphaComponent:0.84] lines:1];
-        self.orderLabel = [self label:PPFontBold(18) color:PrimaryTextClr lines:1];
-        self.statusLabel = [self label:PPFontBold(10) color:AppPrimaryClr lines:1];
-        self.statusLabel.textAlignment = NSTextAlignmentCenter;
-        self.statusLabel.layer.cornerRadius = 11.0;
-        self.statusLabel.layer.cornerCurve = kCACornerCurveContinuous;
-        self.statusLabel.clipsToBounds = YES;
-        self.pickupLabel = [self label:PPFontRegular(13) color:SeconderyTextClr lines:2];
-        self.dropoffLabel = [self label:PPFontRegular(13) color:SeconderyTextClr lines:2];
-        self.driverLabel = [self label:PPFontMedium(12) color:PrimaryTextClr lines:1];
-        self.feeLabel = [self label:PPFontBold(12) color:AppPrimaryClr lines:1];
-        self.dateLabel = [self label:PPFontRegular(11) color:[SeconderyTextClr colorWithAlphaComponent:0.78] lines:2];
+        self.routeEyebrowLabel = [self label:PPFontBold(PPFontCaption2) color:[SeconderyTextClr colorWithAlphaComponent:0.84] lines:1];
+        PPEnableDynamicType(self.routeEyebrowLabel, UIFontTextStyleCaption2);
+        self.orderLabel = [self label:PPFontBold(PPFontTitle3) color:PrimaryTextClr lines:1];
+        PPEnableDynamicType(self.orderLabel, UIFontTextStyleTitle3);
 
-        for (UIView *view in @[self.routeEyebrowLabel, self.orderLabel, self.statusLabel, self.pickupLabel, self.dropoffLabel, self.driverLabel, self.feeLabel, self.dateLabel]) {
+        // The status badge is now a padded container instead of a fixed-height
+        // label, so its text can scale with Dynamic Type without clipping.
+        self.statusPill = [[UIView alloc] init];
+        self.statusPill.translatesAutoresizingMaskIntoConstraints = NO;
+        self.statusPill.clipsToBounds = YES;
+        [self.surface addSubview:self.statusPill];
+
+        self.statusLabel = [self label:PPFontBold(PPFontCaption2) color:AppPrimaryClr lines:1];
+        self.statusLabel.textAlignment = NSTextAlignmentCenter;
+        PPEnableDynamicType(self.statusLabel, UIFontTextStyleCaption2);
+        [self.statusPill addSubview:self.statusLabel];
+
+        self.pickupLabel = [self label:PPFontRegular(13) color:SeconderyTextClr lines:2];
+        PPEnableDynamicType(self.pickupLabel, UIFontTextStyleFootnote);
+        self.dropoffLabel = [self label:PPFontRegular(13) color:SeconderyTextClr lines:2];
+        PPEnableDynamicType(self.dropoffLabel, UIFontTextStyleFootnote);
+        self.driverLabel = [self label:PPFontMedium(PPFontFootnote) color:PrimaryTextClr lines:1];
+        PPEnableDynamicType(self.driverLabel, UIFontTextStyleFootnote);
+        self.feeLabel = [self label:PPFontBold(PPFontFootnote) color:AppPrimaryClr lines:1];
+        PPEnableDynamicType(self.feeLabel, UIFontTextStyleFootnote);
+        self.dateLabel = [self label:PPFontRegular(PPFontCaption1) color:AppTertiaryTextClr lines:2];
+        PPEnableDynamicType(self.dateLabel, UIFontTextStyleCaption1);
+
+        for (UIView *view in @[self.routeEyebrowLabel, self.orderLabel, self.pickupLabel, self.dropoffLabel, self.driverLabel, self.feeLabel, self.dateLabel]) {
             [self.surface addSubview:view];
         }
 
@@ -90,14 +100,18 @@
             [self.routeEyebrowLabel.leadingAnchor constraintEqualToAnchor:self.statusLine.trailingAnchor constant:14.0],
             [self.routeEyebrowLabel.trailingAnchor constraintEqualToAnchor:self.surface.trailingAnchor constant:-16.0],
 
-            [self.orderLabel.topAnchor constraintEqualToAnchor:self.routeEyebrowLabel.bottomAnchor constant:6.0],
+            [self.orderLabel.topAnchor constraintEqualToAnchor:self.routeEyebrowLabel.bottomAnchor constant:PPSpaceMDHalf],
             [self.orderLabel.leadingAnchor constraintEqualToAnchor:self.statusLine.trailingAnchor constant:13.0],
-            [self.orderLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.statusLabel.leadingAnchor constant:-10.0],
+            [self.orderLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.statusPill.leadingAnchor constant:-10.0],
 
-            [self.statusLabel.centerYAnchor constraintEqualToAnchor:self.orderLabel.centerYAnchor],
-            [self.statusLabel.trailingAnchor constraintEqualToAnchor:self.surface.trailingAnchor constant:-16.0],
-            [self.statusLabel.heightAnchor constraintEqualToConstant:23.0],
-            [self.statusLabel.widthAnchor constraintGreaterThanOrEqualToConstant:82.0],
+            [self.statusPill.centerYAnchor constraintEqualToAnchor:self.orderLabel.centerYAnchor],
+            [self.statusPill.trailingAnchor constraintEqualToAnchor:self.surface.trailingAnchor constant:-PPSpaceBase],
+            [self.statusPill.heightAnchor constraintGreaterThanOrEqualToConstant:23.0],
+            [self.statusPill.widthAnchor constraintGreaterThanOrEqualToConstant:82.0],
+            [self.statusLabel.topAnchor constraintEqualToAnchor:self.statusPill.topAnchor constant:PPSpaceXS],
+            [self.statusLabel.bottomAnchor constraintEqualToAnchor:self.statusPill.bottomAnchor constant:-PPSpaceXS],
+            [self.statusLabel.leadingAnchor constraintEqualToAnchor:self.statusPill.leadingAnchor constant:PPSpaceSM],
+            [self.statusLabel.trailingAnchor constraintEqualToAnchor:self.statusPill.trailingAnchor constant:-PPSpaceSM],
 
             [self.pickupLabel.topAnchor constraintEqualToAnchor:self.orderLabel.bottomAnchor constant:12.0],
             [self.pickupLabel.leadingAnchor constraintEqualToAnchor:self.orderLabel.leadingAnchor],
@@ -134,6 +148,12 @@
     return label;
 }
 
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    // Keep the badge a true pill at every Dynamic Type size.
+    PPApplyContinuousCorners(self.statusPill, CGRectGetHeight(self.statusPill.bounds) / 2.0);
+}
+
 - (void)configureWithRequest:(PPDeliveryCompanyRequest *)request {
     UIColor *statusColor = request.statusColor;
     self.statusLine.backgroundColor = statusColor;
@@ -141,7 +161,7 @@
     self.routeEyebrowLabel.text = kLang(@"DeliveryCompany_Dashboard_Eyebrow");
     self.statusLabel.text = request.statusDisplayName;
     self.statusLabel.textColor = statusColor;
-    self.statusLabel.backgroundColor = [statusColor colorWithAlphaComponent:0.10];
+    self.statusPill.backgroundColor = [statusColor colorWithAlphaComponent:0.10];
     self.orderLabel.text = [NSString stringWithFormat:kLang(@"DeliveryCompany_Order_Format"), request.bestOrderNumber];
     self.pickupLabel.text = [NSString stringWithFormat:kLang(@"DeliveryCompany_Pickup_Format"), request.pickupSummary];
     self.dropoffLabel.text = [NSString stringWithFormat:kLang(@"DeliveryCompany_Dropoff_Format"), request.dropoffSummary];
@@ -151,16 +171,17 @@
     self.dateLabel.text = [NSString stringWithFormat:kLang(@"DeliveryCompany_Dates_Format"),
                            PPDeliveryCompanyFormattedDate(request.createdAt),
                            PPDeliveryCompanyFormattedDate(request.updatedAt)];
-    self.accessibilityLabel = [NSString stringWithFormat:@"%@, %@, %@, %@",
-                               self.orderLabel.text, self.statusLabel.text, self.pickupLabel.text, self.dropoffLabel.text];
+    self.accessibilityLabel = [NSString stringWithFormat:@"%@, %@, %@, %@, %@, %@",
+                               self.orderLabel.text, self.statusLabel.text, self.pickupLabel.text,
+                               self.dropoffLabel.text, self.driverLabel.text, self.feeLabel.text];
 }
 
 - (void)setHighlighted:(BOOL)highlighted animated:(BOOL)animated {
     [super setHighlighted:highlighted animated:animated];
-    [UIView animateWithDuration:0.14 animations:^{
-        self.surface.transform = highlighted ? CGAffineTransformMakeScale(0.985, 0.985) : CGAffineTransformIdentity;
+    PPAnimateRespectingMotion(PPAnimDurationFast, ^{
+        self.surface.transform = highlighted ? CGAffineTransformMakeScale(PPTapCardScaleDown, PPTapCardScaleDown) : CGAffineTransformIdentity;
         self.surface.alpha = highlighted ? 0.88 : 1.0;
-    }];
+    }, nil);
 }
 
 @end
@@ -184,6 +205,7 @@
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
 @property (nonatomic, strong) UIView *stateView;
+@property (nonatomic, strong) UIView *stateIconSurface;
 @property (nonatomic, strong) UILabel *stateTitle;
 @property (nonatomic, strong) UILabel *stateSubtitle;
 @property (nonatomic, strong) UIButton *retryButton;
@@ -226,6 +248,15 @@
     [self scrollTabsToLeadingEdgeIfNeeded];
 }
 
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    if ([previousTraitCollection.preferredContentSizeCategory isEqualToString:self.traitCollection.preferredContentSizeCategory]) {
+        return;
+    }
+    // Re-evaluate the capped hero display size when the text size changes live.
+    self.companyLabel.font = PPScaledFont(PPFontBold(PPIsAccessibilityTextSize() ? PPFontTitle1 : 40.0), UIFontTextStyleLargeTitle);
+}
+
 - (void)buildUI {
      self.heroView = [[PPHero alloc] init];
      self.heroView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -234,50 +265,54 @@
 
      self.heroTopGlowView = [[UIView alloc] init];
      self.heroTopGlowView.translatesAutoresizingMaskIntoConstraints = NO;
-     self.heroTopGlowView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
-     self.heroTopGlowView.layer.cornerRadius = 96.0;
-     self.heroTopGlowView.layer.cornerCurve = kCACornerCurveContinuous;
+     self.heroTopGlowView.backgroundColor = AppPrimaryClrWithAlpha(0.08);
+     PPApplyContinuousCorners(self.heroTopGlowView, 96.0);
      [self.heroView addSubview:self.heroTopGlowView];
 
      self.heroBottomGlowView = [[UIView alloc] init];
      self.heroBottomGlowView.translatesAutoresizingMaskIntoConstraints = NO;
-     self.heroBottomGlowView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.04];
-     self.heroBottomGlowView.layer.cornerRadius = 120.0;
-     self.heroBottomGlowView.layer.cornerCurve = kCACornerCurveContinuous;
+     self.heroBottomGlowView.backgroundColor = AppPrimaryClrWithAlpha(0.04);
+     PPApplyContinuousCorners(self.heroBottomGlowView, 120.0);
      [self.heroView addSubview:self.heroBottomGlowView];
 
     UIView *iconSurface = [[UIView alloc] init];
     iconSurface.translatesAutoresizingMaskIntoConstraints = NO;
-    iconSurface.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.11];
-    iconSurface.layer.cornerRadius = 22.0;
+    PPStyleAccentPlate(iconSurface, PPCornerCard, 0.11);
     [self.heroView addSubview:iconSurface];
 
     UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"truck.box.fill"]];
     icon.translatesAutoresizingMaskIntoConstraints = NO;
     icon.tintColor = AppPrimaryClr;
+    icon.isAccessibilityElement = NO;
     [iconSurface addSubview:icon];
 
-    UILabel *eyebrow = [self label:PPFontBold(11) color:AppPrimaryClr lines:1];
+    UILabel *eyebrow = [self label:PPFontBold(PPFontCaption1) color:AppPrimaryClr lines:1];
     eyebrow.text = kLang(@"DeliveryCompany_Dashboard_Eyebrow");
+    PPEnableDynamicType(eyebrow, UIFontTextStyleCaption1);
     [self.heroView addSubview:eyebrow];
 
-    self.companyLabel = [self label:PPFontBold(40) color:PrimaryTextClr lines:3];
+    // The display size is capped at accessibility text sizes so the hero title
+    // still scales but cannot push the request list off screen.
+    self.companyLabel = [self label:PPFontBold(PPIsAccessibilityTextSize() ? PPFontTitle1 : 40.0) color:PrimaryTextClr lines:3];
+    PPEnableDynamicType(self.companyLabel, UIFontTextStyleLargeTitle);
     [self.heroView addSubview:self.companyLabel];
 
-    self.roleLabel = [self label:PPFontRegular(14) color:SeconderyTextClr lines:2];
+    self.roleLabel = [self label:PPFontRegular(PPFontSubheadline) color:SeconderyTextClr lines:2];
+    PPEnableDynamicType(self.roleLabel, UIFontTextStyleSubheadline);
     [self.heroView addSubview:self.roleLabel];
 
     self.heroMetricSurface = [[UIView alloc] init];
     self.heroMetricSurface.translatesAutoresizingMaskIntoConstraints = NO;
     self.heroMetricSurface.backgroundColor = [AppBackgroundClr colorWithAlphaComponent:0.72];
-    self.heroMetricSurface.layer.cornerRadius = 22.0;
-    self.heroMetricSurface.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(self.heroMetricSurface, PPCornerCard);
     [self.heroView addSubview:self.heroMetricSurface];
 
+    // No Dynamic Type on the metric plate: it is a fixed 96x72 badge and both
+    // labels would clip before the plate could grow.
     self.countLabel = [self label:PPFontBold(22) color:PrimaryTextClr lines:1];
     self.countLabel.textAlignment = NSTextAlignmentCenter;
     [self.heroMetricSurface addSubview:self.countLabel];
-    UILabel *metricTitle = [self label:PPFontMedium(10) color:SeconderyTextClr lines:1];
+    UILabel *metricTitle = [self label:PPFontMedium(PPFontCaption2) color:SeconderyTextClr lines:1];
     metricTitle.text = kLang(@"DeliveryCompany_Dashboard_Requests");
     metricTitle.textAlignment = NSTextAlignmentCenter;
     [self.heroMetricSurface addSubview:metricTitle];
@@ -285,8 +320,12 @@
 self.heroMembersControl = [[UIControl alloc] init];
      self.heroMembersControl.translatesAutoresizingMaskIntoConstraints = NO;
      self.heroMembersControl.backgroundColor = [AppBackgroundClr colorWithAlphaComponent:0.74];
-     self.heroMembersControl.layer.cornerRadius = 24.0;
-     self.heroMembersControl.layer.cornerCurve = kCACornerCurveContinuous;
+     PPApplyContinuousCorners(self.heroMembersControl, PPCornerCard);
+     self.heroMembersControl.isAccessibilityElement = YES;
+     self.heroMembersControl.accessibilityTraits = UIAccessibilityTraitButton;
+     self.heroMembersControl.accessibilityLabel = [NSString stringWithFormat:@"%@, %@",
+                                                   kLang(@"DeliveryCompany_Tab_Members"),
+                                                   kLang(@"DeliveryCompany_Dashboard_MembersShortcutSubtitle")];
      [self.heroMembersControl addTarget:self action:@selector(openMembers) forControlEvents:UIControlEventTouchUpInside];
      [self.heroMembersControl addTarget:self action:@selector(heroMembersPressDown) forControlEvents:UIControlEventTouchDown];
      [self.heroMembersControl addTarget:self action:@selector(heroMembersPressUp) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchDragExit | UIControlEventTouchCancel | UIControlEventTouchUpOutside];
@@ -294,9 +333,7 @@ self.heroMembersControl = [[UIControl alloc] init];
 
     UIView *membersIconSurface = [[UIView alloc] init];
     membersIconSurface.translatesAutoresizingMaskIntoConstraints = NO;
-    membersIconSurface.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.12];
-    membersIconSurface.layer.cornerRadius = 18.0;
-    membersIconSurface.layer.cornerCurve = kCACornerCurveContinuous;
+    PPStyleAccentPlate(membersIconSurface, PPCornerMedium, 0.12);
     [self.heroMembersControl addSubview:membersIconSurface];
 
     UIImageView *membersIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"person.3.fill"]];
@@ -304,11 +341,14 @@ self.heroMembersControl = [[UIControl alloc] init];
     membersIcon.tintColor = AppPrimaryClr;
     [membersIconSurface addSubview:membersIcon];
 
-    self.heroMembersTitleLabel = [self label:PPFontBold(15) color:PrimaryTextClr lines:1];
+    // Members shortcut text stays unscaled: the row is a fixed 72pt shortcut
+    // whose height constraint is also toggled to 0 to hide it, so scaled text
+    // here would clip instead of growing the row.
+    self.heroMembersTitleLabel = [self label:PPFontBold(PPFontCallout) color:PrimaryTextClr lines:1];
     self.heroMembersTitleLabel.text = kLang(@"DeliveryCompany_Tab_Members");
     [self.heroMembersControl addSubview:self.heroMembersTitleLabel];
 
-    self.heroMembersSubtitleLabel = [self label:PPFontRegular(12) color:SeconderyTextClr lines:2];
+    self.heroMembersSubtitleLabel = [self label:PPFontRegular(PPFontFootnote) color:SeconderyTextClr lines:2];
     self.heroMembersSubtitleLabel.text = kLang(@"DeliveryCompany_Dashboard_MembersShortcutSubtitle");
     [self.heroMembersControl addSubview:self.heroMembersSubtitleLabel];
 
@@ -325,7 +365,8 @@ self.heroMembersControl = [[UIControl alloc] init];
     self.tabsStack = [[UIStackView alloc] init];
     self.tabsStack.translatesAutoresizingMaskIntoConstraints = NO;
     self.tabsStack.axis = UILayoutConstraintAxisHorizontal;
-    self.tabsStack.spacing = 8.0;
+    self.tabsStack.alignment = UIStackViewAlignmentCenter;
+    self.tabsStack.spacing = PPSpaceSM;
     self.tabsStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
     [self.tabsScrollView addSubview:self.tabsStack];
 
@@ -336,7 +377,7 @@ self.heroMembersControl = [[UIControl alloc] init];
     self.tableView.showsVerticalScrollIndicator = NO;
     self.tableView.estimatedRowHeight = 186.0;
     self.tableView.rowHeight = UITableViewAutomaticDimension;
-    self.tableView.contentInset = UIEdgeInsetsMake(6.0, 0.0, 26.0, 0.0);
+    self.tableView.contentInset = UIEdgeInsetsMake(PPSpaceMDHalf, 0.0, PPSpaceXL, 0.0);
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
     [self.tableView registerClass:PPDeliveryCompanyRequestCell.class forCellReuseIdentifier:@"PPDeliveryCompanyRequestCell"];
@@ -350,6 +391,7 @@ self.heroMembersControl = [[UIControl alloc] init];
     self.paginationSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.paginationSpinner.color = AppPrimaryClr;
     self.paginationSpinner.frame = CGRectMake(0, 0, CGRectGetWidth(self.view.bounds), 48.0);
+    self.paginationSpinner.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     self.tableView.tableFooterView = self.paginationSpinner;
 
     [self buildStateView];
@@ -358,7 +400,8 @@ self.heroMembersControl = [[UIControl alloc] init];
         [self.heroView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:14.0],
         [self.heroView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18.0],
         [self.heroView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-18.0],
-        [self.heroView.heightAnchor constraintEqualToConstant:256.0],
+        // Hero grows with Dynamic Type instead of clipping its title chain.
+        [self.heroView.heightAnchor constraintGreaterThanOrEqualToConstant:256.0],
 
         [self.heroTopGlowView.widthAnchor constraintEqualToConstant:192.0],
         [self.heroTopGlowView.heightAnchor constraintEqualToConstant:192.0],
@@ -451,28 +494,36 @@ self.heroMembersControl = [[UIControl alloc] init];
 
     UIView *iconSurface = [[UIView alloc] init];
     iconSurface.translatesAutoresizingMaskIntoConstraints = NO;
-    iconSurface.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.09];
-    iconSurface.layer.cornerRadius = 25.0;
+    // Circular plate: radius stays half of its 50pt box.
+    PPStyleAccentPlate(iconSurface, 25.0, 0.09);
     [self.stateView addSubview:iconSurface];
+    self.stateIconSurface = iconSurface;
     UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"shippingbox"]];
     icon.translatesAutoresizingMaskIntoConstraints = NO;
     icon.tintColor = AppPrimaryClr;
+    icon.isAccessibilityElement = NO;
     [iconSurface addSubview:icon];
 
     self.stateTitle = [self label:PPFontBold(19) color:PrimaryTextClr lines:2];
     self.stateTitle.textAlignment = NSTextAlignmentCenter;
+    PPEnableDynamicType(self.stateTitle, UIFontTextStyleTitle3);
     [self.stateView addSubview:self.stateTitle];
-    self.stateSubtitle = [self label:PPFontRegular(14) color:SeconderyTextClr lines:0];
+    self.stateSubtitle = [self label:PPFontRegular(PPFontSubheadline) color:SeconderyTextClr lines:0];
     self.stateSubtitle.textAlignment = NSTextAlignmentCenter;
+    PPEnableDynamicType(self.stateSubtitle, UIFontTextStyleSubheadline);
     [self.stateView addSubview:self.stateSubtitle];
 
     self.retryButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.retryButton.translatesAutoresizingMaskIntoConstraints = NO;
-    self.retryButton.titleLabel.font = PPFontBold(15);
+    self.retryButton.titleLabel.font = PPScaledFont(PPFontBold(PPFontCallout), UIFontTextStyleCallout);
+    self.retryButton.titleLabel.adjustsFontForContentSizeCategory = YES;
+    self.retryButton.titleLabel.adjustsFontSizeToFitWidth = YES;
+    self.retryButton.titleLabel.minimumScaleFactor = 0.8;
+    self.retryButton.contentEdgeInsets = UIEdgeInsetsMake(PPSpaceSM, PPSpaceLG, PPSpaceSM, PPSpaceLG);
     [self.retryButton setTitle:kLang(@"Retry") forState:UIControlStateNormal];
     [self.retryButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
     self.retryButton.backgroundColor = AppPrimaryClr;
-    self.retryButton.layer.cornerRadius = 16.0;
+    PPApplyContinuousCorners(self.retryButton, PPCorner16);
     [self.retryButton addTarget:self action:@selector(retryTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.stateView addSubview:self.retryButton];
 
@@ -503,7 +554,7 @@ self.heroMembersControl = [[UIControl alloc] init];
         [self.retryButton.topAnchor constraintEqualToAnchor:self.stateSubtitle.bottomAnchor constant:16.0],
         [self.retryButton.centerXAnchor constraintEqualToAnchor:self.stateView.centerXAnchor],
         [self.retryButton.widthAnchor constraintGreaterThanOrEqualToConstant:120.0],
-        [self.retryButton.heightAnchor constraintEqualToConstant:44.0],
+        [self.retryButton.heightAnchor constraintGreaterThanOrEqualToConstant:PPTouchTargetMin],
         [self.retryButton.bottomAnchor constraintEqualToAnchor:self.stateView.bottomAnchor],
         [self.spinner.centerXAnchor constraintEqualToAnchor:self.stateView.centerXAnchor],
         [self.spinner.centerYAnchor constraintEqualToAnchor:self.stateView.centerYAnchor],
@@ -580,14 +631,15 @@ self.heroMembersControl = [[UIControl alloc] init];
         UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
         button.translatesAutoresizingMaskIntoConstraints = NO;
         button.tag = filter;
+        // Filter chips keep their design size: the tab strip is a fixed 50pt
+        // rail, so scaled titles would clip instead of growing the chip.
         button.titleLabel.font = PPFontBold(13);
-        button.contentEdgeInsets = UIEdgeInsetsMake(10.0, 16.0, 10.0, 16.0);
-        button.layer.cornerRadius = 20.0;
-        button.layer.cornerCurve = kCACornerCurveContinuous;
+        button.contentEdgeInsets = UIEdgeInsetsMake(10.0, PPSpaceBase, 10.0, PPSpaceBase);
+        PPApplyContinuousCorners(button, PPCornerCard);
         button.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
         [button setTitle:PPDeliveryCompanyFilterTitle(filter) forState:UIControlStateNormal];
         [button addTarget:self action:@selector(tabTapped:) forControlEvents:UIControlEventTouchUpInside];
-        [button.heightAnchor constraintEqualToConstant:36.0].active = YES;
+        [button.heightAnchor constraintGreaterThanOrEqualToConstant:PPTouchTargetMin].active = YES;
         [self.tabsStack addArrangedSubview:button];
         [self.tabButtons addObject:button];
     }
@@ -608,11 +660,11 @@ self.heroMembersControl = [[UIControl alloc] init];
     for (UIButton *button in self.tabButtons) {
         BOOL selected = button.tag == self.selectedFilter;
         button.backgroundColor = selected ? AppPrimaryClr : [AppForgroundColr colorWithAlphaComponent:0.92];
-        button.layer.borderColor = (selected ? [AppPrimaryClr colorWithAlphaComponent:0.20] : [SeconderyTextClr colorWithAlphaComponent:0.09]).CGColor;
-        button.layer.shadowColor = selected ? [AppPrimaryClr colorWithAlphaComponent:0.22].CGColor : UIColor.clearColor.CGColor;
+        button.layer.borderColor = (selected ? AppPrimaryClrWithAlpha(0.20) : PPHairlineColor()).CGColor;
+        button.layer.shadowColor = selected ? AppPrimaryClrWithAlpha(0.22).CGColor : UIColor.clearColor.CGColor;
         button.layer.shadowOpacity = selected ? 1.0 : 0.0;
-        button.layer.shadowRadius = selected ? 16.0 : 0.0;
-        button.layer.shadowOffset = selected ? CGSizeMake(0.0, 8.0) : CGSizeZero;
+        button.layer.shadowRadius = selected ? PPShadowButtonRadius : 0.0;
+        button.layer.shadowOffset = selected ? CGSizeMake(0.0, PPShadowButtonOffsetY) : CGSizeZero;
         [button setTitleColor:selected ? UIColor.whiteColor : PrimaryTextClr forState:UIControlStateNormal];
         button.accessibilityTraits = selected ? UIAccessibilityTraitButton | UIAccessibilityTraitSelected : UIAccessibilityTraitButton;
     }
@@ -706,6 +758,7 @@ self.heroMembersControl = [[UIControl alloc] init];
 - (void)showLoading {
     self.tableView.hidden = YES;
     self.stateView.hidden = NO;
+    self.stateIconSurface.hidden = YES;
     self.stateTitle.hidden = YES;
     self.stateSubtitle.hidden = YES;
     self.retryButton.hidden = YES;
@@ -716,6 +769,7 @@ self.heroMembersControl = [[UIControl alloc] init];
     self.tableView.hidden = YES;
     self.stateView.hidden = NO;
     [self.spinner stopAnimating];
+    self.stateIconSurface.hidden = NO;
     self.stateTitle.hidden = NO;
     self.stateSubtitle.hidden = NO;
     self.retryButton.hidden = YES;
@@ -727,6 +781,7 @@ self.heroMembersControl = [[UIControl alloc] init];
     self.tableView.hidden = YES;
     self.stateView.hidden = NO;
     [self.spinner stopAnimating];
+    self.stateIconSurface.hidden = NO;
     self.stateTitle.hidden = NO;
     self.stateSubtitle.hidden = NO;
     self.retryButton.hidden = NO;
@@ -778,7 +833,7 @@ self.heroMembersControl = [[UIControl alloc] init];
 }
 
 - (void)prepareEntrance {
-    if (UIAccessibilityIsReduceMotionEnabled()) return;
+    if (PPMotionReduced()) return;
     self.heroView.alpha = 0.0;
     self.heroView.transform = CGAffineTransformMakeTranslation(0, 12.0);
     self.tabsScrollView.alpha = 0.0;
@@ -788,8 +843,11 @@ self.heroMembersControl = [[UIControl alloc] init];
 - (void)runEntranceIfNeeded {
     if (self.didAnimateEntrance) return;
     self.didAnimateEntrance = YES;
-    if (UIAccessibilityIsReduceMotionEnabled()) {
+    if (PPMotionReduced()) {
+        // Also clears any offset prepared before Reduce Motion was switched on.
         self.heroView.alpha = self.tabsScrollView.alpha = 1.0;
+        self.heroView.transform = CGAffineTransformIdentity;
+        self.tabsScrollView.transform = CGAffineTransformIdentity;
         return;
     }
     [UIView animateWithDuration:0.44 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
@@ -803,14 +861,19 @@ self.heroMembersControl = [[UIControl alloc] init];
 }
 
 - (void)heroMembersPressDown {
-    if (UIAccessibilityIsReduceMotionEnabled()) return;
-    [UIView animateWithDuration:0.12 animations:^{
-        self.heroMembersControl.transform = CGAffineTransformMakeScale(0.985, 0.985);
+    if (PPMotionReduced()) return;
+    [UIView animateWithDuration:PPAnimDurationFast animations:^{
+        self.heroMembersControl.transform = CGAffineTransformMakeScale(PPTapCardScaleDown, PPTapCardScaleDown);
         self.heroMembersControl.alpha = 0.92;
     }];
 }
 
 - (void)heroMembersPressUp {
+    if (PPMotionReduced()) {
+        self.heroMembersControl.transform = CGAffineTransformIdentity;
+        self.heroMembersControl.alpha = 1.0;
+        return;
+    }
     [UIView animateWithDuration:0.18 delay:0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
         self.heroMembersControl.transform = CGAffineTransformIdentity;
         self.heroMembersControl.alpha = 1.0;

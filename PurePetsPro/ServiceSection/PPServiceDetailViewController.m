@@ -11,6 +11,7 @@
 #import "PPServiceManager.h"
 #import "PPAddEditServiceViewController.h"
 #import "PPServiceSubscriptionViewController.h"
+#import "PPServicesListViewController.h"
 #import "PPFirebaseCompat.h"
 
 @interface PPServiceDetailViewController ()
@@ -80,8 +81,14 @@
 #pragma mark - Navigation & Background
 
 - (void)pp_configureNavigation {
-    [self pp_navBarWithOtherButton:nil title:@""];
-    self.navigationController.navigationBar.tintColor = AppPrimaryClr;
+    NSString *title = kLang(@"Serv_Detail_Title") ?: ([Language isRTL] ? @"تفاصيل الخدمة" : @"Service Details");
+    [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:title showBack:YES];
+
+    UIButton *priceBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [priceBtn setImage:[UIImage systemImageNamed:@"banknote.fill"] forState:UIControlStateNormal];
+    priceBtn.tintColor = [UIColor ppPrimary];
+    [priceBtn addTarget:self action:@selector(quickPricingTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self pp_navBarAddActionButton:priceBtn key:@"detail_rate"];
 }
 
 - (void)pp_setupBackdropGlows {
@@ -632,6 +639,22 @@
     [PPFunc pp_playTapEffect];
     PPServiceSubscriptionViewController *vc = [[PPServiceSubscriptionViewController alloc] initWithService:self.service];
     [self.navigationController pushViewController:vc animated:YES];
+}
+
+- (void)quickPricingTapped {
+    [PPFunc pp_playTapEffect];
+    __weak typeof(self) weakSelf = self;
+    PPServiceQuickPricingSheet *sheet = [[PPServiceQuickPricingSheet alloc] initWithService:self.service onUpdated:^{
+        [[PPServiceManager sharedManager] fetchServiceByID:weakSelf.service.serviceID completion:^(PPServiceModel * _Nullable updated, NSError * _Nullable error) {
+            if (updated) {
+                weakSelf.service = updated;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    weakSelf.heroPriceBadge.text = [NSString stringWithFormat:@"%.2f %@", updated.price, kLang(@"Serv_Currency")];
+                });
+            }
+        }];
+    }];
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 @end

@@ -14,6 +14,7 @@
 @property (nonatomic, strong) UIView *bgGlowBottom;
 
 @property (nonatomic, strong) UIView *heroArea;
+@property (nonatomic, strong) NSLayoutConstraint *heroAreaHeightConstraint;
 @property (nonatomic, strong) UIImageView *itemImageView;
 @property (nonatomic, strong) UIButton *imagePickerButton;
 @property (nonatomic, strong) UIImage *selectedImage;
@@ -75,6 +76,19 @@
     return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
 }
 
+/// The hero has a fixed image plate, but its editorial copy participates in
+/// Dynamic Type.  Size the surrounding scroll content from the scaled two-line
+/// worst case so Accessibility text never compresses the hierarchy.
+- (CGFloat)pp_heroAreaHeight {
+    UIFont *titleFont = PPScaledFont([Styling fontBold:23.0], UIFontTextStyleTitle3);
+    UIFont *subtitleFont = PPScaledFont([Styling fontMedium:13.0], UIFontTextStyleFootnote);
+    CGFloat copyHeight = ceil(titleFont.lineHeight * 2.0)
+        + PPSpaceXS
+        + ceil(subtitleFont.lineHeight * 2.0);
+    CGFloat cardContentHeight = PPSpaceXL + PPSpaceXS + MAX(84.0, copyHeight) + PPSpaceBase;
+    return MAX(220.0, ceil(cardContentHeight + (PPSpaceXS * 2.0)));
+}
+
 - (instancetype)initForCreate {
     if (self = [super init]) { _isCreate = YES; }
     return self;
@@ -132,16 +146,17 @@
 }
 
 - (void)pp_updateGlowsForStyle {
+    // Pulse uses color as a soft directional cue, not a competing background.
     BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
-    self.bgGlowTop.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:isDark ? 0.05 : 0.10];
+    self.bgGlowTop.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:isDark ? 0.025 : 0.055];
     self.bgGlowTop.layer.shadowColor = AppPrimaryClr.CGColor;
-    self.bgGlowTop.layer.shadowOpacity = isDark ? 0.04 : 0.08;
-    self.bgGlowTop.layer.shadowRadius = 60.0;
-    
-    self.bgGlowBottom.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:isDark ? 0.03 : 0.06];
+    self.bgGlowTop.layer.shadowOpacity = isDark ? 0.015 : 0.035;
+    self.bgGlowTop.layer.shadowRadius = 48.0;
+
+    self.bgGlowBottom.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:isDark ? 0.018 : 0.035];
     self.bgGlowBottom.layer.shadowColor = [UIColor ppWarning].CGColor;
-    self.bgGlowBottom.layer.shadowOpacity = isDark ? 0.02 : 0.06;
-    self.bgGlowBottom.layer.shadowRadius = 70.0;
+    self.bgGlowBottom.layer.shadowOpacity = isDark ? 0.010 : 0.025;
+    self.bgGlowBottom.layer.shadowRadius = 54.0;
 }
 
 - (void)pp_configureNavigation {
@@ -281,32 +296,40 @@
 }
 
 - (void)pp_buildUI {
+    // The editor is presented from an Objective-C dashboard, so make its root
+    // direction explicit rather than relying on a navigation-controller default.
+    self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+
     self.scrollView = [[UIScrollView alloc] init];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.scrollView.alwaysBounceVertical = YES;
     self.scrollView.showsVerticalScrollIndicator = NO;
-    self.scrollView.contentInset = UIEdgeInsetsMake(0, 0, 100, 0);
+    self.scrollView.contentInset = UIEdgeInsetsMake(PPSpaceXS, 0, 128.0, 0);
+    self.scrollView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     [self.view addSubview:self.scrollView];
     
     _heroArea = [[UIView alloc] init];
     _heroArea.translatesAutoresizingMaskIntoConstraints = NO;
     _heroArea.backgroundColor = UIColor.clearColor;
+    _heroArea.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     [self.scrollView addSubview:_heroArea];
     
-    // Hero Card (Profile Style)
+    // The Market editor uses the same warm, quiet hero composition as Pulse:
+    // a restrained image plate plus a concise editorial hierarchy.
     PPHero *heroCard = [[PPHero alloc] init];
     heroCard.translatesAutoresizingMaskIntoConstraints = NO;
+    heroCard.accentColor = AppPrimaryClr;
+    heroCard.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     [_heroArea addSubview:heroCard];
     
     _itemImageView = [[UIImageView alloc] init];
     _itemImageView.translatesAutoresizingMaskIntoConstraints = NO;
     _itemImageView.contentMode = UIViewContentModeScaleAspectFill;
     _itemImageView.clipsToBounds = YES;
-    _itemImageView.layer.cornerRadius = 34.0;
-    _itemImageView.layer.cornerCurve = kCACornerCurveContinuous;
-    _itemImageView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.06];
-    _itemImageView.layer.borderWidth = 2.0;
-    _itemImageView.layer.borderColor = [AppForgroundColr colorWithAlphaComponent:0.5].CGColor;
+    PPApplyContinuousCorners(_itemImageView, PPCornerMedium);
+    _itemImageView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
+    _itemImageView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    _itemImageView.layer.borderColor = [self pp_borderColor].CGColor;
     [heroCard addSubview:_itemImageView];
     
     _imagePickerButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -315,37 +338,40 @@
     [_imagePickerButton setImage:[UIImage systemImageNamed:@"camera.fill" withConfiguration:camCfg] forState:UIControlStateNormal];
     _imagePickerButton.tintColor = AppPrimaryClr;
     _imagePickerButton.backgroundColor = [self pp_surfaceColor];
-    _imagePickerButton.layer.cornerRadius = 16.0;
-    _imagePickerButton.layer.borderWidth = 1.0;
+    PPApplyContinuousCorners(_imagePickerButton, PPTouchTargetMin / 2.0);
+    _imagePickerButton.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     _imagePickerButton.layer.borderColor = [self pp_borderColor].CGColor;
-    _imagePickerButton.layer.shadowColor = UIColor.blackColor.CGColor;
-    _imagePickerButton.layer.shadowOpacity = 0.1;
-    _imagePickerButton.layer.shadowOffset = CGSizeMake(0, 4);
-    _imagePickerButton.layer.shadowRadius = 8.0;
-    _imagePickerButton.alpha = 0.0;
+    PPApplyButtonShadow(_imagePickerButton);
+    _imagePickerButton.alpha = 1.0;
+    _imagePickerButton.accessibilityLabel = kLang(@"Market_SectionImages");
     [_imagePickerButton addTarget:self action:@selector(pickImage) forControlEvents:UIControlEventTouchUpInside];
     [heroCard addSubview:_imagePickerButton];
     
     UILabel *heroTitle = [[UILabel alloc] init];
     heroTitle.translatesAutoresizingMaskIntoConstraints = NO;
-    heroTitle.font = [Styling fontBold:26.0];
+    heroTitle.font = [Styling fontBold:23.0];
     heroTitle.textColor = PrimaryTextClr;
-    heroTitle.textAlignment = NSTextAlignmentCenter;
+    heroTitle.textAlignment = Language.alignmentForCurrentLanguage;
+    heroTitle.numberOfLines = 2;
     heroTitle.text = self.isCreate ? kLang(@"Market_AddTitle") : kLang(@"Market_EditTitle");
+    PPEnableDynamicType(heroTitle, UIFontTextStyleTitle3);
     [heroCard addSubview:heroTitle];
     
     UILabel *heroSubtitle = [[UILabel alloc] init];
     heroSubtitle.translatesAutoresizingMaskIntoConstraints = NO;
     heroSubtitle.font = [Styling fontMedium:13.0];
     heroSubtitle.textColor = SeconderyTextClr;
-    heroSubtitle.textAlignment = NSTextAlignmentCenter;
+    heroSubtitle.textAlignment = Language.alignmentForCurrentLanguage;
+    heroSubtitle.numberOfLines = 2;
     heroSubtitle.text = kLang(@"Market_FormSubtitle");
+    PPEnableDynamicType(heroSubtitle, UIFontTextStyleFootnote);
     [heroCard addSubview:heroSubtitle];
     
     self.contentStack = [[UIStackView alloc] init];
     self.contentStack.translatesAutoresizingMaskIntoConstraints = NO;
     self.contentStack.axis = UILayoutConstraintAxisVertical;
-    self.contentStack.spacing = 36.0;
+    self.contentStack.spacing = PPSpaceXL;
+    self.contentStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     [self.scrollView addSubview:self.contentStack];
     
     [self pp_setupFormSections];
@@ -356,17 +382,15 @@
     _saveButton.titleLabel.font = [Styling fontBold:17.0];
     _saveButton.tintColor = UIColor.whiteColor;
     _saveButton.backgroundColor = AppPrimaryClr;
-    _saveButton.layer.cornerRadius = 28.0;
-    _saveButton.layer.cornerCurve = kCACornerCurveContinuous;
-    BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
-    _saveButton.layer.shadowColor = AppPrimaryClr.CGColor;
-    _saveButton.layer.shadowOpacity = isDark ? 0.15 : 0.3;
-    _saveButton.layer.shadowRadius = 16.0;
-    _saveButton.layer.shadowOffset = CGSizeMake(0, 8);
+    PPApplyContinuousCorners(_saveButton, PPCornerMedium);
+    PPApplyButtonShadow(_saveButton);
+    _saveButton.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    _saveButton.accessibilityLabel = kLang(@"Save");
     [_saveButton addTarget:self action:@selector(saveTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:_saveButton];
     
     UILayoutGuide *guide = self.view.safeAreaLayoutGuide;
+    self.heroAreaHeightConstraint = [_heroArea.heightAnchor constraintEqualToConstant:[self pp_heroAreaHeight]];
     [NSLayoutConstraint activateConstraints:@[
         [self.scrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -376,39 +400,40 @@
         [_heroArea.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor],
         [_heroArea.leadingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.leadingAnchor],
         [_heroArea.trailingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.trailingAnchor],
-        [_heroArea.heightAnchor constraintEqualToConstant:280.0],
+        self.heroAreaHeightConstraint,
         
-        [heroCard.topAnchor constraintEqualToAnchor:_heroArea.topAnchor constant:12.0],
-        [heroCard.leadingAnchor constraintEqualToAnchor:_heroArea.leadingAnchor constant:20.0],
-        [heroCard.trailingAnchor constraintEqualToAnchor:_heroArea.trailingAnchor constant:-20.0],
-        [heroCard.bottomAnchor constraintEqualToAnchor:_heroArea.bottomAnchor constant:-12.0],
+        [heroCard.topAnchor constraintEqualToAnchor:_heroArea.topAnchor constant:PPSpaceXS],
+        [heroCard.leadingAnchor constraintEqualToAnchor:_heroArea.leadingAnchor constant:PPSpaceBase],
+        [heroCard.trailingAnchor constraintEqualToAnchor:_heroArea.trailingAnchor constant:-PPSpaceBase],
+        [heroCard.bottomAnchor constraintEqualToAnchor:_heroArea.bottomAnchor constant:-PPSpaceXS],
         
-        [_itemImageView.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:36.0],
-        [_itemImageView.centerXAnchor constraintEqualToAnchor:heroCard.centerXAnchor],
-        [_itemImageView.widthAnchor constraintEqualToConstant:108.0],
-        [_itemImageView.heightAnchor constraintEqualToConstant:108.0],
+        [_itemImageView.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:PPSpaceXL],
+        [_itemImageView.leadingAnchor constraintEqualToAnchor:heroCard.leadingAnchor constant:PPSpaceBase],
+        [_itemImageView.widthAnchor constraintEqualToConstant:84.0],
+        [_itemImageView.heightAnchor constraintEqualToConstant:84.0],
         
-        [_imagePickerButton.bottomAnchor constraintEqualToAnchor:_itemImageView.bottomAnchor constant:0.0],
-        [_imagePickerButton.trailingAnchor constraintEqualToAnchor:_itemImageView.trailingAnchor constant:6.0],
-        [_imagePickerButton.widthAnchor constraintEqualToConstant:32.0],
-        [_imagePickerButton.heightAnchor constraintEqualToConstant:32.0],
+        [_imagePickerButton.bottomAnchor constraintEqualToAnchor:_itemImageView.bottomAnchor constant:4.0],
+        [_imagePickerButton.trailingAnchor constraintEqualToAnchor:_itemImageView.trailingAnchor constant:4.0],
+        [_imagePickerButton.widthAnchor constraintEqualToConstant:PPTouchTargetMin],
+        [_imagePickerButton.heightAnchor constraintEqualToConstant:PPTouchTargetMin],
         
-        [heroTitle.topAnchor constraintEqualToAnchor:_itemImageView.bottomAnchor constant:12.0],
-        [heroTitle.leadingAnchor constraintEqualToAnchor:heroCard.leadingAnchor constant:24.0],
-        [heroTitle.trailingAnchor constraintEqualToAnchor:heroCard.trailingAnchor constant:-24.0],
+        [heroTitle.leadingAnchor constraintEqualToAnchor:_itemImageView.trailingAnchor constant:PPSpaceBase],
+        [heroTitle.topAnchor constraintEqualToAnchor:_itemImageView.topAnchor constant:PPSpaceXS],
+        [heroTitle.trailingAnchor constraintEqualToAnchor:heroCard.trailingAnchor constant:-PPSpaceBase],
         
-        [heroSubtitle.topAnchor constraintEqualToAnchor:heroTitle.bottomAnchor constant:4.0],
-        [heroSubtitle.leadingAnchor constraintEqualToAnchor:heroCard.leadingAnchor constant:24.0],
-        [heroSubtitle.trailingAnchor constraintEqualToAnchor:heroCard.trailingAnchor constant:-24.0],
+        [heroSubtitle.topAnchor constraintEqualToAnchor:heroTitle.bottomAnchor constant:PPSpaceXS],
+        [heroSubtitle.leadingAnchor constraintEqualToAnchor:heroTitle.leadingAnchor],
+        [heroSubtitle.trailingAnchor constraintEqualToAnchor:heroTitle.trailingAnchor],
+        [heroSubtitle.bottomAnchor constraintLessThanOrEqualToAnchor:heroCard.bottomAnchor constant:-PPSpaceBase],
         
-        [self.contentStack.topAnchor constraintEqualToAnchor:_heroArea.bottomAnchor constant:20.0],
-        [self.contentStack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:24.0],
-        [self.contentStack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-24.0],
-        [self.contentStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-40.0],
+        [self.contentStack.topAnchor constraintEqualToAnchor:_heroArea.bottomAnchor constant:PPSpaceBase],
+        [self.contentStack.leadingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.leadingAnchor constant:PPSpaceBase],
+        [self.contentStack.trailingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.trailingAnchor constant:-PPSpaceBase],
+        [self.contentStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-PPSpaceXL],
         
-        [_saveButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20.0],
-        [_saveButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20.0],
-        [_saveButton.bottomAnchor constraintEqualToAnchor:guide.bottomAnchor constant:-12.0],
+        [_saveButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [_saveButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [_saveButton.bottomAnchor constraintEqualToAnchor:guide.bottomAnchor constant:-PPSpaceSM],
         [_saveButton.heightAnchor constraintEqualToConstant:56.0]
     ]];
 }
@@ -416,38 +441,40 @@
 - (UIView *)pp_textFieldWithPlaceholder:(NSString *)placeholder icon:(NSString *)iconName field:(UITextField * _Nullable __strong *)fieldPtr {
     UIView *container = [[UIView alloc] init];
     container.translatesAutoresizingMaskIntoConstraints = NO;
-    container.backgroundColor = [self pp_surfaceColor];
-    container.layer.cornerRadius = 20.0;
-    container.layer.cornerCurve = kCACornerCurveContinuous;
-    container.layer.borderWidth = 1.0;
+    container.backgroundColor = [self pp_canvasColor];
+    container.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    PPApplyContinuousCorners(container, PPCornerMedium);
+    container.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     container.layer.borderColor = [self pp_borderColor].CGColor;
     [container.heightAnchor constraintEqualToConstant:58.0].active = YES;
 
     UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:iconName withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightMedium]]];
     icon.translatesAutoresizingMaskIntoConstraints = NO;
-    icon.tintColor = [AppPrimaryClr colorWithAlphaComponent:0.6];
+    icon.tintColor = [AppPrimaryClr colorWithAlphaComponent:0.70];
     icon.contentMode = UIViewContentModeScaleAspectFit;
     [container addSubview:icon];
 
     UITextField *field = [[UITextField alloc] init];
     field.translatesAutoresizingMaskIntoConstraints = NO;
+    field.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     field.textColor = PrimaryTextClr;
     field.font = [Styling fontBold:15.0];
     field.textAlignment = Language.alignmentForCurrentLanguage;
     field.attributedPlaceholder = [[NSAttributedString alloc] initWithString:placeholder ?: @""
-                                                                   attributes:@{NSForegroundColorAttributeName : [SeconderyTextClr colorWithAlphaComponent:0.3]}];
+                                                                   attributes:@{NSForegroundColorAttributeName : [SeconderyTextClr colorWithAlphaComponent:0.52]}];
+    PPEnableDynamicTypeForTextField(field, UIFontTextStyleBody);
     // Arabic digits → English digits normalization for numeric keyboards
     [field addTarget:self action:@selector(pp_normalizeArabicDigitsForField:) forControlEvents:UIControlEventEditingChanged];
     [container addSubview:field];
     if (fieldPtr) *fieldPtr = field;
 
     [NSLayoutConstraint activateConstraints:@[
-        [icon.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:18.0],
+        [icon.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:PPSpaceBase],
         [icon.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
         [icon.widthAnchor constraintEqualToConstant:20.0],
         [icon.heightAnchor constraintEqualToConstant:20.0],
-        [field.leadingAnchor constraintEqualToAnchor:icon.trailingAnchor constant:12.0],
-        [field.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-18.0],
+        [field.leadingAnchor constraintEqualToAnchor:icon.trailingAnchor constant:PPSpaceSM],
+        [field.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-PPSpaceBase],
         [field.topAnchor constraintEqualToAnchor:container.topAnchor],
         [field.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
     ]];
@@ -458,13 +485,13 @@
 - (UITextView *)pp_textViewWithPlaceholder:(NSString *)placeholderText field:(UITextView * _Nullable __strong *)fieldPtr placeholderLabel:(UILabel * _Nullable __strong *)placeholderPtr {
     UITextView *textView = [[UITextView alloc] init];
     textView.translatesAutoresizingMaskIntoConstraints = NO;
-    textView.backgroundColor = [self pp_surfaceColor];
-    textView.layer.cornerRadius = 20.0;
-    textView.layer.cornerCurve = kCACornerCurveContinuous;
-    textView.layer.borderWidth = 1.0;
+    textView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    textView.backgroundColor = [self pp_canvasColor];
+    PPApplyContinuousCorners(textView, PPCornerMedium);
+    textView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     textView.layer.borderColor = [self pp_borderColor].CGColor;
     textView.textColor = PrimaryTextClr;
-    textView.font = [Styling fontBold:15.0];
+    textView.font = PPScaledFont([Styling fontBold:15.0], UIFontTextStyleBody);
     textView.textAlignment = Language.alignmentForCurrentLanguage;
     textView.delegate = self;
     textView.textContainerInset = UIEdgeInsetsMake(18.0, 14.0, 18.0, 14.0);
@@ -488,70 +515,92 @@
 }
 
 - (UIView *)pp_sectionBlockWithTitle:(NSString *)title subtitle:(NSString *)subtitle icon:(NSString *)iconName views:(NSArray<UIView *> *)views {
+    // Pulse groups related work inside one quiet surface rather than treating
+    // every input as an isolated floating card.
+    UIView *surface = [[UIView alloc] init];
+    surface.translatesAutoresizingMaskIntoConstraints = NO;
+    surface.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    PPStyleCardSurface(surface, PPCornerCard);
+
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisVertical;
-    stack.spacing = 14.0;
+    stack.spacing = PPSpaceBase;
+    stack.layoutMarginsRelativeArrangement = YES;
+    stack.layoutMargins = UIEdgeInsetsMake(PPSpaceBase, PPSpaceBase, PPSpaceBase, PPSpaceBase);
+    stack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [surface addSubview:stack];
+
     [stack addArrangedSubview:[self pp_sectionHeader:title subtitle:subtitle icon:iconName]];
     for (UIView *v in views) [stack addArrangedSubview:v];
-    return stack;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:surface.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:surface.bottomAnchor],
+    ]];
+    return surface;
 }
 
 - (UIView *)pp_sectionHeader:(NSString *)title subtitle:(NSString *)subtitle icon:(NSString *)iconName {
     UIView *container = [[UIView alloc] init];
     container.translatesAutoresizingMaskIntoConstraints = NO;
     container.backgroundColor = UIColor.clearColor;
+    container.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
 
-    UIView *bar = [[UIView alloc] init];
-    bar.translatesAutoresizingMaskIntoConstraints = NO;
-    bar.backgroundColor = AppPrimaryClr;
-    bar.layer.cornerRadius = 2.0;
-    [container addSubview:bar];
+    UIView *iconPlate = [[UIView alloc] init];
+    iconPlate.translatesAutoresizingMaskIntoConstraints = NO;
+    PPStyleAccentPlate(iconPlate, 14.0, 0.10);
+    [container addSubview:iconPlate];
 
     UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:iconName withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightSemibold]]];
     icon.translatesAutoresizingMaskIntoConstraints = NO;
     icon.tintColor = AppPrimaryClr;
     icon.contentMode = UIViewContentModeCenter;
-    [container addSubview:icon];
+    [iconPlate addSubview:icon];
 
     UILabel *titleLbl = [[UILabel alloc] init];
     titleLbl.translatesAutoresizingMaskIntoConstraints = NO;
-    titleLbl.font = [Styling fontBold:14];
+    titleLbl.font = [Styling fontBold:15.0];
     titleLbl.textColor = PrimaryTextClr;
     titleLbl.text = title;
     titleLbl.textAlignment = Language.alignmentForCurrentLanguage;
+    PPEnableDynamicType(titleLbl, UIFontTextStyleHeadline);
     [container addSubview:titleLbl];
 
     UILabel *subtitleLbl = [[UILabel alloc] init];
     subtitleLbl.translatesAutoresizingMaskIntoConstraints = NO;
-    subtitleLbl.font = [Styling fontMedium:11];
+    subtitleLbl.font = [Styling fontMedium:11.0];
     subtitleLbl.textColor = SeconderyTextClr;
     subtitleLbl.text = subtitle;
     subtitleLbl.textAlignment = Language.alignmentForCurrentLanguage;
     subtitleLbl.numberOfLines = 2;
-    subtitleLbl.alpha = 0.7;
+    subtitleLbl.hidden = subtitle.length == 0;
+    PPEnableDynamicType(subtitleLbl, UIFontTextStyleCaption1);
     [container addSubview:subtitleLbl];
 
     [NSLayoutConstraint activateConstraints:@[
-        [bar.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
-        [bar.topAnchor constraintEqualToAnchor:container.topAnchor],
-        [bar.widthAnchor constraintEqualToConstant:28.0],
-        [bar.heightAnchor constraintEqualToConstant:4.0],
+        [iconPlate.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [iconPlate.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [iconPlate.widthAnchor constraintEqualToConstant:30.0],
+        [iconPlate.heightAnchor constraintEqualToConstant:30.0],
+        [icon.centerXAnchor constraintEqualToAnchor:iconPlate.centerXAnchor],
+        [icon.centerYAnchor constraintEqualToAnchor:iconPlate.centerYAnchor],
 
-        [icon.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor],
-        [icon.topAnchor constraintEqualToAnchor:bar.bottomAnchor constant:9.0],
-        [icon.widthAnchor constraintEqualToConstant:16.0],
-        [icon.heightAnchor constraintEqualToConstant:16.0],
-
-        [titleLbl.leadingAnchor constraintEqualToAnchor:icon.trailingAnchor constant:6.0],
-        [titleLbl.centerYAnchor constraintEqualToAnchor:icon.centerYAnchor],
+        [titleLbl.leadingAnchor constraintEqualToAnchor:iconPlate.trailingAnchor constant:PPSpaceSM],
+        [titleLbl.topAnchor constraintEqualToAnchor:iconPlate.topAnchor],
         [titleLbl.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
 
-        [subtitleLbl.topAnchor constraintEqualToAnchor:titleLbl.bottomAnchor constant:4.0],
-        [subtitleLbl.leadingAnchor constraintEqualToAnchor:icon.leadingAnchor],
+        [subtitleLbl.topAnchor constraintEqualToAnchor:titleLbl.bottomAnchor constant:PPSpaceXS],
+        [subtitleLbl.leadingAnchor constraintEqualToAnchor:titleLbl.leadingAnchor],
         [subtitleLbl.trailingAnchor constraintEqualToAnchor:titleLbl.trailingAnchor],
-        [subtitleLbl.bottomAnchor constraintEqualToAnchor:container.bottomAnchor]
     ]];
+    if (subtitleLbl.hidden) {
+        [titleLbl.bottomAnchor constraintEqualToAnchor:container.bottomAnchor].active = YES;
+    } else {
+        [subtitleLbl.bottomAnchor constraintEqualToAnchor:container.bottomAnchor].active = YES;
+    }
 
     return container;
 }
@@ -603,18 +652,19 @@
 - (UIView *)pp_imageCollectionView {
     UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
     layout.scrollDirection = UICollectionViewScrollDirectionHorizontal;
-    layout.itemSize = CGSizeMake(120.0, 120.0);
-    layout.minimumInteritemSpacing = 12.0;
-    layout.minimumLineSpacing = 12.0;
+    layout.itemSize = CGSizeMake(108.0, 108.0);
+    layout.minimumInteritemSpacing = PPSpaceSM;
+    layout.minimumLineSpacing = PPSpaceSM;
 
     self.imageCollectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
     self.imageCollectionView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.imageCollectionView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     self.imageCollectionView.backgroundColor = UIColor.clearColor;
     self.imageCollectionView.showsHorizontalScrollIndicator = NO;
     [self.imageCollectionView registerClass:[UICollectionViewCell class] forCellWithReuseIdentifier:@"img"];
     self.imageCollectionView.dataSource = self;
     self.imageCollectionView.delegate = self;
-    [self.imageCollectionView.heightAnchor constraintEqualToConstant:132.0].active = YES;
+    [self.imageCollectionView.heightAnchor constraintEqualToConstant:120.0].active = YES;
     return self.imageCollectionView;
 }
 
@@ -629,36 +679,40 @@
 
     UIView *descBlock = [[UIView alloc] init];
     descBlock.translatesAutoresizingMaskIntoConstraints = NO;
+    descBlock.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    PPStyleCardSurface(descBlock, PPCornerCard);
     UIView *descHeader = [self pp_sectionHeader:kLang(@"Description") subtitle:kLang(@"Market_DescriptionHint") icon:@"doc.text.fill"];
     self.descriptionView = [self pp_textViewWithPlaceholder:kLang(@"Description") field:&_descriptionView placeholderLabel:&_descriptionPlaceholder];
     self.descriptionView.keyboardType = UIKeyboardTypeDefault;
     [descBlock addSubview:descHeader];
     [descBlock addSubview:self.descriptionView];
     [NSLayoutConstraint activateConstraints:@[
-        [descHeader.topAnchor constraintEqualToAnchor:descBlock.topAnchor],
-        [descHeader.leadingAnchor constraintEqualToAnchor:descBlock.leadingAnchor],
-        [descHeader.trailingAnchor constraintEqualToAnchor:descBlock.trailingAnchor],
-        [self.descriptionView.topAnchor constraintEqualToAnchor:descHeader.bottomAnchor constant:12.0],
-        [self.descriptionView.leadingAnchor constraintEqualToAnchor:descBlock.leadingAnchor],
-        [self.descriptionView.trailingAnchor constraintEqualToAnchor:descBlock.trailingAnchor],
-        [self.descriptionView.bottomAnchor constraintEqualToAnchor:descBlock.bottomAnchor],
+        [descHeader.topAnchor constraintEqualToAnchor:descBlock.topAnchor constant:PPSpaceBase],
+        [descHeader.leadingAnchor constraintEqualToAnchor:descBlock.leadingAnchor constant:PPSpaceBase],
+        [descHeader.trailingAnchor constraintEqualToAnchor:descBlock.trailingAnchor constant:-PPSpaceBase],
+        [self.descriptionView.topAnchor constraintEqualToAnchor:descHeader.bottomAnchor constant:PPSpaceBase],
+        [self.descriptionView.leadingAnchor constraintEqualToAnchor:descBlock.leadingAnchor constant:PPSpaceBase],
+        [self.descriptionView.trailingAnchor constraintEqualToAnchor:descBlock.trailingAnchor constant:-PPSpaceBase],
+        [self.descriptionView.bottomAnchor constraintEqualToAnchor:descBlock.bottomAnchor constant:-PPSpaceBase],
     ]];
 
     UIView *descEnBlock = [[UIView alloc] init];
     descEnBlock.translatesAutoresizingMaskIntoConstraints = NO;
+    descEnBlock.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    PPStyleCardSurface(descEnBlock, PPCornerCard);
     UIView *descEnHeader = [self pp_sectionHeader:kLang(@"Description (EN)") subtitle:@"" icon:@"doc.text.fill"];
     self.descriptionEnView = [self pp_textViewWithPlaceholder:kLang(@"Description (EN)") field:&_descriptionEnView placeholderLabel:&_descriptionEnPlaceholder];
     self.descriptionEnView.keyboardType = UIKeyboardTypeASCIICapable;
     [descEnBlock addSubview:descEnHeader];
     [descEnBlock addSubview:self.descriptionEnView];
     [NSLayoutConstraint activateConstraints:@[
-        [descEnHeader.topAnchor constraintEqualToAnchor:descEnBlock.topAnchor],
-        [descEnHeader.leadingAnchor constraintEqualToAnchor:descEnBlock.leadingAnchor],
-        [descEnHeader.trailingAnchor constraintEqualToAnchor:descEnBlock.trailingAnchor],
-        [self.descriptionEnView.topAnchor constraintEqualToAnchor:descEnHeader.bottomAnchor constant:12.0],
-        [self.descriptionEnView.leadingAnchor constraintEqualToAnchor:descEnBlock.leadingAnchor],
-        [self.descriptionEnView.trailingAnchor constraintEqualToAnchor:descEnBlock.trailingAnchor],
-        [self.descriptionEnView.bottomAnchor constraintEqualToAnchor:descEnBlock.bottomAnchor],
+        [descEnHeader.topAnchor constraintEqualToAnchor:descEnBlock.topAnchor constant:PPSpaceBase],
+        [descEnHeader.leadingAnchor constraintEqualToAnchor:descEnBlock.leadingAnchor constant:PPSpaceBase],
+        [descEnHeader.trailingAnchor constraintEqualToAnchor:descEnBlock.trailingAnchor constant:-PPSpaceBase],
+        [self.descriptionEnView.topAnchor constraintEqualToAnchor:descEnHeader.bottomAnchor constant:PPSpaceBase],
+        [self.descriptionEnView.leadingAnchor constraintEqualToAnchor:descEnBlock.leadingAnchor constant:PPSpaceBase],
+        [self.descriptionEnView.trailingAnchor constraintEqualToAnchor:descEnBlock.trailingAnchor constant:-PPSpaceBase],
+        [self.descriptionEnView.bottomAnchor constraintEqualToAnchor:descEnBlock.bottomAnchor constant:-PPSpaceBase],
     ]];
 
     UIView *priceRow = [self pp_textFieldWithPlaceholder:kLang(@"Market_PriceReq") icon:@"banknote.fill" field:&_priceField];
@@ -722,18 +776,20 @@
 
     UIView *imagesBlock = [[UIView alloc] init];
     imagesBlock.translatesAutoresizingMaskIntoConstraints = NO;
+    imagesBlock.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    PPStyleCardSurface(imagesBlock, PPCornerCard);
     UIView *imagesHeader = [self pp_sectionHeader:kLang(@"Market_SectionImages") subtitle:kLang(@"Market_ImagesHint") icon:@"photo.on.rectangle.fill"];
     UIView *imagesView = [self pp_imageCollectionView];
     [imagesBlock addSubview:imagesHeader];
     [imagesBlock addSubview:imagesView];
     [NSLayoutConstraint activateConstraints:@[
-        [imagesHeader.topAnchor constraintEqualToAnchor:imagesBlock.topAnchor],
-        [imagesHeader.leadingAnchor constraintEqualToAnchor:imagesBlock.leadingAnchor],
-        [imagesHeader.trailingAnchor constraintEqualToAnchor:imagesBlock.trailingAnchor],
-        [imagesView.topAnchor constraintEqualToAnchor:imagesHeader.bottomAnchor constant:12.0],
-        [imagesView.leadingAnchor constraintEqualToAnchor:imagesBlock.leadingAnchor],
-        [imagesView.trailingAnchor constraintEqualToAnchor:imagesBlock.trailingAnchor],
-        [imagesView.bottomAnchor constraintEqualToAnchor:imagesBlock.bottomAnchor],
+        [imagesHeader.topAnchor constraintEqualToAnchor:imagesBlock.topAnchor constant:PPSpaceBase],
+        [imagesHeader.leadingAnchor constraintEqualToAnchor:imagesBlock.leadingAnchor constant:PPSpaceBase],
+        [imagesHeader.trailingAnchor constraintEqualToAnchor:imagesBlock.trailingAnchor constant:-PPSpaceBase],
+        [imagesView.topAnchor constraintEqualToAnchor:imagesHeader.bottomAnchor constant:PPSpaceBase],
+        [imagesView.leadingAnchor constraintEqualToAnchor:imagesBlock.leadingAnchor constant:PPSpaceBase],
+        [imagesView.trailingAnchor constraintEqualToAnchor:imagesBlock.trailingAnchor constant:-PPSpaceBase],
+        [imagesView.bottomAnchor constraintEqualToAnchor:imagesBlock.bottomAnchor constant:-PPSpaceBase],
     ]];
 
     UIView *discPctRow = [self pp_textFieldWithPlaceholder:kLang(@"Market_DiscountPct") icon:@"percent" field:&_discountPctField];
@@ -756,6 +812,10 @@
         [self pp_updateGlowsForStyle];
         self.saveButton.layer.shadowColor = AppPrimaryClr.CGColor;
         [self pp_applyLiquidStyleToKindControl];
+    }
+    if (![previousTraitCollection.preferredContentSizeCategory isEqualToString:self.traitCollection.preferredContentSizeCategory]) {
+        self.heroAreaHeightConstraint.constant = [self pp_heroAreaHeight];
+        [self.view setNeedsLayout];
     }
 }
 
@@ -969,8 +1029,11 @@
     if (urlIdx == totalImages) {
         UICollectionViewCell *cell = [cv dequeueReusableCellWithReuseIdentifier:@"img" forIndexPath:ip];
         for (UIView *sv in cell.contentView.subviews) [sv removeFromSuperview];
-        cell.contentView.layer.cornerRadius = 12; cell.contentView.clipsToBounds = YES;
-        cell.contentView.backgroundColor = [AppBackgroundClr colorWithAlphaComponent:0.5];
+        PPApplyContinuousCorners(cell.contentView, PPCornerMedium);
+        cell.contentView.clipsToBounds = YES;
+        cell.contentView.backgroundColor = [self pp_canvasColor];
+        cell.contentView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+        cell.contentView.layer.borderColor = [self pp_borderColor].CGColor;
         
         UIView *addView = [[UIView alloc] initWithFrame:cell.contentView.bounds];
         addView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -1243,23 +1306,26 @@
 
 #pragma mark - Sheet Helpers
 
-- (UIButton *)pp_glassSheetView { UIButton *s = [PPNavigationController setButtonAsBackroundButtonWithStyle:UIButtonConfigurationCornerStyleFixed configType:PPButtonConfigrationGlass];
-    UIButtonConfiguration *c = s.configuration;
-    c.background.cornerRadius = 42;
-    c.baseBackgroundColor = UIColor.clearColor;
-    c.background.backgroundColor = UIColor.clearColor;
-    NSDictionary *attrs = @{
-        NSFontAttributeName: [Styling fontBold:17],
+- (UIButton *)pp_glassSheetView {
+    UIButton *sheet = [PPNavigationController setButtonAsBackroundButtonWithStyle:UIButtonConfigurationCornerStyleFixed configType:PPButtonConfigrationGlass];
+    sheet.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+
+    UIButtonConfiguration *configuration = sheet.configuration;
+    configuration.background.cornerRadius = PPCornerHero;
+    configuration.baseBackgroundColor = UIColor.clearColor;
+    configuration.background.backgroundColor = UIColor.clearColor;
+    NSDictionary *attributes = @{
+        NSFontAttributeName: [Styling fontBold:17.0],
         NSForegroundColorAttributeName: PrimaryTextClr
     };
-    [s setAttributedTitle:[[NSAttributedString alloc] initWithString:@"" attributes:attrs] forState:UIControlStateNormal];
-    s.configuration = c;
-    s.backgroundColor = AppBackgroundClr;
-    s.layer.cornerRadius = 42;
-    s.layer.cornerCurve = kCACornerCurveContinuous;
-    s.layer.borderWidth = 0.5;
-    s.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.12].CGColor;
-    return s;
+    [sheet setAttributedTitle:[[NSAttributedString alloc] initWithString:@"" attributes:attributes] forState:UIControlStateNormal];
+    sheet.configuration = configuration;
+    sheet.backgroundColor = [self pp_surfaceColor];
+    PPApplyContinuousCorners(sheet, PPCornerHero);
+    sheet.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    sheet.layer.borderColor = [self pp_borderColor].CGColor;
+    PPApplyCardShadow(sheet);
+    return sheet;
 }
 
 
@@ -1278,6 +1344,7 @@
 {
     UIScrollView *s = [[UIScrollView alloc] init];
     s.translatesAutoresizingMaskIntoConstraints = NO;
+    s.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     s.showsVerticalScrollIndicator = NO;
     return s;
 }
@@ -1287,40 +1354,39 @@
     UIStackView *s = [[UIStackView alloc] init];
     s.translatesAutoresizingMaskIntoConstraints = NO;
     s.axis = UILayoutConstraintAxisVertical;
-    s.spacing = 8;
+    s.spacing = PPSpaceSM;
+    s.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     [sc addSubview:s];
     return s;
 }
 
-- (UIButton *)pp_sheetButtonWithTitle:(NSString *)t custom:(BOOL)custom
-{
-    UIButton *b = [PPNavigationController setButtonAsBackroundButtonWithStyle:UIButtonConfigurationCornerStyleFixed
-                                                                   configType:PPButtonConfigrationGlass];
+- (UIButton *)pp_sheetButtonWithTitle:(NSString *)title custom:(BOOL)custom {
+    UIButton *button = [PPNavigationController setButtonAsBackroundButtonWithStyle:UIButtonConfigurationCornerStyleFixed
+                                                                        configType:PPButtonConfigrationGlass];
+    button.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
 
-    UIButtonConfiguration *c = b.configuration;
-    c.background.cornerRadius = 17;
-    c.baseBackgroundColor = UIColor.clearColor;
-    c.background.backgroundColor = UIColor.clearColor;
+    UIButtonConfiguration *configuration = button.configuration;
+    configuration.background.cornerRadius = PPCornerMedium;
+    configuration.baseBackgroundColor = UIColor.clearColor;
+    configuration.background.backgroundColor = UIColor.clearColor;
+    configuration.contentInsets = NSDirectionalEdgeInsetsMake(PPSpaceSM, PPSpaceBase, PPSpaceSM, PPSpaceBase);
+    configuration.titleLineBreakMode = NSLineBreakByWordWrapping;
+    button.configuration = configuration;
+    button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeading;
+    button.titleLabel.numberOfLines = 0;
+    button.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
+    button.backgroundColor = [self pp_canvasColor];
+    PPApplyContinuousCorners(button, PPCornerMedium);
+    button.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    button.layer.borderColor = [self pp_borderColor].CGColor;
 
-    b.configuration = c;
-    b.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeading;
-
-    // Attributed title [GM fontsize:14]
-    NSDictionary *attrs = @{
-        NSFontAttributeName: [Styling fontBold:14],
+    NSDictionary *attributes = @{
+        NSFontAttributeName: PPScaledFont([Styling fontBold:14.0], UIFontTextStyleBody),
         NSForegroundColorAttributeName: custom ? AppPrimaryClr : PrimaryTextClr
     };
-
-    NSAttributedString *attrTitle = [[NSAttributedString alloc] initWithString:t attributes:attrs];
-
-    [b setAttributedTitle:attrTitle forState:UIControlStateNormal];
-
-    b.backgroundColor = [AppBackgroundClr colorWithAlphaComponent:0.8];
-    b.layer.cornerRadius = 17;
-    b.clipsToBounds = YES;
-    [b.heightAnchor constraintEqualToConstant:50].active = YES;
-
-    return b;
+    [button setAttributedTitle:[[NSAttributedString alloc] initWithString:title ?: @"" attributes:attributes] forState:UIControlStateNormal];
+    [button.heightAnchor constraintGreaterThanOrEqualToConstant:52.0].active = YES;
+    return button;
 }
 
 - (void)pp_layoutSheet:(UIView *)sheet backdrop:(UIView *)bd title:(UILabel *)tl scroll:(UIScrollView *)sc stack:(UIStackView *)st height:(CGFloat)h
@@ -1357,8 +1423,13 @@
 
 - (void)pp_animateSheetIn:(UIView *)sheet backdrop:(UIView *)bd
 {
-    sheet.transform = CGAffineTransformMakeTranslation(0, 320);
+    if (UIAccessibilityIsReduceMotionEnabled()) {
+        bd.backgroundColor = [UIColor colorWithWhite:0 alpha:0.28];
+        sheet.transform = CGAffineTransformIdentity;
+        return;
+    }
 
+    sheet.transform = CGAffineTransformMakeTranslation(0, 320);
     [UIView animateWithDuration:0.32
                          delay:0
           usingSpringWithDamping:0.88

@@ -42,17 +42,19 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
         _titleLabel = [UILabel new];
         _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _titleLabel.font = [Styling fontMedium:14];
+        _titleLabel.font = [Styling fontMedium:PPFontSubheadline];
         _titleLabel.textColor = SeconderyTextClr;
         _titleLabel.text = title;
         _titleLabel.userInteractionEnabled = NO;
+        PPEnableDynamicType(_titleLabel, UIFontTextStyleSubheadline);
         [self addSubview:_titleLabel];
 
         _countLabel = [UILabel new];
         _countLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _countLabel.font = [Styling fontMedium:11];
-        _countLabel.textColor = [SeconderyTextClr colorWithAlphaComponent:0.55];
+        _countLabel.font = [Styling fontMedium:PPFontCaption1];
+        _countLabel.textColor = AppTertiaryTextClr;
         _countLabel.userInteractionEnabled = NO;
+        PPEnableDynamicType(_countLabel, UIFontTextStyleCaption1);
         [self addSubview:_countLabel];
 
         _underline = [UIView new];
@@ -63,17 +65,28 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         [self addSubview:_underline];
 
         [NSLayoutConstraint activateConstraints:@[
-            [_titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:6],
+            [_titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:PPSpaceMDHalf],
             [_titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
             [_countLabel.firstBaselineAnchor constraintEqualToAnchor:_titleLabel.firstBaselineAnchor],
-            [_countLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor constant:6],
+            [_countLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor constant:PPSpaceMDHalf],
             [_countLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor],
-            [_underline.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:6],
+            [_underline.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:PPSpaceMDHalf],
             [_underline.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
             [_underline.widthAnchor constraintEqualToAnchor:_titleLabel.widthAnchor],
             [_underline.heightAnchor constraintEqualToConstant:1.5],
-            [_underline.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+            // Touch target: the chip keeps its typographic look but is never
+            // shorter than 44pt, so the tappable area below the underline is
+            // real instead of a ~30pt strip.
+            [self.heightAnchor constraintGreaterThanOrEqualToConstant:PPTouchTargetMin],
         ]];
+
+        NSLayoutConstraint *hugUnderline = [_underline.bottomAnchor constraintEqualToAnchor:self.bottomAnchor];
+        hugUnderline.priority = UILayoutPriorityDefaultHigh + 1; // yields to the 44pt minimum
+        hugUnderline.active = YES;
+
+        self.isAccessibilityElement = YES;
+        self.accessibilityTraits = UIAccessibilityTraitButton;
+        self.accessibilityLabel = title;
     }
     return self;
 }
@@ -82,11 +95,14 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     _selectedState = selected;
     void (^apply)(void) = ^{
         self.titleLabel.textColor = selected ? (PrimaryTextClr) : SeconderyTextClr;
-        self.titleLabel.font = selected ? [Styling fontBold:14] : [Styling fontMedium:14];
+        self.titleLabel.font = selected ? [Styling fontBold:PPFontSubheadline] : [Styling fontMedium:PPFontSubheadline];
+        PPEnableDynamicType(self.titleLabel, UIFontTextStyleSubheadline);
         self.underline.alpha = selected ? 1.0 : 0.0;
     };
+    self.accessibilityTraits = selected ? (UIAccessibilityTraitButton | UIAccessibilityTraitSelected)
+                                       : UIAccessibilityTraitButton;
     if (animated) {
-        [UIView animateWithDuration:0.22 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:apply completion:nil];
+        PPAnimateRespectingMotion(PPAnimDurationNormal, apply, nil);
     } else {
         apply();
     }
@@ -94,6 +110,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
 - (void)setCount:(NSInteger)count {
     self.countLabel.text = [NSString stringWithFormat:@"%ld", (long)count];
+    self.accessibilityValue = self.countLabel.text;
 }
 
 @end
@@ -113,10 +130,15 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 @property (nonatomic, strong) _PPVetFilterChip *chipAll;
 @property (nonatomic, strong) _PPVetFilterChip *chipActive;
 @property (nonatomic, strong) _PPVetFilterChip *chipDisabled;
+@property (nonatomic, strong) UIStackView *filterStack;
 
 @property (nonatomic, strong) PPS *searchView;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIView *emptyContainer;
+@property (nonatomic, strong) UILabel *emptyHeadline;
+@property (nonatomic, strong) UIView *emptyRule;
+@property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
+@property (nonatomic, assign) BOOL isLoadingVets;
 
 @property (nonatomic, strong) NSMutableArray<PPVetModel *> *allVets;
 @property (nonatomic, strong) NSMutableArray<PPVetModel *> *filteredVets;
@@ -244,7 +266,12 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         self.view.backgroundColor = [self pp_canvasColor];
         self.heroSurfaceView.backgroundColor = [self pp_surfaceColor];
         self.heroSurfaceView.layer.borderColor = [self pp_borderColor].CGColor;
+        PPApplyElevatedShadow(self.heroSurfaceView); // re-resolve the dynamic shadow color
         [self updateAmbientBackgroundForStyle];
+    }
+    if (previousTraitCollection.preferredContentSizeCategory != self.traitCollection.preferredContentSizeCategory) {
+        [self pp_applyFilterRowLayoutForTextSize];
+        [self pp_applyHeroTitleLineLimitForTextSize];
     }
 }
 
@@ -272,29 +299,29 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
     _heroSurfaceView = [UIView new];
     _heroSurfaceView.translatesAutoresizingMaskIntoConstraints = NO;
+    // Token card surface (fill + hairline border + continuous corners + shadow);
+    // the screen's own surface/border tints are re-applied so dark-mode
+    // behavior in traitCollectionDidChange: stays identical.
+    PPStyleCardSurface(_heroSurfaceView, PPCornerHero);
     _heroSurfaceView.backgroundColor = [self pp_surfaceColor];
-    _heroSurfaceView.layer.cornerRadius = 34.0;
-    _heroSurfaceView.layer.cornerCurve = kCACornerCurveContinuous;
-    _heroSurfaceView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     _heroSurfaceView.layer.borderColor = [self pp_borderColor].CGColor;
-    _heroSurfaceView.layer.shadowColor = AppShadowColor.CGColor;
-    _heroSurfaceView.layer.shadowOpacity = 0.08;
-    _heroSurfaceView.layer.shadowRadius = 24.0;
-    _heroSurfaceView.layer.shadowOffset = CGSizeMake(0, 14.0);
+    PPApplyElevatedShadow(_heroSurfaceView);
     [self.view addSubview:_heroSurfaceView];
 
     UIView *accentBar = [UIView new];
     accentBar.translatesAutoresizingMaskIntoConstraints = NO;
     accentBar.backgroundColor = AppPrimaryClr;
-    accentBar.layer.cornerRadius = 3.0;
+    PPApplyContinuousCorners(accentBar, 3.0);
     [_heroSurfaceView addSubview:accentBar];
 
     _eyebrowLabel = [UILabel new];
     _eyebrowLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _eyebrowLabel.text = [kLang(@"Vet_Section_Title") uppercaseString];
-    _eyebrowLabel.font = [Styling fontBold:11];
+    _eyebrowLabel.font = [Styling fontBold:PPFontCaption1];
     _eyebrowLabel.textColor = AppPrimaryClr;
     _eyebrowLabel.textAlignment = align;
+    _eyebrowLabel.numberOfLines = 0;
+    PPEnableDynamicType(_eyebrowLabel, UIFontTextStyleCaption1);
     [_heroSurfaceView addSubview:_eyebrowLabel];
 
     _titleLabel = [UILabel new];
@@ -304,6 +331,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     _titleLabel.textColor = PrimaryTextClr;
     _titleLabel.numberOfLines = 2;
     _titleLabel.textAlignment = align;
+    PPEnableDynamicType(_titleLabel, UIFontTextStyleLargeTitle);
     [_heroSurfaceView addSubview:_titleLabel];
 
     _metaLabel = [UILabel new];
@@ -312,33 +340,35 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     _metaLabel.font = [Styling fontMedium:13];
     _metaLabel.textColor = SeconderyTextClr;
     _metaLabel.textAlignment = align;
+    _metaLabel.numberOfLines = 0;
+    PPEnableDynamicType(_metaLabel, UIFontTextStyleFootnote);
     [_heroSurfaceView addSubview:_metaLabel];
 
     _titleRule = [UIView new];
     _titleRule.translatesAutoresizingMaskIntoConstraints = NO;
-    _titleRule.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.10];
+    _titleRule.backgroundColor = PPHairlineColor();
     [_heroSurfaceView addSubview:_titleRule];
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [_heroSurfaceView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:8],
+        [_heroSurfaceView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:PPSpaceSM],
         [_heroSurfaceView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18],
         [_heroSurfaceView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-18],
 
         [accentBar.topAnchor constraintEqualToAnchor:_heroSurfaceView.topAnchor constant:18],
         [accentBar.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:22],
         [accentBar.widthAnchor constraintEqualToConstant:70],
-        [accentBar.heightAnchor constraintEqualToConstant:6],
+        [accentBar.heightAnchor constraintEqualToConstant:PPSpaceMDHalf],
 
-        [_eyebrowLabel.topAnchor constraintEqualToAnchor:accentBar.bottomAnchor constant:16],
+        [_eyebrowLabel.topAnchor constraintEqualToAnchor:accentBar.bottomAnchor constant:PPSpaceBase],
         [_eyebrowLabel.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:22],
         [_eyebrowLabel.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-22],
 
-        [_titleLabel.topAnchor constraintEqualToAnchor:_eyebrowLabel.bottomAnchor constant:6],
+        [_titleLabel.topAnchor constraintEqualToAnchor:_eyebrowLabel.bottomAnchor constant:PPSpaceMDHalf],
         [_titleLabel.leadingAnchor constraintEqualToAnchor:_eyebrowLabel.leadingAnchor],
         [_titleLabel.trailingAnchor constraintEqualToAnchor:_eyebrowLabel.trailingAnchor],
 
-        [_metaLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:4],
+        [_metaLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:PPSpaceXS],
         [_metaLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
         [_metaLabel.trailingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor],
 
@@ -348,6 +378,14 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         [_titleRule.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
         [_titleRule.bottomAnchor constraintEqualToAnchor:_heroSurfaceView.bottomAnchor constant:-18],
     ]];
+
+    [self pp_applyHeroTitleLineLimitForTextSize];
+}
+
+// The hero surface height is constraint-driven, so the display title may drop
+// its 2-line cap at accessibility text sizes instead of truncating.
+- (void)pp_applyHeroTitleLineLimitForTextSize {
+    self.titleLabel.numberOfLines = PPIsAccessibilityTextSize() ? 0 : 2;
 }
 
 #pragma mark - Filter row (text + count, accent underline)
@@ -368,12 +406,30 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     stack.spacing = 22;
     stack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     [self.view addSubview:stack];
+    self.filterStack = stack;
 
     [NSLayoutConstraint activateConstraints:@[
         [stack.topAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:18],
-        [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:24],
-        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-24],
+        [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceXL],
+        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceXL],
     ]];
+
+    [self pp_applyFilterRowLayoutForTextSize];
+}
+
+// Three baseline-aligned chips cannot share one row once the text reaches an
+// accessibility size, so the row stacks instead of truncating the titles.
+- (void)pp_applyFilterRowLayoutForTextSize {
+    if (!self.filterStack) { return; }
+    if (PPIsAccessibilityTextSize()) {
+        self.filterStack.alignment = UIStackViewAlignmentLeading; // set before the axis: lastBaseline is invalid vertically
+        self.filterStack.axis = UILayoutConstraintAxisVertical;
+        self.filterStack.spacing = PPSpaceXS;
+    } else {
+        self.filterStack.axis = UILayoutConstraintAxisHorizontal;
+        self.filterStack.alignment = UIStackViewAlignmentLastBaseline;
+        self.filterStack.spacing = 22;
+    }
 }
 
 - (void)chipAllTapped      { [self setActiveFilter:PPVetListFilterAll]; }
@@ -403,23 +459,27 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     sv.textField.placeholder = kLang(@"Vet_Search_Placeholder");
     sv.backgroundColor = UIColor.clearColor;
     sv.showsPrimaryButton = NO;
+    PPEnableDynamicTypeForTextField(sv.textField, UIFontTextStyleBody);
     [self.view addSubview:sv];
     self.searchView = sv;
 
     UIView *hairline = [UIView new];
     hairline.translatesAutoresizingMaskIntoConstraints = NO;
-    hairline.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.10];
+    hairline.backgroundColor = PPHairlineColor();
     [self.view addSubview:hairline];
 
     [NSLayoutConstraint activateConstraints:@[
-        [sv.topAnchor constraintEqualToAnchor:self.chipAll.bottomAnchor constant:18],
+        // Anchored to the filter stack (not just the first chip) so the row can
+        // stack vertically at accessibility text sizes without overlapping.
+        [sv.topAnchor constraintEqualToAnchor:self.filterStack.bottomAnchor constant:PPSpaceXS],
         [sv.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18],
         [sv.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-18],
-        [sv.heightAnchor constraintEqualToConstant:40],
+        // 44pt minimum touch target, and free to grow with the scaled font.
+        [sv.heightAnchor constraintGreaterThanOrEqualToConstant:PPTouchTargetMin],
 
-        [hairline.topAnchor constraintEqualToAnchor:sv.bottomAnchor constant:6],
-        [hairline.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:24],
-        [hairline.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-24],
+        [hairline.topAnchor constraintEqualToAnchor:sv.bottomAnchor constant:PPSpaceMDHalf],
+        [hairline.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceXL],
+        [hairline.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceXL],
         [hairline.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
     ]];
 }
@@ -436,7 +496,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     self.tableView.rowHeight = [PPVetCell preferredHeight];
     self.tableView.estimatedRowHeight = [PPVetCell preferredHeight];
     self.tableView.showsVerticalScrollIndicator = NO;
-    self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 96, 0);
+    self.tableView.contentInset = UIEdgeInsetsMake(PPSpaceSM, 0, 96, 0);
     [self.tableView registerClass:[PPVetCell class] forCellReuseIdentifier:[PPVetCell reuseID]];
 
     UIRefreshControl *refresh = [[UIRefreshControl alloc] init];
@@ -480,22 +540,33 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     UILabel *headline = [UILabel new];
     headline.translatesAutoresizingMaskIntoConstraints = NO;
     headline.text = kLang(@"Vet_Empty_List");
-    headline.font = [Styling fontBold:22];
+    headline.font = [Styling fontBold:PPFontTitle2];
     headline.textColor = PrimaryTextClr;
     headline.textAlignment = NSTextAlignmentCenter;
     headline.numberOfLines = 0;
+    PPEnableDynamicType(headline, UIFontTextStyleTitle2);
     [_emptyContainer addSubview:headline];
+    _emptyHeadline = headline;
 
     UIView *rule = [UIView new];
     rule.translatesAutoresizingMaskIntoConstraints = NO;
     rule.backgroundColor = AppPrimaryClr;
     [_emptyContainer addSubview:rule];
+    _emptyRule = rule;
+
+    // Loading honesty: the first snapshot of the vets listener used to land on
+    // the "empty" copy, so a spinner now owns that state until data arrives.
+    _loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    _loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+    _loadingIndicator.color = AppPrimaryClr;
+    _loadingIndicator.hidesWhenStopped = YES;
+    [_emptyContainer addSubview:_loadingIndicator];
 
     [NSLayoutConstraint activateConstraints:@[
         [_emptyContainer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [_emptyContainer.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
-        [_emptyContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:32],
-        [_emptyContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-32],
+        [_emptyContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceXXL],
+        [_emptyContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceXXL],
 
         [headline.topAnchor constraintEqualToAnchor:_emptyContainer.topAnchor],
         [headline.leadingAnchor constraintEqualToAnchor:_emptyContainer.leadingAnchor],
@@ -504,18 +575,36 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         [rule.topAnchor constraintEqualToAnchor:headline.bottomAnchor constant:18],
         [rule.centerXAnchor constraintEqualToAnchor:_emptyContainer.centerXAnchor],
         [rule.widthAnchor constraintEqualToConstant:42],
-        [rule.heightAnchor constraintEqualToConstant:2],
+        [rule.heightAnchor constraintEqualToConstant:PPSpaceXXS],
         [rule.bottomAnchor constraintEqualToAnchor:_emptyContainer.bottomAnchor],
+
+        // Occupies the same optical slot; the copy is hidden while it spins.
+        [_loadingIndicator.centerXAnchor constraintEqualToAnchor:_emptyContainer.centerXAnchor],
+        [_loadingIndicator.centerYAnchor constraintEqualToAnchor:_emptyContainer.centerYAnchor],
     ]];
+}
+
+- (void)pp_setVetsLoading:(BOOL)loading {
+    _isLoadingVets = loading;
+    self.emptyHeadline.hidden = loading;
+    self.emptyRule.hidden = loading;
+    if (loading) {
+        self.emptyContainer.hidden = NO;
+        [self.loadingIndicator startAnimating];
+    } else {
+        [self.loadingIndicator stopAnimating];
+    }
 }
 
 #pragma mark - Data
 
 - (void)startListening {
+    [self pp_setVetsLoading:YES];
     __weak typeof(self) weakSelf = self;
     self.listener = [[PPVetManager sharedManager] observeAllVets:^(NSArray<PPVetModel *> *vets, NSError *error) {
-        if (error) { DLog(@"[VetsList] listener error: %@", error.localizedDescription); return; }
+        if (error) { [weakSelf pp_setVetsLoading:NO]; DLog(@"[VetsList] listener error: %@", error.localizedDescription); return; }
         __strong typeof(weakSelf) self = weakSelf;
+        [self pp_setVetsLoading:NO];
         self.allVets = [vets mutableCopy] ?: [NSMutableArray array];
         [self refreshCounts];
         [self applyFilterAndReload];
@@ -565,6 +654,10 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [self.tableView reloadData];
     self.emptyContainer.hidden = (self.filteredVets.count > 0);
     self.tableView.hidden      = (self.filteredVets.count == 0);
+    // While a fetch is in flight the placeholder shows the spinner, not the
+    // "no vets" copy.
+    self.emptyHeadline.hidden = self.isLoadingVets;
+    self.emptyRule.hidden     = self.isLoadingVets;
 
     if (!self.didPlayEntrance && self.filteredVets.count > 0) {
         self.didPlayEntrance = YES;
@@ -581,12 +674,20 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
 - (void)playCellEntranceAnimation {
     NSArray<UITableViewCell *> *cells = self.tableView.visibleCells;
+    if (PPMotionReduced()) {
+        // Reduce Motion: land on the final state, no translate/fade stagger.
+        for (UITableViewCell *cell in cells) {
+            cell.alpha = 1;
+            cell.transform = CGAffineTransformIdentity;
+        }
+        return;
+    }
     for (NSUInteger idx = 0; idx < cells.count; idx++) {
         UITableViewCell *cell = cells[idx];
         cell.alpha = 0;
         cell.transform = CGAffineTransformMakeTranslation(0, 16);
         [UIView animateWithDuration:0.42
-                              delay:0.035 * idx
+                              delay:MIN(0.035 * idx, 0.28) // capped so long lists never crawl in
              usingSpringWithDamping:0.92
               initialSpringVelocity:0.30
                             options:UIViewAnimationOptionCurveEaseOut
@@ -705,6 +806,20 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     if (vet) [cell configureWithVet:vet];
     cell.backgroundColor = UIColor.clearColor;
     cell.contentView.backgroundColor = UIColor.clearColor;
+
+    // The row reads as one button instead of a pile of separate labels; the
+    // status word reuses the filter copy already localized on this screen.
+    cell.isAccessibilityElement = YES;
+    cell.accessibilityTraits = UIAccessibilityTraitButton;
+    if (vet) {
+        NSMutableArray<NSString *> *parts = [NSMutableArray array];
+        if (PPSafeString(vet.title).length > 0) { [parts addObject:PPSafeString(vet.title)]; }
+        [parts addObject:vet.isDisabled ? kLang(@"Vet_Filter_Disabled") : kLang(@"Vet_Filter_Active")];
+        if (PPSafeString(vet.phone).length > 0) { [parts addObject:PPSafeString(vet.phone)]; }
+        cell.accessibilityLabel = [parts componentsJoinedByString:@", "];
+    } else {
+        cell.accessibilityLabel = nil;
+    }
     return cell;
 }
 
@@ -783,6 +898,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     }];
     editAction.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.85];
     editAction.image = [UIImage systemImageNamed:@"pencil"];
+    editAction.accessibilityLabel = kLang(@"Vet_Edit_Title"); // icon-only swipe action
 
     BOOL isDisabled = vet.isDisabled;
     UIContextualAction *toggleAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal title:nil handler:^(UIContextualAction *action, UIView *sourceView, void (^handler)(BOOL)) {
@@ -790,12 +906,14 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     }];
     toggleAction.backgroundColor = isDisabled ? AppPrimaryClr : [SeconderyTextClr colorWithAlphaComponent:0.55];
     toggleAction.image = [UIImage systemImageNamed:isDisabled ? @"checkmark" : @"nosign"];
+    toggleAction.accessibilityLabel = isDisabled ? kLang(@"Vet_Action_Enable") : kLang(@"Vet_Action_Disable");
 
     UIContextualAction *subAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal title:nil handler:^(UIContextualAction *action, UIView *sourceView, void (^handler)(BOOL)) {
         [weakSelf manageSubscriptionAtIndexPath:indexPath]; handler(YES);
     }];
     subAction.backgroundColor = AppPrimaryClr;
     subAction.image = [UIImage systemImageNamed:@"creditcard"];
+    subAction.accessibilityLabel = kLang(@"Vet_Subscription");
 
     NSMutableArray<UIContextualAction *> *leading = [NSMutableArray array];
     if ([self pp_canManageVetWorkspace]) { [leading addObject:subAction]; [leading addObject:toggleAction]; }
@@ -814,6 +932,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         [weakSelf deleteVetAtIndexPath:indexPath]; handler(YES);
     }];
     deleteAction.image = [UIImage systemImageNamed:@"trash"];
+    deleteAction.accessibilityLabel = kLang(@"Delete"); // icon-only swipe action
     if (![self pp_canManageVetWorkspace]) return nil;
     UISwipeActionsConfiguration *config = [UISwipeActionsConfiguration configurationWithActions:@[deleteAction]];
     config.performsFirstActionWithFullSwipe = NO;
@@ -822,8 +941,9 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
 - (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
     if (self.didPlayEntrance) {
+        if (PPMotionReduced()) { cell.alpha = 1; return; }
         cell.alpha = 0;
-        [UIView animateWithDuration:0.22 animations:^{ cell.alpha = 1; }];
+        PPAnimateRespectingMotion(PPAnimDurationNormal, ^{ cell.alpha = 1; }, nil);
     }
 }
 

@@ -13,7 +13,8 @@
 #import "PPDeliveryOrderDetailViewController.h"
 
 static CGFloat const kStatCardHeight       = 110.0;
-static CGFloat const kPillHeight           = 38.0;
+// Raised from 38pt to the 44pt minimum touch target for the filter chips.
+static CGFloat const kPillHeight           = PPTouchTargetMin;
 static CGFloat const kChromeInset          = 16.0;
 static CGFloat const kDeliveryHeroHeight   = 480.0;
 static CGFloat const kDeliveryHeroCollapsedHeight = 196.0;
@@ -42,6 +43,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 @property (nonatomic, strong) UILabel *titleLabel;
 - (instancetype)initWithIcon:(NSString *)iconName title:(NSString *)title color:(UIColor *)color;
 - (void)updateCount:(NSInteger)count;
+- (void)pp_refreshAccessibilityValue;
 @end
 
 @implementation _PPStatCard
@@ -52,19 +54,12 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
         self.translatesAutoresizingMaskIntoConstraints = NO;
         self.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
         self.backgroundColor = AppForgroundColr;
-        self.layer.shadowColor = AppShadowColor.CGColor;
-        self.layer.shadowOpacity = 0.06;
-        self.layer.shadowOffset = CGSizeMake(0, 10);
-        self.layer.shadowRadius = 18.0;
+        PPApplyCardShadow(self);
 
         UIView *surfaceView = [[UIView alloc] init];
         surfaceView.translatesAutoresizingMaskIntoConstraints = NO;
-        surfaceView.backgroundColor = AppForgroundColr;
         surfaceView.clipsToBounds = YES;
-        surfaceView.layer.cornerRadius = 24.0;
-        surfaceView.layer.cornerCurve = kCACornerCurveContinuous;
-        surfaceView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-        surfaceView.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.08].CGColor;
+        PPStyleCardSurface(surfaceView, PPCornerCard);
         [self addSubview:surfaceView];
 
         UIView *toneHalo = [[UIView alloc] init];
@@ -76,8 +71,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
         UIView *iconWrap = [[UIView alloc] init];
         iconWrap.translatesAutoresizingMaskIntoConstraints = NO;
         iconWrap.backgroundColor = [color colorWithAlphaComponent:0.10];
-        iconWrap.layer.cornerRadius = 16.0;
-        iconWrap.layer.cornerCurve = kCACornerCurveContinuous;
+        PPApplyContinuousCorners(iconWrap, PPCorner16);
         [surfaceView addSubview:iconWrap];
 
         UIImageView *iconView = [[UIImageView alloc] init];
@@ -96,7 +90,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
         _titleLabel = [[UILabel alloc] init];
         _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _titleLabel.font = PPFontMedium(11);
+        _titleLabel.font = PPFontMedium(PPFontCaption1);
         _titleLabel.textColor = [SeconderyTextClr colorWithAlphaComponent:0.88];
         _titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
         _titleLabel.text = title;
@@ -110,6 +104,13 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
         _countLabel.textAlignment = Language.alignmentForCurrentLanguage;
         _countLabel.text = @"0";
         [surfaceView addSubview:_countLabel];
+
+        // Dynamic Type deliberately NOT enabled on either stat label: the card has a
+        // hard kStatCardHeight constraint that the hero collapse animation lerps down
+        // to 0, so a scaled 11pt title (2 lines) plus a scaled 28pt count would clip.
+        self.isAccessibilityElement = YES;
+        self.accessibilityTraits = UIAccessibilityTraitStaticText;
+        [self pp_refreshAccessibilityValue];
 
         [NSLayoutConstraint activateConstraints:@[
             [surfaceView.topAnchor constraintEqualToAnchor:self.topAnchor],
@@ -153,13 +154,25 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 - (void)layoutSubviews {
     [super layoutSubviews];
 
-    UIBezierPath *shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:24.0];
+    UIBezierPath *shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:PPCornerCard];
     self.layer.shadowPath = shadowPath.CGPath;
+}
+
+- (void)pp_refreshAccessibilityValue {
+    // Composed from values that are already localized where they are produced.
+    self.accessibilityLabel = self.titleLabel.text ?: @"";
+    self.accessibilityValue = self.countLabel.text ?: @"";
 }
 
 - (void)updateCount:(NSInteger)count {
     NSString *nextValue = [NSString stringWithFormat:@"%ld", (long)count];
     if ([self.countLabel.text isEqualToString:nextValue]) {
+        return;
+    }
+
+    if (PPMotionReduced()) {
+        self.countLabel.text = nextValue;
+        [self pp_refreshAccessibilityValue];
         return;
     }
 
@@ -169,6 +182,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
                     animations:^{
         self.countLabel.text = nextValue;
     } completion:nil];
+    [self pp_refreshAccessibilityValue];
 }
 
 @end
@@ -212,6 +226,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 @property (nonatomic, strong) UIView *emptyStateView;
 @property (nonatomic, strong) UIView *emptyHaloView;
 @property (nonatomic, strong) UILabel *emptyFilterLabel;
+@property (nonatomic, strong) UIActivityIndicatorView *emptyLoadingIndicator;
 
 // Data
 @property (nonatomic, assign) PPDeliveryFilter currentFilter;
@@ -220,6 +235,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 @property (nonatomic, assign) BOOL didAnimateChrome;
 @property (nonatomic, assign) BOOL heroExpanded;
 @property (nonatomic, assign) BOOL shouldPlayHeroIntro;
+@property (nonatomic, assign) BOOL didReceiveOrdersUpdate;
 
 @end
 
@@ -236,6 +252,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     self.filteredOrders = @[];
     self.didAnimateEntrance = NO;
     self.didAnimateChrome = NO;
+    self.didReceiveOrdersUpdate = NO;
     self.heroExpanded = !hasSeenHeroIntro;
     self.shouldPlayHeroIntro = !hasSeenHeroIntro;
 
@@ -319,7 +336,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     UIView *topGlow = [[UIView alloc] init];
     topGlow.translatesAutoresizingMaskIntoConstraints = NO;
     topGlow.userInteractionEnabled = NO;
-    topGlow.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.06];
+    topGlow.backgroundColor = AppPrimaryClrWithAlpha(0.06);
     topGlow.layer.cornerRadius = 130.0;
     [self.view addSubview:topGlow];
     [self.view sendSubviewToBack:topGlow];
@@ -393,16 +410,17 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     UIView *badge = [[UIView alloc] init];
     badge.translatesAutoresizingMaskIntoConstraints = NO;
     badge.backgroundColor = backgroundColor;
-    badge.layer.cornerRadius = 18.0;
-    badge.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(badge, PPCornerMedium);
     badge.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
     badge.layer.borderColor = [textColor colorWithAlphaComponent:0.12].CGColor;
 
     UILabel *label = [[UILabel alloc] init];
     label.translatesAutoresizingMaskIntoConstraints = NO;
-    label.font = PPFontBold(12);
+    label.font = PPFontBold(PPFontFootnote);
     label.textColor = textColor;
     label.textAlignment = NSTextAlignmentCenter;
+    // Dynamic Type is opted into per instance by the caller: the hero badge row lives
+    // inside a fixed/lerped hero height, while the empty-state badge can grow freely.
     [badge addSubview:label];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -428,7 +446,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     config.imagePlacement = NSDirectionalRectEdgeTrailing;
     config.titleTextAttributesTransformer = ^NSDictionary<NSAttributedStringKey,id> * _Nonnull(NSDictionary<NSAttributedStringKey,id> * _Nonnull incoming) {
         NSMutableDictionary<NSAttributedStringKey, id> *updated = [incoming mutableCopy] ?: [NSMutableDictionary dictionary];
-        updated[NSFontAttributeName] = PPFontBold(12);
+        updated[NSFontAttributeName] = PPFontBold(PPFontFootnote);
         return updated;
     };
     config.title = kLang(@"Deliv_OrderSummary");
@@ -436,12 +454,11 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     UIButton *button = [UIButton buttonWithConfiguration:config primaryAction:nil];
     button.translatesAutoresizingMaskIntoConstraints = NO;
     button.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    button.layer.cornerRadius = 18.0;
-    button.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(button, PPCornerMedium);
     button.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    button.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.08].CGColor;
+    button.layer.borderColor = PPHairlineColor().CGColor;
     button.layer.shadowColor = AppShadowColor.CGColor;
-    button.layer.shadowOpacity = 0.04;
+    button.layer.shadowOpacity = PPShadowSubtleOpacity;
     button.layer.shadowOffset = CGSizeMake(0, 8);
     button.layer.shadowRadius = 16.0;
     button.accessibilityLabel = kLang(@"Deliv_OrderSummary");
@@ -457,12 +474,17 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
     UILabel *eyebrowLabel = [[UILabel alloc] init];
     eyebrowLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    eyebrowLabel.font = PPFontBold(12);
-    eyebrowLabel.textColor = [AppPrimaryClr colorWithAlphaComponent:0.88];
+    eyebrowLabel.font = PPFontBold(PPFontFootnote);
+    eyebrowLabel.textColor = AppPrimaryClrWithAlpha(0.88);
     eyebrowLabel.textAlignment = Language.alignmentForCurrentLanguage;
     eyebrowLabel.text = kLang(@"Deliv_LiveBoard");
     [_heroSurfaceView addSubview:eyebrowLabel];
 
+    // Dynamic Type is intentionally NOT enabled on the hero eyebrow/title/subtitle or
+    // the hero badge row: the hero has a hard height constraint that is lerped between
+    // kDeliveryHeroHeight and kDeliveryHeroCollapsedHeight, and the chain from the
+    // eyebrow down to statsGrid.bottom is all equal constraints, so any scaled label
+    // would be clipped or fight the collapse animation.
     _heroTitleLabel = [[UILabel alloc] init];
     _heroTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _heroTitleLabel.font = PPFontBold(30);
@@ -474,7 +496,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
     _heroSubtitleLabel = [[UILabel alloc] init];
     _heroSubtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _heroSubtitleLabel.font = PPFontMedium(14);
+    _heroSubtitleLabel.font = PPFontMedium(PPFontSubheadline);
     _heroSubtitleLabel.textColor = [SeconderyTextClr colorWithAlphaComponent:0.88];
     _heroSubtitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     _heroSubtitleLabel.numberOfLines = 0;
@@ -483,7 +505,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
     UIView *heroStageView = [[UIView alloc] init];
     heroStageView.translatesAutoresizingMaskIntoConstraints = NO;
-    heroStageView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.06];
+    heroStageView.backgroundColor = AppPrimaryClrWithAlpha(0.06);
     heroStageView.layer.cornerRadius = 56.0;
     heroStageView.layer.cornerCurve = kCACornerCurveContinuous;
     [_heroSurfaceView addSubview:heroStageView];
@@ -491,7 +513,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
     UIView *heroStageCore = [[UIView alloc] init];
     heroStageCore.translatesAutoresizingMaskIntoConstraints = NO;
-    heroStageCore.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.12];
+    heroStageCore.backgroundColor = AppPrimaryClrWithAlpha(0.12);
     heroStageCore.layer.cornerRadius = 30.0;
     heroStageCore.layer.cornerCurve = kCACornerCurveContinuous;
     [_heroStageView addSubview:heroStageCore];
@@ -510,7 +532,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     heroStageDot.layer.cornerRadius = 5.0;
     [_heroStageView addSubview:heroStageDot];
 
-    UIView *focusBadge = [self buildHeroBadgeWithBackgroundColor:[AppPrimaryClr colorWithAlphaComponent:0.11]
+    UIView *focusBadge = [self buildHeroBadgeWithBackgroundColor:AppPrimaryClrWithAlpha(0.11)
                                                        textColor:AppPrimaryClr
                                                       labelStore:&_heroFocusLabel];
     UIView *resultsBadge = [self buildHeroBadgeWithBackgroundColor:[SeconderyTextClr colorWithAlphaComponent:0.08]
@@ -535,7 +557,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
     UIView *divider = [[UIView alloc] init];
     divider.translatesAutoresizingMaskIntoConstraints = NO;
-    divider.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.08];
+    divider.backgroundColor = PPHairlineColor();
     divider.layer.cornerRadius = 0.5;
     [_heroSurfaceView addSubview:divider];
     self.heroDividerView = divider;
@@ -680,7 +702,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
         config.preferredSymbolConfigurationForImage = [UIImageSymbolConfiguration configurationWithPointSize:12.0 weight:UIImageSymbolWeightMedium];
         config.image = [UIImage systemImageNamed:pill.iconName];
         config.attributedTitle = [[NSAttributedString alloc] initWithString:pill.title attributes:@{
-            NSFontAttributeName: PPFontBold(12)
+            NSFontAttributeName: PPFontBold(PPFontFootnote)
         }];
 
         UIButton *button = [UIButton buttonWithConfiguration:config primaryAction:nil];
@@ -690,10 +712,12 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
         button.layer.cornerRadius = kPillHeight / 2.0;
         button.layer.cornerCurve = kCACornerCurveContinuous;
         button.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-        button.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.08].CGColor;
+        button.layer.borderColor = PPHairlineColor().CGColor;
         button.layer.shadowColor = AppShadowColor.CGColor;
         button.layer.shadowOffset = CGSizeMake(0, 8);
         button.layer.shadowRadius = 16.0;
+        // Fixed-height chip pinned to the 44pt touch minimum, so its 12pt title is
+        // deliberately left unscaled — the pill row height feeds the layout below it.
         [button.heightAnchor constraintEqualToConstant:kPillHeight].active = YES;
         [button addTarget:self action:@selector(pillTapped:) forControlEvents:UIControlEventTouchUpInside];
 
@@ -736,22 +760,22 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
             if (isSelected) {
                 config.baseBackgroundColor = AppForgroundColr;
                 config.baseForegroundColor = AppPrimaryClr;
-                button.layer.borderColor = [AppPrimaryClr colorWithAlphaComponent:0.12].CGColor;
-                button.layer.shadowOpacity = 0.06;
+                button.layer.borderColor = AppPrimaryClrWithAlpha(0.12).CGColor;
+                button.layer.shadowOpacity = PPShadowCardOpacity;
                 button.transform = CGAffineTransformIdentity;
             } else {
                 config.baseBackgroundColor = AppBackgroundClr;
                 config.baseForegroundColor = [SeconderyTextClr colorWithAlphaComponent:0.92];
                 button.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.06].CGColor;
                 button.layer.shadowOpacity = 0.0;
-                button.transform = CGAffineTransformMakeScale(0.985, 0.985);
+                button.transform = PPMotionReduced() ? CGAffineTransformIdentity : CGAffineTransformMakeScale(0.985, 0.985);
             }
 
             button.configuration = config;
         }
     };
 
-    if (animated) {
+    if (animated && !PPMotionReduced()) {
         [UIView animateWithDuration:0.28
                               delay:0.0
              usingSpringWithDamping:0.86
@@ -782,19 +806,15 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     _searchShellView = [[UIView alloc] init];
     _searchShellView.translatesAutoresizingMaskIntoConstraints = NO;
     _searchShellView.backgroundColor = AppForgroundColr;
-    _searchShellView.layer.cornerRadius = kSearchShellHeight / 2.0;
-    _searchShellView.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(_searchShellView, kSearchShellHeight / 2.0);
     _searchShellView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    _searchShellView.layer.borderColor = [AppPrimaryClr colorWithAlphaComponent:0.08].CGColor;
-    _searchShellView.layer.shadowColor = AppShadowColor.CGColor;
-    _searchShellView.layer.shadowOpacity = 0.05;
-    _searchShellView.layer.shadowOffset = CGSizeMake(0, 10);
-    _searchShellView.layer.shadowRadius = 18.0;
+    _searchShellView.layer.borderColor = AppPrimaryClrWithAlpha(0.08).CGColor;
+    PPApplyCardShadow(_searchShellView);
     [self.view addSubview:_searchShellView];
 
     UIView *searchGlow = [[UIView alloc] init];
     searchGlow.translatesAutoresizingMaskIntoConstraints = NO;
-    searchGlow.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.07];
+    searchGlow.backgroundColor = AppPrimaryClrWithAlpha(0.07);
     searchGlow.layer.cornerRadius = 28.0;
     [_searchShellView addSubview:searchGlow];
 
@@ -810,7 +830,10 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
     UITextField *searchField = [_searchBar valueForKey:@"searchField"];
     if (searchField) {
-        searchField.font = PPFontRegular(14);
+        // Dynamic Type is NOT enabled here: the shell is pinned to kSearchShellHeight and
+        // UISearchBar lays its field out with its own fixed internal metrics, so a scaled
+        // font would be clipped inside the bar rather than growing the shell.
+        searchField.font = PPFontRegular(PPFontSubheadline);
         searchField.textAlignment = Language.alignmentForCurrentLanguage;
         searchField.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
         searchField.backgroundColor = UIColor.clearColor;
@@ -821,7 +844,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
         if ([searchField.leftView isKindOfClass:[UIImageView class]]) {
             UIImageView *iconView = (UIImageView *)searchField.leftView;
-            iconView.tintColor = [AppPrimaryClr colorWithAlphaComponent:0.80];
+            iconView.tintColor = AppPrimaryClrWithAlpha(0.80);
         }
     }
 
@@ -891,15 +914,13 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
     _emptyHaloView = [[UIView alloc] init];
     _emptyHaloView.translatesAutoresizingMaskIntoConstraints = NO;
-    _emptyHaloView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
+    _emptyHaloView.backgroundColor = AppPrimaryClrWithAlpha(0.08);
     _emptyHaloView.layer.cornerRadius = 58.0;
     [_emptyStateView addSubview:_emptyHaloView];
 
     UIView *emptyIconCore = [[UIView alloc] init];
     emptyIconCore.translatesAutoresizingMaskIntoConstraints = NO;
-    emptyIconCore.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.14];
-    emptyIconCore.layer.cornerRadius = 34.0;
-    emptyIconCore.layer.cornerCurve = kCACornerCurveContinuous;
+    PPStyleAccentPlate(emptyIconCore, 34.0, 0.14);
     [_emptyHaloView addSubview:emptyIconCore];
 
     UIImageSymbolConfiguration *iconConfig = [UIImageSymbolConfiguration configurationWithPointSize:28.0 weight:UIImageSymbolWeightLight];
@@ -909,18 +930,22 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     iconView.tintColor = AppPrimaryClr;
     [emptyIconCore addSubview:iconView];
 
-    UIView *filterBadge = [self buildHeroBadgeWithBackgroundColor:[AppPrimaryClr colorWithAlphaComponent:0.10]
+    UIView *filterBadge = [self buildHeroBadgeWithBackgroundColor:AppPrimaryClrWithAlpha(0.10)
                                                         textColor:AppPrimaryClr
                                                        labelStore:&_emptyFilterLabel];
     [_emptyStateView addSubview:filterBadge];
+    // Safe to scale: the badge is padding-sized and the empty state has no fixed height.
+    PPEnableDynamicType(_emptyFilterLabel, UIFontTextStyleFootnote);
 
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.font = PPFontBold(19);
     titleLabel.textColor = PrimaryTextClr;
     titleLabel.textAlignment = NSTextAlignmentCenter;
+    titleLabel.numberOfLines = 0;
     titleLabel.text = kLang(@"Deliv_EmptyTitle");
     [_emptyStateView addSubview:titleLabel];
+    PPEnableDynamicType(titleLabel, UIFontTextStyleTitle3);
 
     UILabel *subtitleLabel = [[UILabel alloc] init];
     subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -930,6 +955,16 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     subtitleLabel.numberOfLines = 0;
     subtitleLabel.text = kLang(@"Deliv_EmptySubtitle");
     [_emptyStateView addSubview:subtitleLabel];
+    PPEnableDynamicType(subtitleLabel, UIFontTextStyleFootnote);
+
+    // Loading honesty: before the first delivery snapshot lands there is nothing to
+    // distinguish "still loading" from "genuinely empty", so the placeholder carries
+    // a spinner driven by the same reload pass that toggles the empty state.
+    _emptyLoadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    _emptyLoadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+    _emptyLoadingIndicator.color = AppPrimaryClr;
+    _emptyLoadingIndicator.hidesWhenStopped = YES;
+    [_emptyStateView addSubview:_emptyLoadingIndicator];
 
     [NSLayoutConstraint activateConstraints:@[
         [_emptyStateView.centerXAnchor constraintEqualToAnchor:self.collectionView.centerXAnchor],
@@ -964,10 +999,76 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
         [subtitleLabel.leadingAnchor constraintEqualToAnchor:_emptyStateView.leadingAnchor],
         [subtitleLabel.trailingAnchor constraintEqualToAnchor:_emptyStateView.trailingAnchor],
         [subtitleLabel.bottomAnchor constraintEqualToAnchor:_emptyStateView.bottomAnchor],
+
+        // Sits just below the placeholder block so a stopped spinner leaves no dead
+        // space in the centered empty-state composition.
+        [_emptyLoadingIndicator.topAnchor constraintEqualToAnchor:subtitleLabel.bottomAnchor constant:PPSpaceBase],
+        [_emptyLoadingIndicator.centerXAnchor constraintEqualToAnchor:_emptyStateView.centerXAnchor],
     ]];
 }
 
 #pragma mark - Data
+
+/// YES only until the delivery listener has produced its first projection for this
+/// screen. Reads the manager's existing cached projection; it does not start a fetch.
+- (BOOL)pp_isAwaitingFirstSnapshot {
+    if (self.didReceiveOrdersUpdate) {
+        return NO;
+    }
+    return ([PPDeliveryManager shared].allOrders.count == 0);
+}
+
+- (void)pp_updateLoadingIndicatorVisible:(BOOL)visible {
+    if (visible) {
+        if (!self.emptyLoadingIndicator.isAnimating) {
+            [self.emptyLoadingIndicator startAnimating];
+        }
+    } else if (self.emptyLoadingIndicator.isAnimating) {
+        [self.emptyLoadingIndicator stopAnimating];
+    }
+}
+
+/// Single owner of the placeholder presentation: visibility, its entrance, the
+/// decorative halo pulse and the first-snapshot spinner are decided together so the
+/// three cannot drift out of sync.
+- (void)pp_applyEmptyStateVisible:(BOOL)visible {
+    [self pp_updateLoadingIndicatorVisible:(visible && [self pp_isAwaitingFirstSnapshot])];
+
+    if (!visible) {
+        [self.emptyHaloView.layer removeAnimationForKey:@"breathe"];
+        self.emptyStateView.hidden = YES;
+        self.emptyStateView.alpha = 0.0;
+        self.emptyStateView.transform = CGAffineTransformIdentity;
+        return;
+    }
+
+    if (self.emptyStateView.hidden) {
+        self.emptyStateView.hidden = NO;
+        self.emptyStateView.alpha = 0.0;
+        self.emptyStateView.transform = CGAffineTransformMakeTranslation(0, 12.0);
+        PPAnimateRespectingMotion(0.28, ^{
+            self.emptyStateView.alpha = 1.0;
+            self.emptyStateView.transform = CGAffineTransformIdentity;
+        }, nil);
+    }
+
+    // Perpetual decorative pulse — never started when the user asks for less motion.
+    if (PPMotionReduced()) {
+        [self.emptyHaloView.layer removeAnimationForKey:@"breathe"];
+        return;
+    }
+
+    if (![self.emptyHaloView.layer animationForKey:@"breathe"]) {
+        CABasicAnimation *breathe = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+        breathe.fromValue = @1.0;
+        breathe.toValue = @1.05;
+        breathe.duration = 2.2;
+        breathe.autoreverses = YES;
+        breathe.repeatCount = HUGE_VALF;
+        breathe.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+        [self.emptyHaloView.layer addAnimation:breathe forKey:@"breathe"];
+    }
+}
 
 - (void)reloadData {
     NSString *searchText = self.searchBar.text;
@@ -977,35 +1078,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
     BOOL shouldShowEmpty = (self.filteredOrders.count == 0);
     self.emptyFilterLabel.text = [self pp_titleForFilter:self.currentFilter];
-
-    if (shouldShowEmpty) {
-        if (self.emptyStateView.hidden) {
-            self.emptyStateView.hidden = NO;
-            self.emptyStateView.alpha = 0.0;
-            self.emptyStateView.transform = CGAffineTransformMakeTranslation(0, 12.0);
-            [UIView animateWithDuration:0.28
-                             animations:^{
-                self.emptyStateView.alpha = 1.0;
-                self.emptyStateView.transform = CGAffineTransformIdentity;
-            }];
-        }
-
-        if (![self.emptyHaloView.layer animationForKey:@"breathe"]) {
-            CABasicAnimation *breathe = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
-            breathe.fromValue = @1.0;
-            breathe.toValue = @1.05;
-            breathe.duration = 2.2;
-            breathe.autoreverses = YES;
-            breathe.repeatCount = HUGE_VALF;
-            breathe.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-            [self.emptyHaloView.layer addAnimation:breathe forKey:@"breathe"];
-        }
-    } else {
-        [self.emptyHaloView.layer removeAnimationForKey:@"breathe"];
-        self.emptyStateView.hidden = YES;
-        self.emptyStateView.alpha = 0.0;
-        self.emptyStateView.transform = CGAffineTransformIdentity;
-    }
+    [self pp_applyEmptyStateVisible:shouldShowEmpty];
 
     [self updateStats];
     [self applyHeroExpansionStateAnimated:NO];
@@ -1032,6 +1105,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 }
 
 - (void)ordersDidChange:(NSNotification *)note {
+    self.didReceiveOrdersUpdate = YES;
     [self.refreshControl endRefreshing];
     [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(reloadData) object:nil];
     [self performSelector:@selector(reloadData) withObject:nil afterDelay:0.15];
@@ -1047,6 +1121,11 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 #pragma mark - Motion
 
 - (void)primeChromeForEntranceAnimation {
+    if (PPMotionReduced()) {
+        // Nothing is hidden up front, so there is no entrance to play back.
+        return;
+    }
+
     NSArray<UIView *> *animatedViews = @[
         self.heroSurfaceView,
         self.pillScrollView,
@@ -1109,7 +1188,7 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
         self.statsGrid.hidden = !shouldShowSummaryCards;
     };
 
-    if (animated) {
+    if (animated && !PPMotionReduced()) {
         [UIView animateWithDuration:0.42
                               delay:0.0
              usingSpringWithDamping:0.88
@@ -1127,11 +1206,11 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
 - (void)updateToggleButtonAppearance {
     UIButtonConfiguration *config = self.heroSummaryToggleButton.configuration;
-    config.baseBackgroundColor = self.heroExpanded ? [AppPrimaryClr colorWithAlphaComponent:0.12] : [SeconderyTextClr colorWithAlphaComponent:0.08];
+    config.baseBackgroundColor = self.heroExpanded ? AppPrimaryClrWithAlpha(0.12) : [SeconderyTextClr colorWithAlphaComponent:0.08];
     config.baseForegroundColor = self.heroExpanded ? AppPrimaryClr : PrimaryTextClr;
     config.image = [UIImage systemImageNamed:(self.heroExpanded ? @"chevron.up" : @"chevron.down")];
     self.heroSummaryToggleButton.configuration = config;
-    self.heroSummaryToggleButton.layer.borderColor = (self.heroExpanded ? [AppPrimaryClr colorWithAlphaComponent:0.16] : [SeconderyTextClr colorWithAlphaComponent:0.08]).CGColor;
+    self.heroSummaryToggleButton.layer.borderColor = (self.heroExpanded ? AppPrimaryClrWithAlpha(0.16) : PPHairlineColor()).CGColor;
 }
 
 - (void)applyHeroExpansionStateAnimated:(BOOL)animated {
@@ -1157,6 +1236,16 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
         self.pillScrollView,
         self.searchShellView
     ];
+
+    if (PPMotionReduced()) {
+        // Land on the final chrome state immediately instead of staging it in.
+        for (UIView *view in animatedViews) {
+            view.alpha = 1.0;
+            view.transform = CGAffineTransformIdentity;
+        }
+        self.heroStageView.transform = CGAffineTransformIdentity;
+        return;
+    }
 
     for (UIView *view in animatedViews) {
         view.alpha = 0.0;
@@ -1203,17 +1292,28 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
         return [@(a.item) compare:@(b.item)];
     }];
 
+    BOOL motionReduced = PPMotionReduced();
+
     for (NSInteger i = 0; i < sorted.count; i++) {
         UICollectionViewCell *cell = [self.collectionView cellForItemAtIndexPath:sorted[i]];
         if (!cell) {
             continue;
         }
 
+        if (motionReduced) {
+            cell.alpha = 1.0;
+            cell.transform = CGAffineTransformIdentity;
+            continue;
+        }
+
         cell.alpha = 0.0;
         cell.transform = CGAffineTransformMakeTranslation(0, 26.0);
 
+        // Cumulative stagger is capped so a long visible run never delays the last row.
+        NSTimeInterval staggerDelay = MIN(0.045 * i, 0.28);
+
         [UIView animateWithDuration:0.46
-                              delay:0.045 * i
+                              delay:staggerDelay
              usingSpringWithDamping:0.84
               initialSpringVelocity:0.4
                             options:UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState
@@ -1262,6 +1362,15 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     CGFloat chromeProgress = self.heroExpanded ? MAX(summaryCollapseProgress, MIN(1.0, offset / 220.0)) : 1.0;
 
     [self applyHeroExpansionProgress:summaryCollapseProgress animated:NO];
+
+    if (PPMotionReduced()) {
+        // Keep the functional collapse, drop the decorative scroll-linked parallax.
+        self.heroTitleLabel.transform = CGAffineTransformIdentity;
+        self.heroStageView.transform = CGAffineTransformIdentity;
+        self.heroSubtitleLabel.alpha = 1.0;
+        self.heroBadgeRow.alpha = 1.0;
+        return;
+    }
 
     self.heroTitleLabel.transform = CGAffineTransformMakeTranslation(0, -4.0 * chromeProgress);
     self.heroSubtitleLabel.alpha = MAX(0.74, 1.0 - (0.18 * chromeProgress));

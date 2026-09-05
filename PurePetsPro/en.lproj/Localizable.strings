@@ -2795,3 +2795,43 @@
 "Market_FilterSheet_SortStockLow" = "Stock: Lowest First";
 "Market_Filter_ActiveIndicator" = "Active";
 
+
+/* Delivery Operations Cockpit */
+"Deliv_Cockpit_Title" = "Delivery Operations Cockpit";
+"Deliv_Cockpit_Subtitle" = "Live dispatch tracking and courier management";
+"Deliv_HUD_InTransit" = "In Transit";
+"Deliv_HUD_Ready" = "Ready for Pickup";
+"Deliv_HUD_Delivered" = "Delivered";
+"Deliv_HUD_COD" = "COD Pending";
+"Deliv_QuickAction_Title" = "Quick Dispatch Action";
+"Deliv_QuickAction_Accept" = "Accept Delivery Task";
+"Deliv_QuickAction_Pickup" = "Confirm Store Pickup";
+"Deliv_QuickAction_Transit" = "Start Transit to Customer";
+"Deliv_QuickAction_Deliver" = "Confirm Handover to Customer";
+"Deliv_QuickAction_CollectCash" = "Confirm Cash Collection";
+"Deliv_QuickAction_Complete" = "Complete Order Cycle";
+"Deliv_QuickAction_ReportIssue" = "Report Issue / Delivery Failed";
+"Deliv_Action_Maps" = "Maps";
+"Deliv_Action_Call" = "Call";
+"Deliv_Action_Update" = "Update";
+"Deliv_Action_Details" = "Details";
+"Deliv_Filter_Button" = "Filters";
+"Deliv_FilterSheet_Title" = "Filter & Sort Deliveries";
+"Deliv_FilterSheet_Reset" = "Reset";
+"Deliv_FilterSheet_SectionStatus" = "Delivery Status";
+"Deliv_FilterSheet_SectionPayment" = "Payment & Collection Method";
+"Deliv_FilterSheet_SectionSort" = "Sort Order";
+"Deliv_FilterSheet_ApplyFormat" = "Apply Filters (%ld deliveries)";
+"Deliv_FilterSheet_All" = "All";
+"Deliv_FilterSheet_ReadyOnly" = "Ready for Pickup";
+"Deliv_FilterSheet_InTransitOnly" = "In Transit Only";
+"Deliv_FilterSheet_DeliveredOnly" = "Delivered Successfully";
+"Deliv_FilterSheet_CancelledOnly" = "Cancelled or Failed";
+"Deliv_FilterSheet_CODOnly" = "Cash on Delivery (COD) Only";
+"Deliv_FilterSheet_PrepaidOnly" = "Prepaid Online Only";
+"Deliv_FilterSheet_SortNewest" = "Newest First";
+"Deliv_FilterSheet_SortAmountHigh" = "Amount: High to Low";
+"Deliv_FilterSheet_SortAmountLow" = "Amount: Low to High";
+"Deliv_Route_Pickup" = "Pickup Location:";
+"Deliv_Route_Dropoff" = "Customer Destination:";
+"Deliv_Call_Unavailable" = "Phone number is not available to call";

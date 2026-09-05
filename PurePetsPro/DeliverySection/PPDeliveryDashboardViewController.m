@@ -2,240 +2,1156 @@
 //  PPDeliveryDashboardViewController.m
 //  PurePetsPro
 //
-//  Premium minimal delivery dashboard with a stronger hero composition,
-//  quieter chrome, and refined filtering/search surfaces.
+//  Category-defining Delivery Operations Cockpit:
+//  Real-time Dispatch HUD, Omni-Search with Integrated Filter Button,
+//  Route Visual Cards with Micro-Actions, and Quick Transition Sheet.
 //
 
 #import "PPDeliveryDashboardViewController.h"
 #import "PPDeliveryManager.h"
 #import "PPDeliveryOrderModel.h"
-#import "PPDeliveryOrderCell.h"
 #import "PPDeliveryOrderDetailViewController.h"
+#import "PPDesignTokens.h"
+#import "UIViewController+PPNavBar.h"
+#import "Language.h"
+#import "Styling.h"
+#import "PPFunc+Haptics.h"
+#import "PPToast.h"
+#import <MapKit/MapKit.h>
 
-static CGFloat const kStatCardHeight       = 110.0;
-// Raised from 38pt to the 44pt minimum touch target for the filter chips.
-static CGFloat const kPillHeight           = PPTouchTargetMin;
-static CGFloat const kChromeInset          = 16.0;
-static CGFloat const kDeliveryHeroHeight   = 480.0;
-static CGFloat const kDeliveryHeroCollapsedHeight = 196.0;
-static CGFloat const kSearchShellHeight    = 56.0;
-static CGFloat const kHeroSurfaceRadius    = 42.0;
-static NSString * const PPDeliveryHeroIntroSeenDefaultsKey = @"PPDeliveryHeroIntroSeenDefaultsKey";
+#pragma mark - Filter & Sort Types
 
-static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress) {
-    return from + ((to - from) * progress);
-}
+typedef NS_ENUM(NSInteger, PPDeliveryPaymentFilter) {
+    PPDeliveryPaymentFilterAll = 0,
+    PPDeliveryPaymentFilterCOD,
+    PPDeliveryPaymentFilterPrepaid
+};
 
-#pragma mark - Filter Pill Data
+typedef NS_ENUM(NSInteger, PPDeliverySortOrder) {
+    PPDeliverySortNewest = 0,
+    PPDeliverySortAmountHighToLow,
+    PPDeliverySortAmountLowToHigh
+};
 
-@interface _PPDeliveryPill : NSObject
-@property (nonatomic, copy) NSString *title;
-@property (nonatomic, copy) NSString *iconName;
-@property (nonatomic, assign) PPDeliveryFilter filter;
+#pragma mark - Forward Declarations
+
+@class PPDeliveryFilterSheet;
+@class PPDeliveryQuickTransitionSheet;
+@class PPDeliveryOperationCardCell;
+
+// MARK: - Category-Defining Delivery Filter Sheet
+
+@interface PPDeliveryFilterSheet : UIViewController
+@property (nonatomic, assign) PPDeliveryFilter selectedStatusFilter;
+@property (nonatomic, assign) PPDeliveryPaymentFilter selectedPaymentFilter;
+@property (nonatomic, assign) PPDeliverySortOrder selectedSortOrder;
+@property (nonatomic, copy) NSArray<PPDeliveryOrderModel *> *allOrders;
+@property (nonatomic, copy) void (^onApply)(PPDeliveryFilter statusFilter, PPDeliveryPaymentFilter paymentFilter, PPDeliverySortOrder sortOrder);
+
+@property (nonatomic, strong) UIButton *resetButton;
+@property (nonatomic, strong) UIButton *applyButton;
+@property (nonatomic, strong) NSMutableArray<UIButton *> *statusPills;
+@property (nonatomic, strong) NSMutableArray<UIButton *> *paymentPills;
+@property (nonatomic, strong) NSMutableArray<UIButton *> *sortPills;
+
+- (instancetype)initWithStatusFilter:(PPDeliveryFilter)statusFilter
+                       paymentFilter:(PPDeliveryPaymentFilter)paymentFilter
+                           sortOrder:(PPDeliverySortOrder)sortOrder
+                           allOrders:(NSArray<PPDeliveryOrderModel *> *)allOrders;
 @end
-@implementation _PPDeliveryPill
-@end
 
-#pragma mark - Stat Card
+@implementation PPDeliveryFilterSheet
 
-@interface _PPStatCard : UIView
-@property (nonatomic, strong) UILabel *countLabel;
-@property (nonatomic, strong) UILabel *titleLabel;
-- (instancetype)initWithIcon:(NSString *)iconName title:(NSString *)title color:(UIColor *)color;
-- (void)updateCount:(NSInteger)count;
-- (void)pp_refreshAccessibilityValue;
-@end
-
-@implementation _PPStatCard
-
-- (instancetype)initWithIcon:(NSString *)iconName title:(NSString *)title color:(UIColor *)color {
-    self = [super initWithFrame:CGRectZero];
+- (instancetype)initWithStatusFilter:(PPDeliveryFilter)statusFilter
+                       paymentFilter:(PPDeliveryPaymentFilter)paymentFilter
+                           sortOrder:(PPDeliverySortOrder)sortOrder
+                           allOrders:(NSArray<PPDeliveryOrderModel *> *)allOrders {
+    self = [super init];
     if (self) {
-        self.translatesAutoresizingMaskIntoConstraints = NO;
-        self.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-        self.backgroundColor = AppForgroundColr;
-        PPApplyCardShadow(self);
-
-        UIView *surfaceView = [[UIView alloc] init];
-        surfaceView.translatesAutoresizingMaskIntoConstraints = NO;
-        surfaceView.clipsToBounds = YES;
-        PPStyleCardSurface(surfaceView, PPCornerCard);
-        [self addSubview:surfaceView];
-
-        UIView *toneHalo = [[UIView alloc] init];
-        toneHalo.translatesAutoresizingMaskIntoConstraints = NO;
-        toneHalo.backgroundColor = [color colorWithAlphaComponent:0.11];
-        toneHalo.layer.cornerRadius = 42.0;
-        [surfaceView addSubview:toneHalo];
-
-        UIView *iconWrap = [[UIView alloc] init];
-        iconWrap.translatesAutoresizingMaskIntoConstraints = NO;
-        iconWrap.backgroundColor = [color colorWithAlphaComponent:0.10];
-        PPApplyContinuousCorners(iconWrap, PPCorner16);
-        [surfaceView addSubview:iconWrap];
-
-        UIImageView *iconView = [[UIImageView alloc] init];
-        iconView.translatesAutoresizingMaskIntoConstraints = NO;
-        iconView.contentMode = UIViewContentModeScaleAspectFit;
-        iconView.tintColor = color;
-        UIImageSymbolConfiguration *iconConfig = [UIImageSymbolConfiguration configurationWithPointSize:13.0 weight:UIImageSymbolWeightSemibold];
-        iconView.image = [[UIImage systemImageNamed:iconName] imageWithConfiguration:iconConfig];
-        [iconWrap addSubview:iconView];
-
-        UIView *accentDot = [[UIView alloc] init];
-        accentDot.translatesAutoresizingMaskIntoConstraints = NO;
-        accentDot.backgroundColor = color;
-        accentDot.layer.cornerRadius = 3.0;
-        [surfaceView addSubview:accentDot];
-
-        _titleLabel = [[UILabel alloc] init];
-        _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _titleLabel.font = PPFontMedium(PPFontCaption1);
-        _titleLabel.textColor = [SeconderyTextClr colorWithAlphaComponent:0.88];
-        _titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
-        _titleLabel.text = title;
-        _titleLabel.numberOfLines = 2;
-        [surfaceView addSubview:_titleLabel];
-
-        _countLabel = [[UILabel alloc] init];
-        _countLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _countLabel.font = PPFontBold(28);
-        _countLabel.textColor = PrimaryTextClr;
-        _countLabel.textAlignment = Language.alignmentForCurrentLanguage;
-        _countLabel.text = @"0";
-        [surfaceView addSubview:_countLabel];
-
-        // Dynamic Type deliberately NOT enabled on either stat label: the card has a
-        // hard kStatCardHeight constraint that the hero collapse animation lerps down
-        // to 0, so a scaled 11pt title (2 lines) plus a scaled 28pt count would clip.
-        self.isAccessibilityElement = YES;
-        self.accessibilityTraits = UIAccessibilityTraitStaticText;
-        [self pp_refreshAccessibilityValue];
-
-        [NSLayoutConstraint activateConstraints:@[
-            [surfaceView.topAnchor constraintEqualToAnchor:self.topAnchor],
-            [surfaceView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-            [surfaceView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-            [surfaceView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-
-            [toneHalo.widthAnchor constraintEqualToConstant:84.0],
-            [toneHalo.heightAnchor constraintEqualToConstant:84.0],
-            [toneHalo.topAnchor constraintEqualToAnchor:surfaceView.topAnchor constant:-28.0],
-            [toneHalo.trailingAnchor constraintEqualToAnchor:surfaceView.trailingAnchor constant:18.0],
-
-            [iconWrap.topAnchor constraintEqualToAnchor:surfaceView.topAnchor constant:14.0],
-            [iconWrap.leadingAnchor constraintEqualToAnchor:surfaceView.leadingAnchor constant:14.0],
-            [iconWrap.widthAnchor constraintEqualToConstant:32.0],
-            [iconWrap.heightAnchor constraintEqualToConstant:32.0],
-
-            [iconView.centerXAnchor constraintEqualToAnchor:iconWrap.centerXAnchor],
-            [iconView.centerYAnchor constraintEqualToAnchor:iconWrap.centerYAnchor],
-            [iconView.widthAnchor constraintEqualToConstant:14.0],
-            [iconView.heightAnchor constraintEqualToConstant:14.0],
-
-            [accentDot.topAnchor constraintEqualToAnchor:surfaceView.topAnchor constant:18.0],
-            [accentDot.trailingAnchor constraintEqualToAnchor:surfaceView.trailingAnchor constant:-16.0],
-            [accentDot.widthAnchor constraintEqualToConstant:6.0],
-            [accentDot.heightAnchor constraintEqualToConstant:6.0],
-
-            [_titleLabel.centerYAnchor constraintEqualToAnchor:iconWrap.centerYAnchor],
-            [_titleLabel.leadingAnchor constraintEqualToAnchor:iconWrap.trailingAnchor constant:10.0],
-            [_titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:accentDot.leadingAnchor constant:-10.0],
-
-            [_countLabel.leadingAnchor constraintEqualToAnchor:surfaceView.leadingAnchor constant:14.0],
-            [_countLabel.trailingAnchor constraintEqualToAnchor:surfaceView.trailingAnchor constant:-14.0],
-            [_countLabel.bottomAnchor constraintEqualToAnchor:surfaceView.bottomAnchor constant:-12.0],
-            [_countLabel.topAnchor constraintGreaterThanOrEqualToAnchor:_titleLabel.bottomAnchor constant:10.0],
-        ]];
+        _selectedStatusFilter = statusFilter;
+        _selectedPaymentFilter = paymentFilter;
+        _selectedSortOrder = sortOrder;
+        _allOrders = allOrders ?: @[];
+        _statusPills = [NSMutableArray array];
+        _paymentPills = [NSMutableArray array];
+        _sortPills = [NSMutableArray array];
     }
     return self;
 }
 
-- (void)layoutSubviews {
-    [super layoutSubviews];
-
-    UIBezierPath *shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.bounds cornerRadius:PPCornerCard];
-    self.layer.shadowPath = shadowPath.CGPath;
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor ppSurfaceElevated];
+    self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [self setupSheetUI];
+    [self updateButtonsState];
 }
 
-- (void)pp_refreshAccessibilityValue {
-    // Composed from values that are already localized where they are produced.
-    self.accessibilityLabel = self.titleLabel.text ?: @"";
-    self.accessibilityValue = self.countLabel.text ?: @"";
+- (void)setupSheetUI {
+    UIView *handle = [[UIView alloc] init];
+    handle.translatesAutoresizingMaskIntoConstraints = NO;
+    handle.backgroundColor = [[UIColor ppTextTertiary] colorWithAlphaComponent:0.35];
+    handle.layer.cornerRadius = 2.5;
+    [self.view addSubview:handle];
+
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLabel.text = kLang(@"Deliv_FilterSheet_Title");
+    titleLabel.font = [Styling fontBold:17.0];
+    titleLabel.textColor = [UIColor ppTextPrimary];
+    titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [self.view addSubview:titleLabel];
+
+    self.resetButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.resetButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.resetButton setTitle:kLang(@"Deliv_FilterSheet_Reset") forState:UIControlStateNormal];
+    self.resetButton.titleLabel.font = [Styling fontBold:13.5];
+    self.resetButton.tintColor = [UIColor ppPrimary];
+    [self.resetButton addTarget:self action:@selector(resetTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.resetButton];
+
+    UIView *headerDivider = [[UIView alloc] init];
+    headerDivider.translatesAutoresizingMaskIntoConstraints = NO;
+    headerDivider.backgroundColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6];
+    [self.view addSubview:headerDivider];
+
+    UIScrollView *scrollView = [[UIScrollView alloc] init];
+    scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    scrollView.showsVerticalScrollIndicator = NO;
+    scrollView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [self.view addSubview:scrollView];
+
+    UIStackView *contentStack = [[UIStackView alloc] init];
+    contentStack.translatesAutoresizingMaskIntoConstraints = NO;
+    contentStack.axis = UILayoutConstraintAxisVertical;
+    contentStack.spacing = 18.0;
+    contentStack.alignment = UIStackViewAlignmentFill;
+    [scrollView addSubview:contentStack];
+
+    // 1. Status Section
+    [contentStack addArrangedSubview:[self buildSectionHeader:kLang(@"Deliv_FilterSheet_SectionStatus")]];
+    [contentStack addArrangedSubview:[self buildStatusPillRow]];
+
+    // 2. Payment Section
+    [contentStack addArrangedSubview:[self buildSectionHeader:kLang(@"Deliv_FilterSheet_SectionPayment")]];
+    [contentStack addArrangedSubview:[self buildPaymentPillRow]];
+
+    // 3. Sort Order Section
+    [contentStack addArrangedSubview:[self buildSectionHeader:kLang(@"Deliv_FilterSheet_SectionSort")]];
+    [contentStack addArrangedSubview:[self buildSortPillRow]];
+
+    // 4. Apply CTA Button
+    self.applyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.applyButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.applyButton.titleLabel.font = [Styling fontBold:16.0];
+    self.applyButton.tintColor = UIColor.whiteColor;
+    self.applyButton.backgroundColor = [UIColor ppPrimary];
+    PPApplyContinuousCorners(self.applyButton, 22);
+    PPApplyButtonShadow(self.applyButton);
+    [self.applyButton addTarget:self action:@selector(applyTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:self.applyButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [handle.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [handle.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:10],
+        [handle.widthAnchor constraintEqualToConstant:40],
+        [handle.heightAnchor constraintEqualToConstant:5],
+
+        [titleLabel.topAnchor constraintEqualToAnchor:handle.bottomAnchor constant:14],
+        [titleLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+
+        [self.resetButton.centerYAnchor constraintEqualToAnchor:titleLabel.centerYAnchor],
+        [self.resetButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+
+        [headerDivider.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:12],
+        [headerDivider.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [headerDivider.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [headerDivider.heightAnchor constraintEqualToConstant:0.8],
+
+        [scrollView.topAnchor constraintEqualToAnchor:headerDivider.bottomAnchor constant:12],
+        [scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [scrollView.bottomAnchor constraintEqualToAnchor:self.applyButton.topAnchor constant:-12],
+
+        [contentStack.leadingAnchor constraintEqualToAnchor:scrollView.leadingAnchor],
+        [contentStack.trailingAnchor constraintEqualToAnchor:scrollView.trailingAnchor],
+        [contentStack.topAnchor constraintEqualToAnchor:scrollView.topAnchor],
+        [contentStack.bottomAnchor constraintEqualToAnchor:scrollView.bottomAnchor constant:-16],
+        [contentStack.widthAnchor constraintEqualToAnchor:scrollView.widthAnchor],
+
+        [self.applyButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [self.applyButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [self.applyButton.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
+        [self.applyButton.heightAnchor constraintEqualToConstant:50],
+    ]];
 }
 
-- (void)updateCount:(NSInteger)count {
-    NSString *nextValue = [NSString stringWithFormat:@"%ld", (long)count];
-    if ([self.countLabel.text isEqualToString:nextValue]) {
-        return;
+- (UIView *)buildSectionHeader:(NSString *)title {
+    UILabel *lbl = [[UILabel alloc] init];
+    lbl.text = title;
+    lbl.font = [Styling fontBold:13.5];
+    lbl.textColor = [UIColor ppTextSecondary];
+    lbl.textAlignment = Language.alignmentForCurrentLanguage;
+    return lbl;
+}
+
+- (UIView *)buildStatusPillRow {
+    NSArray<NSDictionary *> *defs = @[
+        @{@"filter": @(PPDeliveryFilterAll), @"title": kLang(@"Deliv_FilterSheet_All")},
+        @{@"filter": @(PPDeliveryFilterReady), @"title": kLang(@"Deliv_FilterSheet_ReadyOnly")},
+        @{@"filter": @(PPDeliveryFilterInTransit), @"title": kLang(@"Deliv_FilterSheet_InTransitOnly")},
+        @{@"filter": @(PPDeliveryFilterDelivered), @"title": kLang(@"Deliv_FilterSheet_DeliveredOnly")},
+        @{@"filter": @(PPDeliveryFilterCancelled), @"title": kLang(@"Deliv_FilterSheet_CancelledOnly")}
+    ];
+
+    UIScrollView *scroll = [[UIScrollView alloc] init];
+    scroll.showsHorizontalScrollIndicator = NO;
+    scroll.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.spacing = 8.0;
+    stack.alignment = UIStackViewAlignmentCenter;
+    [scroll addSubview:stack];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [scroll.heightAnchor constraintEqualToConstant:36],
+        [stack.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:scroll.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor],
+        [stack.heightAnchor constraintEqualToAnchor:scroll.heightAnchor],
+    ]];
+
+    for (NSDictionary *def in defs) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+        [btn setTitle:def[@"title"] forState:UIControlStateNormal];
+        btn.tag = [def[@"filter"] integerValue];
+        btn.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
+        PPApplyContinuousCorners(btn, 16);
+        [btn addTarget:self action:@selector(statusPillTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [btn.heightAnchor constraintEqualToConstant:34].active = YES;
+        [self.statusPills addObject:btn];
+        [stack addArrangedSubview:btn];
+    }
+    return scroll;
+}
+
+- (UIView *)buildPaymentPillRow {
+    NSArray<NSDictionary *> *defs = @[
+        @{@"pay": @(PPDeliveryPaymentFilterAll), @"title": kLang(@"Deliv_FilterSheet_All")},
+        @{@"pay": @(PPDeliveryPaymentFilterCOD), @"title": kLang(@"Deliv_FilterSheet_CODOnly")},
+        @{@"pay": @(PPDeliveryPaymentFilterPrepaid), @"title": kLang(@"Deliv_FilterSheet_PrepaidOnly")}
+    ];
+
+    UIScrollView *scroll = [[UIScrollView alloc] init];
+    scroll.showsHorizontalScrollIndicator = NO;
+    scroll.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.spacing = 8.0;
+    stack.alignment = UIStackViewAlignmentCenter;
+    [scroll addSubview:stack];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [scroll.heightAnchor constraintEqualToConstant:36],
+        [stack.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:scroll.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor],
+        [stack.heightAnchor constraintEqualToAnchor:scroll.heightAnchor],
+    ]];
+
+    for (NSDictionary *def in defs) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+        [btn setTitle:def[@"title"] forState:UIControlStateNormal];
+        btn.tag = [def[@"pay"] integerValue];
+        btn.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
+        PPApplyContinuousCorners(btn, 16);
+        [btn addTarget:self action:@selector(paymentPillTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [btn.heightAnchor constraintEqualToConstant:34].active = YES;
+        [self.paymentPills addObject:btn];
+        [stack addArrangedSubview:btn];
+    }
+    return scroll;
+}
+
+- (UIView *)buildSortPillRow {
+    NSArray<NSDictionary *> *defs = @[
+        @{@"sort": @(PPDeliverySortNewest), @"title": kLang(@"Deliv_FilterSheet_SortNewest")},
+        @{@"sort": @(PPDeliverySortAmountHighToLow), @"title": kLang(@"Deliv_FilterSheet_SortAmountHigh")},
+        @{@"sort": @(PPDeliverySortAmountLowToHigh), @"title": kLang(@"Deliv_FilterSheet_SortAmountLow")}
+    ];
+
+    UIScrollView *scroll = [[UIScrollView alloc] init];
+    scroll.showsHorizontalScrollIndicator = NO;
+    scroll.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.spacing = 8.0;
+    stack.alignment = UIStackViewAlignmentCenter;
+    [scroll addSubview:stack];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [scroll.heightAnchor constraintEqualToConstant:36],
+        [stack.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:scroll.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor],
+        [stack.heightAnchor constraintEqualToAnchor:scroll.heightAnchor],
+    ]];
+
+    for (NSDictionary *def in defs) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+        [btn setTitle:def[@"title"] forState:UIControlStateNormal];
+        btn.tag = [def[@"sort"] integerValue];
+        btn.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
+        PPApplyContinuousCorners(btn, 16);
+        [btn addTarget:self action:@selector(sortPillTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [btn.heightAnchor constraintEqualToConstant:34].active = YES;
+        [self.sortPills addObject:btn];
+        [stack addArrangedSubview:btn];
+    }
+    return scroll;
+}
+
+- (void)statusPillTapped:(UIButton *)sender {
+    self.selectedStatusFilter = sender.tag;
+    UIImpactFeedbackGenerator *gen = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [gen impactOccurred];
+    [self updateButtonsState];
+}
+
+- (void)paymentPillTapped:(UIButton *)sender {
+    self.selectedPaymentFilter = sender.tag;
+    UIImpactFeedbackGenerator *gen = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [gen impactOccurred];
+    [self updateButtonsState];
+}
+
+- (void)sortPillTapped:(UIButton *)sender {
+    self.selectedSortOrder = sender.tag;
+    UIImpactFeedbackGenerator *gen = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+    [gen impactOccurred];
+    [self updateButtonsState];
+}
+
+- (void)resetTapped {
+    self.selectedStatusFilter = PPDeliveryFilterAll;
+    self.selectedPaymentFilter = PPDeliveryPaymentFilterAll;
+    self.selectedSortOrder = PPDeliverySortNewest;
+    UINotificationFeedbackGenerator *gen = [[UINotificationFeedbackGenerator alloc] init];
+    [gen notificationOccurred:UINotificationFeedbackTypeWarning];
+    [self updateButtonsState];
+}
+
+- (NSInteger)calculatedMatchCount {
+    NSInteger count = 0;
+    for (PPDeliveryOrderModel *order in self.allOrders) {
+        BOOL statusMatch = YES;
+        switch (self.selectedStatusFilter) {
+            case PPDeliveryFilterAll: statusMatch = YES; break;
+            case PPDeliveryFilterReady: statusMatch = order.isReady; break;
+            case PPDeliveryFilterPendingPickup: statusMatch = [order.deliveryStatus isEqualToString:PPDeliveryStatusAwaitingHandover] || [order.deliveryStatus isEqualToString:PPDeliveryStatusPickedUp]; break;
+            case PPDeliveryFilterInTransit: statusMatch = [order.deliveryStatus isEqualToString:PPDeliveryStatusInTransit]; break;
+            case PPDeliveryFilterDelivered: statusMatch = [order.deliveryStatus isEqualToString:PPDeliveryStatusDelivered] || [order.deliveryStatus isEqualToString:PPDeliveryStatusCompleted]; break;
+            case PPDeliveryFilterCancelled: statusMatch = [order.deliveryStatus isEqualToString:PPDeliveryStatusCancelled] || [order.deliveryStatus isEqualToString:PPDeliveryStatusFailed]; break;
+        }
+
+        BOOL paymentMatch = YES;
+        switch (self.selectedPaymentFilter) {
+            case PPDeliveryPaymentFilterAll: paymentMatch = YES; break;
+            case PPDeliveryPaymentFilterCOD: paymentMatch = order.isCashOrder; break;
+            case PPDeliveryPaymentFilterPrepaid: paymentMatch = !order.isCashOrder; break;
+        }
+
+        if (statusMatch && paymentMatch) count++;
+    }
+    return count;
+}
+
+- (void)updateButtonsState {
+    for (UIButton *btn in self.statusPills) {
+        BOOL isSel = (btn.tag == self.selectedStatusFilter);
+        btn.titleLabel.font = isSel ? [Styling fontBold:13.0] : [Styling fontMedium:12.5];
+        if (isSel) {
+            btn.tintColor = UIColor.whiteColor;
+            btn.backgroundColor = [UIColor ppPrimary];
+            btn.layer.borderWidth = 0.0;
+            PPApplyButtonShadow(btn);
+        } else {
+            btn.tintColor = [UIColor ppTextPrimary];
+            btn.backgroundColor = [[UIColor ppSurface] colorWithAlphaComponent:0.7];
+            btn.layer.borderWidth = 0.7;
+            btn.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
+            btn.layer.shadowOpacity = 0.0;
+        }
     }
 
-    if (PPMotionReduced()) {
-        self.countLabel.text = nextValue;
-        [self pp_refreshAccessibilityValue];
-        return;
+    for (UIButton *btn in self.paymentPills) {
+        BOOL isSel = (btn.tag == self.selectedPaymentFilter);
+        btn.titleLabel.font = isSel ? [Styling fontBold:13.0] : [Styling fontMedium:12.5];
+        if (isSel) {
+            btn.tintColor = UIColor.whiteColor;
+            btn.backgroundColor = [UIColor ppPrimary];
+            btn.layer.borderWidth = 0.0;
+            PPApplyButtonShadow(btn);
+        } else {
+            btn.tintColor = [UIColor ppTextPrimary];
+            btn.backgroundColor = [[UIColor ppSurface] colorWithAlphaComponent:0.7];
+            btn.layer.borderWidth = 0.7;
+            btn.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
+            btn.layer.shadowOpacity = 0.0;
+        }
     }
 
-    [UIView transitionWithView:self.countLabel
-                      duration:0.22
-                       options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowUserInteraction
-                    animations:^{
-        self.countLabel.text = nextValue;
-    } completion:nil];
-    [self pp_refreshAccessibilityValue];
+    for (UIButton *btn in self.sortPills) {
+        BOOL isSel = (btn.tag == self.selectedSortOrder);
+        btn.titleLabel.font = isSel ? [Styling fontBold:13.0] : [Styling fontMedium:12.5];
+        if (isSel) {
+            btn.tintColor = UIColor.whiteColor;
+            btn.backgroundColor = [UIColor ppPrimary];
+            btn.layer.borderWidth = 0.0;
+            PPApplyButtonShadow(btn);
+        } else {
+            btn.tintColor = [UIColor ppTextPrimary];
+            btn.backgroundColor = [[UIColor ppSurface] colorWithAlphaComponent:0.7];
+            btn.layer.borderWidth = 0.7;
+            btn.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
+            btn.layer.shadowOpacity = 0.0;
+        }
+    }
+
+    NSInteger matchCount = [self calculatedMatchCount];
+    NSString *btnTitle = [NSString stringWithFormat:kLang(@"Deliv_FilterSheet_ApplyFormat"), (long)matchCount];
+    [self.applyButton setTitle:btnTitle forState:UIControlStateNormal];
+
+    BOOL isDefault = (self.selectedStatusFilter == PPDeliveryFilterAll && self.selectedPaymentFilter == PPDeliveryPaymentFilterAll && self.selectedSortOrder == PPDeliverySortNewest);
+    self.resetButton.alpha = isDefault ? 0.4 : 1.0;
+    self.resetButton.userInteractionEnabled = !isDefault;
+}
+
+- (void)applyTapped {
+    UINotificationFeedbackGenerator *gen = [[UINotificationFeedbackGenerator alloc] init];
+    [gen notificationOccurred:UINotificationFeedbackTypeSuccess];
+    if (self.onApply) {
+        self.onApply(self.selectedStatusFilter, self.selectedPaymentFilter, self.selectedSortOrder);
+    }
+    [self dismissViewControllerAnimated:YES completion:nil];
 }
 
 @end
 
-#pragma mark - Dashboard ViewController
+// MARK: - Category-Defining Delivery Quick Transition Sheet
 
-@interface PPDeliveryDashboardViewController () <UICollectionViewDelegate, UICollectionViewDataSource, UISearchBarDelegate>
+@interface PPDeliveryQuickTransitionSheet : UIViewController
+@property (nonatomic, strong) PPDeliveryOrderModel *order;
+@property (nonatomic, copy) void (^onActionExecuted)(void);
+- (instancetype)initWithOrder:(PPDeliveryOrderModel *)order;
+@end
 
-// Hero + stats
-@property (nonatomic, strong) PPHero *heroSurfaceView;
-@property (nonatomic, strong) UILabel *heroTitleLabel;
-@property (nonatomic, strong) UILabel *heroSubtitleLabel;
-@property (nonatomic, strong) UIView *heroBadgeRow;
-@property (nonatomic, strong) UIView *heroStageView;
-@property (nonatomic, strong) UIView *heroDividerView;
-@property (nonatomic, strong) UIButton *heroSummaryToggleButton;
-@property (nonatomic, strong) UILabel *heroFocusLabel;
-@property (nonatomic, strong) UILabel *heroResultsLabel;
-@property (nonatomic, strong) _PPStatCard *totalCard;
-@property (nonatomic, strong) _PPStatCard *readyCard;
-@property (nonatomic, strong) _PPStatCard *transitCard;
-@property (nonatomic, strong) _PPStatCard *deliveredCard;
-@property (nonatomic, strong) NSArray<NSLayoutConstraint *> *statCardHeightConstraints;
-@property (nonatomic, strong) NSLayoutConstraint *heroHeightConstraint;
-@property (nonatomic, strong) NSLayoutConstraint *heroTopConstraint;
-@property (nonatomic, strong) NSLayoutConstraint *statsGridBottomConstraint;
-@property (nonatomic, strong) UIStackView *statsGrid;
+@implementation PPDeliveryQuickTransitionSheet
 
-// Filters
-@property (nonatomic, strong) UIScrollView *pillScrollView;
-@property (nonatomic, strong) NSMutableArray<UIButton *> *pillButtons;
-@property (nonatomic, strong) NSArray<_PPDeliveryPill *> *pills;
+- (instancetype)initWithOrder:(PPDeliveryOrderModel *)order {
+    self = [super init];
+    if (self) {
+        _order = order;
+    }
+    return self;
+}
 
-// Search + collection
-@property (nonatomic, strong) UIView *searchShellView;
-@property (nonatomic, strong) UISearchBar *searchBar;
-@property (nonatomic, strong) UICollectionView *collectionView;
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor ppSurfaceElevated];
+    self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [self setupUI];
+}
+
+- (void)setupUI {
+    UIView *handle = [[UIView alloc] init];
+    handle.translatesAutoresizingMaskIntoConstraints = NO;
+    handle.backgroundColor = [[UIColor ppTextTertiary] colorWithAlphaComponent:0.35];
+    handle.layer.cornerRadius = 2.5;
+    [self.view addSubview:handle];
+
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLabel.text = [NSString stringWithFormat:@"%@ · #%@", kLang(@"Deliv_QuickAction_Title"), self.order.displayOrderNumber];
+    titleLabel.font = [Styling fontBold:16.5];
+    titleLabel.textColor = [UIColor ppTextPrimary];
+    titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [self.view addSubview:titleLabel];
+
+    UIView *headerDivider = [[UIView alloc] init];
+    headerDivider.translatesAutoresizingMaskIntoConstraints = NO;
+    headerDivider.backgroundColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6];
+    [self.view addSubview:headerDivider];
+
+    // Scrollable Content
+    UIScrollView *scrollView = [[UIScrollView alloc] init];
+    scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    scrollView.showsVerticalScrollIndicator = NO;
+    scrollView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [self.view addSubview:scrollView];
+
+    UIStackView *contentStack = [[UIStackView alloc] init];
+    contentStack.translatesAutoresizingMaskIntoConstraints = NO;
+    contentStack.axis = UILayoutConstraintAxisVertical;
+    contentStack.spacing = 14.0;
+    contentStack.alignment = UIStackViewAlignmentFill;
+    [scrollView addSubview:contentStack];
+
+    // 1. Route Summary Surface
+    UIView *routeCard = [[UIView alloc] init];
+    routeCard.backgroundColor = [UIColor ppSurface];
+    PPApplyContinuousCorners(routeCard, PPCornerMedium);
+    routeCard.layer.borderWidth = 0.7;
+    routeCard.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
+    [contentStack addArrangedSubview:routeCard];
+
+    UIStackView *routeStack = [[UIStackView alloc] init];
+    routeStack.translatesAutoresizingMaskIntoConstraints = NO;
+    routeStack.axis = UILayoutConstraintAxisVertical;
+    routeStack.spacing = 10.0;
+    [routeCard addSubview:routeStack];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [routeStack.topAnchor constraintEqualToAnchor:routeCard.topAnchor constant:12],
+        [routeStack.bottomAnchor constraintEqualToAnchor:routeCard.bottomAnchor constant:-12],
+        [routeStack.leadingAnchor constraintEqualToAnchor:routeCard.leadingAnchor constant:14],
+        [routeStack.trailingAnchor constraintEqualToAnchor:routeCard.trailingAnchor constant:-14],
+    ]];
+
+    // Pickup Row
+    NSString *pickupText = [self.order pp_pickupLocationSummary];
+    [routeStack addArrangedSubview:[self buildLocationRowWithIcon:@"building.2.fill"
+                                                           color:[UIColor ppWarning]
+                                                           title:kLang(@"Deliv_Route_Pickup")
+                                                           value:pickupText.length ? pickupText : kLang(@"Deliv_BranchPendingAssignment")]];
+
+    // Dropoff Row
+    NSString *dropoffText = [self.order pp_visibleCustomerLocationSummary];
+    [routeStack addArrangedSubview:[self buildLocationRowWithIcon:@"mappin.circle.fill"
+                                                           color:[UIColor ppPrimary]
+                                                           title:kLang(@"Deliv_Route_Dropoff")
+                                                           value:dropoffText.length ? dropoffText : kLang(@"Deliv_DeliveryAreaPending")]];
+
+    // 2. Financial Highlight (COD or Prepaid)
+    UIView *financeCard = [[UIView alloc] init];
+    financeCard.backgroundColor = self.order.isCashOrder ? [[UIColor ppWarning] colorWithAlphaComponent:0.08] : [[UIColor ppSuccess] colorWithAlphaComponent:0.08];
+    PPApplyContinuousCorners(financeCard, PPCornerSmall);
+    financeCard.layer.borderWidth = 0.7;
+    financeCard.layer.borderColor = (self.order.isCashOrder ? [UIColor ppWarning] : [UIColor ppSuccess]).CGColor;
+    [contentStack addArrangedSubview:financeCard];
+
+    UILabel *financeLabel = [[UILabel alloc] init];
+    financeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    financeLabel.font = [Styling fontBold:14.0];
+    financeLabel.textColor = self.order.isCashOrder ? [UIColor ppWarning] : [UIColor ppSuccess];
+    financeLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    if (self.order.isCashOrder) {
+        financeLabel.text = [NSString stringWithFormat:@"💵 %@: %@", kLang(@"Deliv_CashOnDelivery"), [self.order formattedTotal]];
+    } else {
+        financeLabel.text = [NSString stringWithFormat:@"💳 %@ · %@", kLang(@"Deliv_OnlinePayment"), [self.order formattedTotal]];
+    }
+    [financeCard addSubview:financeLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [financeLabel.topAnchor constraintEqualToAnchor:financeCard.topAnchor constant:10],
+        [financeLabel.bottomAnchor constraintEqualToAnchor:financeCard.bottomAnchor constant:-10],
+        [financeLabel.leadingAnchor constraintEqualToAnchor:financeCard.leadingAnchor constant:12],
+        [financeLabel.trailingAnchor constraintEqualToAnchor:financeCard.trailingAnchor constant:-12],
+    ]];
+
+    // 3. Main Action Button
+    UIButton *primaryActionBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    primaryActionBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    primaryActionBtn.titleLabel.font = [Styling fontBold:16.0];
+    primaryActionBtn.tintColor = UIColor.whiteColor;
+    primaryActionBtn.backgroundColor = [UIColor ppPrimary];
+    PPApplyContinuousCorners(primaryActionBtn, 22);
+    PPApplyButtonShadow(primaryActionBtn);
+
+    if (self.order.canAcceptDelivery) {
+        [primaryActionBtn setTitle:kLang(@"Deliv_QuickAction_Accept") forState:UIControlStateNormal];
+        [primaryActionBtn addTarget:self action:@selector(acceptActionTapped) forControlEvents:UIControlEventTouchUpInside];
+    } else if (self.order.canConfirmPackageHandover) {
+        [primaryActionBtn setTitle:kLang(@"Deliv_QuickAction_Pickup") forState:UIControlStateNormal];
+        [primaryActionBtn addTarget:self action:@selector(pickupActionTapped) forControlEvents:UIControlEventTouchUpInside];
+    } else if (self.order.canMarkInTransit) {
+        [primaryActionBtn setTitle:kLang(@"Deliv_QuickAction_Transit") forState:UIControlStateNormal];
+        [primaryActionBtn addTarget:self action:@selector(transitActionTapped) forControlEvents:UIControlEventTouchUpInside];
+    } else if (self.order.canMarkDelivered) {
+        [primaryActionBtn setTitle:kLang(@"Deliv_QuickAction_Deliver") forState:UIControlStateNormal];
+        [primaryActionBtn addTarget:self action:@selector(deliverActionTapped) forControlEvents:UIControlEventTouchUpInside];
+    } else if (self.order.canCollectCashPayment) {
+        [primaryActionBtn setTitle:kLang(@"Deliv_QuickAction_CollectCash") forState:UIControlStateNormal];
+        [primaryActionBtn addTarget:self action:@selector(cashActionTapped) forControlEvents:UIControlEventTouchUpInside];
+    } else if (self.order.canMarkCompleted) {
+        [primaryActionBtn setTitle:kLang(@"Deliv_QuickAction_Complete") forState:UIControlStateNormal];
+        [primaryActionBtn addTarget:self action:@selector(completeActionTapped) forControlEvents:UIControlEventTouchUpInside];
+    } else {
+        [primaryActionBtn setTitle:self.order.displayStatus forState:UIControlStateNormal];
+        primaryActionBtn.enabled = NO;
+        primaryActionBtn.alpha = 0.6;
+    }
+    [self.view addSubview:primaryActionBtn];
+
+    // Shortcuts: Map & Call
+    UIStackView *shortcutStack = [[UIStackView alloc] init];
+    shortcutStack.translatesAutoresizingMaskIntoConstraints = NO;
+    shortcutStack.axis = UILayoutConstraintAxisHorizontal;
+    shortcutStack.spacing = 10.0;
+    shortcutStack.distribution = UIStackViewDistributionFillEqually;
+    [self.view addSubview:shortcutStack];
+
+    UIButton *mapBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [mapBtn setTitle:[NSString stringWithFormat:@"🗺️ %@", kLang(@"Deliv_Action_Maps")] forState:UIControlStateNormal];
+    mapBtn.titleLabel.font = [Styling fontBold:13.5];
+    mapBtn.tintColor = [UIColor ppPrimary];
+    mapBtn.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.08];
+    PPApplyContinuousCorners(mapBtn, 16);
+    [mapBtn addTarget:self action:@selector(mapShortcutTapped) forControlEvents:UIControlEventTouchUpInside];
+    [shortcutStack addArrangedSubview:mapBtn];
+
+    UIButton *callBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [callBtn setTitle:[NSString stringWithFormat:@"📞 %@", kLang(@"Deliv_Action_Call")] forState:UIControlStateNormal];
+    callBtn.titleLabel.font = [Styling fontBold:13.5];
+    callBtn.tintColor = [UIColor ppSuccess];
+    callBtn.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.08];
+    PPApplyContinuousCorners(callBtn, 16);
+    [callBtn addTarget:self action:@selector(callShortcutTapped) forControlEvents:UIControlEventTouchUpInside];
+    [shortcutStack addArrangedSubview:callBtn];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [handle.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [handle.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:10],
+        [handle.widthAnchor constraintEqualToConstant:40],
+        [handle.heightAnchor constraintEqualToConstant:5],
+
+        [titleLabel.topAnchor constraintEqualToAnchor:handle.bottomAnchor constant:14],
+        [titleLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [titleLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+
+        [headerDivider.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:12],
+        [headerDivider.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [headerDivider.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [headerDivider.heightAnchor constraintEqualToConstant:0.8],
+
+        [scrollView.topAnchor constraintEqualToAnchor:headerDivider.bottomAnchor constant:12],
+        [scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [scrollView.bottomAnchor constraintEqualToAnchor:shortcutStack.topAnchor constant:-12],
+
+        [contentStack.leadingAnchor constraintEqualToAnchor:scrollView.leadingAnchor],
+        [contentStack.trailingAnchor constraintEqualToAnchor:scrollView.trailingAnchor],
+        [contentStack.topAnchor constraintEqualToAnchor:scrollView.topAnchor],
+        [contentStack.bottomAnchor constraintEqualToAnchor:scrollView.bottomAnchor constant:-10],
+        [contentStack.widthAnchor constraintEqualToAnchor:scrollView.widthAnchor],
+
+        [shortcutStack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [shortcutStack.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [shortcutStack.bottomAnchor constraintEqualToAnchor:primaryActionBtn.topAnchor constant:-10],
+        [shortcutStack.heightAnchor constraintEqualToConstant:40],
+
+        [primaryActionBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [primaryActionBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [primaryActionBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
+        [primaryActionBtn.heightAnchor constraintEqualToConstant:50],
+    ]];
+}
+
+- (UIView *)buildLocationRowWithIcon:(NSString *)iconName color:(UIColor *)color title:(NSString *)title value:(NSString *)value {
+    UIView *row = [[UIView alloc] init];
+
+    UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:iconName withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightSemibold]]];
+    icon.translatesAutoresizingMaskIntoConstraints = NO;
+    icon.tintColor = color;
+    [row addSubview:icon];
+
+    UILabel *titleLbl = [[UILabel alloc] init];
+    titleLbl.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLbl.font = [Styling fontMedium:12.0];
+    titleLbl.textColor = [UIColor ppTextSecondary];
+    titleLbl.text = title;
+    titleLbl.textAlignment = Language.alignmentForCurrentLanguage;
+    [row addSubview:titleLbl];
+
+    UILabel *valLbl = [[UILabel alloc] init];
+    valLbl.translatesAutoresizingMaskIntoConstraints = NO;
+    valLbl.font = [Styling fontBold:13.0];
+    valLbl.textColor = [UIColor ppTextPrimary];
+    valLbl.text = value;
+    valLbl.numberOfLines = 2;
+    valLbl.textAlignment = Language.alignmentForCurrentLanguage;
+    [row addSubview:valLbl];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [icon.leadingAnchor constraintEqualToAnchor:row.leadingAnchor],
+        [icon.topAnchor constraintEqualToAnchor:row.topAnchor constant:2],
+        [icon.widthAnchor constraintEqualToConstant:18],
+        [icon.heightAnchor constraintEqualToConstant:18],
+
+        [titleLbl.leadingAnchor constraintEqualToAnchor:icon.trailingAnchor constant:8],
+        [titleLbl.trailingAnchor constraintEqualToAnchor:row.trailingAnchor],
+        [titleLbl.topAnchor constraintEqualToAnchor:row.topAnchor],
+
+        [valLbl.leadingAnchor constraintEqualToAnchor:titleLbl.leadingAnchor],
+        [valLbl.trailingAnchor constraintEqualToAnchor:row.trailingAnchor],
+        [valLbl.topAnchor constraintEqualToAnchor:titleLbl.bottomAnchor constant:2],
+        [valLbl.bottomAnchor constraintEqualToAnchor:row.bottomAnchor],
+    ]];
+
+    return row;
+}
+
+- (void)acceptActionTapped {
+    [self executeActionNamed:@"accept"];
+}
+
+- (void)pickupActionTapped {
+    [self executeActionNamed:@"pickup"];
+}
+
+- (void)transitActionTapped {
+    [self executeActionNamed:@"transit"];
+}
+
+- (void)deliverActionTapped {
+    [self executeActionNamed:@"deliver"];
+}
+
+- (void)cashActionTapped {
+    [self executeActionNamed:@"cash"];
+}
+
+- (void)completeActionTapped {
+    [self executeActionNamed:@"complete"];
+}
+
+- (void)executeActionNamed:(NSString *)action {
+    UINotificationFeedbackGenerator *gen = [[UINotificationFeedbackGenerator alloc] init];
+    [gen notificationOccurred:UINotificationFeedbackTypeSuccess];
+
+    __weak typeof(self) ws = self;
+    PPDeliveryActionBlock callback = ^(BOOL success, NSString *msg, NSError *err) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                [PPToast toast:kLang(@"Success") style:PPToastStyleSuccess haptic:YES duration:2.5];
+                if (ws.onActionExecuted) ws.onActionExecuted();
+                [ws dismissViewControllerAnimated:YES completion:nil];
+            } else {
+                [PPToast toast:err.localizedDescription ?: msg style:PPToastStyleError haptic:YES duration:3.0];
+            }
+        });
+    };
+
+    if ([action isEqualToString:@"accept"]) {
+        [[PPDeliveryManager shared] acceptDeliveryOrder:self.order.orderId completion:callback];
+    } else if ([action isEqualToString:@"pickup"]) {
+        [[PPDeliveryManager shared] markOrderShipped:self.order.orderId note:nil completion:callback];
+    } else if ([action isEqualToString:@"transit"]) {
+        [[PPDeliveryManager shared] markOrderInTransit:self.order.orderId note:nil completion:callback];
+    } else if ([action isEqualToString:@"deliver"]) {
+        [[PPDeliveryManager shared] markOrderDelivered:self.order.orderId note:nil completion:callback];
+    } else if ([action isEqualToString:@"cash"]) {
+        [[PPDeliveryManager shared] collectCashPayment:self.order.orderId note:nil completion:callback];
+    } else if ([action isEqualToString:@"complete"]) {
+        [[PPDeliveryManager shared] markOrderCompleted:self.order.orderId note:nil completion:callback];
+    }
+}
+
+- (void)mapShortcutTapped {
+    [PPFunc pp_playTapEffect];
+    NSString *loc = self.order.deliveryLocationPoint;
+    if (loc.length) {
+        NSArray *parts = [loc componentsSeparatedByString:@","];
+        if (parts.count == 2) {
+            double lat = [parts[0] doubleValue];
+            double lng = [parts[1] doubleValue];
+            NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://maps.apple.com/?q=%f,%f", lat, lng]];
+            if (url) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+            return;
+        }
+    }
+    NSString *addr = [self.order pp_exactDeliveryLocationText];
+    if (addr.length) {
+        NSString *enc = [addr stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+        NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://maps.apple.com/?q=%@", enc]];
+        if (url) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    }
+}
+
+- (void)callShortcutTapped {
+    [PPFunc pp_playTapEffect];
+    NSString *phone = self.order.customerPhone;
+    if (phone.length) {
+        NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"tel://%@", phone]];
+        if (url) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    } else {
+        [PPToast toast:kLang(@"Deliv_Call_Unavailable") style:PPToastStyleWarning haptic:YES duration:2.5];
+    }
+}
+
+@end
+
+// MARK: - Category-Defining Delivery Operation Card Cell
+
+@interface PPDeliveryOperationCardCell : UITableViewCell
+@property (nonatomic, strong) UIView *cardView;
+@property (nonatomic, strong) UILabel *orderNumberPill;
+@property (nonatomic, strong) UIView *statusBadgeContainer;
+@property (nonatomic, strong) UILabel *statusBadgeLabel;
+@property (nonatomic, strong) UILabel *itemsCountPill;
+
+@property (nonatomic, strong) UIImageView *pickupIcon;
+@property (nonatomic, strong) UILabel *pickupLabel;
+@property (nonatomic, strong) UIView *routeConnectorLine;
+@property (nonatomic, strong) UIImageView *dropoffIcon;
+@property (nonatomic, strong) UILabel *dropoffLabel;
+
+@property (nonatomic, strong) UILabel *customerNameLabel;
+@property (nonatomic, strong) UILabel *totalAmountLabel;
+@property (nonatomic, strong) UIView *paymentBadge;
+@property (nonatomic, strong) UILabel *paymentBadgeLabel;
+
+@property (nonatomic, strong) UIButton *mapButton;
+@property (nonatomic, strong) UIButton *callButton;
+@property (nonatomic, strong) UIButton *actionButton;
+@property (nonatomic, strong) UIButton *detailsButton;
+
+@property (nonatomic, strong) PPDeliveryOrderModel *order;
+@property (nonatomic, copy) void (^onMapTapped)(PPDeliveryOrderModel *order);
+@property (nonatomic, copy) void (^onCallTapped)(PPDeliveryOrderModel *order);
+@property (nonatomic, copy) void (^onActionTapped)(PPDeliveryOrderModel *order);
+@property (nonatomic, copy) void (^onDetailsTapped)(PPDeliveryOrderModel *order);
+
+- (void)configureWithOrder:(PPDeliveryOrderModel *)order;
+@end
+
+@implementation PPDeliveryOperationCardCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        self.backgroundColor = UIColor.clearColor;
+        self.contentView.backgroundColor = UIColor.clearColor;
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+        self.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+        [self setupCardUI];
+    }
+    return self;
+}
+
+- (void)setupCardUI {
+    _cardView = [[UIView alloc] init];
+    _cardView.translatesAutoresizingMaskIntoConstraints = NO;
+    _cardView.backgroundColor = [UIColor ppSurface];
+    PPApplyContinuousCorners(_cardView, PPCornerCard);
+    PPApplyCardShadow(_cardView);
+    _cardView.layer.borderWidth = 0.7;
+    _cardView.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.7].CGColor;
+    [self.contentView addSubview:_cardView];
+
+    // 1. Top Strip: Order #, Status Pill, Items Count
+    _orderNumberPill = [[UILabel alloc] init];
+    _orderNumberPill.translatesAutoresizingMaskIntoConstraints = NO;
+    _orderNumberPill.font = [Styling fontBold:12.0];
+    _orderNumberPill.textColor = [UIColor ppTextPrimary];
+    _orderNumberPill.backgroundColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.4];
+    _orderNumberPill.textAlignment = NSTextAlignmentCenter;
+    PPApplyContinuousCorners(_orderNumberPill, 8);
+    _orderNumberPill.clipsToBounds = YES;
+    [_cardView addSubview:_orderNumberPill];
+
+    _statusBadgeContainer = [[UIView alloc] init];
+    _statusBadgeContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    PPApplyContinuousCorners(_statusBadgeContainer, 10);
+    [_cardView addSubview:_statusBadgeContainer];
+
+    _statusBadgeLabel = [[UILabel alloc] init];
+    _statusBadgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _statusBadgeLabel.font = [Styling fontBold:11.5];
+    _statusBadgeLabel.textAlignment = NSTextAlignmentCenter;
+    [_statusBadgeContainer addSubview:_statusBadgeLabel];
+
+    _itemsCountPill = [[UILabel alloc] init];
+    _itemsCountPill.translatesAutoresizingMaskIntoConstraints = NO;
+    _itemsCountPill.font = [Styling fontMedium:11.0];
+    _itemsCountPill.textColor = [UIColor ppTextSecondary];
+    _itemsCountPill.textAlignment = NSTextAlignmentCenter;
+    [_cardView addSubview:_itemsCountPill];
+
+    // 2. Route Visual Journey
+    UIView *routeBox = [[UIView alloc] init];
+    routeBox.translatesAutoresizingMaskIntoConstraints = NO;
+    routeBox.backgroundColor = [[UIColor ppBackground] colorWithAlphaComponent:0.5];
+    PPApplyContinuousCorners(routeBox, PPCornerSmall);
+    [_cardView addSubview:routeBox];
+
+    _pickupIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"building.2.fill" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightBold]]];
+    _pickupIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    _pickupIcon.tintColor = [UIColor ppWarning];
+    [routeBox addSubview:_pickupIcon];
+
+    _pickupLabel = [[UILabel alloc] init];
+    _pickupLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _pickupLabel.font = [Styling fontMedium:12.0];
+    _pickupLabel.textColor = [UIColor ppTextSecondary];
+    _pickupLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [routeBox addSubview:_pickupLabel];
+
+    _routeConnectorLine = [[UIView alloc] init];
+    _routeConnectorLine.translatesAutoresizingMaskIntoConstraints = NO;
+    _routeConnectorLine.backgroundColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.7];
+    [routeBox addSubview:_routeConnectorLine];
+
+    _dropoffIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"mappin.circle.fill" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightBold]]];
+    _dropoffIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    _dropoffIcon.tintColor = [UIColor ppPrimary];
+    [routeBox addSubview:_dropoffIcon];
+
+    _dropoffLabel = [[UILabel alloc] init];
+    _dropoffLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _dropoffLabel.font = [Styling fontBold:12.5];
+    _dropoffLabel.textColor = [UIColor ppTextPrimary];
+    _dropoffLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [routeBox addSubview:_dropoffLabel];
+
+    // 3. Customer & Financial Bar
+    _customerNameLabel = [[UILabel alloc] init];
+    _customerNameLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _customerNameLabel.font = [Styling fontBold:14.0];
+    _customerNameLabel.textColor = [UIColor ppTextPrimary];
+    _customerNameLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [_cardView addSubview:_customerNameLabel];
+
+    _totalAmountLabel = [[UILabel alloc] init];
+    _totalAmountLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _totalAmountLabel.font = [Styling fontBold:15.0];
+    _totalAmountLabel.textColor = [UIColor ppPrimary];
+    _totalAmountLabel.textAlignment = NSTextAlignmentRight;
+    [_cardView addSubview:_totalAmountLabel];
+
+    _paymentBadge = [[UIView alloc] init];
+    _paymentBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    PPApplyContinuousCorners(_paymentBadge, 8);
+    [_cardView addSubview:_paymentBadge];
+
+    _paymentBadgeLabel = [[UILabel alloc] init];
+    _paymentBadgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _paymentBadgeLabel.font = [Styling fontBold:11.0];
+    _paymentBadgeLabel.textAlignment = NSTextAlignmentCenter;
+    [_paymentBadge addSubview:_paymentBadgeLabel];
+
+    // 4. Tactile Micro-Action Strip
+    UIStackView *actionStrip = [[UIStackView alloc] init];
+    actionStrip.translatesAutoresizingMaskIntoConstraints = NO;
+    actionStrip.axis = UILayoutConstraintAxisHorizontal;
+    actionStrip.spacing = 8.0;
+    actionStrip.distribution = UIStackViewDistributionFillEqually;
+    [_cardView addSubview:actionStrip];
+
+    _mapButton = [self buildMicroActionButtonWithTitle:kLang(@"Deliv_Action_Maps") icon:@"map.fill" color:[UIColor ppInfo] selector:@selector(mapTapped)];
+    _callButton = [self buildMicroActionButtonWithTitle:kLang(@"Deliv_Action_Call") icon:@"phone.fill" color:[UIColor ppSuccess] selector:@selector(callTapped)];
+    _actionButton = [self buildMicroActionButtonWithTitle:kLang(@"Deliv_Action_Update") icon:@"bolt.fill" color:[UIColor ppPrimary] selector:@selector(actionTapped)];
+    _detailsButton = [self buildMicroActionButtonWithTitle:kLang(@"Deliv_Action_Details") icon:@"ellipsis.circle.fill" color:[UIColor ppTextSecondary] selector:@selector(detailsTapped)];
+
+    [actionStrip addArrangedSubview:_mapButton];
+    [actionStrip addArrangedSubview:_callButton];
+    [actionStrip addArrangedSubview:_actionButton];
+    [actionStrip addArrangedSubview:_detailsButton];
+
+    // Constraints
+    [NSLayoutConstraint activateConstraints:@[
+        [_cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
+        [_cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6],
+        [_cardView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:PPSpaceBase],
+        [_cardView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-PPSpaceBase],
+
+        // Top Row
+        [_orderNumberPill.topAnchor constraintEqualToAnchor:_cardView.topAnchor constant:12],
+        [_orderNumberPill.leadingAnchor constraintEqualToAnchor:_cardView.leadingAnchor constant:12],
+        [_orderNumberPill.heightAnchor constraintEqualToConstant:22],
+        [_orderNumberPill.widthAnchor constraintGreaterThanOrEqualToConstant:60],
+
+        [_itemsCountPill.centerYAnchor constraintEqualToAnchor:_orderNumberPill.centerYAnchor],
+        [_itemsCountPill.leadingAnchor constraintEqualToAnchor:_orderNumberPill.trailingAnchor constant:8],
+
+        [_statusBadgeContainer.centerYAnchor constraintEqualToAnchor:_orderNumberPill.centerYAnchor],
+        [_statusBadgeContainer.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-12],
+        [_statusBadgeContainer.heightAnchor constraintEqualToConstant:22],
+
+        [_statusBadgeLabel.leadingAnchor constraintEqualToAnchor:_statusBadgeContainer.leadingAnchor constant:8],
+        [_statusBadgeLabel.trailingAnchor constraintEqualToAnchor:_statusBadgeContainer.trailingAnchor constant:-8],
+        [_statusBadgeLabel.centerYAnchor constraintEqualToAnchor:_statusBadgeContainer.centerYAnchor],
+
+        // Route Box
+        [routeBox.topAnchor constraintEqualToAnchor:_orderNumberPill.bottomAnchor constant:10],
+        [routeBox.leadingAnchor constraintEqualToAnchor:_cardView.leadingAnchor constant:12],
+        [routeBox.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-12],
+
+        [_pickupIcon.topAnchor constraintEqualToAnchor:routeBox.topAnchor constant:8],
+        [_pickupIcon.leadingAnchor constraintEqualToAnchor:routeBox.leadingAnchor constant:8],
+        [_pickupIcon.widthAnchor constraintEqualToConstant:14],
+        [_pickupIcon.heightAnchor constraintEqualToConstant:14],
+
+        [_pickupLabel.centerYAnchor constraintEqualToAnchor:_pickupIcon.centerYAnchor],
+        [_pickupLabel.leadingAnchor constraintEqualToAnchor:_pickupIcon.trailingAnchor constant:6],
+        [_pickupLabel.trailingAnchor constraintEqualToAnchor:routeBox.trailingAnchor constant:-8],
+
+        [_routeConnectorLine.topAnchor constraintEqualToAnchor:_pickupIcon.bottomAnchor constant:2],
+        [_routeConnectorLine.centerXAnchor constraintEqualToAnchor:_pickupIcon.centerXAnchor],
+        [_routeConnectorLine.widthAnchor constraintEqualToConstant:1.5],
+        [_routeConnectorLine.heightAnchor constraintEqualToConstant:10],
+
+        [_dropoffIcon.topAnchor constraintEqualToAnchor:_routeConnectorLine.bottomAnchor constant:2],
+        [_dropoffIcon.centerXAnchor constraintEqualToAnchor:_pickupIcon.centerXAnchor],
+        [_dropoffIcon.widthAnchor constraintEqualToConstant:14],
+        [_dropoffIcon.heightAnchor constraintEqualToConstant:14],
+        [_dropoffIcon.bottomAnchor constraintEqualToAnchor:routeBox.bottomAnchor constant:-8],
+
+        [_dropoffLabel.centerYAnchor constraintEqualToAnchor:_dropoffIcon.centerYAnchor],
+        [_dropoffLabel.leadingAnchor constraintEqualToAnchor:_dropoffIcon.trailingAnchor constant:6],
+        [_dropoffLabel.trailingAnchor constraintEqualToAnchor:routeBox.trailingAnchor constant:-8],
+
+        // Customer & Financial Bar
+        [_customerNameLabel.topAnchor constraintEqualToAnchor:routeBox.bottomAnchor constant:10],
+        [_customerNameLabel.leadingAnchor constraintEqualToAnchor:_cardView.leadingAnchor constant:12],
+
+        [_totalAmountLabel.centerYAnchor constraintEqualToAnchor:_customerNameLabel.centerYAnchor],
+        [_totalAmountLabel.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-12],
+        [_totalAmountLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:_customerNameLabel.trailingAnchor constant:8],
+
+        [_paymentBadge.topAnchor constraintEqualToAnchor:_customerNameLabel.bottomAnchor constant:6],
+        [_paymentBadge.leadingAnchor constraintEqualToAnchor:_cardView.leadingAnchor constant:12],
+        [_paymentBadge.heightAnchor constraintEqualToConstant:20],
+
+        [_paymentBadgeLabel.leadingAnchor constraintEqualToAnchor:_paymentBadge.leadingAnchor constant:6],
+        [_paymentBadgeLabel.trailingAnchor constraintEqualToAnchor:_paymentBadge.trailingAnchor constant:-6],
+        [_paymentBadgeLabel.centerYAnchor constraintEqualToAnchor:_paymentBadge.centerYAnchor],
+
+        // Action Strip
+        [actionStrip.topAnchor constraintEqualToAnchor:_paymentBadge.bottomAnchor constant:12],
+        [actionStrip.leadingAnchor constraintEqualToAnchor:_cardView.leadingAnchor constant:10],
+        [actionStrip.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-10],
+        [actionStrip.bottomAnchor constraintEqualToAnchor:_cardView.bottomAnchor constant:-12],
+        [actionStrip.heightAnchor constraintEqualToConstant:34],
+    ]];
+}
+
+- (UIButton *)buildMicroActionButtonWithTitle:(NSString *)title icon:(NSString *)iconName color:(UIColor *)color selector:(SEL)selector {
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+    btn.translatesAutoresizingMaskIntoConstraints = NO;
+    UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:11.5 weight:UIImageSymbolWeightSemibold];
+    [btn setImage:[UIImage systemImageNamed:iconName withConfiguration:cfg] forState:UIControlStateNormal];
+    [btn setTitle:[NSString stringWithFormat:@" %@", title] forState:UIControlStateNormal];
+    btn.titleLabel.font = [Styling fontBold:11.5];
+    btn.tintColor = color;
+    btn.backgroundColor = [color colorWithAlphaComponent:0.09];
+    PPApplyContinuousCorners(btn, 12);
+    [btn addTarget:self action:selector forControlEvents:UIControlEventTouchUpInside];
+    return btn;
+}
+
+- (void)configureWithOrder:(PPDeliveryOrderModel *)order {
+    _order = order;
+    _orderNumberPill.text = [NSString stringWithFormat:@"#%@", order.displayOrderNumber];
+    _customerNameLabel.text = order.customerName.length ? order.customerName : kLang(@"Deliv_CustomerInfo");
+    _totalAmountLabel.text = [order formattedTotal];
+    _itemsCountPill.text = [NSString stringWithFormat:kLang(@"Deliv_ItemsInOrder"), (long)order.items.count];
+
+    // Pickup & Dropoff
+    NSString *pickup = [order pp_pickupLocationSummary];
+    _pickupLabel.text = pickup.length ? pickup : kLang(@"Deliv_BranchPendingAssignment");
+    NSString *dropoff = [order pp_visibleCustomerLocationSummary];
+    _dropoffLabel.text = dropoff.length ? dropoff : kLang(@"Deliv_DeliveryAreaPending");
+
+    // Status Pill
+    NSString *statusStr = order.displayStatus;
+    _statusBadgeLabel.text = statusStr;
+
+    if ([order.deliveryStatus isEqualToString:PPDeliveryStatusInTransit]) {
+        _statusBadgeContainer.backgroundColor = [[UIColor ppInfo] colorWithAlphaComponent:0.12];
+        _statusBadgeLabel.textColor = [UIColor ppInfo];
+    } else if (order.isReady || [order.deliveryStatus isEqualToString:PPDeliveryStatusAwaitingHandover]) {
+        _statusBadgeContainer.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:0.12];
+        _statusBadgeLabel.textColor = [UIColor ppWarning];
+    } else if ([order.deliveryStatus isEqualToString:PPDeliveryStatusDelivered] || [order.deliveryStatus isEqualToString:PPDeliveryStatusCompleted]) {
+        _statusBadgeContainer.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.12];
+        _statusBadgeLabel.textColor = [UIColor ppSuccess];
+    } else {
+        _statusBadgeContainer.backgroundColor = [[UIColor ppTextSecondary] colorWithAlphaComponent:0.10];
+        _statusBadgeLabel.textColor = [UIColor ppTextSecondary];
+    }
+
+    // Payment Badge
+    if (order.isCashOrder) {
+        _paymentBadge.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:0.12];
+        _paymentBadgeLabel.textColor = [UIColor ppWarning];
+        _paymentBadgeLabel.text = [NSString stringWithFormat:@"💵 %@", kLang(@"Deliv_CashOnDelivery")];
+    } else {
+        _paymentBadge.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.12];
+        _paymentBadgeLabel.textColor = [UIColor ppSuccess];
+        _paymentBadgeLabel.text = [NSString stringWithFormat:@"💳 %@", kLang(@"Deliv_OnlinePayment")];
+    }
+}
+
+- (void)mapTapped {
+    if (self.onMapTapped) self.onMapTapped(self.order);
+}
+
+- (void)callTapped {
+    if (self.onCallTapped) self.onCallTapped(self.order);
+}
+
+- (void)actionTapped {
+    if (self.onActionTapped) self.onActionTapped(self.order);
+}
+
+- (void)detailsTapped {
+    if (self.onDetailsTapped) self.onDetailsTapped(self.order);
+}
+
+@end
+
+// MARK: - Reimagined Delivery Dashboard View Controller
+
+@interface PPDeliveryDashboardViewController () <UITableViewDelegate, UITableViewDataSource, UITextFieldDelegate>
+
+// Telemetry HUD
+@property (nonatomic, strong) UIView *flightDeckHeader;
+@property (nonatomic, strong) UILabel *inTransitCountBadge;
+@property (nonatomic, strong) UILabel *readyCountBadge;
+@property (nonatomic, strong) UILabel *deliveredCountBadge;
+@property (nonatomic, strong) UILabel *codPendingCountBadge;
+
+// Omni Search & Filter Capsule
+@property (nonatomic, strong) UITextField *omniSearchField;
+@property (nonatomic, strong) UIButton *clearSearchButton;
+@property (nonatomic, strong) UILabel *resultsCountBadge;
+@property (nonatomic, strong) UIButton *filterButton;
+@property (nonatomic, strong) UIView *filterBadgeDot;
+
+// Table & Empty State
+@property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
-
-// Empty state
+@property (nonatomic, strong) UIActivityIndicatorView *spinner;
 @property (nonatomic, strong) UIView *emptyStateView;
-@property (nonatomic, strong) UIView *emptyHaloView;
-@property (nonatomic, strong) UILabel *emptyFilterLabel;
-@property (nonatomic, strong) UIActivityIndicatorView *emptyLoadingIndicator;
 
-// Data
-@property (nonatomic, assign) PPDeliveryFilter currentFilter;
-@property (nonatomic, strong) NSArray<PPDeliveryOrderModel *> *filteredOrders;
-@property (nonatomic, assign) BOOL didAnimateEntrance;
-@property (nonatomic, assign) BOOL didAnimateChrome;
-@property (nonatomic, assign) BOOL heroExpanded;
-@property (nonatomic, assign) BOOL shouldPlayHeroIntro;
-@property (nonatomic, assign) BOOL didReceiveOrdersUpdate;
+// Data State
+@property (nonatomic, copy) NSArray<PPDeliveryOrderModel *> *allOrders;
+@property (nonatomic, copy) NSArray<PPDeliveryOrderModel *> *filteredOrders;
+@property (nonatomic, copy) NSString *searchQuery;
+@property (nonatomic, assign) PPDeliveryFilter currentStatusFilter;
+@property (nonatomic, assign) PPDeliveryPaymentFilter currentPaymentFilter;
+@property (nonatomic, assign) PPDeliverySortOrder currentSortOrder;
+@property (nonatomic, assign) BOOL hasLoadedOnce;
 
 @end
 
@@ -245,27 +1161,19 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.view.backgroundColor = [UIColor ppBackground];
+    self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
 
-    BOOL hasSeenHeroIntro = [[NSUserDefaults standardUserDefaults] boolForKey:PPDeliveryHeroIntroSeenDefaultsKey];
-    self.view.backgroundColor = AppBackgroundClr;
-    self.currentFilter = PPDeliveryFilterReady;
+    self.allOrders = @[];
     self.filteredOrders = @[];
-    self.didAnimateEntrance = NO;
-    self.didAnimateChrome = NO;
-    self.didReceiveOrdersUpdate = NO;
-    self.heroExpanded = !hasSeenHeroIntro;
-    self.shouldPlayHeroIntro = !hasSeenHeroIntro;
+    self.searchQuery = @"";
+    self.currentStatusFilter = PPDeliveryFilterAll;
+    self.currentPaymentFilter = PPDeliveryPaymentFilterAll;
+    self.currentSortOrder = PPDeliverySortNewest;
+    self.hasLoadedOnce = NO;
 
-    [self setupBackgroundAtmosphere];
-    [self buildPillData];
-    [self setupStatsHeader];
-    [self setupPillFilters];
-    [self setupSearchBar];
-    [self setupCollectionView];
+    [self setupTableView];
     [self setupEmptyState];
-    [self updateToggleButtonAppearance];
-    [self applyHeroExpansionStateAnimated:NO];
-    [self primeChromeForEntranceAnimation];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(ordersDidChange:)
@@ -273,42 +1181,11 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
                                                object:nil];
 }
 
-- (void)onBack {
-    if (self.navigationController) {
-        [self.navigationController popViewControllerAnimated:YES];
-    } else {
-        [self dismissViewControllerAnimated:YES completion:nil];
-    }
-}
-
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    [self animateChromeIfNeeded];
-    [self scrollPillsToLeadingEdgeIfNeeded];
-
-    if (self.shouldPlayHeroIntro) {
-        self.shouldPlayHeroIntro = NO;
-        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:PPDeliveryHeroIntroSeenDefaultsKey];
-
-        __weak typeof(self) weakSelf = self;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf || strongSelf.view.window == nil || !strongSelf.heroExpanded) {
-                return;
-            }
-
-            strongSelf.heroExpanded = NO;
-            [strongSelf updateToggleButtonAppearance];
-            [strongSelf applyHeroExpansionStateAnimated:YES];
-        });
-    }
-}
-
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:kLang(@"DeliveryManagement") showBack:YES];
+    [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:kLang(@"Deliv_Cockpit_Title") showBack:YES];
     [[PPDeliveryManager shared] startListeningForDeliveryOrders];
-    [self reloadData];
+    [self reloadOrdersFromManager];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -318,1082 +1195,652 @@ static inline CGFloat PPDeliveryLerp(CGFloat from, CGFloat to, CGFloat progress)
     }
 }
 
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
-
-    UIBezierPath *searchPath = [UIBezierPath bezierPathWithRoundedRect:self.searchShellView.bounds
-                                                           cornerRadius:(kSearchShellHeight / 2.0)];
-    self.searchShellView.layer.shadowPath = searchPath.CGPath;
-}
-
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-#pragma mark - Setup: Background
-
-- (void)setupBackgroundAtmosphere {
-    UIView *topGlow = [[UIView alloc] init];
-    topGlow.translatesAutoresizingMaskIntoConstraints = NO;
-    topGlow.userInteractionEnabled = NO;
-    topGlow.backgroundColor = AppPrimaryClrWithAlpha(0.06);
-    topGlow.layer.cornerRadius = 130.0;
-    [self.view addSubview:topGlow];
-    [self.view sendSubviewToBack:topGlow];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [topGlow.widthAnchor constraintEqualToConstant:260.0],
-        [topGlow.heightAnchor constraintEqualToConstant:260.0],
-        [topGlow.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:-110.0],
-        [topGlow.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:72.0],
-    ]];
-}
-
-#pragma mark - Pill Data
-
-- (void)buildPillData {
-    NSMutableArray *arr = [NSMutableArray array];
-
-    _PPDeliveryPill *p0 = [_PPDeliveryPill new];
-    p0.title = kLang(@"Deliv_FilterReady");
-    p0.iconName = @"shippingbox";
-    p0.filter = PPDeliveryFilterReady;
-    [arr addObject:p0];
-
-    _PPDeliveryPill *p1 = [_PPDeliveryPill new];
-    p1.title = kLang(@"Deliv_FilterPendingPickup");
-    p1.iconName = @"shippingbox.circle";
-    p1.filter = PPDeliveryFilterPendingPickup;
-    [arr addObject:p1];
-
-    _PPDeliveryPill *p2 = [_PPDeliveryPill new];
-    p2.title = kLang(@"Deliv_FilterInTransit");
-    p2.iconName = @"truck.box";
-    p2.filter = PPDeliveryFilterInTransit;
-    [arr addObject:p2];
-
-    _PPDeliveryPill *p3 = [_PPDeliveryPill new];
-    p3.title = kLang(@"Deliv_FilterDelivered");
-    p3.iconName = @"checkmark.circle";
-    p3.filter = PPDeliveryFilterDelivered;
-    [arr addObject:p3];
-
-    _PPDeliveryPill *p4 = [_PPDeliveryPill new];
-    p4.title = kLang(@"Deliv_FilterCancelled");
-    p4.iconName = @"xmark.circle";
-    p4.filter = PPDeliveryFilterCancelled;
-    [arr addObject:p4];
-
-    _PPDeliveryPill *p5 = [_PPDeliveryPill new];
-    p5.title = kLang(@"Deliv_FilterAll");
-    p5.iconName = @"list.bullet";
-    p5.filter = PPDeliveryFilterAll;
-    [arr addObject:p5];
-
-    self.pills = [arr copy];
-}
-
-- (NSString *)pp_titleForFilter:(PPDeliveryFilter)filter {
-    for (_PPDeliveryPill *pill in self.pills) {
-        if (pill.filter == filter) {
-            return pill.title ?: @"";
-        }
-    }
-    return @"";
-}
-
-#pragma mark - Setup: Hero
-
-- (UIView *)buildHeroBadgeWithBackgroundColor:(UIColor *)backgroundColor
-                                    textColor:(UIColor *)textColor
-                                   labelStore:(UILabel * __strong *)labelStore {
-    UIView *badge = [[UIView alloc] init];
-    badge.translatesAutoresizingMaskIntoConstraints = NO;
-    badge.backgroundColor = backgroundColor;
-    PPApplyContinuousCorners(badge, PPCornerMedium);
-    badge.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    badge.layer.borderColor = [textColor colorWithAlphaComponent:0.12].CGColor;
-
-    UILabel *label = [[UILabel alloc] init];
-    label.translatesAutoresizingMaskIntoConstraints = NO;
-    label.font = PPFontBold(PPFontFootnote);
-    label.textColor = textColor;
-    label.textAlignment = NSTextAlignmentCenter;
-    // Dynamic Type is opted into per instance by the caller: the hero badge row lives
-    // inside a fixed/lerped hero height, while the empty-state badge can grow freely.
-    [badge addSubview:label];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [label.topAnchor constraintEqualToAnchor:badge.topAnchor constant:9.0],
-        [label.bottomAnchor constraintEqualToAnchor:badge.bottomAnchor constant:-9.0],
-        [label.leadingAnchor constraintEqualToAnchor:badge.leadingAnchor constant:14.0],
-        [label.trailingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:-14.0],
-    ]];
-
-    if (labelStore) {
-        *labelStore = label;
-    }
-    return badge;
-}
-
-- (UIButton *)buildHeroSummaryToggleButton {
-    UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
-    config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
-    config.baseBackgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.08];
-    config.baseForegroundColor = PrimaryTextClr;
-    config.contentInsets = NSDirectionalEdgeInsetsMake(9.0, 20.0, 9.0, 20.0);
-    config.imagePadding = 8.0;
-    config.imagePlacement = NSDirectionalRectEdgeTrailing;
-    config.titleTextAttributesTransformer = ^NSDictionary<NSAttributedStringKey,id> * _Nonnull(NSDictionary<NSAttributedStringKey,id> * _Nonnull incoming) {
-        NSMutableDictionary<NSAttributedStringKey, id> *updated = [incoming mutableCopy] ?: [NSMutableDictionary dictionary];
-        updated[NSFontAttributeName] = PPFontBold(PPFontFootnote);
-        return updated;
-    };
-    config.title = kLang(@"Deliv_OrderSummary");
-
-    UIButton *button = [UIButton buttonWithConfiguration:config primaryAction:nil];
-    button.translatesAutoresizingMaskIntoConstraints = NO;
-    button.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    PPApplyContinuousCorners(button, PPCornerMedium);
-    button.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    button.layer.borderColor = PPHairlineColor().CGColor;
-    button.layer.shadowColor = AppShadowColor.CGColor;
-    button.layer.shadowOpacity = PPShadowSubtleOpacity;
-    button.layer.shadowOffset = CGSizeMake(0, 8);
-    button.layer.shadowRadius = 16.0;
-    button.accessibilityLabel = kLang(@"Deliv_OrderSummary");
-    [button addTarget:self action:@selector(toggleHeroSummaryCards) forControlEvents:UIControlEventTouchUpInside];
-    return button;
-}
-
-- (void)setupStatsHeader {
-    _heroSurfaceView = [[PPHero alloc] init];
-    _heroSurfaceView.translatesAutoresizingMaskIntoConstraints = NO;
-    _heroSurfaceView.accentColor = AppPrimaryClr;
-    [self.view addSubview:_heroSurfaceView];
-
-    UILabel *eyebrowLabel = [[UILabel alloc] init];
-    eyebrowLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    eyebrowLabel.font = PPFontBold(PPFontFootnote);
-    eyebrowLabel.textColor = AppPrimaryClrWithAlpha(0.88);
-    eyebrowLabel.textAlignment = Language.alignmentForCurrentLanguage;
-    eyebrowLabel.text = kLang(@"Deliv_LiveBoard");
-    [_heroSurfaceView addSubview:eyebrowLabel];
-
-    // Dynamic Type is intentionally NOT enabled on the hero eyebrow/title/subtitle or
-    // the hero badge row: the hero has a hard height constraint that is lerped between
-    // kDeliveryHeroHeight and kDeliveryHeroCollapsedHeight, and the chain from the
-    // eyebrow down to statsGrid.bottom is all equal constraints, so any scaled label
-    // would be clipped or fight the collapse animation.
-    _heroTitleLabel = [[UILabel alloc] init];
-    _heroTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _heroTitleLabel.font = PPFontBold(30);
-    _heroTitleLabel.textColor = PrimaryTextClr;
-    _heroTitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
-    _heroTitleLabel.numberOfLines = 2;
-    _heroTitleLabel.text = kLang(@"DeliveryManagement");
-    [_heroSurfaceView addSubview:_heroTitleLabel];
-
-    _heroSubtitleLabel = [[UILabel alloc] init];
-    _heroSubtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _heroSubtitleLabel.font = PPFontMedium(PPFontSubheadline);
-    _heroSubtitleLabel.textColor = [SeconderyTextClr colorWithAlphaComponent:0.88];
-    _heroSubtitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
-    _heroSubtitleLabel.numberOfLines = 0;
-    _heroSubtitleLabel.text = kLang(@"DeliveryManagementSubtitle");
-    [_heroSurfaceView addSubview:_heroSubtitleLabel];
-
-    UIView *heroStageView = [[UIView alloc] init];
-    heroStageView.translatesAutoresizingMaskIntoConstraints = NO;
-    heroStageView.backgroundColor = AppPrimaryClrWithAlpha(0.06);
-    heroStageView.layer.cornerRadius = 56.0;
-    heroStageView.layer.cornerCurve = kCACornerCurveContinuous;
-    [_heroSurfaceView addSubview:heroStageView];
-    _heroStageView = heroStageView;
-
-    UIView *heroStageCore = [[UIView alloc] init];
-    heroStageCore.translatesAutoresizingMaskIntoConstraints = NO;
-    heroStageCore.backgroundColor = AppPrimaryClrWithAlpha(0.12);
-    heroStageCore.layer.cornerRadius = 30.0;
-    heroStageCore.layer.cornerCurve = kCACornerCurveContinuous;
-    [_heroStageView addSubview:heroStageCore];
-
-    UIImageView *heroStageIcon = [[UIImageView alloc] init];
-    heroStageIcon.translatesAutoresizingMaskIntoConstraints = NO;
-    heroStageIcon.contentMode = UIViewContentModeScaleAspectFit;
-    heroStageIcon.tintColor = AppPrimaryClr;
-    UIImageSymbolConfiguration *stageIconConfig = [UIImageSymbolConfiguration configurationWithPointSize:26.0 weight:UIImageSymbolWeightSemibold];
-    heroStageIcon.image = [[UIImage systemImageNamed:@"truck.box.fill"] imageWithConfiguration:stageIconConfig];
-    [heroStageCore addSubview:heroStageIcon];
-
-    UIView *heroStageDot = [[UIView alloc] init];
-    heroStageDot.translatesAutoresizingMaskIntoConstraints = NO;
-    heroStageDot.backgroundColor = [UIColor ppSuccess];
-    heroStageDot.layer.cornerRadius = 5.0;
-    [_heroStageView addSubview:heroStageDot];
-
-    UIView *focusBadge = [self buildHeroBadgeWithBackgroundColor:AppPrimaryClrWithAlpha(0.11)
-                                                       textColor:AppPrimaryClr
-                                                      labelStore:&_heroFocusLabel];
-    UIView *resultsBadge = [self buildHeroBadgeWithBackgroundColor:[SeconderyTextClr colorWithAlphaComponent:0.08]
-                                                         textColor:PrimaryTextClr
-                                                        labelStore:&_heroResultsLabel];
-
-    self.heroSummaryToggleButton = [self buildHeroSummaryToggleButton];
-
-    UIStackView *badgeRow = [[UIStackView alloc] initWithArrangedSubviews:@[
-        resultsBadge,
-        focusBadge,
-        self.heroSummaryToggleButton
-    ]];
-    badgeRow.translatesAutoresizingMaskIntoConstraints = NO;
-    badgeRow.axis = UILayoutConstraintAxisHorizontal;
-    badgeRow.alignment = UIStackViewAlignmentCenter;
-    badgeRow.spacing = 8.0;
-    badgeRow.semanticContentAttribute = UISemanticContentAttributeForceLeftToRight;
-    [_heroSurfaceView addSubview:badgeRow];
-    [_heroSurfaceView bringSubviewToFront:badgeRow];
-    self.heroBadgeRow = badgeRow;
-
-    UIView *divider = [[UIView alloc] init];
-    divider.translatesAutoresizingMaskIntoConstraints = NO;
-    divider.backgroundColor = PPHairlineColor();
-    divider.layer.cornerRadius = 0.5;
-    [_heroSurfaceView addSubview:divider];
-    self.heroDividerView = divider;
-
-    _totalCard = [[_PPStatCard alloc] initWithIcon:@"cube.box.fill"
-                                             title:kLang(@"Deliv_TotalOrders")
-                                             color:AppPrimaryClr];
-    _readyCard = [[_PPStatCard alloc] initWithIcon:@"shippingbox.fill"
-                                             title:kLang(@"Deliv_ReadyCount")
-                                             color:[UIColor ppWarning]];
-    _transitCard = [[_PPStatCard alloc] initWithIcon:@"truck.box.fill"
-                                               title:kLang(@"Deliv_InTransitCount")
-                                               color:[UIColor ppQuickActionCommunity]];
-    _deliveredCard = [[_PPStatCard alloc] initWithIcon:@"checkmark.circle.fill"
-                                                 title:kLang(@"Deliv_DeliveredCount")
-                                                 color:[UIColor ppSuccess]];
-
-    UIStackView *topStatsRow = [[UIStackView alloc] initWithArrangedSubviews:@[_totalCard, _readyCard]];
-    topStatsRow.translatesAutoresizingMaskIntoConstraints = NO;
-    topStatsRow.axis = UILayoutConstraintAxisHorizontal;
-    topStatsRow.alignment = UIStackViewAlignmentFill;
-    topStatsRow.distribution = UIStackViewDistributionFillEqually;
-    topStatsRow.spacing = 10.0;
-    topStatsRow.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-
-    UIStackView *bottomStatsRow = [[UIStackView alloc] initWithArrangedSubviews:@[_transitCard, _deliveredCard]];
-    bottomStatsRow.translatesAutoresizingMaskIntoConstraints = NO;
-    bottomStatsRow.axis = UILayoutConstraintAxisHorizontal;
-    bottomStatsRow.alignment = UIStackViewAlignmentFill;
-    bottomStatsRow.distribution = UIStackViewDistributionFillEqually;
-    bottomStatsRow.spacing = 10.0;
-    bottomStatsRow.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-
-    UIStackView *statsGrid = [[UIStackView alloc] initWithArrangedSubviews:@[
-        topStatsRow,
-        bottomStatsRow
-    ]];
-    statsGrid.translatesAutoresizingMaskIntoConstraints = NO;
-    statsGrid.axis = UILayoutConstraintAxisVertical;
-    statsGrid.alignment = UIStackViewAlignmentFill;
-    statsGrid.distribution = UIStackViewDistributionFillEqually;
-    statsGrid.spacing = 10.0;
-    [_heroSurfaceView addSubview:statsGrid];
-    self.statsGrid = statsGrid;
-
-    NSMutableArray<NSLayoutConstraint *> *cardHeightConstraints = [NSMutableArray array];
-    for (_PPStatCard *card in @[_totalCard, _readyCard, _transitCard, _deliveredCard]) {
-        NSLayoutConstraint *heightConstraint = [card.heightAnchor constraintEqualToConstant:kStatCardHeight];
-        heightConstraint.active = YES;
-        [cardHeightConstraints addObject:heightConstraint];
-    }
-    self.statCardHeightConstraints = cardHeightConstraints.copy;
-
-    self.heroTopConstraint = [_heroSurfaceView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:10.0];
-    self.heroHeightConstraint = [_heroSurfaceView.heightAnchor constraintEqualToConstant:(self.heroExpanded ? kDeliveryHeroHeight : kDeliveryHeroCollapsedHeight)];
-
-    [NSLayoutConstraint activateConstraints:@[
-        self.heroTopConstraint,
-        [_heroSurfaceView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:kChromeInset],
-        [_heroSurfaceView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-kChromeInset],
-        self.heroHeightConstraint,
-
-        [eyebrowLabel.topAnchor constraintEqualToAnchor:_heroSurfaceView.topAnchor constant:22.0],
-        [eyebrowLabel.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:20.0],
-        [eyebrowLabel.trailingAnchor constraintEqualToAnchor:_heroStageView.leadingAnchor constant:-12.0],
-
-        [_heroStageView.topAnchor constraintEqualToAnchor:_heroSurfaceView.topAnchor constant:20.0],
-        [_heroStageView.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-20.0],
-        [_heroStageView.widthAnchor constraintEqualToConstant:112.0],
-        [_heroStageView.heightAnchor constraintEqualToConstant:112.0],
-
-        [heroStageCore.centerXAnchor constraintEqualToAnchor:_heroStageView.centerXAnchor],
-        [heroStageCore.centerYAnchor constraintEqualToAnchor:_heroStageView.centerYAnchor],
-        [heroStageCore.widthAnchor constraintEqualToConstant:60.0],
-        [heroStageCore.heightAnchor constraintEqualToConstant:60.0],
-
-        [heroStageIcon.centerXAnchor constraintEqualToAnchor:heroStageCore.centerXAnchor],
-        [heroStageIcon.centerYAnchor constraintEqualToAnchor:heroStageCore.centerYAnchor],
-        [heroStageIcon.widthAnchor constraintEqualToConstant:32.0],
-        [heroStageIcon.heightAnchor constraintEqualToConstant:32.0],
-
-        [heroStageDot.topAnchor constraintEqualToAnchor:_heroStageView.topAnchor constant:18.0],
-        [heroStageDot.trailingAnchor constraintEqualToAnchor:_heroStageView.trailingAnchor constant:-18.0],
-        [heroStageDot.widthAnchor constraintEqualToConstant:10.0],
-        [heroStageDot.heightAnchor constraintEqualToConstant:10.0],
-
-        [_heroTitleLabel.topAnchor constraintEqualToAnchor:eyebrowLabel.bottomAnchor constant:14.0],
-        [_heroTitleLabel.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:20.0],
-        [_heroTitleLabel.trailingAnchor constraintEqualToAnchor:_heroStageView.leadingAnchor constant:-12.0],
-
-        [_heroSubtitleLabel.topAnchor constraintEqualToAnchor:_heroTitleLabel.bottomAnchor constant:6.0],
-        [_heroSubtitleLabel.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:20.0],
-        [_heroSubtitleLabel.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-20.0],
-
-        [badgeRow.topAnchor constraintEqualToAnchor:_heroSubtitleLabel.bottomAnchor constant:14.0],
-        [badgeRow.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:20.0],
-        [badgeRow.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-20.0],
-
-        [divider.topAnchor constraintEqualToAnchor:badgeRow.bottomAnchor constant:18.0],
-        [divider.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:20.0],
-        [divider.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-20.0],
-        [divider.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
-
-        [statsGrid.topAnchor constraintEqualToAnchor:divider.bottomAnchor constant:16.0],
-        [statsGrid.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:20.0],
-        [statsGrid.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-20.0],
-    ]];
-
-    self.statsGridBottomConstraint = [statsGrid.bottomAnchor constraintEqualToAnchor:_heroSurfaceView.bottomAnchor constant:-20.0];
-    self.statsGridBottomConstraint.active = self.heroExpanded;
-}
-
-#pragma mark - Setup: Filters
-
-- (void)setupPillFilters {
-    _pillScrollView = [[UIScrollView alloc] init];
-    _pillScrollView.translatesAutoresizingMaskIntoConstraints = NO;
-    _pillScrollView.showsHorizontalScrollIndicator = NO;
-    _pillScrollView.clipsToBounds = NO;
-    _pillScrollView.alwaysBounceHorizontal = YES;
-    _pillScrollView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    [self.view addSubview:_pillScrollView];
-
-    UIStackView *stack = [[UIStackView alloc] init];
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    stack.axis = UILayoutConstraintAxisHorizontal;
-    stack.alignment = UIStackViewAlignmentCenter;
-    stack.spacing = 8.0;
-    stack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    [_pillScrollView addSubview:stack];
-
-    _pillButtons = [NSMutableArray array];
-
-    for (NSInteger i = 0; i < self.pills.count; i++) {
-        _PPDeliveryPill *pill = self.pills[i];
-
-        UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
-        config.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
-        config.contentInsets = NSDirectionalEdgeInsetsMake(10.0, 16.0, 10.0, 16.0);
-        config.imagePadding = 8.0;
-        config.imagePlacement = NSDirectionalRectEdgeLeading;
-        config.preferredSymbolConfigurationForImage = [UIImageSymbolConfiguration configurationWithPointSize:12.0 weight:UIImageSymbolWeightMedium];
-        config.image = [UIImage systemImageNamed:pill.iconName];
-        config.attributedTitle = [[NSAttributedString alloc] initWithString:pill.title attributes:@{
-            NSFontAttributeName: PPFontBold(PPFontFootnote)
-        }];
-
-        UIButton *button = [UIButton buttonWithConfiguration:config primaryAction:nil];
-        button.translatesAutoresizingMaskIntoConstraints = NO;
-        button.tag = i;
-        button.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-        button.layer.cornerRadius = kPillHeight / 2.0;
-        button.layer.cornerCurve = kCACornerCurveContinuous;
-        button.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-        button.layer.borderColor = PPHairlineColor().CGColor;
-        button.layer.shadowColor = AppShadowColor.CGColor;
-        button.layer.shadowOffset = CGSizeMake(0, 8);
-        button.layer.shadowRadius = 16.0;
-        // Fixed-height chip pinned to the 44pt touch minimum, so its 12pt title is
-        // deliberately left unscaled — the pill row height feeds the layout below it.
-        [button.heightAnchor constraintEqualToConstant:kPillHeight].active = YES;
-        [button addTarget:self action:@selector(pillTapped:) forControlEvents:UIControlEventTouchUpInside];
-
-        [stack addArrangedSubview:button];
-        [_pillButtons addObject:button];
-    }
-
-    [NSLayoutConstraint activateConstraints:@[
-        [_pillScrollView.topAnchor constraintEqualToAnchor:_heroSurfaceView.bottomAnchor constant:14.0],
-        [_pillScrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [_pillScrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [_pillScrollView.heightAnchor constraintEqualToConstant:kPillHeight + 6.0],
-
-        [stack.topAnchor constraintEqualToAnchor:_pillScrollView.topAnchor],
-        [stack.leadingAnchor constraintEqualToAnchor:_pillScrollView.leadingAnchor constant:kChromeInset],
-        [stack.trailingAnchor constraintEqualToAnchor:_pillScrollView.trailingAnchor constant:-kChromeInset],
-        [stack.bottomAnchor constraintEqualToAnchor:_pillScrollView.bottomAnchor],
-        [stack.heightAnchor constraintEqualToAnchor:_pillScrollView.heightAnchor],
-    ]];
-
-    [self updatePillSelectionAnimated:NO];
-}
-
-- (void)scrollPillsToLeadingEdgeIfNeeded {
-    if (!Language.isRTL) return;
-    [self.pillScrollView layoutIfNeeded];
-    CGFloat maxOffsetX = self.pillScrollView.contentSize.width - self.pillScrollView.bounds.size.width;
-    if (maxOffsetX > 0) {
-        [self.pillScrollView setContentOffset:CGPointMake(maxOffsetX, 0) animated:NO];
-    }
-}
-
-- (void)updatePillSelectionAnimated:(BOOL)animated {
-    void (^applyStyles)(void) = ^{
-        for (NSInteger i = 0; i < self.pillButtons.count; i++) {
-            UIButton *button = self.pillButtons[i];
-            BOOL isSelected = (self.pills[i].filter == self.currentFilter);
-            UIButtonConfiguration *config = button.configuration;
-
-            if (isSelected) {
-                config.baseBackgroundColor = AppForgroundColr;
-                config.baseForegroundColor = AppPrimaryClr;
-                button.layer.borderColor = AppPrimaryClrWithAlpha(0.12).CGColor;
-                button.layer.shadowOpacity = PPShadowCardOpacity;
-                button.transform = CGAffineTransformIdentity;
-            } else {
-                config.baseBackgroundColor = AppBackgroundClr;
-                config.baseForegroundColor = [SeconderyTextClr colorWithAlphaComponent:0.92];
-                button.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.06].CGColor;
-                button.layer.shadowOpacity = 0.0;
-                button.transform = PPMotionReduced() ? CGAffineTransformIdentity : CGAffineTransformMakeScale(0.985, 0.985);
-            }
-
-            button.configuration = config;
-        }
-    };
-
-    if (animated && !PPMotionReduced()) {
-        [UIView animateWithDuration:0.28
-                              delay:0.0
-             usingSpringWithDamping:0.86
-              initialSpringVelocity:0.4
-                            options:UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState
-                         animations:applyStyles
-                         completion:nil];
-    } else {
-        applyStyles();
-    }
-}
-
-- (void)pillTapped:(UIButton *)sender {
-    NSInteger index = sender.tag;
-    if (index < 0 || index >= (NSInteger)self.pills.count) {
-        return;
-    }
-
-    self.currentFilter = self.pills[index].filter;
-    [PPFunc pp_playSelectionEffect];
-    [self updatePillSelectionAnimated:YES];
-    [self reloadData];
-}
-
-#pragma mark - Setup: Search
-
-- (void)setupSearchBar {
-    _searchShellView = [[UIView alloc] init];
-    _searchShellView.translatesAutoresizingMaskIntoConstraints = NO;
-    _searchShellView.backgroundColor = AppForgroundColr;
-    PPApplyContinuousCorners(_searchShellView, kSearchShellHeight / 2.0);
-    _searchShellView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    _searchShellView.layer.borderColor = AppPrimaryClrWithAlpha(0.08).CGColor;
-    PPApplyCardShadow(_searchShellView);
-    [self.view addSubview:_searchShellView];
-
-    UIView *searchGlow = [[UIView alloc] init];
-    searchGlow.translatesAutoresizingMaskIntoConstraints = NO;
-    searchGlow.backgroundColor = AppPrimaryClrWithAlpha(0.07);
-    searchGlow.layer.cornerRadius = 28.0;
-    [_searchShellView addSubview:searchGlow];
-
-    _searchBar = [[UISearchBar alloc] init];
-    _searchBar.translatesAutoresizingMaskIntoConstraints = NO;
-    _searchBar.placeholder = kLang(@"Deliv_SearchOrders");
-    _searchBar.searchBarStyle = UISearchBarStyleMinimal;
-    _searchBar.delegate = self;
-    _searchBar.backgroundColor = UIColor.clearColor;
-    _searchBar.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    _searchBar.backgroundImage = [UIImage new];
-    [_searchShellView addSubview:_searchBar];
-
-    UITextField *searchField = [_searchBar valueForKey:@"searchField"];
-    if (searchField) {
-        // Dynamic Type is NOT enabled here: the shell is pinned to kSearchShellHeight and
-        // UISearchBar lays its field out with its own fixed internal metrics, so a scaled
-        // font would be clipped inside the bar rather than growing the shell.
-        searchField.font = PPFontRegular(PPFontSubheadline);
-        searchField.textAlignment = Language.alignmentForCurrentLanguage;
-        searchField.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-        searchField.backgroundColor = UIColor.clearColor;
-        searchField.layer.cornerRadius = 0.0;
-        searchField.layer.borderWidth = 0.0;
-        searchField.borderStyle = UITextBorderStyleNone;
-        searchField.clearButtonMode = UITextFieldViewModeWhileEditing;
-
-        if ([searchField.leftView isKindOfClass:[UIImageView class]]) {
-            UIImageView *iconView = (UIImageView *)searchField.leftView;
-            iconView.tintColor = AppPrimaryClrWithAlpha(0.80);
-        }
-    }
-
-    [NSLayoutConstraint activateConstraints:@[
-        [_searchShellView.topAnchor constraintEqualToAnchor:_pillScrollView.bottomAnchor constant:14.0],
-        [_searchShellView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:kChromeInset],
-        [_searchShellView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-kChromeInset],
-        [_searchShellView.heightAnchor constraintEqualToConstant:kSearchShellHeight],
-
-        [searchGlow.widthAnchor constraintEqualToConstant:120.0],
-        [searchGlow.heightAnchor constraintEqualToConstant:120.0],
-        [searchGlow.centerYAnchor constraintEqualToAnchor:_searchShellView.centerYAnchor],
-        [searchGlow.trailingAnchor constraintEqualToAnchor:_searchShellView.trailingAnchor constant:46.0],
-
-        [_searchBar.topAnchor constraintEqualToAnchor:_searchShellView.topAnchor constant:2.0],
-        [_searchBar.leadingAnchor constraintEqualToAnchor:_searchShellView.leadingAnchor constant:2.0],
-        [_searchBar.trailingAnchor constraintEqualToAnchor:_searchShellView.trailingAnchor constant:-2.0],
-        [_searchBar.bottomAnchor constraintEqualToAnchor:_searchShellView.bottomAnchor constant:-2.0],
-    ]];
-}
-
-#pragma mark - Setup: Collection View
-
-- (void)setupCollectionView {
-    UICollectionViewCompositionalLayout *layout = [self createLayout];
-    _collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
-    _collectionView.translatesAutoresizingMaskIntoConstraints = NO;
-    _collectionView.backgroundColor = AppClearClr;
-    _collectionView.delegate = self;
-    _collectionView.dataSource = self;
-    _collectionView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
-    _collectionView.alwaysBounceVertical = YES;
-    [_collectionView registerClass:[PPDeliveryOrderCell class]
-        forCellWithReuseIdentifier:PPDeliveryOrderCellIdentifier];
-    [self.view addSubview:_collectionView];
+#pragma mark - UI Setup
+
+- (void)setupTableView {
+    _tableView = [[UITableView alloc] initWithFrame:self.view.bounds style:UITableViewStylePlain];
+    _tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    _tableView.backgroundColor = UIColor.clearColor;
+    _tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    _tableView.delegate = self;
+    _tableView.dataSource = self;
+    _tableView.rowHeight = UITableViewAutomaticDimension;
+    _tableView.estimatedRowHeight = 210;
+    _tableView.showsVerticalScrollIndicator = NO;
+    _tableView.contentInset = UIEdgeInsetsMake(0, 0, 40, 0);
+    _tableView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [_tableView registerClass:PPDeliveryOperationCardCell.class forCellReuseIdentifier:@"PPDeliveryOperationCardCell"];
+    [self.view addSubview:_tableView];
 
     _refreshControl = [[UIRefreshControl alloc] init];
-    _refreshControl.tintColor = AppPrimaryClr;
     [_refreshControl addTarget:self action:@selector(handleRefresh) forControlEvents:UIControlEventValueChanged];
-    _collectionView.refreshControl = _refreshControl;
+    _tableView.refreshControl = _refreshControl;
+
+    _spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    _spinner.translatesAutoresizingMaskIntoConstraints = NO;
+    _spinner.color = [UIColor ppPrimary];
+    _spinner.hidesWhenStopped = YES;
+    [self.view addSubview:_spinner];
 
     [NSLayoutConstraint activateConstraints:@[
-        [_collectionView.topAnchor constraintEqualToAnchor:_searchShellView.bottomAnchor constant:10.0],
-        [_collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [_collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [_collectionView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [_tableView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [_tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [_tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [_tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+
+        [_spinner.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [_spinner.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
     ]];
+
+    [self rebuildFlightDeckHeader];
 }
 
-- (UICollectionViewCompositionalLayout *)createLayout {
-    UICollectionLayoutListConfiguration *config = [[UICollectionLayoutListConfiguration alloc]
-        initWithAppearance:UICollectionLayoutListAppearancePlain];
-    config.backgroundColor = AppClearClr;
-    config.showsSeparators = NO;
+- (void)rebuildFlightDeckHeader {
+    CGFloat screenW = CGRectGetWidth(self.view.bounds);
+    if (screenW <= 0) screenW = UIScreen.mainScreen.bounds.size.width;
 
-    return [UICollectionViewCompositionalLayout layoutWithListConfiguration:config];
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, screenW, 238)];
+    header.backgroundColor = UIColor.clearColor;
+    header.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+
+    // Subtitle Eyebrow
+    UILabel *cockpitSubtitle = [[UILabel alloc] init];
+    cockpitSubtitle.translatesAutoresizingMaskIntoConstraints = NO;
+    cockpitSubtitle.text = kLang(@"Deliv_Cockpit_Subtitle");
+    cockpitSubtitle.font = [Styling fontMedium:12.5];
+    cockpitSubtitle.textColor = [UIColor ppTextSecondary];
+    cockpitSubtitle.textAlignment = Language.alignmentForCurrentLanguage;
+    [header addSubview:cockpitSubtitle];
+
+    // 1. Dispatch Telemetry HUD (4 Cards)
+    UIView *hudBox = [[UIView alloc] init];
+    hudBox.translatesAutoresizingMaskIntoConstraints = NO;
+    hudBox.backgroundColor = [UIColor ppSurface];
+    hudBox.layer.borderWidth = 0.8;
+    hudBox.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.75].CGColor;
+    PPApplyContinuousCorners(hudBox, PPCornerMedium);
+    PPApplyCardShadow(hudBox);
+    [header addSubview:hudBox];
+
+    UIStackView *hudStack = [[UIStackView alloc] init];
+    hudStack.translatesAutoresizingMaskIntoConstraints = NO;
+    hudStack.axis = UILayoutConstraintAxisHorizontal;
+    hudStack.spacing = 8.0;
+    hudStack.distribution = UIStackViewDistributionFillEqually;
+    [hudBox addSubview:hudStack];
+
+    self.inTransitCountBadge = [[UILabel alloc] init];
+    UIView *cardInTransit = [self buildHUDCardWithTitle:kLang(@"Deliv_HUD_InTransit")
+                                                  badge:self.inTransitCountBadge
+                                                   icon:@"car.fill"
+                                                  color:[UIColor ppInfo]
+                                            tapSelector:@selector(filterInTransitTapped)];
+
+    self.readyCountBadge = [[UILabel alloc] init];
+    UIView *cardReady = [self buildHUDCardWithTitle:kLang(@"Deliv_HUD_Ready")
+                                              badge:self.readyCountBadge
+                                               icon:@"shippingbox.fill"
+                                              color:[UIColor ppWarning]
+                                        tapSelector:@selector(filterReadyTapped)];
+
+    self.deliveredCountBadge = [[UILabel alloc] init];
+    UIView *cardDelivered = [self buildHUDCardWithTitle:kLang(@"Deliv_HUD_Delivered")
+                                                  badge:self.deliveredCountBadge
+                                                   icon:@"checkmark.circle.fill"
+                                                  color:[UIColor ppSuccess]
+                                            tapSelector:@selector(filterDeliveredTapped)];
+
+    self.codPendingCountBadge = [[UILabel alloc] init];
+    UIView *cardCOD = [self buildHUDCardWithTitle:kLang(@"Deliv_HUD_COD")
+                                            badge:self.codPendingCountBadge
+                                             icon:@"banknote.fill"
+                                            color:[UIColor ppPrimary]
+                                      tapSelector:@selector(filterCODTapped)];
+
+    [hudStack addArrangedSubview:cardInTransit];
+    [hudStack addArrangedSubview:cardReady];
+    [hudStack addArrangedSubview:cardDelivered];
+    [hudStack addArrangedSubview:cardCOD];
+
+    // 2. Omni-Search & Filter Command Capsule
+    UIView *searchContainer = [[UIView alloc] init];
+    searchContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    searchContainer.backgroundColor = [UIColor ppSurfaceElevated];
+    searchContainer.layer.borderWidth = 0.8;
+    searchContainer.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.75].CGColor;
+    PPApplyContinuousCorners(searchContainer, PPCornerMedium);
+    PPApplyCardShadow(searchContainer);
+    [header addSubview:searchContainer];
+
+    UIView *iconBadge = [[UIView alloc] init];
+    iconBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    iconBadge.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.07];
+    PPApplyContinuousCorners(iconBadge, 14);
+    [searchContainer addSubview:iconBadge];
+
+    UIImageView *searchIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightBold]]];
+    searchIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    searchIcon.tintColor = [UIColor ppPrimary];
+    searchIcon.contentMode = UIViewContentModeScaleAspectFit;
+    [iconBadge addSubview:searchIcon];
+
+    self.omniSearchField = [[UITextField alloc] init];
+    self.omniSearchField.translatesAutoresizingMaskIntoConstraints = NO;
+    self.omniSearchField.placeholder = kLang(@"Deliv_SearchOrders");
+    self.omniSearchField.font = [Styling fontMedium:13.5];
+    self.omniSearchField.textColor = [UIColor ppTextPrimary];
+    self.omniSearchField.textAlignment = Language.alignmentForCurrentLanguage;
+    self.omniSearchField.returnKeyType = UIReturnKeySearch;
+    self.omniSearchField.delegate = self;
+    [self.omniSearchField addTarget:self action:@selector(searchTextChanged:) forControlEvents:UIControlEventEditingChanged];
+    [searchContainer addSubview:self.omniSearchField];
+
+    self.resultsCountBadge = [[UILabel alloc] init];
+    self.resultsCountBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    self.resultsCountBadge.font = [Styling fontBold:11.0];
+    self.resultsCountBadge.textColor = [UIColor ppPrimary];
+    self.resultsCountBadge.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.10];
+    self.resultsCountBadge.textAlignment = NSTextAlignmentCenter;
+    PPApplyContinuousCorners(self.resultsCountBadge, 8);
+    self.resultsCountBadge.clipsToBounds = YES;
+    [searchContainer addSubview:self.resultsCountBadge];
+
+    self.clearSearchButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.clearSearchButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.clearSearchButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightMedium]] forState:UIControlStateNormal];
+    self.clearSearchButton.tintColor = [UIColor ppTextTertiary];
+    self.clearSearchButton.hidden = YES;
+    [self.clearSearchButton addTarget:self action:@selector(clearSearchTapped) forControlEvents:UIControlEventTouchUpInside];
+    [searchContainer addSubview:self.clearSearchButton];
+
+    // Integrated Filter Button
+    self.filterButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.filterButton.translatesAutoresizingMaskIntoConstraints = NO;
+    UIImageSymbolConfiguration *fCfg = [UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightSemibold];
+    [self.filterButton setImage:[UIImage systemImageNamed:@"slider.horizontal.3" withConfiguration:fCfg] forState:UIControlStateNormal];
+    [self.filterButton setTitle:[NSString stringWithFormat:@" %@", kLang(@"Deliv_Filter_Button")] forState:UIControlStateNormal];
+    self.filterButton.titleLabel.font = [Styling fontBold:12.0];
+    self.filterButton.tintColor = [UIColor ppTextSecondary];
+    self.filterButton.backgroundColor = [[UIColor ppSurface] colorWithAlphaComponent:0.7];
+    self.filterButton.layer.borderWidth = 0.7;
+    self.filterButton.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
+    self.filterButton.contentEdgeInsets = UIEdgeInsetsMake(0, 10, 0, 10);
+    PPApplyContinuousCorners(self.filterButton, 15);
+    [self.filterButton addTarget:self action:@selector(openFilterSheet) forControlEvents:UIControlEventTouchUpInside];
+    [searchContainer addSubview:self.filterButton];
+
+    self.filterBadgeDot = [[UIView alloc] init];
+    self.filterBadgeDot.translatesAutoresizingMaskIntoConstraints = NO;
+    self.filterBadgeDot.backgroundColor = [UIColor ppPrimary];
+    self.filterBadgeDot.layer.cornerRadius = 3.5;
+    self.filterBadgeDot.hidden = YES;
+    [self.filterButton addSubview:self.filterBadgeDot];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [cockpitSubtitle.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:PPSpaceBase],
+        [cockpitSubtitle.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-PPSpaceBase],
+        [cockpitSubtitle.topAnchor constraintEqualToAnchor:header.topAnchor constant:8],
+
+        [hudBox.topAnchor constraintEqualToAnchor:cockpitSubtitle.bottomAnchor constant:10],
+        [hudBox.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:PPSpaceBase],
+        [hudBox.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-PPSpaceBase],
+        [hudBox.heightAnchor constraintEqualToConstant:78],
+
+        [hudStack.topAnchor constraintEqualToAnchor:hudBox.topAnchor constant:6],
+        [hudStack.bottomAnchor constraintEqualToAnchor:hudBox.bottomAnchor constant:-6],
+        [hudStack.leadingAnchor constraintEqualToAnchor:hudBox.leadingAnchor constant:8],
+        [hudStack.trailingAnchor constraintEqualToAnchor:hudBox.trailingAnchor constant:-8],
+
+        [searchContainer.topAnchor constraintEqualToAnchor:hudBox.bottomAnchor constant:12],
+        [searchContainer.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:PPSpaceBase],
+        [searchContainer.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-PPSpaceBase],
+        [searchContainer.heightAnchor constraintEqualToConstant:46],
+
+        [iconBadge.leadingAnchor constraintEqualToAnchor:searchContainer.leadingAnchor constant:8],
+        [iconBadge.centerYAnchor constraintEqualToAnchor:searchContainer.centerYAnchor],
+        [iconBadge.widthAnchor constraintEqualToConstant:28],
+        [iconBadge.heightAnchor constraintEqualToConstant:28],
+
+        [searchIcon.centerXAnchor constraintEqualToAnchor:iconBadge.centerXAnchor],
+        [searchIcon.centerYAnchor constraintEqualToAnchor:iconBadge.centerYAnchor],
+        [searchIcon.widthAnchor constraintEqualToConstant:14],
+        [searchIcon.heightAnchor constraintEqualToConstant:14],
+
+        [self.omniSearchField.leadingAnchor constraintEqualToAnchor:iconBadge.trailingAnchor constant:8],
+        [self.omniSearchField.trailingAnchor constraintEqualToAnchor:self.resultsCountBadge.leadingAnchor constant:-6],
+        [self.omniSearchField.centerYAnchor constraintEqualToAnchor:searchContainer.centerYAnchor],
+
+        [self.resultsCountBadge.trailingAnchor constraintEqualToAnchor:self.clearSearchButton.leadingAnchor constant:-4],
+        [self.resultsCountBadge.centerYAnchor constraintEqualToAnchor:searchContainer.centerYAnchor],
+        [self.resultsCountBadge.heightAnchor constraintEqualToConstant:20],
+        [self.resultsCountBadge.widthAnchor constraintGreaterThanOrEqualToConstant:26],
+
+        [self.clearSearchButton.trailingAnchor constraintEqualToAnchor:self.filterButton.leadingAnchor constant:-8],
+        [self.clearSearchButton.centerYAnchor constraintEqualToAnchor:searchContainer.centerYAnchor],
+        [self.clearSearchButton.widthAnchor constraintEqualToConstant:22],
+        [self.clearSearchButton.heightAnchor constraintEqualToConstant:22],
+
+        [self.filterButton.trailingAnchor constraintEqualToAnchor:searchContainer.trailingAnchor constant:-7],
+        [self.filterButton.centerYAnchor constraintEqualToAnchor:searchContainer.centerYAnchor],
+        [self.filterButton.heightAnchor constraintEqualToConstant:32],
+        [self.filterButton.widthAnchor constraintGreaterThanOrEqualToConstant:76],
+
+        [self.filterBadgeDot.topAnchor constraintEqualToAnchor:self.filterButton.topAnchor constant:4],
+        [self.filterBadgeDot.trailingAnchor constraintEqualToAnchor:self.filterButton.trailingAnchor constant:-4],
+        [self.filterBadgeDot.widthAnchor constraintEqualToConstant:7],
+        [self.filterBadgeDot.heightAnchor constraintEqualToConstant:7],
+    ]];
+
+    self.flightDeckHeader = header;
+    self.tableView.tableHeaderView = header;
 }
 
-#pragma mark - Setup: Empty State
+- (UIView *)buildHUDCardWithTitle:(NSString *)title badge:(UILabel *)badge icon:(NSString *)iconName color:(UIColor *)color tapSelector:(SEL)selector {
+    UIView *card = [[UIView alloc] init];
+    card.backgroundColor = [[UIColor ppBackground] colorWithAlphaComponent:0.65];
+    PPApplyContinuousCorners(card, PPCornerSmall);
+
+    if (selector) {
+        UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:selector];
+        [card addGestureRecognizer:tap];
+        card.userInteractionEnabled = YES;
+    }
+
+    UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:iconName withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightBold]]];
+    icon.translatesAutoresizingMaskIntoConstraints = NO;
+    icon.tintColor = color;
+    [card addSubview:icon];
+
+    badge.translatesAutoresizingMaskIntoConstraints = NO;
+    badge.font = [Styling fontBold:15.0];
+    badge.textColor = [UIColor ppTextPrimary];
+    badge.text = @"0";
+    badge.textAlignment = Language.alignmentForCurrentLanguage;
+    [card addSubview:badge];
+
+    UILabel *titleLbl = [[UILabel alloc] init];
+    titleLbl.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLbl.font = [Styling fontMedium:10.5];
+    titleLbl.textColor = [UIColor ppTextSecondary];
+    titleLbl.text = title;
+    titleLbl.numberOfLines = 1;
+    titleLbl.textAlignment = Language.alignmentForCurrentLanguage;
+    [card addSubview:titleLbl];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [icon.topAnchor constraintEqualToAnchor:card.topAnchor constant:8],
+        [icon.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:8],
+        [icon.widthAnchor constraintEqualToConstant:14],
+        [icon.heightAnchor constraintEqualToConstant:14],
+
+        [badge.topAnchor constraintEqualToAnchor:icon.bottomAnchor constant:3],
+        [badge.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:8],
+        [badge.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-8],
+
+        [titleLbl.topAnchor constraintEqualToAnchor:badge.bottomAnchor constant:2],
+        [titleLbl.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:8],
+        [titleLbl.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-8],
+        [titleLbl.bottomAnchor constraintLessThanOrEqualToAnchor:card.bottomAnchor constant:-6],
+    ]];
+
+    return card;
+}
 
 - (void)setupEmptyState {
     _emptyStateView = [[UIView alloc] init];
     _emptyStateView.translatesAutoresizingMaskIntoConstraints = NO;
-    _emptyStateView.alpha = 0.0;
     _emptyStateView.hidden = YES;
     [self.view addSubview:_emptyStateView];
 
-    _emptyHaloView = [[UIView alloc] init];
-    _emptyHaloView.translatesAutoresizingMaskIntoConstraints = NO;
-    _emptyHaloView.backgroundColor = AppPrimaryClrWithAlpha(0.08);
-    _emptyHaloView.layer.cornerRadius = 58.0;
-    [_emptyStateView addSubview:_emptyHaloView];
+    UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"shippingbox.fill"]];
+    icon.translatesAutoresizingMaskIntoConstraints = NO;
+    icon.tintColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.35];
+    icon.contentMode = UIViewContentModeScaleAspectFit;
+    [_emptyStateView addSubview:icon];
 
-    UIView *emptyIconCore = [[UIView alloc] init];
-    emptyIconCore.translatesAutoresizingMaskIntoConstraints = NO;
-    PPStyleAccentPlate(emptyIconCore, 34.0, 0.14);
-    [_emptyHaloView addSubview:emptyIconCore];
+    UILabel *titleLbl = [[UILabel alloc] init];
+    titleLbl.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLbl.font = [Styling fontBold:17.0];
+    titleLbl.textColor = [UIColor ppTextPrimary];
+    titleLbl.text = kLang(@"Deliv_EmptyTitle");
+    titleLbl.textAlignment = NSTextAlignmentCenter;
+    [_emptyStateView addSubview:titleLbl];
 
-    UIImageSymbolConfiguration *iconConfig = [UIImageSymbolConfiguration configurationWithPointSize:28.0 weight:UIImageSymbolWeightLight];
-    UIImageView *iconView = [[UIImageView alloc] initWithImage:[[UIImage systemImageNamed:@"shippingbox.fill"] imageWithConfiguration:iconConfig]];
-    iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    iconView.contentMode = UIViewContentModeScaleAspectFit;
-    iconView.tintColor = AppPrimaryClr;
-    [emptyIconCore addSubview:iconView];
+    UILabel *subLbl = [[UILabel alloc] init];
+    subLbl.translatesAutoresizingMaskIntoConstraints = NO;
+    subLbl.font = [Styling fontRegular:13.5];
+    subLbl.textColor = [UIColor ppTextSecondary];
+    subLbl.text = kLang(@"Deliv_EmptySubtitle");
+    subLbl.textAlignment = NSTextAlignmentCenter;
+    subLbl.numberOfLines = 2;
+    [_emptyStateView addSubview:subLbl];
 
-    UIView *filterBadge = [self buildHeroBadgeWithBackgroundColor:AppPrimaryClrWithAlpha(0.10)
-                                                        textColor:AppPrimaryClr
-                                                       labelStore:&_emptyFilterLabel];
-    [_emptyStateView addSubview:filterBadge];
-    // Safe to scale: the badge is padding-sized and the empty state has no fixed height.
-    PPEnableDynamicType(_emptyFilterLabel, UIFontTextStyleFootnote);
-
-    UILabel *titleLabel = [[UILabel alloc] init];
-    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    titleLabel.font = PPFontBold(19);
-    titleLabel.textColor = PrimaryTextClr;
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    titleLabel.numberOfLines = 0;
-    titleLabel.text = kLang(@"Deliv_EmptyTitle");
-    [_emptyStateView addSubview:titleLabel];
-    PPEnableDynamicType(titleLabel, UIFontTextStyleTitle3);
-
-    UILabel *subtitleLabel = [[UILabel alloc] init];
-    subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    subtitleLabel.font = PPFontMedium(13);
-    subtitleLabel.textColor = [SeconderyTextClr colorWithAlphaComponent:0.88];
-    subtitleLabel.textAlignment = NSTextAlignmentCenter;
-    subtitleLabel.numberOfLines = 0;
-    subtitleLabel.text = kLang(@"Deliv_EmptySubtitle");
-    [_emptyStateView addSubview:subtitleLabel];
-    PPEnableDynamicType(subtitleLabel, UIFontTextStyleFootnote);
-
-    // Loading honesty: before the first delivery snapshot lands there is nothing to
-    // distinguish "still loading" from "genuinely empty", so the placeholder carries
-    // a spinner driven by the same reload pass that toggles the empty state.
-    _emptyLoadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
-    _emptyLoadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
-    _emptyLoadingIndicator.color = AppPrimaryClr;
-    _emptyLoadingIndicator.hidesWhenStopped = YES;
-    [_emptyStateView addSubview:_emptyLoadingIndicator];
+    UIButton *refreshBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    refreshBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [refreshBtn setTitle:kLang(@"CommandCenter_Refresh") forState:UIControlStateNormal];
+    refreshBtn.titleLabel.font = [Styling fontBold:13.5];
+    refreshBtn.tintColor = [UIColor ppPrimary];
+    refreshBtn.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.10];
+    PPApplyContinuousCorners(refreshBtn, 16);
+    [refreshBtn addTarget:self action:@selector(handleRefresh) forControlEvents:UIControlEventTouchUpInside];
+    [_emptyStateView addSubview:refreshBtn];
 
     [NSLayoutConstraint activateConstraints:@[
-        [_emptyStateView.centerXAnchor constraintEqualToAnchor:self.collectionView.centerXAnchor],
-        [_emptyStateView.centerYAnchor constraintEqualToAnchor:self.collectionView.centerYAnchor constant:8.0],
-        [_emptyStateView.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.collectionView.leadingAnchor constant:42.0],
-        [_emptyStateView.trailingAnchor constraintLessThanOrEqualToAnchor:self.collectionView.trailingAnchor constant:-42.0],
-        [_emptyStateView.widthAnchor constraintLessThanOrEqualToConstant:320.0],
+        [_emptyStateView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [_emptyStateView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:50],
+        [_emptyStateView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceXL],
+        [_emptyStateView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceXL],
 
-        [_emptyHaloView.topAnchor constraintEqualToAnchor:_emptyStateView.topAnchor],
-        [_emptyHaloView.centerXAnchor constraintEqualToAnchor:_emptyStateView.centerXAnchor],
-        [_emptyHaloView.widthAnchor constraintEqualToConstant:116.0],
-        [_emptyHaloView.heightAnchor constraintEqualToConstant:116.0],
+        [icon.centerXAnchor constraintEqualToAnchor:_emptyStateView.centerXAnchor],
+        [icon.topAnchor constraintEqualToAnchor:_emptyStateView.topAnchor],
+        [icon.widthAnchor constraintEqualToConstant:56],
+        [icon.heightAnchor constraintEqualToConstant:56],
 
-        [emptyIconCore.centerXAnchor constraintEqualToAnchor:_emptyHaloView.centerXAnchor],
-        [emptyIconCore.centerYAnchor constraintEqualToAnchor:_emptyHaloView.centerYAnchor],
-        [emptyIconCore.widthAnchor constraintEqualToConstant:68.0],
-        [emptyIconCore.heightAnchor constraintEqualToConstant:68.0],
+        [titleLbl.topAnchor constraintEqualToAnchor:icon.bottomAnchor constant:12],
+        [titleLbl.leadingAnchor constraintEqualToAnchor:_emptyStateView.leadingAnchor],
+        [titleLbl.trailingAnchor constraintEqualToAnchor:_emptyStateView.trailingAnchor],
 
-        [iconView.centerXAnchor constraintEqualToAnchor:emptyIconCore.centerXAnchor],
-        [iconView.centerYAnchor constraintEqualToAnchor:emptyIconCore.centerYAnchor],
-        [iconView.widthAnchor constraintEqualToConstant:34.0],
-        [iconView.heightAnchor constraintEqualToConstant:34.0],
+        [subLbl.topAnchor constraintEqualToAnchor:titleLbl.bottomAnchor constant:6],
+        [subLbl.leadingAnchor constraintEqualToAnchor:_emptyStateView.leadingAnchor],
+        [subLbl.trailingAnchor constraintEqualToAnchor:_emptyStateView.trailingAnchor],
 
-        [filterBadge.topAnchor constraintEqualToAnchor:_emptyHaloView.bottomAnchor constant:18.0],
-        [filterBadge.centerXAnchor constraintEqualToAnchor:_emptyStateView.centerXAnchor],
-
-        [titleLabel.topAnchor constraintEqualToAnchor:filterBadge.bottomAnchor constant:16.0],
-        [titleLabel.leadingAnchor constraintEqualToAnchor:_emptyStateView.leadingAnchor],
-        [titleLabel.trailingAnchor constraintEqualToAnchor:_emptyStateView.trailingAnchor],
-
-        [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:8.0],
-        [subtitleLabel.leadingAnchor constraintEqualToAnchor:_emptyStateView.leadingAnchor],
-        [subtitleLabel.trailingAnchor constraintEqualToAnchor:_emptyStateView.trailingAnchor],
-        [subtitleLabel.bottomAnchor constraintEqualToAnchor:_emptyStateView.bottomAnchor],
-
-        // Sits just below the placeholder block so a stopped spinner leaves no dead
-        // space in the centered empty-state composition.
-        [_emptyLoadingIndicator.topAnchor constraintEqualToAnchor:subtitleLabel.bottomAnchor constant:PPSpaceBase],
-        [_emptyLoadingIndicator.centerXAnchor constraintEqualToAnchor:_emptyStateView.centerXAnchor],
+        [refreshBtn.topAnchor constraintEqualToAnchor:subLbl.bottomAnchor constant:16],
+        [refreshBtn.centerXAnchor constraintEqualToAnchor:_emptyStateView.centerXAnchor],
+        [refreshBtn.widthAnchor constraintEqualToConstant:140],
+        [refreshBtn.heightAnchor constraintEqualToConstant:38],
+        [refreshBtn.bottomAnchor constraintEqualToAnchor:_emptyStateView.bottomAnchor],
     ]];
 }
 
-#pragma mark - Data
-
-/// YES only until the delivery listener has produced its first projection for this
-/// screen. Reads the manager's existing cached projection; it does not start a fetch.
-- (BOOL)pp_isAwaitingFirstSnapshot {
-    if (self.didReceiveOrdersUpdate) {
-        return NO;
-    }
-    return ([PPDeliveryManager shared].allOrders.count == 0);
-}
-
-- (void)pp_updateLoadingIndicatorVisible:(BOOL)visible {
-    if (visible) {
-        if (!self.emptyLoadingIndicator.isAnimating) {
-            [self.emptyLoadingIndicator startAnimating];
-        }
-    } else if (self.emptyLoadingIndicator.isAnimating) {
-        [self.emptyLoadingIndicator stopAnimating];
-    }
-}
-
-/// Single owner of the placeholder presentation: visibility, its entrance, the
-/// decorative halo pulse and the first-snapshot spinner are decided together so the
-/// three cannot drift out of sync.
-- (void)pp_applyEmptyStateVisible:(BOOL)visible {
-    [self pp_updateLoadingIndicatorVisible:(visible && [self pp_isAwaitingFirstSnapshot])];
-
-    if (!visible) {
-        [self.emptyHaloView.layer removeAnimationForKey:@"breathe"];
-        self.emptyStateView.hidden = YES;
-        self.emptyStateView.alpha = 0.0;
-        self.emptyStateView.transform = CGAffineTransformIdentity;
-        return;
-    }
-
-    if (self.emptyStateView.hidden) {
-        self.emptyStateView.hidden = NO;
-        self.emptyStateView.alpha = 0.0;
-        self.emptyStateView.transform = CGAffineTransformMakeTranslation(0, 12.0);
-        PPAnimateRespectingMotion(0.28, ^{
-            self.emptyStateView.alpha = 1.0;
-            self.emptyStateView.transform = CGAffineTransformIdentity;
-        }, nil);
-    }
-
-    // Perpetual decorative pulse — never started when the user asks for less motion.
-    if (PPMotionReduced()) {
-        [self.emptyHaloView.layer removeAnimationForKey:@"breathe"];
-        return;
-    }
-
-    if (![self.emptyHaloView.layer animationForKey:@"breathe"]) {
-        CABasicAnimation *breathe = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
-        breathe.fromValue = @1.0;
-        breathe.toValue = @1.05;
-        breathe.duration = 2.2;
-        breathe.autoreverses = YES;
-        breathe.repeatCount = HUGE_VALF;
-        breathe.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-        [self.emptyHaloView.layer addAnimation:breathe forKey:@"breathe"];
-    }
-}
-
-- (void)reloadData {
-    NSString *searchText = self.searchBar.text;
-    self.filteredOrders = [[PPDeliveryManager shared] ordersForFilter:self.currentFilter
-                                                          searchText:searchText];
-    [self.collectionView reloadData];
-
-    BOOL shouldShowEmpty = (self.filteredOrders.count == 0);
-    self.emptyFilterLabel.text = [self pp_titleForFilter:self.currentFilter];
-    [self pp_applyEmptyStateVisible:shouldShowEmpty];
-
-    [self updateStats];
-    [self applyHeroExpansionStateAnimated:NO];
-
-    if (!self.didAnimateEntrance && self.filteredOrders.count > 0) {
-        self.didAnimateEntrance = YES;
-        [self animateEntranceOnce];
-    }
-}
-
-- (void)updateStats {
-    NSArray *all = [[PPDeliveryManager shared] ordersForFilter:PPDeliveryFilterAll searchText:nil];
-    NSArray *ready = [[PPDeliveryManager shared] ordersForFilter:PPDeliveryFilterReady searchText:nil];
-    NSArray *transit = [[PPDeliveryManager shared] ordersForFilter:PPDeliveryFilterInTransit searchText:nil];
-    NSArray *delivered = [[PPDeliveryManager shared] ordersForFilter:PPDeliveryFilterDelivered searchText:nil];
-
-    [self.totalCard updateCount:(NSInteger)all.count];
-    [self.readyCard updateCount:(NSInteger)ready.count];
-    [self.transitCard updateCount:(NSInteger)transit.count];
-    [self.deliveredCard updateCount:(NSInteger)delivered.count];
-
-    self.heroFocusLabel.text = [self pp_titleForFilter:self.currentFilter];
-    self.heroResultsLabel.text = [NSString stringWithFormat:kLang(@"Deliv_VisibleOrdersCount"), (long)self.filteredOrders.count];
-}
+#pragma mark - Data & Filtering
 
 - (void)ordersDidChange:(NSNotification *)note {
-    self.didReceiveOrdersUpdate = YES;
-    [self.refreshControl endRefreshing];
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(reloadData) object:nil];
-    [self performSelector:@selector(reloadData) withObject:nil afterDelay:0.15];
-}
-
-- (void)handleRefresh {
-    [[PPDeliveryManager shared] startListeningForDeliveryOrders];
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [self.refreshControl endRefreshing];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self reloadOrdersFromManager];
     });
 }
 
-#pragma mark - Motion
-
-- (void)primeChromeForEntranceAnimation {
-    if (PPMotionReduced()) {
-        // Nothing is hidden up front, so there is no entrance to play back.
-        return;
-    }
-
-    NSArray<UIView *> *animatedViews = @[
-        self.heroSurfaceView,
-        self.pillScrollView,
-        self.searchShellView
-    ];
-
-    for (UIView *view in animatedViews) {
-        view.alpha = 0.0;
-        view.transform = CGAffineTransformMakeTranslation(0, 20.0);
-    }
-
-    self.heroStageView.transform = CGAffineTransformMakeScale(0.92, 0.92);
+- (void)handleRefresh {
+    [self.refreshControl endRefreshing];
+    [self reloadOrdersFromManager];
 }
 
-- (CGFloat)heroCollapseProgressForCurrentState {
-    if (!self.heroExpanded) {
-        return 1.0;
-    }
-
-    if (self.filteredOrders.count <= 10) {
-        return 0.0;
-    }
-
-    CGFloat offset = MAX(0.0, self.collectionView.contentOffset.y);
-    return MIN(1.0, offset / 160.0);
+- (void)reloadOrdersFromManager {
+    self.allOrders = [[PPDeliveryManager shared] allOrders] ?: @[];
+    self.hasLoadedOnce = YES;
+    [self updateCockpitUI];
 }
 
-- (void)applyHeroExpansionProgress:(CGFloat)collapseProgress animated:(BOOL)animated {
-    CGFloat normalizedProgress = MIN(MAX(collapseProgress, 0.0), 1.0);
-    BOOL shouldShowSummaryCards = (normalizedProgress < 0.999);
+- (void)updateCockpitUI {
+    // 1. Calculate HUD Telemetry
+    NSInteger inTransitCount = 0;
+    NSInteger readyCount = 0;
+    NSInteger deliveredCount = 0;
+    NSInteger codCount = 0;
 
-    if (shouldShowSummaryCards) {
-        self.heroDividerView.hidden = NO;
-        self.statsGrid.hidden = NO;
+    for (PPDeliveryOrderModel *o in self.allOrders) {
+        if ([o.deliveryStatus isEqualToString:PPDeliveryStatusInTransit]) inTransitCount++;
+        if (o.isReady || [o.deliveryStatus isEqualToString:PPDeliveryStatusAwaitingHandover]) readyCount++;
+        if ([o.deliveryStatus isEqualToString:PPDeliveryStatusDelivered] || [o.deliveryStatus isEqualToString:PPDeliveryStatusCompleted]) deliveredCount++;
+        if (o.isCashOrder) codCount++;
     }
 
-    self.statsGridBottomConstraint.active = shouldShowSummaryCards;
+    self.inTransitCountBadge.text = [NSString stringWithFormat:@"%ld", (long)inTransitCount];
+    self.readyCountBadge.text = [NSString stringWithFormat:@"%ld", (long)readyCount];
+    self.deliveredCountBadge.text = [NSString stringWithFormat:@"%ld", (long)deliveredCount];
+    self.codPendingCountBadge.text = [NSString stringWithFormat:@"%ld", (long)codCount];
 
-    CGFloat targetHeroHeight = PPDeliveryLerp(kDeliveryHeroHeight, kDeliveryHeroCollapsedHeight, normalizedProgress);
-    CGFloat targetCardHeight = PPDeliveryLerp(kStatCardHeight, 0.0, normalizedProgress);
-    CGFloat targetDividerAlpha = PPDeliveryLerp(1.0, 0.0, normalizedProgress);
-    CGFloat targetStatsAlpha = PPDeliveryLerp(1.0, 0.0, normalizedProgress);
-    CGFloat targetStatsSpacing = PPDeliveryLerp(10.0, 0.0, normalizedProgress);
-    CGAffineTransform targetStatsTransform = CGAffineTransformMakeTranslation(0, -14.0 * normalizedProgress);
-
-    void (^updates)(void) = ^{
-        self.heroHeightConstraint.constant = targetHeroHeight;
-        self.statsGrid.spacing = targetStatsSpacing;
-        for (NSLayoutConstraint *constraint in self.statCardHeightConstraints) {
-            constraint.constant = targetCardHeight;
+    // 2. Filter Orders
+    NSMutableArray *filtered = [NSMutableArray array];
+    for (PPDeliveryOrderModel *order in self.allOrders) {
+        // Status Filter
+        BOOL statusMatch = YES;
+        switch (self.currentStatusFilter) {
+            case PPDeliveryFilterAll: statusMatch = YES; break;
+            case PPDeliveryFilterReady: statusMatch = order.isReady; break;
+            case PPDeliveryFilterPendingPickup: statusMatch = [order.deliveryStatus isEqualToString:PPDeliveryStatusAwaitingHandover] || [order.deliveryStatus isEqualToString:PPDeliveryStatusPickedUp]; break;
+            case PPDeliveryFilterInTransit: statusMatch = [order.deliveryStatus isEqualToString:PPDeliveryStatusInTransit]; break;
+            case PPDeliveryFilterDelivered: statusMatch = [order.deliveryStatus isEqualToString:PPDeliveryStatusDelivered] || [order.deliveryStatus isEqualToString:PPDeliveryStatusCompleted]; break;
+            case PPDeliveryFilterCancelled: statusMatch = [order.deliveryStatus isEqualToString:PPDeliveryStatusCancelled] || [order.deliveryStatus isEqualToString:PPDeliveryStatusFailed]; break;
         }
-        self.heroDividerView.alpha = targetDividerAlpha;
-        self.statsGrid.alpha = targetStatsAlpha;
-        self.statsGrid.transform = targetStatsTransform;
-        [self.view layoutIfNeeded];
-    };
+        if (!statusMatch) continue;
 
-    void (^completion)(void) = ^{
-        self.heroDividerView.hidden = !shouldShowSummaryCards;
-        self.statsGrid.hidden = !shouldShowSummaryCards;
-    };
+        // Payment Filter
+        BOOL payMatch = YES;
+        switch (self.currentPaymentFilter) {
+            case PPDeliveryPaymentFilterAll: payMatch = YES; break;
+            case PPDeliveryPaymentFilterCOD: payMatch = order.isCashOrder; break;
+            case PPDeliveryPaymentFilterPrepaid: payMatch = !order.isCashOrder; break;
+        }
+        if (!payMatch) continue;
 
-    if (animated && !PPMotionReduced()) {
-        [UIView animateWithDuration:0.42
-                              delay:0.0
-             usingSpringWithDamping:0.88
-              initialSpringVelocity:0.28
-                            options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState
-                         animations:updates
-                         completion:^(__unused BOOL finished) {
-            completion();
+        // Search Filter
+        if (self.searchQuery.length > 0) {
+            NSString *q = self.searchQuery.lowercaseString;
+            BOOL numMatch = [order.displayOrderNumber.lowercaseString containsString:q] || [order.orderId.lowercaseString containsString:q];
+            BOOL nameMatch = [order.customerName.lowercaseString containsString:q];
+            BOOL phoneMatch = [order.customerPhone containsString:q];
+            BOOL addrMatch = [[order pp_visibleCustomerLocationSummary].lowercaseString containsString:q];
+            BOOL branchMatch = [[order pp_pickupLocationSummary].lowercaseString containsString:q];
+            if (!numMatch && !nameMatch && !phoneMatch && !addrMatch && !branchMatch) continue;
+        }
+
+        [filtered addObject:order];
+    }
+
+    // 3. Sort Orders
+    if (self.currentSortOrder == PPDeliverySortAmountHighToLow) {
+        [filtered sortUsingComparator:^NSComparisonResult(PPDeliveryOrderModel *a, PPDeliveryOrderModel *b) {
+            return [@(b.totalAmount) compare:@(a.totalAmount)];
+        }];
+    } else if (self.currentSortOrder == PPDeliverySortAmountLowToHigh) {
+        [filtered sortUsingComparator:^NSComparisonResult(PPDeliveryOrderModel *a, PPDeliveryOrderModel *b) {
+            return [@(a.totalAmount) compare:@(b.totalAmount)];
         }];
     } else {
-        updates();
-        completion();
-    }
-}
-
-- (void)updateToggleButtonAppearance {
-    UIButtonConfiguration *config = self.heroSummaryToggleButton.configuration;
-    config.baseBackgroundColor = self.heroExpanded ? AppPrimaryClrWithAlpha(0.12) : [SeconderyTextClr colorWithAlphaComponent:0.08];
-    config.baseForegroundColor = self.heroExpanded ? AppPrimaryClr : PrimaryTextClr;
-    config.image = [UIImage systemImageNamed:(self.heroExpanded ? @"chevron.up" : @"chevron.down")];
-    self.heroSummaryToggleButton.configuration = config;
-    self.heroSummaryToggleButton.layer.borderColor = (self.heroExpanded ? AppPrimaryClrWithAlpha(0.16) : PPHairlineColor()).CGColor;
-}
-
-- (void)applyHeroExpansionStateAnimated:(BOOL)animated {
-    [self applyHeroExpansionProgress:[self heroCollapseProgressForCurrentState] animated:animated];
-}
-
-- (void)toggleHeroSummaryCards {
-    self.heroExpanded = !self.heroExpanded;
-    [PPFunc pp_playSelectionEffect];
-    [self updateToggleButtonAppearance];
-    [self applyHeroExpansionStateAnimated:YES];
-}
-
-- (void)animateChromeIfNeeded {
-    if (self.didAnimateChrome) {
-        return;
+        // Newest First
+        [filtered sortUsingComparator:^NSComparisonResult(PPDeliveryOrderModel *a, PPDeliveryOrderModel *b) {
+            NSDate *da = a.createdAt ?: [NSDate distantPast];
+            NSDate *db = b.createdAt ?: [NSDate distantPast];
+            return [db compare:da];
+        }];
     }
 
-    self.didAnimateChrome = YES;
+    self.filteredOrders = filtered.copy;
+    self.resultsCountBadge.text = [NSString stringWithFormat:@"%ld", (long)self.filteredOrders.count];
+    self.clearSearchButton.hidden = (self.searchQuery.length == 0);
 
-    NSArray<UIView *> *animatedViews = @[
-        self.heroSurfaceView,
-        self.pillScrollView,
-        self.searchShellView
-    ];
-
-    if (PPMotionReduced()) {
-        // Land on the final chrome state immediately instead of staging it in.
-        for (UIView *view in animatedViews) {
-            view.alpha = 1.0;
-            view.transform = CGAffineTransformIdentity;
-        }
-        self.heroStageView.transform = CGAffineTransformIdentity;
-        return;
+    // Update Filter Button Visual Halo
+    BOOL hasNonDefaultFilter = (self.currentStatusFilter != PPDeliveryFilterAll || self.currentPaymentFilter != PPDeliveryPaymentFilterAll || self.currentSortOrder != PPDeliverySortNewest);
+    if (hasNonDefaultFilter) {
+        self.filterButton.tintColor = [UIColor ppPrimary];
+        self.filterButton.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.14];
+        self.filterButton.layer.borderColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.45].CGColor;
+        self.filterBadgeDot.hidden = NO;
+    } else {
+        self.filterButton.tintColor = [UIColor ppTextSecondary];
+        self.filterButton.backgroundColor = [[UIColor ppSurface] colorWithAlphaComponent:0.7];
+        self.filterButton.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
+        self.filterBadgeDot.hidden = YES;
     }
 
-    for (UIView *view in animatedViews) {
-        view.alpha = 0.0;
-        view.transform = CGAffineTransformMakeTranslation(0, 20.0);
+    BOOL hasItems = self.filteredOrders.count > 0;
+    self.emptyStateView.hidden = hasItems || !self.hasLoadedOnce;
+    self.tableView.hidden = !hasItems && self.hasLoadedOnce && self.allOrders.count == 0;
+
+    [self.tableView reloadData];
+}
+
+#pragma mark - Filter Actions
+
+- (void)openFilterSheet {
+    PPDeliveryFilterSheet *sheet = [[PPDeliveryFilterSheet alloc] initWithStatusFilter:self.currentStatusFilter
+                                                                         paymentFilter:self.currentPaymentFilter
+                                                                             sortOrder:self.currentSortOrder
+                                                                             allOrders:self.allOrders];
+    __weak typeof(self) ws = self;
+    sheet.onApply = ^(PPDeliveryFilter statusFilter, PPDeliveryPaymentFilter paymentFilter, PPDeliverySortOrder sortOrder) {
+        ws.currentStatusFilter = statusFilter;
+        ws.currentPaymentFilter = paymentFilter;
+        ws.currentSortOrder = sortOrder;
+        [ws updateCockpitUI];
+    };
+
+    if (@available(iOS 15.0, *)) {
+        sheet.modalPresentationStyle = UIModalPresentationPageSheet;
+        UISheetPresentationController *pres = sheet.sheetPresentationController;
+        pres.detents = @[
+            [UISheetPresentationControllerDetent mediumDetent],
+            [UISheetPresentationControllerDetent largeDetent]
+        ];
+        pres.prefersGrabberVisible = YES;
+        pres.preferredCornerRadius = 24.0;
+    } else {
+        sheet.modalPresentationStyle = UIModalPresentationFormSheet;
     }
-
-    self.heroStageView.transform = CGAffineTransformMakeScale(0.92, 0.92);
-
-    [UIView animateWithDuration:0.58
-                          delay:0.0
-         usingSpringWithDamping:0.88
-          initialSpringVelocity:0.32
-                        options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction
-                     animations:^{
-        self.heroSurfaceView.alpha = 1.0;
-        self.heroSurfaceView.transform = CGAffineTransformIdentity;
-        self.heroStageView.transform = CGAffineTransformIdentity;
-    } completion:nil];
-
-    [UIView animateWithDuration:0.50
-                          delay:0.08
-         usingSpringWithDamping:0.92
-          initialSpringVelocity:0.28
-                        options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction
-                     animations:^{
-        self.pillScrollView.alpha = 1.0;
-        self.pillScrollView.transform = CGAffineTransformIdentity;
-    } completion:nil];
-
-    [UIView animateWithDuration:0.50
-                          delay:0.14
-         usingSpringWithDamping:0.92
-          initialSpringVelocity:0.26
-                        options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction
-                     animations:^{
-        self.searchShellView.alpha = 1.0;
-        self.searchShellView.transform = CGAffineTransformIdentity;
-    } completion:nil];
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
-- (void)animateEntranceOnce {
-    NSArray<NSIndexPath *> *visible = [self.collectionView indexPathsForVisibleItems];
-    NSArray<NSIndexPath *> *sorted = [visible sortedArrayUsingComparator:^NSComparisonResult(NSIndexPath *a, NSIndexPath *b) {
-        return [@(a.item) compare:@(b.item)];
-    }];
-
-    BOOL motionReduced = PPMotionReduced();
-
-    for (NSInteger i = 0; i < sorted.count; i++) {
-        UICollectionViewCell *cell = [self.collectionView cellForItemAtIndexPath:sorted[i]];
-        if (!cell) {
-            continue;
-        }
-
-        if (motionReduced) {
-            cell.alpha = 1.0;
-            cell.transform = CGAffineTransformIdentity;
-            continue;
-        }
-
-        cell.alpha = 0.0;
-        cell.transform = CGAffineTransformMakeTranslation(0, 26.0);
-
-        // Cumulative stagger is capped so a long visible run never delays the last row.
-        NSTimeInterval staggerDelay = MIN(0.045 * i, 0.28);
-
-        [UIView animateWithDuration:0.46
-                              delay:staggerDelay
-             usingSpringWithDamping:0.84
-              initialSpringVelocity:0.4
-                            options:UIViewAnimationOptionAllowUserInteraction | UIViewAnimationOptionBeginFromCurrentState
-                         animations:^{
-            cell.alpha = 1.0;
-            cell.transform = CGAffineTransformIdentity;
-        } completion:nil];
-    }
+- (void)filterInTransitTapped {
+    self.currentStatusFilter = PPDeliveryFilterInTransit;
+    [PPFunc pp_playTapEffect];
+    [self updateCockpitUI];
 }
 
-#pragma mark - UISearchBarDelegate
-
-- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
-    [self reloadData];
+- (void)filterReadyTapped {
+    self.currentStatusFilter = PPDeliveryFilterReady;
+    [PPFunc pp_playTapEffect];
+    [self updateCockpitUI];
 }
 
-- (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
-    [searchBar resignFirstResponder];
+- (void)filterDeliveredTapped {
+    self.currentStatusFilter = PPDeliveryFilterDelivered;
+    [PPFunc pp_playTapEffect];
+    [self updateCockpitUI];
 }
 
-#pragma mark - UICollectionViewDataSource
+- (void)filterCODTapped {
+    self.currentPaymentFilter = PPDeliveryPaymentFilterCOD;
+    [PPFunc pp_playTapEffect];
+    [self updateCockpitUI];
+}
 
-- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
+#pragma mark - Search
+
+- (void)searchTextChanged:(UITextField *)sender {
+    self.searchQuery = [sender.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    [self updateCockpitUI];
+}
+
+- (void)clearSearchTapped {
+    self.omniSearchField.text = @"";
+    self.searchQuery = @"";
+    [self.omniSearchField resignFirstResponder];
+    [self updateCockpitUI];
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [textField resignFirstResponder];
+    return YES;
+}
+
+#pragma mark - Table View
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     return self.filteredOrders.count;
 }
 
-- (__kindof UICollectionViewCell *)collectionView:(UICollectionView *)collectionView
-                           cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    PPDeliveryOrderCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:PPDeliveryOrderCellIdentifier
-                                                                          forIndexPath:indexPath];
-    if (indexPath.item < self.filteredOrders.count) {
-        [cell configureWithOrder:self.filteredOrders[indexPath.item]];
-    }
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    PPDeliveryOperationCardCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PPDeliveryOperationCardCell" forIndexPath:indexPath];
+    PPDeliveryOrderModel *order = self.filteredOrders[indexPath.row];
+    [cell configureWithOrder:order];
+
+    __weak typeof(self) ws = self;
+    cell.onMapTapped = ^(PPDeliveryOrderModel *targetOrder) {
+        [ws openMapsForOrder:targetOrder];
+    };
+    cell.onCallTapped = ^(PPDeliveryOrderModel *targetOrder) {
+        [ws callCustomerForOrder:targetOrder];
+    };
+    cell.onActionTapped = ^(PPDeliveryOrderModel *targetOrder) {
+        [ws openQuickActionSheetForOrder:targetOrder];
+    };
+    cell.onDetailsTapped = ^(PPDeliveryOrderModel *targetOrder) {
+        [ws openDetailsForOrder:targetOrder];
+    };
+
     return cell;
 }
 
-#pragma mark - UICollectionViewDelegate
-
-- (void)scrollViewDidScroll:(UIScrollView *)scrollView {
-    if (scrollView != self.collectionView) {
-        return;
-    }
-
-    CGFloat offset = MAX(0.0, scrollView.contentOffset.y);
-    CGFloat summaryCollapseProgress = [self heroCollapseProgressForCurrentState];
-    CGFloat chromeProgress = self.heroExpanded ? MAX(summaryCollapseProgress, MIN(1.0, offset / 220.0)) : 1.0;
-
-    [self applyHeroExpansionProgress:summaryCollapseProgress animated:NO];
-
-    if (PPMotionReduced()) {
-        // Keep the functional collapse, drop the decorative scroll-linked parallax.
-        self.heroTitleLabel.transform = CGAffineTransformIdentity;
-        self.heroStageView.transform = CGAffineTransformIdentity;
-        self.heroSubtitleLabel.alpha = 1.0;
-        self.heroBadgeRow.alpha = 1.0;
-        return;
-    }
-
-    self.heroTitleLabel.transform = CGAffineTransformMakeTranslation(0, -4.0 * chromeProgress);
-    self.heroSubtitleLabel.alpha = MAX(0.74, 1.0 - (0.18 * chromeProgress));
-    self.heroBadgeRow.alpha = MAX(0.82, 1.0 - (0.12 * chromeProgress));
-    self.heroStageView.transform = CGAffineTransformMakeTranslation(0, -5.0 * chromeProgress);
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    PPDeliveryOrderModel *order = self.filteredOrders[indexPath.row];
+    [self openDetailsForOrder:order];
 }
 
-- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    [collectionView deselectItemAtIndexPath:indexPath animated:YES];
-    if (indexPath.item >= self.filteredOrders.count) {
-        return;
-    }
+#pragma mark - Card Actions
 
+- (void)openMapsForOrder:(PPDeliveryOrderModel *)order {
     [PPFunc pp_playTapEffect];
-    PPDeliveryOrderModel *order = self.filteredOrders[indexPath.item];
-    PPDeliveryOrderDetailViewController *detail = [[PPDeliveryOrderDetailViewController alloc] initWithOrder:order];
-    [self.navigationController pushViewController:detail animated:YES];
+    NSString *loc = order.deliveryLocationPoint;
+    if (loc.length) {
+        NSArray *parts = [loc componentsSeparatedByString:@","];
+        if (parts.count == 2) {
+            double lat = [parts[0] doubleValue];
+            double lng = [parts[1] doubleValue];
+            NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://maps.apple.com/?q=%f,%f", lat, lng]];
+            if (url) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+            return;
+        }
+    }
+    NSString *addr = [order pp_exactDeliveryLocationText];
+    if (addr.length) {
+        NSString *enc = [addr stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+        NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://maps.apple.com/?q=%@", enc]];
+        if (url) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    }
 }
 
-- (CGSize)collectionView:(UICollectionView *)collectionView
-                  layout:(UICollectionViewLayout *)collectionViewLayout
-  sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
-    return CGSizeMake(collectionView.bounds.size.width, [PPDeliveryOrderCell preferredHeight]);
+- (void)callCustomerForOrder:(PPDeliveryOrderModel *)order {
+    [PPFunc pp_playTapEffect];
+    NSString *phone = order.customerPhone;
+    if (phone.length) {
+        NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"tel://%@", phone]];
+        if (url) [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    } else {
+        [PPToast toast:kLang(@"Deliv_Call_Unavailable") style:PPToastStyleWarning haptic:YES duration:2.5];
+    }
+}
+
+- (void)openQuickActionSheetForOrder:(PPDeliveryOrderModel *)order {
+    [PPFunc pp_playTapEffect];
+    PPDeliveryQuickTransitionSheet *sheet = [[PPDeliveryQuickTransitionSheet alloc] initWithOrder:order];
+    __weak typeof(self) ws = self;
+    sheet.onActionExecuted = ^{
+        [ws reloadOrdersFromManager];
+    };
+    if (@available(iOS 15.0, *)) {
+        sheet.modalPresentationStyle = UIModalPresentationPageSheet;
+        UISheetPresentationController *pres = sheet.sheetPresentationController;
+        pres.detents = @[
+            [UISheetPresentationControllerDetent mediumDetent],
+            [UISheetPresentationControllerDetent largeDetent]
+        ];
+        pres.prefersGrabberVisible = YES;
+        pres.preferredCornerRadius = 24.0;
+    } else {
+        sheet.modalPresentationStyle = UIModalPresentationFormSheet;
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)openDetailsForOrder:(PPDeliveryOrderModel *)order {
+    [PPFunc pp_playTapEffect];
+    PPDeliveryOrderDetailViewController *vc = [[PPDeliveryOrderDetailViewController alloc] initWithOrder:order];
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 @end

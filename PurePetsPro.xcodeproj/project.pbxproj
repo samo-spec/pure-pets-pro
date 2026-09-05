@@ -179,6 +179,9 @@
 		F2CCF4372F8CA17F007FBAD4 /* PPServiceDetailViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4292F8CA17F007FBAD4 /* PPServiceDetailViewController.m */; };
 		F2CCF4382F8CA17F007FBAD4 /* PPAddEditServiceViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4252F8CA17F007FBAD4 /* PPAddEditServiceViewController.m */; };
 		F2CCF4392F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4312F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.m */; };
+		F2CCF4832F8CA17F007FBAD4 /* PPServiceRequestsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4822F8CA17F007FBAD4 /* PPServiceRequestsViewController.m */; };
+		F2CCF4862F8CA17F007FBAD4 /* PPServiceScheduleViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4852F8CA17F007FBAD4 /* PPServiceScheduleViewController.m */; };
+		F2CCF4892F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4882F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m */; };
 		F2CCF44B2F8CA17F007FBAD4 /* PPFulfillmentCell.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4422F8CA17F007FBAD4 /* PPFulfillmentCell.m */; };
 		F2CCF44C2F8CA17F007FBAD4 /* PPFulfillmentListViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4462F8CA17F007FBAD4 /* PPFulfillmentListViewController.m */; };
 		F2CCF44D2F8CA17F007FBAD4 /* PPFulfillmentManager.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4482F8CA17F007FBAD4 /* PPFulfillmentManager.m */; };
@@ -610,6 +613,12 @@
 		F2CCF42F2F8CA17F007FBAD4 /* PPServicesListViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServicesListViewController.m; sourceTree = "<group>"; };
 		F2CCF4302F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceSubscriptionViewController.h; sourceTree = "<group>"; };
 		F2CCF4312F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceSubscriptionViewController.m; sourceTree = "<group>"; };
+		F2CCF4812F8CA17F007FBAD4 /* PPServiceRequestsViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceRequestsViewController.h; sourceTree = "<group>"; };
+		F2CCF4822F8CA17F007FBAD4 /* PPServiceRequestsViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceRequestsViewController.m; sourceTree = "<group>"; };
+		F2CCF4842F8CA17F007FBAD4 /* PPServiceScheduleViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceScheduleViewController.h; sourceTree = "<group>"; };
+		F2CCF4852F8CA17F007FBAD4 /* PPServiceScheduleViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceScheduleViewController.m; sourceTree = "<group>"; };
+		F2CCF4872F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceTemplatePickerViewController.h; sourceTree = "<group>"; };
+		F2CCF4882F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceTemplatePickerViewController.m; sourceTree = "<group>"; };
 		F2CCF4412F8CA17F007FBAD4 /* PPFulfillmentCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPFulfillmentCell.h; sourceTree = "<group>"; };
 		F2CCF4422F8CA17F007FBAD4 /* PPFulfillmentCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPFulfillmentCell.m; sourceTree = "<group>"; };
 		F2CCF4432F8CA17F007FBAD4 /* PPFulfillmentDetailViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPFulfillmentDetailViewController.h; sourceTree = "<group>"; };
@@ -1422,6 +1431,12 @@
 				F2CCF42F2F8CA17F007FBAD4 /* PPServicesListViewController.m */,
 				F2CCF4302F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.h */,
 				F2CCF4312F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.m */,
+				F2CCF4812F8CA17F007FBAD4 /* PPServiceRequestsViewController.h */,
+				F2CCF4822F8CA17F007FBAD4 /* PPServiceRequestsViewController.m */,
+				F2CCF4842F8CA17F007FBAD4 /* PPServiceScheduleViewController.h */,
+				F2CCF4852F8CA17F007FBAD4 /* PPServiceScheduleViewController.m */,
+				F2CCF4872F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.h */,
+				F2CCF4882F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m */,
 			);
 			path = ServiceSection;
 			sourceTree = "<group>";
@@ -1956,6 +1971,9 @@
 				F2CCF4382F8CA17F007FBAD4 /* PPAddEditServiceViewController.m in Sources */,
 				F294D3CC2FEDCDC800A6D657 /* PPProCoverImageCell.m in Sources */,
 				F2CCF4392F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.m in Sources */,
+				F2CCF4832F8CA17F007FBAD4 /* PPServiceRequestsViewController.m in Sources */,
+				F2CCF4862F8CA17F007FBAD4 /* PPServiceScheduleViewController.m in Sources */,
+				F2CCF4892F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m in Sources */,
 				F2CCF44B2F8CA17F007FBAD4 /* PPFulfillmentCell.m in Sources */,
 				F2CCF44C2F8CA17F007FBAD4 /* PPFulfillmentListViewController.m in Sources */,
 				F2CCF44D2F8CA17F007FBAD4 /* PPFulfillmentManager.m in Sources */,

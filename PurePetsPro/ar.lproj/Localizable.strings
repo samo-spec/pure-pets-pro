@@ -2824,3 +2824,43 @@
 "Market_FilterSheet_SortStockLow" = "المخزون: الأقل أولاً";
 "Market_Filter_ActiveIndicator" = "نشط";
 
+
+/* Delivery Operations Cockpit */
+"Deliv_Cockpit_Title" = "إدارة عمليات التوصيل";
+"Deliv_Cockpit_Subtitle" = "متابعة الشحنات النشطة ومسار التوصيل المباشر";
+"Deliv_HUD_InTransit" = "قيد التوصيل";
+"Deliv_HUD_Ready" = "جاهز للاستلام";
+"Deliv_HUD_Delivered" = "تم التسليم";
+"Deliv_HUD_COD" = "تحصيل نقدي";
+"Deliv_QuickAction_Title" = "إجراءات الشحنة السريعة";
+"Deliv_QuickAction_Accept" = "قبول مهمة التوصيل";
+"Deliv_QuickAction_Pickup" = "تأكيد استلام الطرد من المتجر";
+"Deliv_QuickAction_Transit" = "بدء التحرك والتوصيل للعميل";
+"Deliv_QuickAction_Deliver" = "تأكيد تسليم الشحنة للعميل";
+"Deliv_QuickAction_CollectCash" = "تأكيد استلام المبلغ النقدي";
+"Deliv_QuickAction_Complete" = "إتمام وإنهاء الطلب";
+"Deliv_QuickAction_ReportIssue" = "الإبلاغ عن مشكلة / تعذر التسليم";
+"Deliv_Action_Maps" = "الخريطة";
+"Deliv_Action_Call" = "اتصال";
+"Deliv_Action_Update" = "تحديث";
+"Deliv_Action_Details" = "تفاصيل";
+"Deliv_Filter_Button" = "الفلاتر";
+"Deliv_FilterSheet_Title" = "تصفية وترتيب الشحنات";
+"Deliv_FilterSheet_Reset" = "إعادة ضبط";
+"Deliv_FilterSheet_SectionStatus" = "حالة مسار التوصيل";
+"Deliv_FilterSheet_SectionPayment" = "طريقة الدفع والتحصيل";
+"Deliv_FilterSheet_SectionSort" = "ترتيب القائمة";
+"Deliv_FilterSheet_ApplyFormat" = "تطبيق التصفية (%ld شحنة)";
+"Deliv_FilterSheet_All" = "الكل";
+"Deliv_FilterSheet_ReadyOnly" = "جاهز للاستلام";
+"Deliv_FilterSheet_InTransitOnly" = "قيد التوصيل الآن";
+"Deliv_FilterSheet_DeliveredOnly" = "تم التسليم بنجاح";
+"Deliv_FilterSheet_CancelledOnly" = "ملغاة أو متعذرة";
+"Deliv_FilterSheet_CODOnly" = "دفع نقدي عند الاستلام (COD)";
+"Deliv_FilterSheet_PrepaidOnly" = "مدفوع إلكترونياً مسبقاً";
+"Deliv_FilterSheet_SortNewest" = "الأحدث أولاً";
+"Deliv_FilterSheet_SortAmountHigh" = "المبلغ: من الأعلى للأقل";
+"Deliv_FilterSheet_SortAmountLow" = "المبلغ: من الأقل للأعلى";
+"Deliv_Route_Pickup" = "نقطة الاستلام:";
+"Deliv_Route_Dropoff" = "وجهة العميل:";
+"Deliv_Call_Unavailable" = "رقم الهاتف غير متاح للاتصال";

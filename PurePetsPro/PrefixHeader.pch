@@ -84,6 +84,9 @@ static NSString * const PPProThemePreferenceDark = @"dark";
 #import "PPServicesListViewController.h"
 #import "PPAddEditServiceViewController.h"
 #import "PPServiceDetailViewController.h"
+#import "PPServiceRequestsViewController.h"
+#import "PPServiceScheduleViewController.h"
+#import "PPServiceTemplatePickerViewController.h"
 
 // ===== Fulfillment Section =====
 #import "PPFulfillmentModel.h"

@@ -89,6 +89,12 @@
     priceBtn.tintColor = [UIColor ppPrimary];
     [priceBtn addTarget:self action:@selector(quickPricingTapped) forControlEvents:UIControlEventTouchUpInside];
     [self pp_navBarAddActionButton:priceBtn key:@"detail_rate"];
+
+    UIButton *delBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [delBtn setImage:[UIImage systemImageNamed:@"trash"] forState:UIControlStateNormal];
+    delBtn.tintColor = [UIColor ppError];
+    [delBtn addTarget:self action:@selector(deleteServiceTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self pp_navBarAddActionButton:delBtn key:@"detail_delete"];
 }
 
 - (void)pp_setupBackdropGlows {
@@ -655,6 +661,25 @@
         }];
     }];
     [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)deleteServiceTapped {
+    [PPFunc pp_playTapEffect];
+    __weak typeof(self) weakSelf = self;
+    NSString *title = [Language isRTL] ? @"تأكيد حذف عرض الخدمة" : @"Confirm Service Deletion";
+    NSString *msg = [Language isRTL] ? @"هل أنت متأكد من رغبتك في حذف هذا العرض نهائياً من قائمة خدماتك؟" : @"Are you sure you want to permanently remove this service?";
+    [PPAlertHelper showConfirmationIn:self title:title subtitle:msg placeholder:nil confirmButton:kLang(@"Delete") cancelButton:kLang(@"Cancel") confirmBlock:^{
+        [PPHUD showIndeterminateIn:weakSelf.view title:[Language isRTL] ? @"جارٍ الحذف..." : @"Deleting..." subtitle:nil];
+        [[PPServiceManager sharedManager] deleteService:weakSelf.service completion:^(NSError * _Nullable error) {
+            [PPHUD dismiss];
+            if (error) {
+                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+            } else {
+                [PPHUD showSuccess:[Language isRTL] ? @"تم حذف الخدمة بنجاح" : @"Service deleted"];
+                [weakSelf.navigationController popViewControllerAnimated:YES];
+            }
+        }];
+    } cancelBlock:nil];
 }
 
 @end

@@ -2,43 +2,43 @@
 //  PPServiceCell.m
 //  PurePetsPro
 //
-//  Modern trending card-based service cell with type icon overlay,
-//  glassmorphism-inspired card, capsule status badges, and verification dot.
+//  Category-defining service card with spatial continuous curvature,
+//  multi-tag pet species pills, inline availability switch, and live price badge.
 //
 
 #import "PPServiceCell.h"
 #import "PPServiceModel.h"
 #import "UIImageView+WebCache.h"
 
-static CGFloat const kCardRadius     = 24.0;
-static CGFloat const kImageSize      = 64.0;
+static CGFloat const kCardRadius     = 22.0;
+static CGFloat const kImageSize      = 74.0;
 static CGFloat const kImageRadius    = 18.0;
-static CGFloat const kHPad           = 16.0;
-static CGFloat const kVPad           = 16.0;
-static CGFloat const kBadgeH         = 22.0;
-static CGFloat const kBadgeRadius    = 11.0;
-static CGFloat const kTypeIconSize   = 22.0;
-static CGFloat const kVerifDotSize   = 8.0;
+static CGFloat const kHPad           = 14.0;
+static CGFloat const kVPad           = 14.0;
 
 @interface PPServiceCell ()
+@property (nonatomic, strong, readwrite) UIView *cardView;
 @property (nonatomic, strong, readwrite) UIImageView *serviceImageView;
+@property (nonatomic, strong) UIView *typeEmblemBg;
+@property (nonatomic, strong) UIImageView *typeEmblemIcon;
 @property (nonatomic, strong, readwrite) UILabel *titleLabel;
 @property (nonatomic, strong, readwrite) UILabel *subtitleLabel;
 @property (nonatomic, strong, readwrite) UILabel *priceLabel;
 @property (nonatomic, strong, readwrite) UILabel *statusBadge;
-@property (nonatomic, strong, readwrite) UIView  *cardView;
+@property (nonatomic, strong) UIView *statusDot;
+@property (nonatomic, strong) UILabel *speciesPill;
+@property (nonatomic, strong) UILabel *durationPill;
+@property (nonatomic, strong, readwrite) UISwitch *inlineSwitch;
 @property (nonatomic, strong) UIImageView *chevronView;
-@property (nonatomic, strong) UIView  *typeIconBg;
-@property (nonatomic, strong) UIImageView *typeIconView;
-@property (nonatomic, strong) UIView  *verifDot;
-@property (nonatomic, strong) UILabel *priceCurrencyLabel;
+@property (nonatomic, strong) UIView *pricePillBg;
+@property (nonatomic, strong) PPServiceModel *currentService;
 @end
 
 @implementation PPServiceCell
 
 + (NSString *)reuseID { return @"PPServiceCell"; }
 
-+ (CGFloat)preferredHeight { return 116.0; }
++ (CGFloat)preferredHeight { return 138.0; }
 
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
     if (self = [super initWithStyle:style reuseIdentifier:reuseIdentifier]) {
@@ -53,231 +53,284 @@ static CGFloat const kVerifDotSize   = 8.0;
 #pragma mark - Build UI
 
 - (void)buildUI {
-    // ── Card ──
+    // ── Outer Card ──
     _cardView = [UIView new];
     _cardView.translatesAutoresizingMaskIntoConstraints = NO;
-    _cardView.backgroundColor = AppForgroundColr;
-    _cardView.layer.cornerRadius = kCardRadius;
-    _cardView.layer.cornerCurve = kCACornerCurveContinuous;
-    _cardView.layer.shadowColor = UIColor.blackColor.CGColor;
-    _cardView.layer.shadowOpacity = 0.06;
-    _cardView.layer.shadowRadius = 16;
-    _cardView.layer.shadowOffset = CGSizeMake(0, 6);
-    _cardView.layer.borderWidth = 0.5;
-    _cardView.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.06].CGColor;
+    _cardView.backgroundColor = [UIColor ppElevatedSurface];
+    PPApplyContinuousCorners(_cardView, kCardRadius);
+    _cardView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    _cardView.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+    PPApplyCardShadow(_cardView);
     [self.contentView addSubview:_cardView];
 
-    // ── Image ──
+    // ── Photo Thumbnail ──
     _serviceImageView = [UIImageView new];
     _serviceImageView.translatesAutoresizingMaskIntoConstraints = NO;
     _serviceImageView.contentMode = UIViewContentModeScaleAspectFill;
     _serviceImageView.clipsToBounds = YES;
-    _serviceImageView.layer.cornerRadius = kImageRadius;
-    _serviceImageView.layer.cornerCurve = kCACornerCurveContinuous;
+    PPApplyContinuousCorners(_serviceImageView, kImageRadius);
     _serviceImageView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.06];
     [_cardView addSubview:_serviceImageView];
 
-    // ── Type icon overlay (bottom-trailing of image) ──
-    _typeIconBg = [UIView new];
-    _typeIconBg.translatesAutoresizingMaskIntoConstraints = NO;
-    _typeIconBg.backgroundColor = AppPrimaryClr;
-    _typeIconBg.layer.cornerRadius = kTypeIconSize / 2.0;
-    _typeIconBg.layer.borderWidth = 2.0;
-    _typeIconBg.layer.borderColor = AppForgroundColr.CGColor;
-    [_cardView addSubview:_typeIconBg];
+    // ── Floating Type Emblem (bottom-trailing of image) ──
+    _typeEmblemBg = [UIView new];
+    _typeEmblemBg.translatesAutoresizingMaskIntoConstraints = NO;
+    _typeEmblemBg.backgroundColor = AppPrimaryClr;
+    _typeEmblemBg.layer.cornerRadius = 12.0;
+    _typeEmblemBg.layer.borderWidth = 2.0;
+    _typeEmblemBg.layer.borderColor = [UIColor ppElevatedSurface].CGColor;
+    [_cardView addSubview:_typeEmblemBg];
 
-    _typeIconView = [UIImageView new];
-    _typeIconView.translatesAutoresizingMaskIntoConstraints = NO;
-    _typeIconView.tintColor = UIColor.whiteColor;
-    _typeIconView.contentMode = UIViewContentModeScaleAspectFit;
-    [_typeIconBg addSubview:_typeIconView];
+    _typeEmblemIcon = [UIImageView new];
+    _typeEmblemIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    _typeEmblemIcon.tintColor = UIColor.whiteColor;
+    _typeEmblemIcon.contentMode = UIViewContentModeScaleAspectFit;
+    [_typeEmblemBg addSubview:_typeEmblemIcon];
 
     // ── Title ──
     _titleLabel = [UILabel new];
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _titleLabel.font = [Styling fontBold:16];
+    _titleLabel.font = [Styling fontBold:15.5];
     _titleLabel.textColor = PrimaryTextClr;
     _titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    _titleLabel.numberOfLines = 1;
     _titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [_cardView addSubview:_titleLabel];
 
-    // ── Verification dot (next to title) ──
-    _verifDot = [UIView new];
-    _verifDot.translatesAutoresizingMaskIntoConstraints = NO;
-    _verifDot.layer.cornerRadius = kVerifDotSize / 2.0;
-    _verifDot.hidden = YES;
-    [_cardView addSubview:_verifDot];
+    // ── Species Tag Chip ──
+    _speciesPill = [UILabel new];
+    _speciesPill.translatesAutoresizingMaskIntoConstraints = NO;
+    _speciesPill.font = [Styling fontBold:10];
+    _speciesPill.textColor = AppPrimaryClr;
+    _speciesPill.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
+    _speciesPill.textAlignment = NSTextAlignmentCenter;
+    PPApplyContinuousCorners(_speciesPill, 6.0);
+    _speciesPill.clipsToBounds = YES;
+    [_cardView addSubview:_speciesPill];
 
-    // ── Subtitle ──
+    // ── Subtitle / Description ──
     _subtitleLabel = [UILabel new];
     _subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _subtitleLabel.font = [Styling fontMedium:12];
     _subtitleLabel.textColor = SeconderyTextClr;
     _subtitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    _subtitleLabel.numberOfLines = 2;
+    _subtitleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [_cardView addSubview:_subtitleLabel];
 
-    // ── Status badge (capsule) ──
-    _statusBadge = [UILabel new];
-    _statusBadge.translatesAutoresizingMaskIntoConstraints = NO;
-    _statusBadge.font = [Styling fontBold:10];
-    _statusBadge.textColor = UIColor.whiteColor;
-    _statusBadge.textAlignment = NSTextAlignmentCenter;
-    _statusBadge.layer.cornerRadius = kBadgeRadius;
-    _statusBadge.clipsToBounds = YES;
-    [_cardView addSubview:_statusBadge];
+    // ── Price Pill Container ──
+    _pricePillBg = [UIView new];
+    _pricePillBg.translatesAutoresizingMaskIntoConstraints = NO;
+    _pricePillBg.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.10];
+    PPApplyContinuousCorners(_pricePillBg, 11.0);
+    [_cardView addSubview:_pricePillBg];
 
-    // ── Price ──
     _priceLabel = [UILabel new];
     _priceLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _priceLabel.font = [Styling fontBold:15];
-    _priceLabel.textColor = AppPrimaryClr;
-    _priceLabel.textAlignment = NSTextAlignmentRight;
-    [_cardView addSubview:_priceLabel];
+    _priceLabel.font = [Styling fontBold:13.5];
+    _priceLabel.textColor = [UIColor ppSuccess];
+    _priceLabel.textAlignment = NSTextAlignmentCenter;
+    [_pricePillBg addSubview:_priceLabel];
 
-    _priceCurrencyLabel = [UILabel new];
-    _priceCurrencyLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _priceCurrencyLabel.font = [Styling fontMedium:10];
-    _priceCurrencyLabel.textColor = [AppPrimaryClr colorWithAlphaComponent:0.7];
-    _priceCurrencyLabel.textAlignment = NSTextAlignmentRight;
-    [_cardView addSubview:_priceCurrencyLabel];
+    // ── Status Badge with Dot ──
+    _statusBadge = [UILabel new];
+    _statusBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    _statusBadge.font = [Styling fontBold:10.5];
+    _statusBadge.textColor = SeconderyTextClr;
+    _statusBadge.textAlignment = Language.alignmentForCurrentLanguage;
+    [_cardView addSubview:_statusBadge];
+
+    _statusDot = [UIView new];
+    _statusDot.translatesAutoresizingMaskIntoConstraints = NO;
+    _statusDot.layer.cornerRadius = 4.0;
+    _statusDot.backgroundColor = [UIColor ppSuccess];
+    [_cardView addSubview:_statusDot];
+
+    // ── Duration Pill ──
+    _durationPill = [UILabel new];
+    _durationPill.translatesAutoresizingMaskIntoConstraints = NO;
+    _durationPill.font = [Styling fontMedium:10.5];
+    _durationPill.textColor = SeconderyTextClr;
+    _durationPill.textAlignment = Language.alignmentForCurrentLanguage;
+    [_cardView addSubview:_durationPill];
+
+    // ── Inline Availability Switch ──
+    _inlineSwitch = [[UISwitch alloc] init];
+    _inlineSwitch.translatesAutoresizingMaskIntoConstraints = NO;
+    _inlineSwitch.onTintColor = [UIColor ppSuccess];
+    _inlineSwitch.transform = CGAffineTransformMakeScale(0.78, 0.78);
+    [_inlineSwitch addTarget:self action:@selector(switchToggled:) forControlEvents:UIControlEventValueChanged];
+    [_cardView addSubview:_inlineSwitch];
 
     // ── Chevron ──
     _chevronView = [UIImageView new];
     _chevronView.translatesAutoresizingMaskIntoConstraints = NO;
     _chevronView.image = [UIImage systemImageNamed:Language.isRTL ? @"chevron.left" : @"chevron.right"
-                                     withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:11 weight:UIImageSymbolWeightMedium]];
-    _chevronView.tintColor = [SeconderyTextClr colorWithAlphaComponent:0.3];
+                                 withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:10 weight:UIImageSymbolWeightSemibold]];
+    _chevronView.tintColor = [SeconderyTextClr colorWithAlphaComponent:0.35];
     _chevronView.contentMode = UIViewContentModeScaleAspectFit;
     [_cardView addSubview:_chevronView];
 
-    // ── Layout ──
-    CGFloat textLeading = kHPad + kImageSize + 14;
-
+    // ── Auto Layout Constraints (Leading/Trailing Safe for RTL) ──
     [NSLayoutConstraint activateConstraints:@[
-        // Card
-        [_cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
-        [_cardView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-        [_cardView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-        [_cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6],
+        // Card bounds
+        [_cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:5.0],
+        [_cardView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16.0],
+        [_cardView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16.0],
+        [_cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-5.0],
 
-        // Image
+        // Image thumbnail
         [_serviceImageView.leadingAnchor constraintEqualToAnchor:_cardView.leadingAnchor constant:kHPad],
-        [_serviceImageView.centerYAnchor constraintEqualToAnchor:_cardView.centerYAnchor],
+        [_serviceImageView.topAnchor constraintEqualToAnchor:_cardView.topAnchor constant:kVPad],
         [_serviceImageView.widthAnchor constraintEqualToConstant:kImageSize],
         [_serviceImageView.heightAnchor constraintEqualToConstant:kImageSize],
 
-        // Type icon
-        [_typeIconBg.trailingAnchor constraintEqualToAnchor:_serviceImageView.trailingAnchor constant:4],
-        [_typeIconBg.bottomAnchor constraintEqualToAnchor:_serviceImageView.bottomAnchor constant:4],
-        [_typeIconBg.widthAnchor constraintEqualToConstant:kTypeIconSize],
-        [_typeIconBg.heightAnchor constraintEqualToConstant:kTypeIconSize],
-        [_typeIconView.centerXAnchor constraintEqualToAnchor:_typeIconBg.centerXAnchor],
-        [_typeIconView.centerYAnchor constraintEqualToAnchor:_typeIconBg.centerYAnchor],
-        [_typeIconView.widthAnchor constraintEqualToConstant:12],
-        [_typeIconView.heightAnchor constraintEqualToConstant:12],
+        // Type Emblem
+        [_typeEmblemBg.trailingAnchor constraintEqualToAnchor:_serviceImageView.trailingAnchor constant:5.0],
+        [_typeEmblemBg.bottomAnchor constraintEqualToAnchor:_serviceImageView.bottomAnchor constant:5.0],
+        [_typeEmblemBg.widthAnchor constraintEqualToConstant:24.0],
+        [_typeEmblemBg.heightAnchor constraintEqualToConstant:24.0],
+        [_typeEmblemIcon.centerXAnchor constraintEqualToAnchor:_typeEmblemBg.centerXAnchor],
+        [_typeEmblemIcon.centerYAnchor constraintEqualToAnchor:_typeEmblemBg.centerYAnchor],
+        [_typeEmblemIcon.widthAnchor constraintEqualToConstant:13.0],
+        [_typeEmblemIcon.heightAnchor constraintEqualToConstant:13.0],
 
-        // Title
-        [_titleLabel.topAnchor constraintEqualToAnchor:_cardView.topAnchor constant:kVPad],
-        [_titleLabel.leadingAnchor constraintEqualToAnchor:_cardView.leadingAnchor constant:textLeading],
-        [_titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_priceLabel.leadingAnchor constant:-8],
+        // Title row
+        [_titleLabel.topAnchor constraintEqualToAnchor:_cardView.topAnchor constant:13.0],
+        [_titleLabel.leadingAnchor constraintEqualToAnchor:_serviceImageView.trailingAnchor constant:14.0],
+        [_titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_speciesPill.leadingAnchor constant:-6.0],
 
-        // Verif dot
-        [_verifDot.centerYAnchor constraintEqualToAnchor:_titleLabel.centerYAnchor],
-        [_verifDot.leadingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor constant:6],
-        [_verifDot.widthAnchor constraintEqualToConstant:kVerifDotSize],
-        [_verifDot.heightAnchor constraintEqualToConstant:kVerifDotSize],
+        // Species tag pill
+        [_speciesPill.centerYAnchor constraintEqualToAnchor:_titleLabel.centerYAnchor],
+        [_speciesPill.trailingAnchor constraintLessThanOrEqualToAnchor:_pricePillBg.leadingAnchor constant:-8.0],
+        [_speciesPill.heightAnchor constraintEqualToConstant:19.0],
 
-        // Subtitle
-        [_subtitleLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:3],
+        // Price Pill
+        [_pricePillBg.topAnchor constraintEqualToAnchor:_cardView.topAnchor constant:12.0],
+        [_pricePillBg.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-kHPad],
+        [_pricePillBg.heightAnchor constraintEqualToConstant:25.0],
+        [_priceLabel.topAnchor constraintEqualToAnchor:_pricePillBg.topAnchor],
+        [_priceLabel.bottomAnchor constraintEqualToAnchor:_pricePillBg.bottomAnchor],
+        [_priceLabel.leadingAnchor constraintEqualToAnchor:_pricePillBg.leadingAnchor constant:10.0],
+        [_priceLabel.trailingAnchor constraintEqualToAnchor:_pricePillBg.trailingAnchor constant:-10.0],
+
+        // Subtitle / Description
+        [_subtitleLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:4.0],
         [_subtitleLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
-        [_subtitleLabel.trailingAnchor constraintEqualToAnchor:_chevronView.leadingAnchor constant:-8],
+        [_subtitleLabel.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-14.0],
 
-        // Status badge
-        [_statusBadge.bottomAnchor constraintEqualToAnchor:_cardView.bottomAnchor constant:-kVPad],
-        [_statusBadge.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
-        [_statusBadge.heightAnchor constraintEqualToConstant:kBadgeH],
-        [_statusBadge.widthAnchor constraintGreaterThanOrEqualToConstant:64],
+        // Bottom status & controls row
+        [_statusDot.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
+        [_statusDot.centerYAnchor constraintEqualToAnchor:_statusBadge.centerYAnchor],
+        [_statusDot.widthAnchor constraintEqualToConstant:8.0],
+        [_statusDot.heightAnchor constraintEqualToConstant:8.0],
 
-        // Price
-        [_priceLabel.topAnchor constraintEqualToAnchor:_cardView.topAnchor constant:kVPad],
-        [_priceLabel.trailingAnchor constraintEqualToAnchor:_chevronView.leadingAnchor constant:-6],
-        [_priceCurrencyLabel.topAnchor constraintEqualToAnchor:_priceLabel.bottomAnchor constant:0],
-        [_priceCurrencyLabel.trailingAnchor constraintEqualToAnchor:_priceLabel.trailingAnchor],
+        [_statusBadge.leadingAnchor constraintEqualToAnchor:_statusDot.trailingAnchor constant:6.0],
+        [_statusBadge.bottomAnchor constraintEqualToAnchor:_cardView.bottomAnchor constant:-12.0],
+
+        [_durationPill.leadingAnchor constraintEqualToAnchor:_statusBadge.trailingAnchor constant:12.0],
+        [_durationPill.centerYAnchor constraintEqualToAnchor:_statusBadge.centerYAnchor],
 
         // Chevron
         [_chevronView.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-kHPad],
-        [_chevronView.centerYAnchor constraintEqualToAnchor:_cardView.centerYAnchor],
-        [_chevronView.widthAnchor constraintEqualToConstant:10],
-        [_chevronView.heightAnchor constraintEqualToConstant:14],
+        [_chevronView.centerYAnchor constraintEqualToAnchor:_statusBadge.centerYAnchor],
+        [_chevronView.widthAnchor constraintEqualToConstant:8.0],
+        [_chevronView.heightAnchor constraintEqualToConstant:12.0],
+
+        // Inline Switch
+        [_inlineSwitch.trailingAnchor constraintEqualToAnchor:_chevronView.leadingAnchor constant:-10.0],
+        [_inlineSwitch.centerYAnchor constraintEqualToAnchor:_statusBadge.centerYAnchor],
     ]];
 }
 
-#pragma mark - Configure
+#pragma mark - Actions
+
+- (void)switchToggled:(UISwitch *)sender {
+    [PPFunc pp_playTapEffect];
+    if (self.onToggleAvailability) {
+        self.onToggleAvailability(sender.isOn);
+    }
+}
+
+#pragma mark - Configuration
 
 - (void)configureWithService:(PPServiceModel *)service {
+    _currentService = service;
+
     self.titleLabel.text = service.title ?: @"—";
-    self.subtitleLabel.text = [NSString stringWithFormat:@"%@ · %@",
-                               [service localizedTypeName],
-                               service.category ?: @""];
+    self.subtitleLabel.text = (service.descriptionText.length > 0) ? service.descriptionText : [service localizedTypeName];
 
-    // Price
-    self.priceLabel.text = [NSString stringWithFormat:@"%.2f", service.price];
-    self.priceCurrencyLabel.text = kLang(@"Serv_Currency");
+    // Formatted Price in QAR
+    NSString *curr = service.currency.length > 0 ? service.currency : kLang(@"Serv_Currency");
+    self.priceLabel.text = [NSString stringWithFormat:@"%.0f %@", service.price, curr];
 
-    // Type icon
-    NSString *iconName = (service.type == PPServiceTypeGrooming) ? @"scissors" : @"figure.walk";
-    self.typeIconView.image = [UIImage systemImageNamed:iconName
-                                withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:10 weight:UIImageSymbolWeightBold]];
+    // Species Badge
+    NSString *speciesName = kLang(@"Serv_Pet_All");
+    if (service.petMainKindID == 1) {
+        speciesName = [NSString stringWithFormat:@"🐕 %@", kLang(@"Serv_Pet_Dogs")];
+    } else if (service.petMainKindID == 2) {
+        speciesName = [NSString stringWithFormat:@"🐈 %@", kLang(@"Serv_Pet_Cats")];
+    } else if (service.petMainKindID == 3) {
+        speciesName = [NSString stringWithFormat:@"🦜 %@", kLang(@"Serv_Pet_Birds")];
+    }
+    self.speciesPill.text = [NSString stringWithFormat:@"  %@  ", speciesName];
 
-    // Status badge — provider-facing availability
+    // Type emblem icon
+    NSString *iconName = @"scissors";
+    if (service.type == PPServiceTypeTraining) {
+        iconName = @"figure.walk";
+    } else if ([service.category.lowercaseString containsString:@"health"] || [service.category.lowercaseString containsString:@"clinic"]) {
+        iconName = @"heart.text.square.fill";
+    } else if ([service.category.lowercaseString containsString:@"board"] || [service.category.lowercaseString containsString:@"hotel"]) {
+        iconName = @"house.fill";
+    }
+    self.typeEmblemIcon.image = [UIImage systemImageNamed:iconName
+                                  withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:11 weight:UIImageSymbolWeightBold]];
+
+    // Status dot & badge
+    BOOL live = service.isLive;
+    self.inlineSwitch.on = live;
+
     if (service.isBlocked) {
-        [self applyBadge:kLang(@"statusBlocked") color:[UIColor ppError]];
+        self.statusDot.backgroundColor = [UIColor ppError];
+        self.statusBadge.text = kLang(@"statusBlocked");
+        self.statusBadge.textColor = [UIColor ppError];
     } else if (service.isDisabled) {
-        [self applyBadge:kLang(@"statusDisabled") color:[UIColor ppError]];
+        self.statusDot.backgroundColor = [UIColor ppError];
+        self.statusBadge.text = kLang(@"statusDisabled");
+        self.statusBadge.textColor = [UIColor ppError];
     } else if (!service.isAvailable) {
-        [self applyBadge:kLang(@"Serv_Unavailable") color:[UIColor ppWarning]];
+        self.statusDot.backgroundColor = [UIColor ppWarning];
+        self.statusBadge.text = kLang(@"Serv_Unavailable");
+        self.statusBadge.textColor = [UIColor ppWarning];
     } else {
-        [self applyBadge:kLang(@"Serv_Available") color:[UIColor ppSuccess]];
+        self.statusDot.backgroundColor = [UIColor ppSuccess];
+        self.statusBadge.text = kLang(@"Serv_Available");
+        self.statusBadge.textColor = [UIColor ppSuccess];
     }
 
-    // Verification dot
-    NSString *v = [service.verificationStatus lowercaseString] ?: @"";
-    if ([v isEqualToString:@"verified"]) {
-        self.verifDot.hidden = NO;
-        self.verifDot.backgroundColor = [UIColor ppSuccess];
-    } else if ([v isEqualToString:@"pending"] || [v isEqualToString:@"pending_review"]) {
-        self.verifDot.hidden = NO;
-        self.verifDot.backgroundColor = [UIColor ppWarning];
-    } else if ([v isEqualToString:@"rejected"] || [v isEqualToString:@"blocked"]) {
-        self.verifDot.hidden = NO;
-        self.verifDot.backgroundColor = [UIColor ppError];
-    } else {
-        self.verifDot.hidden = YES;
-    }
+    // Duration micro-badge
+    self.durationPill.text = [NSString stringWithFormat:@"⏱️ %@", [NSString stringWithFormat:kLang(@"Serv_Duration_Format"), (long)45]];
 
-    // Image
+    // Photo Loading with smooth shimmer
     if (service.imageURL.length > 0) {
         [self.serviceImageView sd_setImageWithURL:[NSURL URLWithString:service.imageURL]
-                               placeholderImage:[UIImage systemImageNamed:@"sparkles"]];
+                                placeholderImage:[UIImage systemImageNamed:@"sparkles"]];
+        self.serviceImageView.tintColor = [AppPrimaryClr colorWithAlphaComponent:0.3];
     } else {
-        self.serviceImageView.image = [UIImage systemImageNamed:@"sparkles"];
+        self.serviceImageView.image = [UIImage systemImageNamed:@"sparkles"
+                                       withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:26 weight:UIImageSymbolWeightLight]];
         self.serviceImageView.tintColor = AppPrimaryClr;
         self.serviceImageView.contentMode = UIViewContentModeCenter;
     }
 }
 
-- (void)applyBadge:(NSString *)text color:(UIColor *)color {
-    self.statusBadge.text = [NSString stringWithFormat:@"  %@  ", text];
-    self.statusBadge.backgroundColor = [color colorWithAlphaComponent:0.15];
-    self.statusBadge.textColor = color;
-    self.statusBadge.layer.cornerRadius = kBadgeRadius;
-}
-
 - (void)setHighlighted:(BOOL)highlighted animated:(BOOL)animated {
     [super setHighlighted:highlighted animated:animated];
-    [UIView animateWithDuration:0.2 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-        self.cardView.transform = highlighted ? CGAffineTransformMakeScale(0.97, 0.97) : CGAffineTransformIdentity;
+    [UIView animateWithDuration:0.18 delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        self.cardView.transform = highlighted ? CGAffineTransformMakeScale(0.982, 0.982) : CGAffineTransformIdentity;
     } completion:nil];
 }
 
 @end
+

@@ -1274,7 +1274,12 @@
             NSString *msg = newState
                 ? ([Language isRTL] ? @"الخدمة متاحة للطلب الآن" : @"Service is live for bookings")
                 : ([Language isRTL] ? @"تم إيقاف الخدمة مؤقتاً" : @"Service paused temporarily");
-            [PPToast showToast:msg inView:weakSelf.view];
+            [PPToast toast:msg
+                     style:PPToastStyleSuccess
+                    haptic:YES
+                  duration:2.0
+                  position:PPToastPositionBottom
+                    inView:weakSelf.view];
         }
     }];
 }

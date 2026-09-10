@@ -27,6 +27,8 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 @property (nonatomic, strong) UILabel *subtitleLabel;
 @property (nonatomic, strong) UILabel *totalValueLabel;
 @property (nonatomic, strong) UILabel *availableValueLabel;
+@property (nonatomic, strong) UILabel *adoptedValueLabel;
+@property (nonatomic, strong) UILabel *hiddenValueLabel;
 @property (nonatomic, strong) UISegmentedControl *filterControl;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIView *emptyStateView;
@@ -37,6 +39,7 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 @property (nonatomic, strong) UILabel *stateLabel;
 @property (nonatomic, strong) id<FIRListenerRegistration> listener;
 @property (nonatomic, copy) NSArray<PPAdoptPetModel *> *allPets;
+@property (nonatomic, copy) NSString *searchQuery;
 @property (nonatomic, assign) BOOL hasLoadedOnce;
 @property (nonatomic, assign) BOOL didPrepareEntrance;
 @property (nonatomic, assign) BOOL didPlayEntrance;
@@ -153,6 +156,10 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 }
 
 - (void)buildHero {
+    BOOL isPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
+    CGFloat horizontalMargin = isPad ? 28.0 : 16.0;
+    CGFloat metricHeight = isPad ? 68.0 : 56.0;
+
     self.heroSurfaceView = [UIView new];
     self.heroSurfaceView.translatesAutoresizingMaskIntoConstraints = NO;
     PPStyleCardSurface(self.heroSurfaceView, PPCornerHero);
@@ -177,17 +184,11 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 
     self.eyebrowLabel = [self labelWithFont:[Styling fontBold:PPFontCaption1] color:[self pp_accentColor] lines:1];
     self.eyebrowLabel.text = [kLang(@"AdoptPro_ListEyebrow") uppercaseString];
-    // Hero has no fixed height, so the eyebrow may scale. Line count is kept at
-    // 1 on purpose: the hero pushes the table down as it grows.
     PPEnableDynamicType(self.eyebrowLabel, UIFontTextStyleCaption1);
     [self.heroSurfaceView addSubview:self.eyebrowLabel];
 
-    // Base size kept at 30pt: the nearest type token (33pt) would enlarge the
-    // hero title and force the shrink-to-fit path immediately.
-    self.titleLabel = [self labelWithFont:[Styling fontBold:30.0] color:PrimaryTextClr lines:2];
+    self.titleLabel = [self labelWithFont:[Styling fontBold:isPad ? 32.0 : 26.0] color:PrimaryTextClr lines:2];
     self.titleLabel.text = kLang(@"AdoptPro_ListTitle");
-    // Shrink-to-fit is intentionally preserved so the scaled title stays inside
-    // the hero instead of pushing the list off-screen on small devices.
     self.titleLabel.adjustsFontSizeToFitWidth = YES;
     self.titleLabel.minimumScaleFactor = 0.82;
     PPEnableDynamicType(self.titleLabel, UIFontTextStyleLargeTitle);
@@ -202,16 +203,24 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     metricStack.translatesAutoresizingMaskIntoConstraints = NO;
     metricStack.axis = UILayoutConstraintAxisHorizontal;
     metricStack.distribution = UIStackViewDistributionFillEqually;
-    metricStack.spacing = 10.0;
+    metricStack.spacing = isPad ? 12.0 : 8.0;
     metricStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
     [self.heroSurfaceView addSubview:metricStack];
 
-    UIView *totalMetric = [self metricViewWithTitle:kLang(@"AdoptPro_Total") value:@"0"];
-    UIView *availableMetric = [self metricViewWithTitle:kLang(@"AdoptPro_Available") value:@"0"];
+    UIControl *totalMetric = [self metricCardWithTitle:kLang(@"AdoptPro_Total") value:@"0" filterIndex:0];
+    UIControl *availableMetric = [self metricCardWithTitle:kLang(@"AdoptPro_Filter_Available") value:@"0" filterIndex:1];
+    UIControl *adoptedMetric = [self metricCardWithTitle:kLang(@"AdoptPro_Filter_Adopted") value:@"0" filterIndex:2];
+    UIControl *hiddenMetric = [self metricCardWithTitle:kLang(@"AdoptPro_Filter_Hidden") value:@"0" filterIndex:3];
+
     self.totalValueLabel = (UILabel *)[totalMetric viewWithTag:9151];
     self.availableValueLabel = (UILabel *)[availableMetric viewWithTag:9151];
+    self.adoptedValueLabel = (UILabel *)[adoptedMetric viewWithTag:9151];
+    self.hiddenValueLabel = (UILabel *)[hiddenMetric viewWithTag:9151];
+
     [metricStack addArrangedSubview:totalMetric];
     [metricStack addArrangedSubview:availableMetric];
+    [metricStack addArrangedSubview:adoptedMetric];
+    [metricStack addArrangedSubview:hiddenMetric];
 
     self.filterControl = [[UISegmentedControl alloc] initWithItems:@[
         kLang(@"AdoptPro_Filter_All"),
@@ -223,8 +232,6 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     self.filterControl.selectedSegmentIndex = PPAdoptPetsFilterAll;
     self.filterControl.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
     self.filterControl.selectedSegmentTintColor = AppPrimaryClrWithAlpha(0.18);
-    // Segment titles stay at a fixed size: four segments inside one control row
-    // have no horizontal room to grow without truncating every label.
     [self.filterControl setTitleTextAttributes:@{
         NSFontAttributeName: [Styling fontBold:PPFontCaption1],
         NSForegroundColorAttributeName: SeconderyTextClr
@@ -238,48 +245,47 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [self.heroSurfaceView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:10.0],
-        [self.heroSurfaceView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18.0],
-        [self.heroSurfaceView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-18.0],
+        [self.heroSurfaceView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:isPad ? 14.0 : 8.0],
+        [self.heroSurfaceView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:horizontalMargin],
+        [self.heroSurfaceView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-horizontalMargin],
 
-        [accentLine.topAnchor constraintEqualToAnchor:self.heroSurfaceView.topAnchor constant:20.0],
-        [accentLine.leadingAnchor constraintEqualToAnchor:self.heroSurfaceView.leadingAnchor constant:22.0],
-        [accentLine.widthAnchor constraintEqualToConstant:52.0],
-        [accentLine.heightAnchor constraintEqualToConstant:5.0],
+        [accentLine.topAnchor constraintEqualToAnchor:self.heroSurfaceView.topAnchor constant:18.0],
+        [accentLine.leadingAnchor constraintEqualToAnchor:self.heroSurfaceView.leadingAnchor constant:20.0],
+        [accentLine.widthAnchor constraintEqualToConstant:48.0],
+        [accentLine.heightAnchor constraintEqualToConstant:4.5],
 
-        [iconSurface.topAnchor constraintEqualToAnchor:self.heroSurfaceView.topAnchor constant:18.0],
-        [iconSurface.trailingAnchor constraintEqualToAnchor:self.heroSurfaceView.trailingAnchor constant:-20.0],
-        [iconSurface.widthAnchor constraintEqualToConstant:48.0],
-        [iconSurface.heightAnchor constraintEqualToConstant:48.0],
+        [iconSurface.topAnchor constraintEqualToAnchor:self.heroSurfaceView.topAnchor constant:16.0],
+        [iconSurface.trailingAnchor constraintEqualToAnchor:self.heroSurfaceView.trailingAnchor constant:-18.0],
+        [iconSurface.widthAnchor constraintEqualToConstant:44.0],
+        [iconSurface.heightAnchor constraintEqualToConstant:44.0],
 
         [iconView.centerXAnchor constraintEqualToAnchor:iconSurface.centerXAnchor],
         [iconView.centerYAnchor constraintEqualToAnchor:iconSurface.centerYAnchor],
-        [iconView.widthAnchor constraintEqualToConstant:24.0],
-        [iconView.heightAnchor constraintEqualToConstant:24.0],
+        [iconView.widthAnchor constraintEqualToConstant:22.0],
+        [iconView.heightAnchor constraintEqualToConstant:22.0],
 
-        [self.eyebrowLabel.topAnchor constraintEqualToAnchor:accentLine.bottomAnchor constant:16.0],
-        [self.eyebrowLabel.leadingAnchor constraintEqualToAnchor:self.heroSurfaceView.leadingAnchor constant:22.0],
-        [self.eyebrowLabel.trailingAnchor constraintLessThanOrEqualToAnchor:iconSurface.leadingAnchor constant:-12.0],
+        [self.eyebrowLabel.topAnchor constraintEqualToAnchor:accentLine.bottomAnchor constant:12.0],
+        [self.eyebrowLabel.leadingAnchor constraintEqualToAnchor:self.heroSurfaceView.leadingAnchor constant:20.0],
+        [self.eyebrowLabel.trailingAnchor constraintLessThanOrEqualToAnchor:iconSurface.leadingAnchor constant:-10.0],
 
-        [self.titleLabel.topAnchor constraintEqualToAnchor:self.eyebrowLabel.bottomAnchor constant:6.0],
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.eyebrowLabel.bottomAnchor constant:4.0],
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.eyebrowLabel.leadingAnchor],
-        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.heroSurfaceView.trailingAnchor constant:-22.0],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.heroSurfaceView.trailingAnchor constant:-20.0],
 
-        [self.subtitleLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:8.0],
+        [self.subtitleLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:6.0],
         [self.subtitleLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
         [self.subtitleLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
 
-        [metricStack.topAnchor constraintEqualToAnchor:self.subtitleLabel.bottomAnchor constant:18.0],
+        [metricStack.topAnchor constraintEqualToAnchor:self.subtitleLabel.bottomAnchor constant:14.0],
         [metricStack.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
         [metricStack.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
-        // Relaxed from a fixed 58pt so the scaled metric type can grow.
-        [metricStack.heightAnchor constraintGreaterThanOrEqualToConstant:58.0],
+        [metricStack.heightAnchor constraintEqualToConstant:metricHeight],
 
-        [self.filterControl.topAnchor constraintEqualToAnchor:metricStack.bottomAnchor constant:14.0],
+        [self.filterControl.topAnchor constraintEqualToAnchor:metricStack.bottomAnchor constant:12.0],
         [self.filterControl.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
         [self.filterControl.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
         [self.filterControl.heightAnchor constraintEqualToConstant:PPTouchTargetMin],
-        [self.filterControl.bottomAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:-20.0],
+        [self.filterControl.bottomAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:-16.0],
     ]];
 }
 
@@ -294,33 +300,44 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     return label;
 }
 
-- (UIView *)metricViewWithTitle:(NSString *)title value:(NSString *)value {
-    UIView *view = [UIView new];
-    view.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.055];
-    PPApplyContinuousCorners(view, PPCornerMedium);
+- (UIControl *)metricCardWithTitle:(NSString *)title value:(NSString *)value filterIndex:(NSInteger)index {
+    UIControl *control = [UIControl new];
+    control.translatesAutoresizingMaskIntoConstraints = NO;
+    control.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.06];
+    control.tag = index;
+    PPApplyContinuousCorners(control, PPCornerMedium);
+    [control addTarget:self action:@selector(metricCardTapped:) forControlEvents:UIControlEventTouchUpInside];
 
-    UILabel *caption = [self labelWithFont:[Styling fontMedium:PPFontCaption2] color:[SeconderyTextClr colorWithAlphaComponent:0.78] lines:1];
+    UILabel *caption = [self labelWithFont:[Styling fontMedium:PPFontCaption2] color:[SeconderyTextClr colorWithAlphaComponent:0.80] lines:1];
     caption.text = title;
-    UILabel *valueLabel = [self labelWithFont:[Styling fontBold:PPFontTitle2] color:PrimaryTextClr lines:1];
+    caption.textAlignment = NSTextAlignmentCenter;
+
+    UILabel *valueLabel = [self labelWithFont:[Styling fontBold:PPFontTitle3] color:PrimaryTextClr lines:1];
     valueLabel.text = value;
     valueLabel.tag = 9151;
-    // Safe to scale: the metric stack height is now a minimum, and the bottom
-    // padding constraint below forces the plate to grow with the text.
-    PPEnableDynamicType(caption, UIFontTextStyleCaption2);
-    PPEnableDynamicType(valueLabel, UIFontTextStyleTitle2);
+    valueLabel.textAlignment = NSTextAlignmentCenter;
 
-    [view addSubview:caption];
-    [view addSubview:valueLabel];
+    PPEnableDynamicType(caption, UIFontTextStyleCaption2);
+    PPEnableDynamicType(valueLabel, UIFontTextStyleTitle3);
+
+    [control addSubview:caption];
+    [control addSubview:valueLabel];
     [NSLayoutConstraint activateConstraints:@[
-        [caption.leadingAnchor constraintEqualToAnchor:view.leadingAnchor constant:14.0],
-        [caption.trailingAnchor constraintEqualToAnchor:view.trailingAnchor constant:-14.0],
-        [caption.topAnchor constraintEqualToAnchor:view.topAnchor constant:9.0],
-        [valueLabel.leadingAnchor constraintEqualToAnchor:caption.leadingAnchor],
-        [valueLabel.trailingAnchor constraintEqualToAnchor:caption.trailingAnchor],
-        [valueLabel.topAnchor constraintEqualToAnchor:caption.bottomAnchor constant:3.0],
-        [valueLabel.bottomAnchor constraintLessThanOrEqualToAnchor:view.bottomAnchor constant:-9.0],
+        [caption.leadingAnchor constraintEqualToAnchor:control.leadingAnchor constant:4.0],
+        [caption.trailingAnchor constraintEqualToAnchor:control.trailingAnchor constant:-4.0],
+        [caption.topAnchor constraintEqualToAnchor:control.topAnchor constant:7.0],
+        [valueLabel.leadingAnchor constraintEqualToAnchor:control.leadingAnchor constant:4.0],
+        [valueLabel.trailingAnchor constraintEqualToAnchor:control.trailingAnchor constant:-4.0],
+        [valueLabel.topAnchor constraintEqualToAnchor:caption.bottomAnchor constant:2.0],
+        [valueLabel.bottomAnchor constraintLessThanOrEqualToAnchor:control.bottomAnchor constant:-6.0],
     ]];
-    return view;
+    return control;
+}
+
+- (void)metricCardTapped:(UIControl *)sender {
+    [PPFunc pp_playTapEffect];
+    self.filterControl.selectedSegmentIndex = sender.tag;
+    [self applyCurrentFilterAnimated:YES];
 }
 
 - (void)buildTableView {
@@ -518,15 +535,23 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
 - (void)updateMetrics {
     NSInteger total = self.allPets.count;
     NSInteger available = 0;
+    NSInteger adopted = 0;
+    NSInteger hidden = 0;
     for (PPAdoptPetModel *pet in self.allPets) {
-        BOOL hidden = pet.isBlocked || pet.isDeleted || pet.visibility == 1 || [pet.status isEqualToString:@"hidden"];
-        BOOL adopted = pet.isAdopted || [pet.status isEqualToString:@"adopted"];
-        if (!hidden && !adopted) {
+        BOOL isHidden = pet.isBlocked || pet.isDeleted || pet.visibility == 1 || [pet.status isEqualToString:@"hidden"];
+        BOOL isAdopted = pet.isAdopted || [pet.status isEqualToString:@"adopted"];
+        if (isAdopted) {
+            adopted++;
+        } else if (isHidden) {
+            hidden++;
+        } else {
             available++;
         }
     }
     self.totalValueLabel.text = [NSString stringWithFormat:@"%ld", (long)total];
     self.availableValueLabel.text = [NSString stringWithFormat:@"%ld", (long)available];
+    self.adoptedValueLabel.text = [NSString stringWithFormat:@"%ld", (long)adopted];
+    self.hiddenValueLabel.text = [NSString stringWithFormat:@"%ld", (long)hidden];
 }
 
 - (void)setLoading:(BOOL)loading message:(NSString *)message {
@@ -650,6 +675,32 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     }];
     edit.backgroundColor = [self pp_accentColor];
     return [UISwipeActionsConfiguration configurationWithActions:@[edit]];
+}
+
+#pragma mark - iPad Key Commands
+
+- (BOOL)canBecomeFirstResponder {
+    return YES;
+}
+
+- (NSArray<UIKeyCommand *> *)keyCommands {
+    UIKeyCommand *addCmd = [UIKeyCommand commandWithTitle:kLang(@"AdoptPro_AddListing")
+                                                    image:nil
+                                                   action:@selector(addTapped)
+                                                    input:@"n"
+                                            modifierFlags:UIKeyModifierCommand
+                                             propertyList:nil];
+    addCmd.discoverabilityTitle = kLang(@"AdoptPro_AddListing");
+
+    UIKeyCommand *refreshCmd = [UIKeyCommand commandWithTitle:kLang(@"Refresh")
+                                                        image:nil
+                                                       action:@selector(startListening)
+                                                        input:@"r"
+                                                modifierFlags:UIKeyModifierCommand
+                                                 propertyList:nil];
+    refreshCmd.discoverabilityTitle = kLang(@"Refresh");
+
+    return @[addCmd, refreshCmd];
 }
 
 @end

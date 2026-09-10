@@ -265,14 +265,13 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
     }
     
     // Keep the auxiliary action on the opposite physical side from the back button.
+    [self pp_navBarRemoveButtonForKey:kPPKeyBaseButton];
     if (otherBtn) {
         if (isRTL) {
             [self _pp_addLeftButton:otherBtn key:kPPKeyBaseButton];
         } else {
             [self _pp_addRightButton:otherBtn key:kPPKeyBaseButton];
         }
-    } else {
-        [self pp_navBarRemoveButtonForKey:kPPKeyBaseButton];
     }
     return bar;
 }
@@ -589,11 +588,23 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
 
 - (void)_pp_addRightButton:(UIButton *)btn key:(NSString *)key {
     UIStackView *right = PPRightForVC(self); if (!right) return;
+    if (key.length > 0) {
+        [self pp_navBarRemoveButtonForKey:key];
+    }
+    if (btn.superview) {
+        [btn removeFromSuperview];
+    }
     PPDictForVC(self, YES)[key] = btn;
     [right addArrangedSubview:btn];
 }
 - (void)_pp_addLeftButton:(UIButton *)btn key:(NSString *)key {
     UIStackView *left = PPLeftForVC(self); if (!left) return;
+    if (key.length > 0) {
+        [self pp_navBarRemoveButtonForKey:key];
+    }
+    if (btn.superview) {
+        [btn removeFromSuperview];
+    }
     PPDictForVC(self, YES)[key] = btn;
     [left addArrangedSubview:btn];
 }

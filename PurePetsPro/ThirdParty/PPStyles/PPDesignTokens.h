@@ -86,7 +86,9 @@ static inline UIColor * _Nonnull pp_canvasColor(void) {
 #define PPScreenMargin   20.0f
 
 #define PPCornerSmall    12.0f
+#define PPCornerInput    14.0f
 #define PPCorner16       16.0f
+#define PPCornerButton   16.0f
 #define PPCornerMedium   18.0f
 #define PPCornerCard     22.0f
 #define PPCornerHero     32.0f
@@ -230,6 +232,13 @@ static inline void PPApplyCardShadow(id target) {
     layer.shadowOffset = CGSizeMake(0, PPShadowCardOffsetY);
 }
 
+static inline void PPApplyCardBorder(id target) {
+    CALayer *layer = PPLayerForDesignTokenTarget(target);
+    if (!layer) { return; }
+    layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+}
+
 static inline void PPApplyElevatedShadow(id target) {
     CALayer *layer = PPLayerForDesignTokenTarget(target);
     if (!layer) { return; }
@@ -246,6 +255,10 @@ static inline void PPApplyButtonShadow(id target) {
     layer.shadowOpacity = PPShadowButtonOpacity;
     layer.shadowRadius = PPShadowButtonRadius;
     layer.shadowOffset = CGSizeMake(0, PPShadowButtonOffsetY);
+}
+
+static inline void PPApplyFloatingBarShadow(id target) {
+    PPApplyElevatedShadow(target);
 }
 
 static inline void PPApplyContinuousCorners(id target, CGFloat radius) {

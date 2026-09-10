@@ -914,12 +914,19 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
 @property (nonatomic, strong) UILabel *priceLabel;
 @property (nonatomic, strong) UILabel *animalsSnippetLabel;
 
+// Inline Quick Stock Stepper
+@property (nonatomic, strong) UIView *stockStepperContainer;
+@property (nonatomic, strong) UIButton *stockDecrementButton;
 @property (nonatomic, strong) UIButton *stockPillButton;
+@property (nonatomic, strong) UIButton *stockIncrementButton;
+
 @property (nonatomic, strong) UIButton *visibilityPillButton;
 @property (nonatomic, strong) UIButton *detailsPillButton;
 
 @property (nonatomic, strong) PPVetMedicineModel *medicine;
 @property (nonatomic, copy, nullable) void (^onQuickStockTapped)(void);
+@property (nonatomic, copy, nullable) void (^onQuickIncrementStock)(void);
+@property (nonatomic, copy, nullable) void (^onQuickDecrementStock)(void);
 @property (nonatomic, copy, nullable) void (^onVisibilityToggled)(void);
 @property (nonatomic, copy, nullable) void (^onDetailsTapped)(void);
 @end
@@ -938,6 +945,9 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
 }
 
 - (void)setupCard {
+    BOOL isPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
+    CGFloat hMargin = isPad ? 24.0 : 16.0;
+
     _cardSurface = [[UIView alloc] init];
     _cardSurface.translatesAutoresizingMaskIntoConstraints = NO;
     _cardSurface.backgroundColor = [UIColor ppSurfaceElevated];
@@ -1018,18 +1028,56 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     divider.backgroundColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.5];
     [_cardSurface addSubview:divider];
     
-    // Interactive Quick Actions Row
+    // ── Inline Quick Stock Stepper Container ──
+    _stockStepperContainer = [[UIView alloc] init];
+    _stockStepperContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    _stockStepperContainer.backgroundColor = [UIColor ppSurface];
+    _stockStepperContainer.layer.borderWidth = 0.8;
+    _stockStepperContainer.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+    PPApplyContinuousCorners(_stockStepperContainer, PPCornerSmall);
+    [_cardSurface addSubview:_stockStepperContainer];
+
+    UIImageSymbolConfiguration *symCfg = [UIImageSymbolConfiguration configurationWithPointSize:11 weight:UIImageSymbolWeightBold];
+
+    _stockDecrementButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _stockDecrementButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [_stockDecrementButton setImage:[UIImage systemImageNamed:@"minus" withConfiguration:symCfg] forState:UIControlStateNormal];
+    _stockDecrementButton.tintColor = [UIColor ppPrimary];
+    [_stockDecrementButton addTarget:self action:@selector(decrementTapped) forControlEvents:UIControlEventTouchUpInside];
+    [_stockStepperContainer addSubview:_stockDecrementButton];
+
     _stockPillButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _stockPillButton.translatesAutoresizingMaskIntoConstraints = NO;
-    _stockPillButton.backgroundColor = [UIColor ppSurface];
-    _stockPillButton.layer.borderWidth = 0.8;
-    _stockPillButton.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-    _stockPillButton.titleLabel.font = [Styling fontBold:12.0];
+    _stockPillButton.titleLabel.font = [Styling fontBold:11.5];
     [_stockPillButton setTitleColor:[UIColor ppTextPrimary] forState:UIControlStateNormal];
-    PPApplyContinuousCorners(_stockPillButton, PPCornerSmall);
     [_stockPillButton addTarget:self action:@selector(stockTapped) forControlEvents:UIControlEventTouchUpInside];
-    [_cardSurface addSubview:_stockPillButton];
+    [_stockStepperContainer addSubview:_stockPillButton];
+
+    _stockIncrementButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _stockIncrementButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [_stockIncrementButton setImage:[UIImage systemImageNamed:@"plus" withConfiguration:symCfg] forState:UIControlStateNormal];
+    _stockIncrementButton.tintColor = [UIColor ppPrimary];
+    [_stockIncrementButton addTarget:self action:@selector(incrementTapped) forControlEvents:UIControlEventTouchUpInside];
+    [_stockStepperContainer addSubview:_stockIncrementButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [_stockDecrementButton.leadingAnchor constraintEqualToAnchor:_stockStepperContainer.leadingAnchor],
+        [_stockDecrementButton.topAnchor constraintEqualToAnchor:_stockStepperContainer.topAnchor],
+        [_stockDecrementButton.bottomAnchor constraintEqualToAnchor:_stockStepperContainer.bottomAnchor],
+        [_stockDecrementButton.widthAnchor constraintEqualToConstant:28],
+
+        [_stockPillButton.leadingAnchor constraintEqualToAnchor:_stockDecrementButton.trailingAnchor],
+        [_stockPillButton.topAnchor constraintEqualToAnchor:_stockStepperContainer.topAnchor],
+        [_stockPillButton.bottomAnchor constraintEqualToAnchor:_stockStepperContainer.bottomAnchor],
+        [_stockPillButton.trailingAnchor constraintEqualToAnchor:_stockIncrementButton.leadingAnchor],
+
+        [_stockIncrementButton.trailingAnchor constraintEqualToAnchor:_stockStepperContainer.trailingAnchor],
+        [_stockIncrementButton.topAnchor constraintEqualToAnchor:_stockStepperContainer.topAnchor],
+        [_stockIncrementButton.bottomAnchor constraintEqualToAnchor:_stockStepperContainer.bottomAnchor],
+        [_stockIncrementButton.widthAnchor constraintEqualToConstant:28],
+    ]];
     
+    // Visibility Pill Button
     _visibilityPillButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _visibilityPillButton.translatesAutoresizingMaskIntoConstraints = NO;
     _visibilityPillButton.backgroundColor = [UIColor ppSurface];
@@ -1040,6 +1088,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     [_visibilityPillButton addTarget:self action:@selector(visibilityTapped) forControlEvents:UIControlEventTouchUpInside];
     [_cardSurface addSubview:_visibilityPillButton];
     
+    // Details Button
     _detailsPillButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _detailsPillButton.translatesAutoresizingMaskIntoConstraints = NO;
     _detailsPillButton.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.08];
@@ -1052,8 +1101,8 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     
     [NSLayoutConstraint activateConstraints:@[
         [_cardSurface.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
-        [_cardSurface.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-        [_cardSurface.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+        [_cardSurface.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:hMargin],
+        [_cardSurface.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-hMargin],
         [_cardSurface.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6],
         
         [_medicineImageView.topAnchor constraintEqualToAnchor:_cardSurface.topAnchor constant:14],
@@ -1101,21 +1150,21 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
         [divider.trailingAnchor constraintEqualToAnchor:_cardSurface.trailingAnchor constant:-14],
         [divider.heightAnchor constraintEqualToConstant:0.8],
         
-        [_stockPillButton.topAnchor constraintEqualToAnchor:divider.bottomAnchor constant:10],
-        [_stockPillButton.leadingAnchor constraintEqualToAnchor:_cardSurface.leadingAnchor constant:14],
-        [_stockPillButton.heightAnchor constraintEqualToConstant:36],
-        [_stockPillButton.bottomAnchor constraintEqualToAnchor:_cardSurface.bottomAnchor constant:-12],
+        [_stockStepperContainer.topAnchor constraintEqualToAnchor:divider.bottomAnchor constant:10],
+        [_stockStepperContainer.leadingAnchor constraintEqualToAnchor:_cardSurface.leadingAnchor constant:14],
+        [_stockStepperContainer.heightAnchor constraintEqualToConstant:36],
+        [_stockStepperContainer.bottomAnchor constraintEqualToAnchor:_cardSurface.bottomAnchor constant:-12],
         
-        [_visibilityPillButton.centerYAnchor constraintEqualToAnchor:_stockPillButton.centerYAnchor],
-        [_visibilityPillButton.leadingAnchor constraintEqualToAnchor:_stockPillButton.trailingAnchor constant:8],
+        [_visibilityPillButton.centerYAnchor constraintEqualToAnchor:_stockStepperContainer.centerYAnchor],
+        [_visibilityPillButton.leadingAnchor constraintEqualToAnchor:_stockStepperContainer.trailingAnchor constant:8],
         [_visibilityPillButton.heightAnchor constraintEqualToConstant:36],
-        [_visibilityPillButton.widthAnchor constraintEqualToAnchor:_stockPillButton.widthAnchor],
+        [_visibilityPillButton.widthAnchor constraintEqualToAnchor:_stockStepperContainer.widthAnchor],
         
-        [_detailsPillButton.centerYAnchor constraintEqualToAnchor:_stockPillButton.centerYAnchor],
+        [_detailsPillButton.centerYAnchor constraintEqualToAnchor:_stockStepperContainer.centerYAnchor],
         [_detailsPillButton.leadingAnchor constraintEqualToAnchor:_visibilityPillButton.trailingAnchor constant:8],
         [_detailsPillButton.trailingAnchor constraintEqualToAnchor:_cardSurface.trailingAnchor constant:-14],
         [_detailsPillButton.heightAnchor constraintEqualToConstant:36],
-        [_detailsPillButton.widthAnchor constraintEqualToAnchor:_stockPillButton.widthAnchor]
+        [_detailsPillButton.widthAnchor constraintEqualToAnchor:_stockStepperContainer.widthAnchor]
     ]];
 }
 
@@ -1162,7 +1211,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     }
     
     // Action Buttons
-    NSString *stockTitle = [NSString stringWithFormat:@"📦 %ld %@", (long)MAX(0, medicine.stockQuantity), [Language isRTL] ? @"وحدة" : @"pcs"];
+    NSString *stockTitle = [NSString stringWithFormat:@"%ld %@", (long)MAX(0, medicine.stockQuantity), [Language isRTL] ? @"وحدة" : @"pcs"];
     [_stockPillButton setTitle:stockTitle forState:UIControlStateNormal];
     
     if (isLive) {
@@ -1178,6 +1227,14 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     }
     
     _cardSurface.alpha = medicine.isDisabled ? 0.6 : 1.0;
+}
+
+- (void)decrementTapped {
+    if (self.onQuickDecrementStock) self.onQuickDecrementStock();
+}
+
+- (void)incrementTapped {
+    if (self.onQuickIncrementStock) self.onQuickIncrementStock();
 }
 
 - (void)stockTapped {
@@ -1236,7 +1293,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     self.currentLens = PPPharmacyFilterLensAll;
     self.filterButtons = [NSMutableArray array];
     
-    [self setupNavigation];
+    // Note: setupNavigation is called exclusively in viewWillAppear: to prevent duplicated buttons
     [self setupTableView];
     [self setupTableHeader];
     [self setupEmptyState];
@@ -1247,6 +1304,45 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self setupNavigation];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    if (self.tableHeaderView) {
+        CGRect f = self.tableHeaderView.frame;
+        if (f.size.width != self.tableView.bounds.size.width) {
+            f.size.width = self.tableView.bounds.size.width;
+            self.tableHeaderView.frame = f;
+            self.tableView.tableHeaderView = self.tableHeaderView;
+        }
+    }
+}
+
+#pragma mark - iPad Hardware Keyboard Commands
+
+- (BOOL)canBecomeFirstResponder {
+    return YES;
+}
+
+- (NSArray<UIKeyCommand *> *)keyCommands {
+    return @[
+        [UIKeyCommand keyCommandWithInput:@"n" modifierFlags:UIKeyModifierCommand action:@selector(addMedicineTapped) discoverabilityTitle:[Language isRTL] ? @"إضافة دواء جديد" : @"Add New Medicine"],
+        [UIKeyCommand keyCommandWithInput:@"r" modifierFlags:UIKeyModifierCommand action:@selector(pp_reloadMedicines) discoverabilityTitle:[Language isRTL] ? @"تحديث المخزون" : @"Reload Inventory"],
+        [UIKeyCommand keyCommandWithInput:@"f" modifierFlags:UIKeyModifierCommand action:@selector(focusSearchField) discoverabilityTitle:[Language isRTL] ? @"البحث في الأدوية" : @"Search Medicines"],
+        [UIKeyCommand keyCommandWithInput:UIKeyInputEscape modifierFlags:0 action:@selector(handleEscapeKey) discoverabilityTitle:[Language isRTL] ? @"إلغاء / رجوع" : @"Dismiss / Back"]
+    ];
+}
+
+- (void)focusSearchField {
+    [self.searchField becomeFirstResponder];
+}
+
+- (void)handleEscapeKey {
+    if ([self.searchField isFirstResponder]) {
+        [self.searchField resignFirstResponder];
+    } else {
+        [self.navigationController popViewControllerAnimated:YES];
+    }
 }
 
 - (void)setupNavigation {
@@ -1316,7 +1412,12 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
 }
 
 - (void)setupTableHeader {
-    _tableHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 360)];
+    BOOL isPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
+    CGFloat hMargin = isPad ? 24.0 : 16.0;
+    CGFloat cockpitHeight = isPad ? 140.0 : 200.0;
+    CGFloat headerHeight = isPad ? 260.0 : 340.0;
+    
+    _tableHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, headerHeight)];
     _tableHeaderView.backgroundColor = UIColor.clearColor;
     
     // 1. Cockpit Card
@@ -1345,53 +1446,61 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     cockpitSubtitle.textAlignment = Language.alignmentForCurrentLanguage;
     [cockpitCard addSubview:cockpitSubtitle];
     
-    // 4 KPI Tiles Grid (2 Rows x 2 Cols)
+    // 4 KPI Tiles Grid (iPad: 1 Row x 4 Cols, iPhone: 2 Rows x 2 Cols)
     UIStackView *gridStack = [[UIStackView alloc] init];
     gridStack.translatesAutoresizingMaskIntoConstraints = NO;
-    gridStack.axis = UILayoutConstraintAxisVertical;
     gridStack.spacing = 8;
     gridStack.distribution = UIStackViewDistributionFillEqually;
     [cockpitCard addSubview:gridStack];
-    
-    UIStackView *row1 = [[UIStackView alloc] init];
-    row1.axis = UILayoutConstraintAxisHorizontal;
-    row1.spacing = 8;
-    row1.distribution = UIStackViewDistributionFillEqually;
     
     self.totalCountLabel = [[UILabel alloc] init];
     UIView *tile1 = [self makeKpiTileWithTitle:[Language isRTL] ? @"إجمالي الأدوية" : @"Total Medicines"
                                      valueLabel:self.totalCountLabel
                                        iconName:@"pills.fill"
                                      tintColor:[UIColor ppPrimary]];
-    [row1 addArrangedSubview:tile1];
     
     self.valuationLabel = [[UILabel alloc] init];
     UIView *tile2 = [self makeKpiTileWithTitle:[Language isRTL] ? @"قيمة الصيدلية" : @"Total Value"
                                      valueLabel:self.valuationLabel
                                        iconName:@"chart.line.uptrend.xyaxis"
                                      tintColor:[UIColor ppSuccess]];
-    [row1 addArrangedSubview:tile2];
-    [gridStack addArrangedSubview:row1];
-    
-    UIStackView *row2 = [[UIStackView alloc] init];
-    row2.axis = UILayoutConstraintAxisHorizontal;
-    row2.spacing = 8;
-    row2.distribution = UIStackViewDistributionFillEqually;
     
     self.availableCountLabel = [[UILabel alloc] init];
     UIView *tile3 = [self makeKpiTileWithTitle:[Language isRTL] ? @"متاح للطلب" : @"In Stock"
                                      valueLabel:self.availableCountLabel
                                        iconName:@"checkmark.seal.fill"
                                      tintColor:[UIColor ppAccent]];
-    [row2 addArrangedSubview:tile3];
     
     self.lowStockCountLabel = [[UILabel alloc] init];
     UIView *tile4 = [self makeKpiTileWithTitle:[Language isRTL] ? @"تنبيه النواقص" : @"Low Stock"
                                      valueLabel:self.lowStockCountLabel
                                        iconName:@"exclamationmark.triangle.fill"
                                      tintColor:[UIColor ppWarning]];
-    [row2 addArrangedSubview:tile4];
-    [gridStack addArrangedSubview:row2];
+    
+    if (isPad) {
+        gridStack.axis = UILayoutConstraintAxisHorizontal;
+        [gridStack addArrangedSubview:tile1];
+        [gridStack addArrangedSubview:tile2];
+        [gridStack addArrangedSubview:tile3];
+        [gridStack addArrangedSubview:tile4];
+    } else {
+        gridStack.axis = UILayoutConstraintAxisVertical;
+        UIStackView *row1 = [[UIStackView alloc] init];
+        row1.axis = UILayoutConstraintAxisHorizontal;
+        row1.spacing = 8;
+        row1.distribution = UIStackViewDistributionFillEqually;
+        [row1 addArrangedSubview:tile1];
+        [row1 addArrangedSubview:tile2];
+        [gridStack addArrangedSubview:row1];
+        
+        UIStackView *row2 = [[UIStackView alloc] init];
+        row2.axis = UILayoutConstraintAxisHorizontal;
+        row2.spacing = 8;
+        row2.distribution = UIStackViewDistributionFillEqually;
+        [row2 addArrangedSubview:tile3];
+        [row2 addArrangedSubview:tile4];
+        [gridStack addArrangedSubview:row2];
+    }
     
     // 2. Omni-Search Bar
     UIView *searchBarBox = [[UIView alloc] init];
@@ -1418,13 +1527,20 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     [_searchField addTarget:self action:@selector(searchChanged) forControlEvents:UIControlEventEditingChanged];
     [searchBarBox addSubview:_searchField];
     
+    UIStackView *searchTrailingStack = [[UIStackView alloc] init];
+    searchTrailingStack.translatesAutoresizingMaskIntoConstraints = NO;
+    searchTrailingStack.axis = UILayoutConstraintAxisHorizontal;
+    searchTrailingStack.spacing = 6;
+    searchTrailingStack.alignment = UIStackViewAlignmentCenter;
+    [searchBarBox addSubview:searchTrailingStack];
+
     _clearSearchButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _clearSearchButton.translatesAutoresizingMaskIntoConstraints = NO;
     [_clearSearchButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal];
     _clearSearchButton.tintColor = [UIColor ppTextTertiary];
     _clearSearchButton.hidden = YES;
     [_clearSearchButton addTarget:self action:@selector(clearSearch) forControlEvents:UIControlEventTouchUpInside];
-    [searchBarBox addSubview:_clearSearchButton];
+    [searchTrailingStack addArrangedSubview:_clearSearchButton];
     
     _searchResultBadge = [[UILabel alloc] init];
     _searchResultBadge.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1432,8 +1548,9 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     _searchResultBadge.textColor = [UIColor ppPrimary];
     _searchResultBadge.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.1];
     _searchResultBadge.textAlignment = NSTextAlignmentCenter;
+    _searchResultBadge.hidden = YES;
     PPApplyContinuousCorners(_searchResultBadge, PPCornerPill);
-    [searchBarBox addSubview:_searchResultBadge];
+    [searchTrailingStack addArrangedSubview:_searchResultBadge];
     
     // 3. Filter Rail
     _filterScrollView = [[UIScrollView alloc] init];
@@ -1451,9 +1568,9 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     
     [NSLayoutConstraint activateConstraints:@[
         [cockpitCard.topAnchor constraintEqualToAnchor:_tableHeaderView.topAnchor constant:12],
-        [cockpitCard.leadingAnchor constraintEqualToAnchor:_tableHeaderView.leadingAnchor constant:16],
-        [cockpitCard.trailingAnchor constraintEqualToAnchor:_tableHeaderView.trailingAnchor constant:-16],
-        [cockpitCard.heightAnchor constraintEqualToConstant:200],
+        [cockpitCard.leadingAnchor constraintEqualToAnchor:_tableHeaderView.leadingAnchor constant:hMargin],
+        [cockpitCard.trailingAnchor constraintEqualToAnchor:_tableHeaderView.trailingAnchor constant:-hMargin],
+        [cockpitCard.heightAnchor constraintEqualToConstant:cockpitHeight],
         
         [cockpitTitle.topAnchor constraintEqualToAnchor:cockpitCard.topAnchor constant:14],
         [cockpitTitle.leadingAnchor constraintEqualToAnchor:cockpitCard.leadingAnchor constant:16],
@@ -1469,8 +1586,8 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
         [gridStack.bottomAnchor constraintEqualToAnchor:cockpitCard.bottomAnchor constant:-12],
         
         [searchBarBox.topAnchor constraintEqualToAnchor:cockpitCard.bottomAnchor constant:12],
-        [searchBarBox.leadingAnchor constraintEqualToAnchor:_tableHeaderView.leadingAnchor constant:16],
-        [searchBarBox.trailingAnchor constraintEqualToAnchor:_tableHeaderView.trailingAnchor constant:-16],
+        [searchBarBox.leadingAnchor constraintEqualToAnchor:_tableHeaderView.leadingAnchor constant:hMargin],
+        [searchBarBox.trailingAnchor constraintEqualToAnchor:_tableHeaderView.trailingAnchor constant:-hMargin],
         [searchBarBox.heightAnchor constraintEqualToConstant:48],
         
         [searchIcon.leadingAnchor constraintEqualToAnchor:searchBarBox.leadingAnchor constant:14],
@@ -1479,19 +1596,18 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
         [searchIcon.heightAnchor constraintEqualToConstant:20],
         
         [_searchField.leadingAnchor constraintEqualToAnchor:searchIcon.trailingAnchor constant:10],
-        [_searchField.trailingAnchor constraintEqualToAnchor:_clearSearchButton.leadingAnchor constant:-8],
+        [_searchField.trailingAnchor constraintEqualToAnchor:searchTrailingStack.leadingAnchor constant:-8],
         [_searchField.topAnchor constraintEqualToAnchor:searchBarBox.topAnchor],
         [_searchField.bottomAnchor constraintEqualToAnchor:searchBarBox.bottomAnchor],
         
-        [_clearSearchButton.trailingAnchor constraintEqualToAnchor:_searchResultBadge.leadingAnchor constant:-6],
-        [_clearSearchButton.centerYAnchor constraintEqualToAnchor:searchBarBox.centerYAnchor],
+        [searchTrailingStack.trailingAnchor constraintEqualToAnchor:searchBarBox.trailingAnchor constant:-12],
+        [searchTrailingStack.centerYAnchor constraintEqualToAnchor:searchBarBox.centerYAnchor],
+        
         [_clearSearchButton.widthAnchor constraintEqualToConstant:24],
         [_clearSearchButton.heightAnchor constraintEqualToConstant:24],
         
-        [_searchResultBadge.trailingAnchor constraintEqualToAnchor:searchBarBox.trailingAnchor constant:-12],
-        [_searchResultBadge.centerYAnchor constraintEqualToAnchor:searchBarBox.centerYAnchor],
         [_searchResultBadge.heightAnchor constraintEqualToConstant:24],
-        [_searchResultBadge.widthAnchor constraintGreaterThanOrEqualToConstant:40],
+        [_searchResultBadge.widthAnchor constraintGreaterThanOrEqualToConstant:36],
         
         [_filterScrollView.topAnchor constraintEqualToAnchor:searchBarBox.bottomAnchor constant:10],
         [_filterScrollView.leadingAnchor constraintEqualToAnchor:_tableHeaderView.leadingAnchor],
@@ -1499,8 +1615,8 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
         [_filterScrollView.heightAnchor constraintEqualToConstant:44],
         
         [_filterStackView.topAnchor constraintEqualToAnchor:_filterScrollView.topAnchor],
-        [_filterStackView.leadingAnchor constraintEqualToAnchor:_filterScrollView.leadingAnchor constant:16],
-        [_filterStackView.trailingAnchor constraintEqualToAnchor:_filterScrollView.trailingAnchor constant:-16],
+        [_filterStackView.leadingAnchor constraintEqualToAnchor:_filterScrollView.leadingAnchor constant:hMargin],
+        [_filterStackView.trailingAnchor constraintEqualToAnchor:_filterScrollView.trailingAnchor constant:-hMargin],
         [_filterStackView.bottomAnchor constraintEqualToAnchor:_filterScrollView.bottomAnchor],
         [_filterStackView.heightAnchor constraintEqualToAnchor:_filterScrollView.heightAnchor]
     ]];
@@ -1793,7 +1909,13 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     }];
     
     self.filteredMedicines = [self.allMedicines filteredArrayUsingPredicate:pred];
-    self.searchResultBadge.text = [NSString stringWithFormat:@"%ld", (long)self.filteredMedicines.count];
+    if (query.length > 0) {
+        self.searchResultBadge.text = [NSString stringWithFormat:@"%ld", (long)self.filteredMedicines.count];
+        self.searchResultBadge.hidden = NO;
+    } else {
+        self.searchResultBadge.text = @"";
+        self.searchResultBadge.hidden = YES;
+    }
     self.emptyStateView.hidden = (self.filteredMedicines.count > 0);
     
     [self.tableView reloadData];
@@ -1801,14 +1923,21 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
 
 - (void)searchChanged {
     self.searchQuery = self.searchField.text;
-    self.clearSearchButton.hidden = (self.searchField.text.length == 0);
+    BOOL hasQuery = (self.searchField.text.length > 0);
+    self.clearSearchButton.hidden = !hasQuery;
+    if (!hasQuery) {
+        self.searchResultBadge.hidden = YES;
+    }
     [self applyFilter];
 }
 
 - (void)clearSearch {
     [PPFunc pp_playTapEffect];
     self.searchField.text = @"";
-    [self searchChanged];
+    self.searchQuery = @"";
+    self.clearSearchButton.hidden = YES;
+    self.searchResultBadge.hidden = YES;
+    [self applyFilter];
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField *)textField {
@@ -1828,6 +1957,18 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     [cell configureWithMedicine:medicine];
     
     __weak typeof(self) weakSelf = self;
+    cell.onQuickIncrementStock = ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [self quickAdjustStockForMedicine:medicine delta:1];
+    };
+    
+    cell.onQuickDecrementStock = ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [self quickAdjustStockForMedicine:medicine delta:-1];
+    };
+    
     cell.onQuickStockTapped = ^{
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
@@ -1847,6 +1988,37 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     };
     
     return cell;
+}
+
+- (void)quickAdjustStockForMedicine:(PPVetMedicineModel *)medicine delta:(NSInteger)delta {
+    [PPFunc pp_playTapEffect];
+    NSInteger oldStock = medicine.stockQuantity;
+    BOOL oldAvailable = medicine.isAvailable;
+    
+    NSInteger newStock = MAX(0, oldStock + delta);
+    if (newStock == oldStock) return;
+    
+    medicine.stockQuantity = newStock;
+    medicine.isAvailable = (newStock > 0 && medicine.isPublished && !medicine.isDisabled);
+    
+    [self updateCockpitMetrics];
+    [self.tableView reloadData];
+    
+    __weak typeof(self) weakSelf = self;
+    [[PPVetManager sharedManager] updateMedicine:medicine image:nil completion:^(NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            if (error) {
+                // Rollback on error
+                medicine.stockQuantity = oldStock;
+                medicine.isAvailable = oldAvailable;
+                [self updateCockpitMetrics];
+                [self.tableView reloadData];
+                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+            }
+        });
+    }];
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {

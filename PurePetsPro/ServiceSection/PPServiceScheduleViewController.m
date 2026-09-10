@@ -187,10 +187,20 @@
     [PPFunc pp_playTapEffect];
     if (sender.isOn) {
         _vacationCard.layer.borderColor = [UIColor ppWarning].CGColor;
-        [PPToast showToast:Language.isRTL ? @"تم تفعيل وضع الإجازة: الحجوزات معلقة مؤقتاً" : @"Vacation Mode activated" inView:self.view];
+        [PPToast toast:Language.isRTL ? @"تم تفعيل وضع الإجازة: الحجوزات معلقة مؤقتاً" : @"Vacation Mode activated"
+                 style:PPToastStyleWarning
+                haptic:YES
+              duration:2.0
+              position:PPToastPositionBottom
+                inView:self.view];
     } else {
         _vacationCard.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-        [PPToast showToast:Language.isRTL ? @"تم استئناف استقبال الحجوزات وفق الجدول" : @"Schedule resumed" inView:self.view];
+        [PPToast toast:Language.isRTL ? @"تم استئناف استقبال الحجوزات وفق الجدول" : @"Schedule resumed"
+                 style:PPToastStyleSuccess
+                haptic:YES
+              duration:2.0
+              position:PPToastPositionBottom
+                inView:self.view];
     }
 }
 

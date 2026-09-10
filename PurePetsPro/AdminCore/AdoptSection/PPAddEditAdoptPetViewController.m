@@ -21,6 +21,12 @@
 @property (nonatomic, strong) UITextField *adopterNameField;
 @property (nonatomic, strong) UITextField *adopterContactField;
 @property (nonatomic, strong) UISegmentedControl *statusControl;
+@property (nonatomic, strong) UIView *adopterSectionView;
+@property (nonatomic, strong) UIView *livePreviewContainer;
+@property (nonatomic, strong) UILabel *previewTitleLabel;
+@property (nonatomic, strong) UILabel *previewDescLabel;
+@property (nonatomic, strong) UILabel *previewStatusLabel;
+@property (nonatomic, strong) UIView *previewStatusBadge;
 @property (nonatomic, strong) UIView *saveBar;
 @property (nonatomic, strong) UIButton *saveButton;
 @property (nonatomic, strong) NSLayoutConstraint *saveBarBottomConstraint;
@@ -125,13 +131,145 @@
 }
 
 - (void)buildScrollView {
+    BOOL isPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
+
+    if (isPad) {
+        // iPad 2-Column Split Studio
+        [self buildPadSplitStudio];
+    } else {
+        // iPhone Ergonomic Flow
+        self.scrollView = [UIScrollView new];
+        self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+        self.scrollView.alwaysBounceVertical = YES;
+        self.scrollView.showsVerticalScrollIndicator = NO;
+        self.scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+        self.scrollView.contentInset = UIEdgeInsetsMake(0, 0, 116.0, 0);
+        [self.view addSubview:self.scrollView];
+
+        self.contentStack = [UIStackView new];
+        self.contentStack.translatesAutoresizingMaskIntoConstraints = NO;
+        self.contentStack.axis = UILayoutConstraintAxisVertical;
+        self.contentStack.spacing = 16.0;
+        self.contentStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+        [self.scrollView addSubview:self.contentStack];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [self.scrollView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+            [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+            [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+            [self.scrollView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+
+            [self.contentStack.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor constant:14.0],
+            [self.contentStack.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor constant:20.0],
+            [self.contentStack.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor constant:-20.0],
+            [self.contentStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-34.0],
+            [self.contentStack.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor constant:-40.0],
+        ]];
+    }
+}
+
+- (void)buildPadSplitStudio {
+    UIView *splitRoot = [UIView new];
+    splitRoot.translatesAutoresizingMaskIntoConstraints = NO;
+    splitRoot.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.view addSubview:splitRoot];
+
+    // Left Column: Live Consumer Feed Preview Card
+    self.livePreviewContainer = [UIView new];
+    self.livePreviewContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.livePreviewContainer.backgroundColor = [self pp_surfaceColor];
+    PPApplyContinuousCorners(self.livePreviewContainer, PPCornerHero);
+    PPApplyCardShadow(self.livePreviewContainer);
+    [splitRoot addSubview:self.livePreviewContainer];
+
+    UILabel *previewEyebrow = [self labelWithFont:[Styling fontBold:PPFontCaption1] color:[self pp_accentColor] lines:1];
+    previewEyebrow.text = [kLang(@"AdoptPro_FormEyebrow") uppercaseString];
+
+    UILabel *previewHeader = [self labelWithFont:[Styling fontBold:PPFontTitle2] color:PrimaryTextClr lines:1];
+    previewHeader.text = [Language isRTL] ? @"معاينة المنشور المباشرة" : @"Live Feed Preview";
+
+    UIView *cardBox = [UIView new];
+    cardBox.translatesAutoresizingMaskIntoConstraints = NO;
+    cardBox.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.04];
+    PPApplyContinuousCorners(cardBox, PPCornerCard);
+    cardBox.layer.borderWidth = 1.0;
+    cardBox.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.08].CGColor;
+
+    UIImageView *petIcon = [UIImageView new];
+    petIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    petIcon.image = [UIImage systemImageNamed:@"pawprint.circle.fill"];
+    petIcon.tintColor = [self pp_accentColor];
+    petIcon.contentMode = UIViewContentModeScaleAspectFit;
+
+    self.previewTitleLabel = [self labelWithFont:[Styling fontBold:PPFontTitle3] color:PrimaryTextClr lines:2];
+    self.previewTitleLabel.text = self.pet.title.length ? self.pet.title : kLang(@"AdoptPro_Untitled");
+
+    self.previewDescLabel = [self labelWithFont:[Styling fontRegular:PPFontSubheadline] color:SeconderyTextClr lines:4];
+    self.previewDescLabel.text = self.pet.descriptionText.length ? self.pet.descriptionText : kLang(@"AdoptPro_NoDescription");
+
+    self.previewStatusBadge = [UIView new];
+    self.previewStatusBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    PPApplyContinuousCorners(self.previewStatusBadge, PPCornerPill);
+    self.previewStatusBadge.backgroundColor = [[self pp_accentColor] colorWithAlphaComponent:0.12];
+
+    self.previewStatusLabel = [self labelWithFont:[Styling fontBold:PPFontCaption1] color:[self pp_accentColor] lines:1];
+    self.previewStatusLabel.text = kLang(@"AdoptPro_Status_Available");
+    self.previewStatusLabel.textAlignment = NSTextAlignmentCenter;
+    [self.previewStatusBadge addSubview:self.previewStatusLabel];
+
+    [self.livePreviewContainer addSubview:previewEyebrow];
+    [self.livePreviewContainer addSubview:previewHeader];
+    [self.livePreviewContainer addSubview:cardBox];
+    [cardBox addSubview:petIcon];
+    [cardBox addSubview:self.previewTitleLabel];
+    [cardBox addSubview:self.previewDescLabel];
+    [cardBox addSubview:self.previewStatusBadge];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [previewEyebrow.topAnchor constraintEqualToAnchor:self.livePreviewContainer.topAnchor constant:24.0],
+        [previewEyebrow.leadingAnchor constraintEqualToAnchor:self.livePreviewContainer.leadingAnchor constant:24.0],
+        [previewEyebrow.trailingAnchor constraintEqualToAnchor:self.livePreviewContainer.trailingAnchor constant:-24.0],
+
+        [previewHeader.topAnchor constraintEqualToAnchor:previewEyebrow.bottomAnchor constant:4.0],
+        [previewHeader.leadingAnchor constraintEqualToAnchor:previewEyebrow.leadingAnchor],
+        [previewHeader.trailingAnchor constraintEqualToAnchor:previewEyebrow.trailingAnchor],
+
+        [cardBox.topAnchor constraintEqualToAnchor:previewHeader.bottomAnchor constant:20.0],
+        [cardBox.leadingAnchor constraintEqualToAnchor:previewEyebrow.leadingAnchor],
+        [cardBox.trailingAnchor constraintEqualToAnchor:previewEyebrow.trailingAnchor],
+        [cardBox.bottomAnchor constraintLessThanOrEqualToAnchor:self.livePreviewContainer.bottomAnchor constant:-24.0],
+
+        [petIcon.topAnchor constraintEqualToAnchor:cardBox.topAnchor constant:18.0],
+        [petIcon.leadingAnchor constraintEqualToAnchor:cardBox.leadingAnchor constant:18.0],
+        [petIcon.widthAnchor constraintEqualToConstant:44.0],
+        [petIcon.heightAnchor constraintEqualToConstant:44.0],
+
+        [self.previewStatusBadge.centerYAnchor constraintEqualToAnchor:petIcon.centerYAnchor],
+        [self.previewStatusBadge.trailingAnchor constraintEqualToAnchor:cardBox.trailingAnchor constant:-18.0],
+        [self.previewStatusBadge.heightAnchor constraintEqualToConstant:26.0],
+
+        [self.previewStatusLabel.leadingAnchor constraintEqualToAnchor:self.previewStatusBadge.leadingAnchor constant:10.0],
+        [self.previewStatusLabel.trailingAnchor constraintEqualToAnchor:self.previewStatusBadge.trailingAnchor constant:-10.0],
+        [self.previewStatusLabel.centerYAnchor constraintEqualToAnchor:self.previewStatusBadge.centerYAnchor],
+
+        [self.previewTitleLabel.topAnchor constraintEqualToAnchor:petIcon.bottomAnchor constant:14.0],
+        [self.previewTitleLabel.leadingAnchor constraintEqualToAnchor:petIcon.leadingAnchor],
+        [self.previewTitleLabel.trailingAnchor constraintEqualToAnchor:cardBox.trailingAnchor constant:-18.0],
+
+        [self.previewDescLabel.topAnchor constraintEqualToAnchor:self.previewTitleLabel.bottomAnchor constant:8.0],
+        [self.previewDescLabel.leadingAnchor constraintEqualToAnchor:self.previewTitleLabel.leadingAnchor],
+        [self.previewDescLabel.trailingAnchor constraintEqualToAnchor:self.previewTitleLabel.trailingAnchor],
+        [self.previewDescLabel.bottomAnchor constraintEqualToAnchor:cardBox.bottomAnchor constant:-20.0],
+    ]];
+
+    // Right Column: Form Scroll View
     self.scrollView = [UIScrollView new];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.scrollView.alwaysBounceVertical = YES;
     self.scrollView.showsVerticalScrollIndicator = NO;
     self.scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     self.scrollView.contentInset = UIEdgeInsetsMake(0, 0, 116.0, 0);
-    [self.view addSubview:self.scrollView];
+    [splitRoot addSubview:self.scrollView];
 
     self.contentStack = [UIStackView new];
     self.contentStack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -140,17 +278,28 @@
     self.contentStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
     [self.scrollView addSubview:self.contentStack];
 
+    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [self.scrollView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
-        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [splitRoot.topAnchor constraintEqualToAnchor:safe.topAnchor],
+        [splitRoot.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:24.0],
+        [splitRoot.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-24.0],
+        [splitRoot.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+
+        [self.livePreviewContainer.topAnchor constraintEqualToAnchor:splitRoot.topAnchor constant:14.0],
+        [self.livePreviewContainer.leadingAnchor constraintEqualToAnchor:splitRoot.leadingAnchor],
+        [self.livePreviewContainer.widthAnchor constraintEqualToConstant:360.0],
+        [self.livePreviewContainer.bottomAnchor constraintLessThanOrEqualToAnchor:splitRoot.bottomAnchor constant:-100.0],
+
+        [self.scrollView.topAnchor constraintEqualToAnchor:splitRoot.topAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.livePreviewContainer.trailingAnchor constant:20.0],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:splitRoot.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:splitRoot.bottomAnchor],
 
         [self.contentStack.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor constant:14.0],
-        [self.contentStack.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor constant:20.0],
-        [self.contentStack.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor constant:-20.0],
+        [self.contentStack.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor],
+        [self.contentStack.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor],
         [self.contentStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-34.0],
-        [self.contentStack.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor constant:-40.0],
+        [self.contentStack.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor],
     ]];
 }
 
@@ -158,7 +307,9 @@
     [self.contentStack addArrangedSubview:[self heroSection]];
     [self.contentStack addArrangedSubview:[self listingSection]];
     [self.contentStack addArrangedSubview:[self statusSection]];
-    [self.contentStack addArrangedSubview:[self adopterSection]];
+    self.adopterSectionView = [self adopterSection];
+    [self.contentStack addArrangedSubview:self.adopterSectionView];
+    self.adopterSectionView.hidden = (self.statusControl.selectedSegmentIndex != 1);
 }
 
 - (UIView *)heroSection {
@@ -238,11 +389,75 @@
     UIStackView *stack = (UIStackView *)[surface viewWithTag:7701];
 
     self.titleField = [self textFieldWithPlaceholder:kLang(@"AdoptPro_Field_Title_Placeholder")];
+    [self.titleField addTarget:self action:@selector(titleChanged) forControlEvents:UIControlEventEditingChanged];
     [stack addArrangedSubview:[self fieldShellWithTitle:kLang(@"AdoptPro_Field_Title") content:self.titleField height:58.0]];
+
+    // Temperament quick tags row
+    [stack addArrangedSubview:[self temperamentChipsRow]];
 
     UIView *descriptionShell = [self textViewShellWithTitle:kLang(@"AdoptPro_Field_Description")];
     [stack addArrangedSubview:descriptionShell];
     return surface;
+}
+
+- (UIView *)temperamentChipsRow {
+    UIScrollView *scroll = [UIScrollView new];
+    scroll.translatesAutoresizingMaskIntoConstraints = NO;
+    scroll.showsHorizontalScrollIndicator = NO;
+    scroll.alwaysBounceHorizontal = YES;
+
+    UIStackView *stack = [UIStackView new];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.spacing = 8.0;
+    stack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [scroll addSubview:stack];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [scroll.heightAnchor constraintEqualToConstant:38.0],
+        [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor],
+        [stack.heightAnchor constraintEqualToAnchor:scroll.heightAnchor],
+    ]];
+
+    NSArray<NSString *> *tags = [Language isRTL]
+        ? @[@"#ودود_وأليف", @"#يحب_الأطفال", @"#مدرب_بالكامل", @"#مطعّم_وسليم", @"#هادئ_ولطيف", @"#نشيط_ومرح"]
+        : @[@"#Friendly", @"#GoodWithKids", @"#HouseTrained", @"#Vaccinated", @"#Calm", @"#Playful"];
+
+    for (NSString *tag in tags) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+        btn.translatesAutoresizingMaskIntoConstraints = NO;
+        btn.backgroundColor = [[self pp_accentColor] colorWithAlphaComponent:0.08];
+        PPApplyContinuousCorners(btn, PPCornerPill);
+        btn.titleLabel.font = [Styling fontMedium:12.5];
+        [btn setTitle:tag forState:UIControlStateNormal];
+        [btn setTitleColor:[self pp_accentColor] forState:UIControlStateNormal];
+        btn.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
+        [btn addTarget:self action:@selector(temperamentChipTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [stack addArrangedSubview:btn];
+    }
+
+    return scroll;
+}
+
+- (void)temperamentChipTapped:(UIButton *)sender {
+    [PPFunc pp_playTapEffect];
+    NSString *tag = [sender titleForState:UIControlStateNormal];
+    if (tag.length == 0) return;
+    NSString *current = self.descriptionView.text ?: @"";
+    if (current.length > 0) {
+        self.descriptionView.text = [NSString stringWithFormat:@"%@ %@", current, tag];
+    } else {
+        self.descriptionView.text = tag;
+    }
+    self.descriptionPlaceholder.hidden = self.descriptionView.text.length > 0;
+    [self updateLivePreview];
+}
+
+- (void)titleChanged {
+    [self updateLivePreview];
 }
 
 - (UIView *)statusSection {
@@ -264,8 +479,19 @@
         NSFontAttributeName: [Styling fontBold:12.0],
         NSForegroundColorAttributeName: [self pp_accentColor]
     } forState:UIControlStateSelected];
+    [self.statusControl addTarget:self action:@selector(statusChanged:) forControlEvents:UIControlEventValueChanged];
     [stack addArrangedSubview:[self fieldShellWithTitle:kLang(@"AdoptPro_Field_Status") content:self.statusControl height:52.0]];
     return surface;
+}
+
+- (void)statusChanged:(UISegmentedControl *)sender {
+    [PPFunc pp_playTapEffect];
+    BOOL isAdopted = (sender.selectedSegmentIndex == 1);
+    [UIView animateWithDuration:0.25 animations:^{
+        self.adopterSectionView.alpha = isAdopted ? 1.0 : 0.0;
+        self.adopterSectionView.hidden = !isAdopted;
+    }];
+    [self updateLivePreview];
 }
 
 - (UIView *)adopterSection {
@@ -278,6 +504,32 @@
     [stack addArrangedSubview:[self fieldShellWithTitle:kLang(@"AdoptPro_Field_Adopter") content:self.adopterNameField height:58.0]];
     [stack addArrangedSubview:[self fieldShellWithTitle:kLang(@"AdoptPro_Field_AdopterContact") content:self.adopterContactField height:58.0]];
     return surface;
+}
+
+- (void)updateLivePreview {
+    if (!self.livePreviewContainer) return;
+    NSString *title = [self trimmed:self.titleField.text];
+    self.previewTitleLabel.text = title.length > 0 ? title : kLang(@"AdoptPro_Untitled");
+    NSString *desc = [self trimmed:self.descriptionView.text];
+    self.previewDescLabel.text = desc.length > 0 ? desc : kLang(@"AdoptPro_NoDescription");
+
+    switch (self.statusControl.selectedSegmentIndex) {
+        case 1:
+            self.previewStatusLabel.text = kLang(@"AdoptPro_Status_Adopted");
+            self.previewStatusLabel.textColor = [UIColor ppSuccess];
+            self.previewStatusBadge.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.12];
+            break;
+        case 2:
+            self.previewStatusLabel.text = kLang(@"AdoptPro_Status_Hidden");
+            self.previewStatusLabel.textColor = [UIColor ppWarning];
+            self.previewStatusBadge.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:0.12];
+            break;
+        default:
+            self.previewStatusLabel.text = kLang(@"AdoptPro_Status_Available");
+            self.previewStatusLabel.textColor = [self pp_accentColor];
+            self.previewStatusBadge.backgroundColor = [[self pp_accentColor] colorWithAlphaComponent:0.12];
+            break;
+    }
 }
 
 - (UIView *)sectionSurfaceWithTitle:(NSString *)title subtitle:(NSString *)subtitle {
@@ -459,6 +711,8 @@
     } else {
         self.statusControl.selectedSegmentIndex = 0;
     }
+    self.adopterSectionView.hidden = (self.statusControl.selectedSegmentIndex != 1);
+    [self updateLivePreview];
 }
 
 - (void)applyFormToPet {
@@ -541,6 +795,33 @@
 
 - (void)textViewDidChange:(UITextView *)textView {
     self.descriptionPlaceholder.hidden = textView.text.length > 0;
+    [self updateLivePreview];
+}
+
+#pragma mark - iPad Hardware Key Commands
+
+- (BOOL)canBecomeFirstResponder {
+    return YES;
+}
+
+- (NSArray<UIKeyCommand *> *)keyCommands {
+    if (UI_USER_INTERFACE_IDIOM() != UIUserInterfaceIdiomPad) {
+        return nil;
+    }
+    return @[
+        [UIKeyCommand keyCommandWithInput:@"s"
+                            modifierFlags:UIKeyModifierCommand
+                                   action:@selector(saveTapped)
+                     discoverabilityTitle:[Language isRTL] ? @"حفظ المنشور" : @"Save Listing"],
+        [UIKeyCommand keyCommandWithInput:UIKeyInputEscape
+                            modifierFlags:0
+                                   action:@selector(handleEscapeKey)
+                     discoverabilityTitle:[Language isRTL] ? @"رجوع / إلغاء" : @"Back / Cancel"]
+    ];
+}
+
+- (void)handleEscapeKey {
+    [self.navigationController popViewControllerAnimated:YES];
 }
 
 #pragma mark - Keyboard

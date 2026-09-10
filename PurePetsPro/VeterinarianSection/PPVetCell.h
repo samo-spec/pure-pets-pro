@@ -17,7 +17,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, readonly) UILabel *statusBadge;
 @property (nonatomic, strong, readonly) UILabel *subscriptionLabel;
 @property (nonatomic, strong, readonly) UILabel *costLabel;
-@property (nonatomic, strong, readonly) UIView *cardView;
+@property (nonatomic, copy, nullable) void (^onCallTapped)(PPVetModel *vet);
+@property (nonatomic, copy, nullable) void (^onWhatsAppTapped)(PPVetModel *vet);
+@property (nonatomic, copy, nullable) void (^onToggleStatusTapped)(PPVetModel *vet);
 
 + (NSString *)reuseID;
 + (CGFloat)preferredHeight;

@@ -132,6 +132,14 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 @property (nonatomic, strong) _PPVetFilterChip *chipDisabled;
 @property (nonatomic, strong) UIStackView *filterStack;
 
+@property (nonatomic, strong) UIStackView *metricStack;
+@property (nonatomic, strong) UIView *metricCardTotal;
+@property (nonatomic, strong) UIView *metricCardActive;
+@property (nonatomic, strong) UIView *metricCardDisabled;
+@property (nonatomic, strong) UILabel *metricValueTotal;
+@property (nonatomic, strong) UILabel *metricValueActive;
+@property (nonatomic, strong) UILabel *metricValueDisabled;
+
 @property (nonatomic, strong) PPS *searchView;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIView *emptyContainer;
@@ -291,17 +299,15 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [self.listener remove];
 }
 
-#pragma mark - Title (one strong typographic statement, no card)
+#pragma mark - Title & Telemetry Bento Hero
 
 - (void)setupTitleHeader {
     BOOL rtl = Language.isRTL;
     NSTextAlignment align = rtl ? NSTextAlignmentRight : NSTextAlignmentLeft;
+    BOOL isPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
 
     _heroSurfaceView = [UIView new];
     _heroSurfaceView.translatesAutoresizingMaskIntoConstraints = NO;
-    // Token card surface (fill + hairline border + continuous corners + shadow);
-    // the screen's own surface/border tints are re-applied so dark-mode
-    // behavior in traitCollectionDidChange: stays identical.
     PPStyleCardSurface(_heroSurfaceView, PPCornerHero);
     _heroSurfaceView.backgroundColor = [self pp_surfaceColor];
     _heroSurfaceView.layer.borderColor = [self pp_borderColor].CGColor;
@@ -326,8 +332,8 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
     _titleLabel = [UILabel new];
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _titleLabel.text = kLang(@"Vet_Manage_Title");
-    _titleLabel.font = [Styling fontBold:30];
+    _titleLabel.text = kLang(@"Vet_Manage_Title") ?: ([Language isRTL] ? @"إدارة الكوادر والمراكز البيطرية" : @"Veterinarians Management");
+    _titleLabel.font = [Styling fontBold:28];
     _titleLabel.textColor = PrimaryTextClr;
     _titleLabel.numberOfLines = 2;
     _titleLabel.textAlignment = align;
@@ -337,53 +343,124 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     _metaLabel = [UILabel new];
     _metaLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _metaLabel.text = @"";
-    _metaLabel.font = [Styling fontMedium:13];
+    _metaLabel.font = [Styling fontMedium:12.5];
     _metaLabel.textColor = SeconderyTextClr;
     _metaLabel.textAlignment = align;
     _metaLabel.numberOfLines = 0;
     PPEnableDynamicType(_metaLabel, UIFontTextStyleFootnote);
     [_heroSurfaceView addSubview:_metaLabel];
 
-    _titleRule = [UIView new];
-    _titleRule.translatesAutoresizingMaskIntoConstraints = NO;
-    _titleRule.backgroundColor = PPHairlineColor();
-    [_heroSurfaceView addSubview:_titleRule];
+    // Interactive Telemetry Cards
+    UILabel *lblTotal = nil;
+    self.metricCardTotal = [self metricCardWithTitle:kLang(@"Vet_Filter_All") ?: ([Language isRTL] ? @"إجمالي الأطباء" : @"All Vets")
+                                          countLabel:&lblTotal
+                                         accentColor:AppPrimaryClr
+                                              action:@selector(chipAllTapped)];
+    _metricValueTotal = lblTotal;
+
+    UILabel *lblActive = nil;
+    self.metricCardActive = [self metricCardWithTitle:kLang(@"Vet_Filter_Active") ?: ([Language isRTL] ? @"معتمد ونشط" : @"Active")
+                                           countLabel:&lblActive
+                                          accentColor:[UIColor ppSuccess]
+                                               action:@selector(chipActiveTapped)];
+    _metricValueActive = lblActive;
+
+    UILabel *lblDisabled = nil;
+    self.metricCardDisabled = [self metricCardWithTitle:kLang(@"Vet_Filter_Disabled") ?: ([Language isRTL] ? @"غير مفعل" : @"Disabled")
+                                             countLabel:&lblDisabled
+                                            accentColor:[UIColor ppError]
+                                                 action:@selector(chipDisabledTapped)];
+    _metricValueDisabled = lblDisabled;
+
+    self.metricStack = [UIStackView new];
+    self.metricStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.metricStack.axis = UILayoutConstraintAxisHorizontal;
+    self.metricStack.spacing = 10.0;
+    self.metricStack.distribution = UIStackViewDistributionFillEqually;
+    self.metricStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.metricStack addArrangedSubview:self.metricCardTotal];
+    [self.metricStack addArrangedSubview:self.metricCardActive];
+    [self.metricStack addArrangedSubview:self.metricCardDisabled];
+    [_heroSurfaceView addSubview:self.metricStack];
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+    CGFloat cardH = isPad ? 62.0 : 54.0;
+    CGFloat hMargin = isPad ? 24.0 : 18.0;
+
     [NSLayoutConstraint activateConstraints:@[
         [_heroSurfaceView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:PPSpaceSM],
-        [_heroSurfaceView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18],
-        [_heroSurfaceView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-18],
+        [_heroSurfaceView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:hMargin],
+        [_heroSurfaceView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-hMargin],
 
-        [accentBar.topAnchor constraintEqualToAnchor:_heroSurfaceView.topAnchor constant:18],
-        [accentBar.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:22],
-        [accentBar.widthAnchor constraintEqualToConstant:70],
-        [accentBar.heightAnchor constraintEqualToConstant:PPSpaceMDHalf],
+        [accentBar.topAnchor constraintEqualToAnchor:_heroSurfaceView.topAnchor constant:16],
+        [accentBar.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:20],
+        [accentBar.widthAnchor constraintEqualToConstant:64],
+        [accentBar.heightAnchor constraintEqualToConstant:5.0],
 
-        [_eyebrowLabel.topAnchor constraintEqualToAnchor:accentBar.bottomAnchor constant:PPSpaceBase],
-        [_eyebrowLabel.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:22],
-        [_eyebrowLabel.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-22],
+        [_eyebrowLabel.topAnchor constraintEqualToAnchor:accentBar.bottomAnchor constant:10.0],
+        [_eyebrowLabel.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:20],
+        [_eyebrowLabel.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-20],
 
-        [_titleLabel.topAnchor constraintEqualToAnchor:_eyebrowLabel.bottomAnchor constant:PPSpaceMDHalf],
+        [_titleLabel.topAnchor constraintEqualToAnchor:_eyebrowLabel.bottomAnchor constant:4.0],
         [_titleLabel.leadingAnchor constraintEqualToAnchor:_eyebrowLabel.leadingAnchor],
         [_titleLabel.trailingAnchor constraintEqualToAnchor:_eyebrowLabel.trailingAnchor],
 
-        [_metaLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:PPSpaceXS],
+        [_metaLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:3.0],
         [_metaLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
         [_metaLabel.trailingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor],
 
-        [_titleRule.topAnchor constraintEqualToAnchor:_metaLabel.bottomAnchor constant:18],
-        [_titleRule.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:22],
-        [_titleRule.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-22],
-        [_titleRule.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
-        [_titleRule.bottomAnchor constraintEqualToAnchor:_heroSurfaceView.bottomAnchor constant:-18],
+        [self.metricStack.topAnchor constraintEqualToAnchor:_metaLabel.bottomAnchor constant:12.0],
+        [self.metricStack.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:18],
+        [self.metricStack.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-18],
+        [self.metricStack.heightAnchor constraintEqualToConstant:cardH],
+        [self.metricStack.bottomAnchor constraintEqualToAnchor:_heroSurfaceView.bottomAnchor constant:-16],
     ]];
 
     [self pp_applyHeroTitleLineLimitForTextSize];
 }
 
-// The hero surface height is constraint-driven, so the display title may drop
-// its 2-line cap at accessibility text sizes instead of truncating.
+- (UIView *)metricCardWithTitle:(NSString *)title countLabel:(UILabel **)outCountLabel accentColor:(UIColor *)accentColor action:(SEL)action {
+    UIView *card = [UIView new];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor = [accentColor colorWithAlphaComponent:0.07];
+    PPApplyContinuousCorners(card, PPCornerButton);
+    card.layer.borderWidth = 1.0;
+    card.layer.borderColor = [accentColor colorWithAlphaComponent:0.22].CGColor;
+    card.userInteractionEnabled = YES;
+
+    UILabel *countLabel = [UILabel new];
+    countLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    countLabel.font = [Styling fontBold:19.0];
+    countLabel.textColor = accentColor;
+    countLabel.text = @"0";
+    countLabel.textAlignment = NSTextAlignmentCenter;
+    [card addSubview:countLabel];
+    if (outCountLabel) *outCountLabel = countLabel;
+
+    UILabel *titleLabel = [UILabel new];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLabel.font = [Styling fontMedium:11.0];
+    titleLabel.textColor = SeconderyTextClr;
+    titleLabel.text = title;
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    titleLabel.adjustsFontSizeToFitWidth = YES;
+    titleLabel.minimumScaleFactor = 0.8;
+    [card addSubview:titleLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [countLabel.topAnchor constraintEqualToAnchor:card.topAnchor constant:6.0],
+        [countLabel.centerXAnchor constraintEqualToAnchor:card.centerXAnchor],
+        [titleLabel.topAnchor constraintEqualToAnchor:countLabel.bottomAnchor constant:1.0],
+        [titleLabel.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:4.0],
+        [titleLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-4.0],
+        [titleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:card.bottomAnchor constant:-6.0],
+    ]];
+
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:action];
+    [card addGestureRecognizer:tap];
+    return card;
+}
+
 - (void)pp_applyHeroTitleLineLimitForTextSize {
     self.titleLabel.numberOfLines = PPIsAccessibilityTextSize() ? 0 : 2;
 }
@@ -409,7 +486,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     self.filterStack = stack;
 
     [NSLayoutConstraint activateConstraints:@[
-        [stack.topAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:18],
+        [stack.topAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:14],
         [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceXL],
         [stack.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceXL],
     ]];
@@ -417,12 +494,10 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [self pp_applyFilterRowLayoutForTextSize];
 }
 
-// Three baseline-aligned chips cannot share one row once the text reaches an
-// accessibility size, so the row stacks instead of truncating the titles.
 - (void)pp_applyFilterRowLayoutForTextSize {
     if (!self.filterStack) { return; }
     if (PPIsAccessibilityTextSize()) {
-        self.filterStack.alignment = UIStackViewAlignmentLeading; // set before the axis: lastBaseline is invalid vertically
+        self.filterStack.alignment = UIStackViewAlignmentLeading;
         self.filterStack.axis = UILayoutConstraintAxisVertical;
         self.filterStack.spacing = PPSpaceXS;
     } else {
@@ -443,6 +518,12 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [self.chipAll      setSelectedState:(filter == PPVetListFilterAll)      animated:YES];
     [self.chipActive   setSelectedState:(filter == PPVetListFilterActive)   animated:YES];
     [self.chipDisabled setSelectedState:(filter == PPVetListFilterDisabled) animated:YES];
+
+    // Update telemetry card visual selection borders
+    self.metricCardTotal.layer.borderWidth = (filter == PPVetListFilterAll) ? 2.0 : 1.0;
+    self.metricCardActive.layer.borderWidth = (filter == PPVetListFilterActive) ? 2.0 : 1.0;
+    self.metricCardDisabled.layer.borderWidth = (filter == PPVetListFilterDisabled) ? 2.0 : 1.0;
+
     [self applyFilterAndReload];
 }
 
@@ -623,9 +704,13 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [self.chipActive   setCount:active];
     [self.chipDisabled setCount:disabled];
 
+    self.metricValueTotal.text = [NSString stringWithFormat:@"%ld", (long)total];
+    self.metricValueActive.text = [NSString stringWithFormat:@"%ld", (long)active];
+    self.metricValueDisabled.text = [NSString stringWithFormat:@"%ld", (long)disabled];
+
     self.metaLabel.text = total == 0
-        ? kLang(@"Vet_Empty_List")
-        : [NSString stringWithFormat:@"%ld %@", (long)total, kLang(@"Vet_Section_Title")];
+        ? (kLang(@"Vet_Empty_List") ?: ([Language isRTL] ? @"لا توجد ملفات أطباء مسجلة حالياً" : @"No veterinarians registered yet"))
+        : [NSString stringWithFormat:@"%ld %@", (long)total, kLang(@"Vet_Section_Title") ?: ([Language isRTL] ? @"طبيب ومركز بيطري" : @"Veterinarians")];
 }
 
 - (void)applyFilterAndReload {
@@ -807,6 +892,26 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     cell.backgroundColor = UIColor.clearColor;
     cell.contentView.backgroundColor = UIColor.clearColor;
 
+    __weak typeof(self) weakSelf = self;
+    cell.onCallTapped = ^(PPVetModel *v) {
+        NSString *phone = [v.phone stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (phone.length == 0) return;
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:[@"tel://" stringByAppendingString:phone]] options:@{} completionHandler:nil];
+    };
+
+    cell.onWhatsAppTapped = ^(PPVetModel *v) {
+        NSString *wa = [v.whatsapp stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (wa.length == 0) return;
+        NSString *clean = [wa stringByReplacingOccurrencesOfString:@"+" withString:@""];
+        clean = [clean stringByReplacingOccurrencesOfString:@" " withString:@""];
+        NSString *urlStr = [NSString stringWithFormat:@"https://wa.me/%@", clean];
+        [[UIApplication sharedApplication] openURL:[NSURL URLWithString:urlStr] options:@{} completionHandler:nil];
+    };
+
+    cell.onToggleStatusTapped = ^(PPVetModel *v) {
+        [weakSelf toggleDisabledAtIndexPath:indexPath];
+    };
+
     // The row reads as one button instead of a pile of separate labels; the
     // status word reuses the filter copy already localized on this screen.
     cell.isAccessibilityElement = YES;
@@ -945,6 +1050,44 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         cell.alpha = 0;
         PPAnimateRespectingMotion(PPAnimDurationNormal, ^{ cell.alpha = 1; }, nil);
     }
+}
+
+#pragma mark - iPad Hardware Key Commands
+
+- (BOOL)canBecomeFirstResponder {
+    return YES;
+}
+
+- (NSArray<UIKeyCommand *> *)keyCommands {
+    if (UI_USER_INTERFACE_IDIOM() != UIUserInterfaceIdiomPad) {
+        return nil;
+    }
+    return @[
+        [UIKeyCommand keyCommandWithInput:@"n"
+                            modifierFlags:UIKeyModifierCommand
+                                   action:@selector(addVetTapped)
+                     discoverabilityTitle:[Language isRTL] ? @"إضافة طبيب بيطري" : @"Add Veterinarian"],
+        [UIKeyCommand keyCommandWithInput:@"r"
+                            modifierFlags:UIKeyModifierCommand
+                                   action:@selector(onRefresh)
+                     discoverabilityTitle:[Language isRTL] ? @"تحديث القائمة" : @"Refresh List"],
+        [UIKeyCommand keyCommandWithInput:@"f"
+                            modifierFlags:UIKeyModifierCommand
+                                   action:@selector(focusSearchField)
+                     discoverabilityTitle:[Language isRTL] ? @"بحث في الأطباء" : @"Search Vets"],
+        [UIKeyCommand keyCommandWithInput:UIKeyInputEscape
+                            modifierFlags:0
+                                   action:@selector(handleEscapeKey)
+                     discoverabilityTitle:[Language isRTL] ? @"رجوع" : @"Back"]
+    ];
+}
+
+- (void)focusSearchField {
+    [self.searchView.textField becomeFirstResponder];
+}
+
+- (void)handleEscapeKey {
+    [self.navigationController popViewControllerAnimated:YES];
 }
 
 @end

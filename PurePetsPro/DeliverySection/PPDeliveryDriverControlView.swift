@@ -4,13 +4,13 @@
 //
 //  Category-Defining SwiftUI Delivery Driver Cockpit & Mission Control Screen.
 //  Tactile, alive, fluid micro-interactions, dynamic waypoint flight deck,
-//  haptic slide-to-confirm action, and real-time shift telemetry.
+//  aerospace slide-to-confirm action bolt, and real-time shift telemetry.
 //
 
 import SwiftUI
 import CoreLocation
 
-// MARK: - Category-Defining Slide-To-Confirm Action Track
+// MARK: - Category-Defining Aerospace Slide-To-Confirm Action Bolt
 
 public struct PPDeliverySlideActionTrack: View {
     public let title: String
@@ -22,11 +22,12 @@ public struct PPDeliverySlideActionTrack: View {
     @State private var dragOffset: CGFloat = 0
     @State private var trackWidth: CGFloat = 0
     @State private var didComplete: Bool = false
+    @State private var pulseChevron: Bool = false
     @Environment(\.layoutDirection) private var layoutDirection
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let thumbSize: CGFloat = 52.0
-    private let trackHeight: CGFloat = 60.0
+    private let trackHeight: CGFloat = 62.0
 
     public init(
         title: String,
@@ -45,7 +46,7 @@ public struct PPDeliverySlideActionTrack: View {
     private var isRTL: Bool { layoutDirection == .rightToLeft }
 
     private var maxTravel: CGFloat {
-        max(1, trackWidth - thumbSize - 8)
+        max(1, trackWidth - thumbSize - 10)
     }
 
     private var progress: CGFloat {
@@ -57,50 +58,82 @@ public struct PPDeliverySlideActionTrack: View {
     public var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: isRTL ? .trailing : .leading) {
-                // Background Track Surface
+                // Background Track Chassis
                 RoundedRectangle(cornerRadius: trackHeight / 2, style: .continuous)
                     .fill(tint.opacity(0.12))
                     .overlay(
                         RoundedRectangle(cornerRadius: trackHeight / 2, style: .continuous)
-                            .stroke(tint.opacity(0.35 + progress * 0.4), lineWidth: 1.5)
+                            .stroke(
+                                LinearGradient(
+                                    colors: [
+                                        tint.opacity(0.35 + progress * 0.45),
+                                        tint.opacity(0.15)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                ),
+                                lineWidth: 1.5
+                            )
                     )
 
-                // Dynamic Fill Track
+                // Dynamic Kinetic Fill Track
                 RoundedRectangle(cornerRadius: trackHeight / 2, style: .continuous)
-                    .fill(tint.opacity(0.22 + progress * 0.28))
-                    .frame(width: max(thumbSize + 8, (isRTL ? -dragOffset : dragOffset) + thumbSize + 4))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                tint.opacity(0.20 + progress * 0.25),
+                                tint.opacity(0.35 + progress * 0.35)
+                            ],
+                            startPoint: isRTL ? .trailing : .leading,
+                            endPoint: isRTL ? .leading : .trailing
+                        )
+                    )
+                    .frame(width: max(thumbSize + 10, (isRTL ? -dragOffset : dragOffset) + thumbSize + 6))
 
                 // Centered Label with Animated Chevrons
                 HStack(spacing: 8) {
                     if isRTL {
                         Image(systemName: "chevron.backward.2")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(tint.opacity(0.8 - progress * 0.5))
-                            .offset(x: reduceMotion ? 0 : -progress * 6)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(tint.opacity(0.85 - progress * 0.6))
+                            .offset(x: reduceMotion ? 0 : (pulseChevron ? -4 : 0))
                     }
 
                     Text(title)
-                        .font(PPBrandFont.headline(15))
+                        .font(PPBrandFont.bold(15))
                         .foregroundColor(AdminSurface.primaryText)
-                        .opacity(1.0 - Double(progress) * 0.7)
+                        .opacity(1.0 - Double(progress) * 0.75)
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
 
                     if !isRTL {
                         Image(systemName: "chevron.forward.2")
-                            .font(.system(size: 14, weight: .bold))
-                            .foregroundColor(tint.opacity(0.8 - progress * 0.5))
-                            .offset(x: reduceMotion ? 0 : progress * 6)
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundColor(tint.opacity(0.85 - progress * 0.6))
+                            .offset(x: reduceMotion ? 0 : (pulseChevron ? 4 : 0))
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .allowsHitTesting(false)
 
-                // Draggable Tactile Thumb
+                // Precision Tactile Thumb Bolt
                 ZStack {
                     Circle()
-                        .fill(tint)
-                        .shadow(color: tint.opacity(0.45), radius: 8, x: 0, y: 3)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    tint,
+                                    tint.opacity(0.88)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .overlay(
+                            Circle()
+                                .stroke(Color.white.opacity(0.35), lineWidth: 1.2)
+                        )
+                        .shadow(color: tint.opacity(0.42), radius: 8, x: 0, y: 3)
 
                     if isExecuting {
                         ProgressView()
@@ -117,7 +150,7 @@ public struct PPDeliverySlideActionTrack: View {
                     }
                 }
                 .frame(width: thumbSize, height: thumbSize)
-                .padding(4)
+                .padding(5)
                 .offset(x: dragOffset)
                 .gesture(
                     DragGesture()
@@ -129,7 +162,7 @@ public struct PPDeliverySlideActionTrack: View {
 
                             if progress > 0.3 && progress < 0.35 {
                                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                            } else if progress > 0.7 && progress < 0.75 {
+                            } else if progress > 0.65 && progress < 0.70 {
                                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                             }
                         }
@@ -150,7 +183,7 @@ public struct PPDeliverySlideActionTrack: View {
                                 }
                             } else {
                                 // Spring back to start
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
                                     dragOffset = 0
                                 }
                             }
@@ -159,6 +192,11 @@ public struct PPDeliverySlideActionTrack: View {
             }
             .onAppear {
                 self.trackWidth = proxy.size.width
+                if !reduceMotion {
+                    withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                        pulseChevron = true
+                    }
+                }
             }
             .onChange(of: proxy.size.width) { newWidth in
                 self.trackWidth = newWidth
@@ -167,6 +205,7 @@ public struct PPDeliverySlideActionTrack: View {
         .frame(height: trackHeight)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(title)
+        .accessibilityHint(Language.get("Deliv_Accessibility_SlideHint", alter: "اسحب المؤشر للنهاية للتأكيد"))
         .accessibilityAddTraits(.isButton)
     }
 }
@@ -177,8 +216,8 @@ public struct PPDeliveryTelemetryGrid: View {
     @ObservedObject var state: PPDeliveryDriverObservableState
 
     public var body: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-            // 1. Completed Stops
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
+            // 1. Completed Stops Today
             telemetryTile(
                 icon: "checkmark.seal.fill",
                 iconColor: AdminSurface.emerald,
@@ -187,31 +226,31 @@ public struct PPDeliveryTelemetryGrid: View {
                 badge: Language.get("Deliv_Metric_OnTrack", alter: "ممتاز")
             )
 
-            // 2. Today's Earnings
+            // 2. Today's Shift Earnings
             telemetryTile(
                 icon: "banknote.fill",
                 iconColor: AdminSurface.primary,
-                value: String(format: "%.1f %@", state.todayTotalEarningsQAR, Language.get("QAR", alter: "ر.ق")),
+                value: String(format: "%.0f %@", state.todayTotalEarningsQAR, Language.get("QAR", alter: "ر.ق")),
                 title: Language.get("Deliv_Metric_Earnings", alter: "أرباح الشيفت"),
                 badge: Language.get("Deliv_Metric_Live", alter: "مباشر")
             )
 
-            // 3. COD Cash Collected
+            // 3. Cash on Hand (COD to remit)
             telemetryTile(
                 icon: "dollarsign.circle.fill",
                 iconColor: AdminSurface.amber,
-                value: String(format: "%.1f %@", state.todayCODCollectedQAR, Language.get("QAR", alter: "ر.ق")),
+                value: String(format: "%.0f %@", state.todayCODCollectedQAR, Language.get("QAR", alter: "ر.ق")),
                 title: Language.get("Deliv_Metric_CODHand", alter: "كاش في العهدة"),
                 badge: Language.get("Deliv_Metric_Remit", alter: "للتحصيل")
             )
 
-            // 4. On-Time Gauge
+            // 4. On-Time Score Index
             telemetryTile(
-                icon: "timer",
+                icon: "gauge.with.needle.fill",
                 iconColor: Color.blue,
                 value: "\(state.onTimeScorePercentage)%",
                 title: Language.get("Deliv_Metric_OnTime", alter: "دقة المواعيد"),
-                badge: Language.get("Deliv_Metric_Target", alter: "98%+")
+                badge: Language.get("Deliv_Metric_Target", alter: "هدف 98%+")
             )
         }
     }
@@ -223,12 +262,12 @@ public struct PPDeliveryTelemetryGrid: View {
         title: String,
         badge: String
     ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .fill(iconColor.opacity(0.12))
-                        .frame(width: 32, height: 32)
+                        .frame(width: 34, height: 34)
                     Image(systemName: icon)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(iconColor)
@@ -239,33 +278,35 @@ public struct PPDeliveryTelemetryGrid: View {
                 Text(badge)
                     .font(PPBrandFont.caption(10))
                     .foregroundColor(iconColor)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
                     .background(
                         Capsule().fill(iconColor.opacity(0.1))
                     )
             }
 
             Text(value)
-                .font(PPBrandFont.bold(17))
+                .font(PPBrandFont.bold(18))
                 .foregroundColor(AdminSurface.primaryText)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+                .monospacedDigit()
 
             Text(title)
-                .font(PPBrandFont.caption(12))
+                .font(PPBrandFont.regular(12))
                 .foregroundColor(AdminSurface.secondaryText)
                 .lineLimit(1)
         }
-        .padding(12)
+        .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(AdminSurface.card)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(AdminSurface.hairline, lineWidth: 1)
         )
+        .shadow(color: Color.black.opacity(0.02), radius: 8, x: 0, y: 3)
     }
 }
 
@@ -276,19 +317,20 @@ public struct PPDeliveryActiveMissionDeck: View {
     @ObservedObject var state: PPDeliveryDriverObservableState
 
     @State private var isPayloadExpanded: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var phase: PPDeliveryMissionPhase {
         state.missionPhase(for: order)
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            // Mission Header
+        VStack(alignment: .leading, spacing: 16) {
+            // Mission Header Badge & Payment Tag
             HStack(alignment: .center, spacing: 10) {
                 ZStack {
                     Circle()
                         .fill(AdminSurface.amber.opacity(0.15))
-                        .frame(width: 38, height: 38)
+                        .frame(width: 40, height: 40)
                     Image(systemName: "location.north.line.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundColor(AdminSurface.amber)
@@ -297,7 +339,7 @@ public struct PPDeliveryActiveMissionDeck: View {
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(Language.get("Deliv_ActiveMission_Title", alter: "مهمة التوصيل الحالية"))
-                            .font(PPBrandFont.bold(15))
+                            .font(PPBrandFont.bold(16))
                             .foregroundColor(AdminSurface.primaryText)
 
                         Circle()
@@ -313,14 +355,15 @@ public struct PPDeliveryActiveMissionDeck: View {
                 Spacer()
 
                 // Cash or Prepaid Tag
-                HStack(spacing: 4) {
+                HStack(spacing: 5) {
                     Image(systemName: order.isCashOrder() ? "banknote.fill" : "creditcard.fill")
                         .font(.system(size: 11, weight: .semibold))
                     Text(order.formattedTotal() ?? "")
                         .font(PPBrandFont.bold(13))
+                        .monospacedDigit()
                 }
                 .foregroundColor(order.isCashOrder() ? AdminSurface.amber : AdminSurface.emerald)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 9)
                 .padding(.vertical, 5)
                 .background(
                     Capsule().fill(order.isCashOrder() ? AdminSurface.amber.opacity(0.12) : AdminSurface.emerald.opacity(0.12))
@@ -329,8 +372,8 @@ public struct PPDeliveryActiveMissionDeck: View {
 
             Divider().background(AdminSurface.hairline)
 
-            // Dynamic Waypoints Trail
-            VStack(alignment: .leading, spacing: 12) {
+            // Dynamic Waypoints Corridor
+            VStack(alignment: .leading, spacing: 14) {
                 // Waypoint 1: Store / Branch Pickup
                 HStack(alignment: .top, spacing: 12) {
                     VStack(spacing: 4) {
@@ -343,21 +386,22 @@ public struct PPDeliveryActiveMissionDeck: View {
 
                         Rectangle()
                             .fill(phase >= .inTransit ? AdminSurface.emerald.opacity(0.6) : AdminSurface.hairline)
-                            .frame(width: 2, height: 38)
+                            .frame(width: 2, height: 42)
                     }
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(Language.get("Deliv_Pickup_Store", alter: "نقطة الاستلام (المتجر)"))
                             .font(PPBrandFont.caption(11))
                             .foregroundColor(AdminSurface.secondaryText)
 
                         Text(order.branchName ?? order.pp_pickupLocationSummary() ?? Language.get("Deliv_BranchPendingAssignment", alter: "الفرع الرئيسي"))
-                            .font(PPBrandFont.bold(14))
+                            .font(PPBrandFont.bold(15))
                             .foregroundColor(AdminSurface.primaryText)
                             .lineLimit(1)
 
                         HStack(spacing: 8) {
                             Button(action: {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                 state.openAppleMapsNavigation(address: order.pp_pickupLocationSummary())
                             }) {
                                 HStack(spacing: 4) {
@@ -366,20 +410,30 @@ public struct PPDeliveryActiveMissionDeck: View {
                                     Text(Language.get("Deliv_NavToPickup", alter: "خريطة الفرع"))
                                         .font(PPBrandFont.caption(11))
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 4)
                                 .background(Capsule().fill(AdminSurface.primary.opacity(0.1)))
                                 .foregroundColor(AdminSurface.primary)
                             }
+                            .buttonStyle(PPDeliveryTouchButtonStyle())
 
                             if let branchPhone = order.marketplaceProviderPhone, !branchPhone.isEmpty {
                                 Button(action: {
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                     state.dialPhoneNumber(branchPhone)
                                 }) {
-                                    Image(systemName: "phone.circle.fill")
-                                        .font(.system(size: 18))
-                                        .foregroundColor(AdminSurface.primary)
+                                    HStack(spacing: 4) {
+                                        Image(systemName: "phone.fill")
+                                            .font(.system(size: 11))
+                                        Text(Language.get("Call", alter: "اتصال"))
+                                            .font(PPBrandFont.caption(11))
+                                    }
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().fill(AdminSurface.emerald.opacity(0.1)))
+                                    .foregroundColor(AdminSurface.emerald)
                                 }
+                                .buttonStyle(PPDeliveryTouchButtonStyle())
                             }
                         }
                         .padding(.top, 2)
@@ -395,13 +449,13 @@ public struct PPDeliveryActiveMissionDeck: View {
                             Circle().stroke(Color.white, lineWidth: 2)
                         )
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 3) {
                         Text(Language.get("Deliv_Dropoff_Customer", alter: "وجهة التوصيل (العميل)"))
                             .font(PPBrandFont.caption(11))
                             .foregroundColor(AdminSurface.secondaryText)
 
                         Text(!order.customerName.isEmpty ? order.customerName : Language.get("Customer", alter: "العميل"))
-                            .font(PPBrandFont.bold(14))
+                            .font(PPBrandFont.bold(15))
                             .foregroundColor(AdminSurface.primaryText)
 
                         Text(order.pp_visibleCustomerLocationSummary().isEmpty ? order.deliveryAddress : order.pp_visibleCustomerLocationSummary())
@@ -411,6 +465,7 @@ public struct PPDeliveryActiveMissionDeck: View {
 
                         HStack(spacing: 8) {
                             Button(action: {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                                 state.openAppleMapsNavigation(address: order.pp_visibleCustomerLocationSummary().isEmpty ? order.deliveryAddress : order.pp_visibleCustomerLocationSummary())
                             }) {
                                 HStack(spacing: 4) {
@@ -419,14 +474,16 @@ public struct PPDeliveryActiveMissionDeck: View {
                                     Text(Language.get("Deliv_Directions", alter: "الملاحة للعميل"))
                                         .font(PPBrandFont.caption(11))
                                 }
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 4)
                                 .background(Capsule().fill(Color.blue.opacity(0.1)))
                                 .foregroundColor(Color.blue)
                             }
+                            .buttonStyle(PPDeliveryTouchButtonStyle())
 
                             if !order.customerPhone.isEmpty {
                                 Button(action: {
+                                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
                                     state.dialPhoneNumber(order.customerPhone)
                                 }) {
                                     HStack(spacing: 4) {
@@ -435,11 +492,12 @@ public struct PPDeliveryActiveMissionDeck: View {
                                         Text(Language.get("Call", alter: "اتصال"))
                                             .font(PPBrandFont.caption(11))
                                     }
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 3)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 4)
                                     .background(Capsule().fill(AdminSurface.emerald.opacity(0.1)))
                                     .foregroundColor(AdminSurface.emerald)
                                 }
+                                .buttonStyle(PPDeliveryTouchButtonStyle())
                             }
                         }
                         .padding(.top, 2)
@@ -458,7 +516,7 @@ public struct PPDeliveryActiveMissionDeck: View {
                         .font(.system(size: 13))
                         .foregroundColor(AdminSurface.primary)
 
-                    Text(String(format: Language.get("Deliv_ItemsInOrder", alter: "%ld عنصر في هذا الطلب"), order.items.count))
+                    Text(String(format: Language.get("Deliv_ItemsInOrder", alter: "%ld أغراض في هذا الطلب"), order.items.count))
                         .font(PPBrandFont.bold(13))
                         .foregroundColor(AdminSurface.primaryText)
 
@@ -468,23 +526,24 @@ public struct PPDeliveryActiveMissionDeck: View {
                         .font(.system(size: 12, weight: .bold))
                         .foregroundColor(AdminSurface.secondaryText)
                 }
-                .padding(10)
+                .padding(11)
                 .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(AdminSurface.card.opacity(0.6))
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(AdminSurface.card.opacity(0.7))
                 )
             }
+            .buttonStyle(PPDeliveryTouchButtonStyle(pressedScale: 0.98))
 
             if isPayloadExpanded, !order.items.isEmpty {
                 VStack(spacing: 6) {
                     ForEach(order.items, id: \.itemID) { item in
                         HStack(spacing: 8) {
                             Text("\(item.quantity)x")
-                                .font(PPBrandFont.bold(12))
+                                .font(PPBrandFont.bold(13))
                                 .foregroundColor(AdminSurface.primary)
 
                             Text(item.name ?? "")
-                                .font(PPBrandFont.medium(12))
+                                .font(PPBrandFont.medium(13))
                                 .foregroundColor(AdminSurface.primaryText)
                                 .lineLimit(1)
 
@@ -492,21 +551,21 @@ public struct PPDeliveryActiveMissionDeck: View {
 
                             if let variant = item.variant, !variant.isEmpty {
                                 Text(variant)
-                                    .font(PPBrandFont.caption(10))
+                                    .font(PPBrandFont.caption(11))
                                     .foregroundColor(AdminSurface.secondaryText)
-                                    .padding(.horizontal, 6)
+                                    .padding(.horizontal, 7)
                                     .padding(.vertical, 2)
                                     .background(Capsule().fill(AdminSurface.card))
                             }
                         }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
                     }
                 }
                 .padding(8)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(AdminSurface.card.opacity(0.4))
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(AdminSurface.card.opacity(0.5))
                 )
             }
 
@@ -520,14 +579,14 @@ public struct PPDeliveryActiveMissionDeck: View {
                 executeNextStep(for: order)
             }
         }
-        .padding(16)
+        .padding(18)
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .fill(AdminSurface.card)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(AdminSurface.primary.opacity(0.2), lineWidth: 1.5)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(AdminSurface.primary.opacity(0.22), lineWidth: 1.5)
         )
         .shadow(color: AdminSurface.primary.opacity(0.08), radius: 14, x: 0, y: 6)
     }
@@ -568,15 +627,15 @@ public struct PPDeliveryDispatchRadarSection: View {
     @ObservedObject var state: PPDeliveryDriverObservableState
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
-                HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     Image(systemName: "radiowaves.left.and.right")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 15, weight: .bold))
                         .foregroundColor(AdminSurface.primary)
 
                     Text(Language.get("Deliv_Radar_Title", alter: "رادار المهام الجاهزة"))
-                        .font(PPBrandFont.bold(15))
+                        .font(PPBrandFont.bold(16))
                         .foregroundColor(AdminSurface.primaryText)
                 }
 
@@ -585,8 +644,8 @@ public struct PPDeliveryDispatchRadarSection: View {
                 Text("\(orders.count) " + Language.get("Deliv_OrdersReady", alter: "طلب متاح"))
                     .font(PPBrandFont.caption(12))
                     .foregroundColor(AdminSurface.primary)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
                     .background(Capsule().fill(AdminSurface.primary.opacity(0.12)))
             }
 
@@ -597,17 +656,18 @@ public struct PPDeliveryDispatchRadarSection: View {
     }
 
     private func dispatchCard(_ order: PPDeliveryOrderModel) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(!order.displayOrderNumber.isEmpty ? order.displayOrderNumber : order.bestOrderNumber())
-                    .font(PPBrandFont.bold(14))
+                    .font(PPBrandFont.bold(15))
                     .foregroundColor(AdminSurface.primaryText)
 
                 Spacer()
 
                 Text(order.formattedTotal() ?? "")
-                    .font(PPBrandFont.bold(14))
+                    .font(PPBrandFont.bold(15))
                     .foregroundColor(order.isCashOrder() ? AdminSurface.amber : AdminSurface.emerald)
+                    .monospacedDigit()
             }
 
             HStack(spacing: 12) {
@@ -639,13 +699,14 @@ public struct PPDeliveryDispatchRadarSection: View {
                 Text(String(format: Language.get("Deliv_ItemsCount", alter: "%ld أغراض"), order.items.count))
                     .font(PPBrandFont.caption(11))
                     .foregroundColor(AdminSurface.secondaryText)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(AdminSurface.card))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(AdminSurface.cardElevated))
 
                 Spacer()
 
                 Button(action: {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     state.acceptOrder(order)
                 }) {
                     HStack(spacing: 6) {
@@ -654,20 +715,22 @@ public struct PPDeliveryDispatchRadarSection: View {
                         Text(Language.get("Deliv_AcceptJob", alter: "استلام المهمة"))
                             .font(PPBrandFont.bold(13))
                     }
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
                     .background(Capsule().fill(AdminSurface.primary))
                     .foregroundColor(.white)
+                    .shadow(color: AdminSurface.primary.opacity(0.3), radius: 6, x: 0, y: 3)
                 }
+                .buttonStyle(PPDeliveryTouchButtonStyle())
             }
         }
-        .padding(14)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(AdminSurface.card)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(AdminSurface.hairline, lineWidth: 1)
         )
     }
@@ -709,14 +772,15 @@ public struct PPDeliveryCashCollectionSheet: View {
                         .foregroundColor(AdminSurface.secondaryText)
 
                     ZStack {
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .fill(AdminSurface.amber.opacity(0.12))
-                            .frame(height: 74)
+                            .frame(height: 78)
 
                         VStack(spacing: 2) {
                             Text(String(format: "%.2f %@", targetAmount, Language.get("QAR", alter: "ر.ق")))
-                                .font(PPBrandFont.bold(26))
+                                .font(PPBrandFont.bold(28))
                                 .foregroundColor(AdminSurface.amber)
+                                .monospacedDigit()
 
                             Text(Language.get("Deliv_RequiredAmount", alter: "المبلغ المطلوب تحصيله نقداً"))
                                 .font(PPBrandFont.caption(12))
@@ -746,12 +810,13 @@ public struct PPDeliveryCashCollectionSheet: View {
                             .foregroundColor(AdminSurface.primaryText)
                         Spacer()
                         Text(String(format: "%.2f %@", changeDue, Language.get("QAR", alter: "ر.ق")))
-                            .font(PPBrandFont.bold(16))
+                            .font(PPBrandFont.bold(17))
                             .foregroundColor(AdminSurface.emerald)
+                            .monospacedDigit()
                     }
-                    .padding(12)
+                    .padding(14)
                     .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
                             .fill(AdminSurface.emerald.opacity(0.1))
                     )
                     .padding(.horizontal, 16)
@@ -764,13 +829,14 @@ public struct PPDeliveryCashCollectionSheet: View {
                         .foregroundColor(AdminSurface.secondaryText)
 
                     TextField(Language.get("Deliv_NotesPlaceholder", alter: "تم التسليم عند الباب / للعميل شخصياً..."), text: $deliveryNotes)
+                        .font(PPBrandFont.regular(14))
                         .padding(12)
                         .background(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .fill(AdminSurface.card)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(AdminSurface.cardElevated)
                         )
                         .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
                                 .stroke(AdminSurface.hairline, lineWidth: 1)
                         )
                 }
@@ -780,6 +846,7 @@ public struct PPDeliveryCashCollectionSheet: View {
 
                 // Confirm and Complete Button
                 Button(action: {
+                    UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
                     state.collectCashAndComplete(order, note: deliveryNotes.isEmpty ? nil : deliveryNotes)
                     dismiss()
                 }) {
@@ -796,8 +863,9 @@ public struct PPDeliveryCashCollectionSheet: View {
                             .fill(AdminSurface.emerald)
                     )
                     .foregroundColor(.white)
-                    .shadow(color: AdminSurface.emerald.opacity(0.3), radius: 8, x: 0, y: 4)
+                    .shadow(color: AdminSurface.emerald.opacity(0.32), radius: 8, x: 0, y: 4)
                 }
+                .buttonStyle(PPDeliveryTouchButtonStyle())
                 .padding(.horizontal, 16)
                 .padding(.bottom, 20)
             }
@@ -807,6 +875,8 @@ public struct PPDeliveryCashCollectionSheet: View {
                     Button(Language.get("Cancel", alter: "إلغاء")) {
                         dismiss()
                     }
+                    .font(PPBrandFont.bold(15))
+                    .foregroundColor(AdminSurface.primary)
                 }
             }
         }
@@ -821,16 +891,17 @@ public struct PPDeliveryCashCollectionSheet: View {
                 .font(PPBrandFont.caption(12))
                 .foregroundColor(AdminSurface.primaryText)
                 .padding(.horizontal, 10)
-                .padding(.vertical, 7)
+                .padding(.vertical, 8)
                 .background(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(AdminSurface.card)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(AdminSurface.cardElevated)
                 )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(AdminSurface.hairline, lineWidth: 1)
                 )
         }
+        .buttonStyle(PPDeliveryTouchButtonStyle(pressedScale: 0.94))
     }
 }
 
@@ -933,7 +1004,9 @@ public struct PPDeliveryDriverControlView: View {
 
             // Duty Toggle Pill
             Button(action: {
-                state.toggleDuty()
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
+                    state.toggleDuty()
+                }
             }) {
                 HStack(spacing: 6) {
                     Image(systemName: state.dutyState.systemIcon)
@@ -943,7 +1016,7 @@ public struct PPDeliveryDriverControlView: View {
                         .font(PPBrandFont.bold(13))
                 }
                 .foregroundColor(state.dutyState.tintColor)
-                .padding(.horizontal, 12)
+                .padding(.horizontal, 13)
                 .padding(.vertical, 7)
                 .background(
                     Capsule()
@@ -954,14 +1027,15 @@ public struct PPDeliveryDriverControlView: View {
                         .stroke(state.dutyState.tintColor.opacity(0.3), lineWidth: 1)
                 )
             }
+            .buttonStyle(PPDeliveryTouchButtonStyle(pressedScale: 0.94))
         }
-        .padding(14)
+        .padding(16)
         .background(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(AdminSurface.card)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(AdminSurface.hairline, lineWidth: 1)
         )
     }
@@ -987,13 +1061,13 @@ public struct PPDeliveryDriverControlView: View {
                     }
                 }
             }
-            .padding(10)
+            .padding(11)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .fill(AdminSurface.card)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
                     .stroke(AdminSurface.hairline, lineWidth: 1)
             )
 
@@ -1015,8 +1089,8 @@ public struct PPDeliveryDriverControlView: View {
                                     .font(PPBrandFont.bold(13))
                             }
                             .foregroundColor(state.selectedFilter == filter ? .white : AdminSurface.primaryText)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 7)
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 8)
                             .background(
                                 Capsule()
                                     .fill(state.selectedFilter == filter ? AdminSurface.primary : AdminSurface.card)
@@ -1026,6 +1100,7 @@ public struct PPDeliveryDriverControlView: View {
                                     .stroke(state.selectedFilter == filter ? Color.clear : AdminSurface.hairline, lineWidth: 1)
                             )
                         }
+                        .buttonStyle(PPDeliveryTouchButtonStyle(pressedScale: 0.94))
                     }
                 }
             }
@@ -1053,9 +1128,9 @@ public struct PPDeliveryDriverControlView: View {
                         .foregroundColor(AdminSurface.secondaryText)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 32)
+                .padding(.vertical, 36)
                 .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .fill(AdminSurface.card.opacity(0.5))
                 )
             } else {
@@ -1067,7 +1142,7 @@ public struct PPDeliveryDriverControlView: View {
     }
 
     private func orderSummaryRow(_ order: PPDeliveryOrderModel) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(!order.displayOrderNumber.isEmpty ? order.displayOrderNumber : order.bestOrderNumber())
                     .font(PPBrandFont.bold(14))
@@ -1085,14 +1160,15 @@ public struct PPDeliveryDriverControlView: View {
 
             HStack {
                 Text(!order.customerName.isEmpty ? order.customerName : Language.get("Customer", alter: "العميل"))
-                    .font(PPBrandFont.medium(13))
+                    .font(PPBrandFont.medium(14))
                     .foregroundColor(AdminSurface.primaryText)
 
                 Spacer()
 
                 Text(order.formattedTotal() ?? "")
-                    .font(PPBrandFont.bold(13))
+                    .font(PPBrandFont.bold(14))
                     .foregroundColor(order.isCashOrder() ? AdminSurface.amber : AdminSurface.emerald)
+                    .monospacedDigit()
             }
 
             Text(order.pp_visibleCustomerLocationSummary().isEmpty ? order.deliveryAddress : order.pp_visibleCustomerLocationSummary())
@@ -1100,13 +1176,13 @@ public struct PPDeliveryDriverControlView: View {
                 .foregroundColor(AdminSurface.secondaryText)
                 .lineLimit(1)
         }
-        .padding(12)
+        .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .fill(AdminSurface.card)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
                 .stroke(AdminSurface.hairline, lineWidth: 1)
         )
     }

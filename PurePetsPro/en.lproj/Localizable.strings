@@ -3760,3 +3760,11 @@
 "Deliv_Toast_Delivered" = "Order delivered to customer successfully";
 "Deliv_Toast_CashCollected" = "Cash collected and delivery confirmed";
 "Deliv_PhoneUnavailable" = "Phone number unavailable";
+"Deliv_Accessibility_ToggleDutyHint" = "Tap to toggle online and break status";
+"Deliv_Accessibility_SlideHint" = "Slide thumb to the end to confirm";
+"Deliv_Accessibility_OpenCockpitHint" = "Opens routes map, orders queue, and shift operations";
+"Deliv_PaymentCOD" = "COD Cash";
+"Deliv_PaymentPrepaid" = "Prepaid";
+"Deliv_BranchPendingAssignment" = "Main Branch";
+"Deliv_Slide_Delivered" = "Completed";
+"Deliv_FilterDelivered" = "Completed Today";

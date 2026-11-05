@@ -149,3 +149,9 @@
    - **Standalone Product:** Create a product with price, stock, SKU, and barcode. Verify it saves and displays as single item.
    - **Product with Options:** Create a new product, tap *"Enable Options & Open Studio"*, add options (e.g., Size & Color), generate matrix, and save. Verify parent item groups variants and aggregate stock updates.
    - **Medicine with Strengths:** Open Pharmacy tab, create medicine, tap *"Enable Options & Open Studio"*, select Strength preset (e.g. 50mg & 100mg), set prices and stock. Verify medicine appears with strength badges and can be edited in matrix.
+
+## 6. Post-Verification Hotfix: TableView Data Binding
+- **Issue:** Telemetry header and search pill correctly displayed item metrics (e.g., 42 SKUs, 40 search results), but table view rows below the header were blank.
+- **Root Cause:** In `setupTableView` within `PPProviderMarketItemsViewController.m`, `self.tableView.delegate = self;` was set but `self.tableView.dataSource = self;` was omitted, preventing UITableView from querying `numberOfRowsInSection:` and `cellForRowAtIndexPath:`.
+- **Resolution:** Added `self.tableView.dataSource = self;` at line 3274 of `PPProviderMarketItemsViewController.m`. Verified all data rows, family cards, and action sheets render as expected.
+

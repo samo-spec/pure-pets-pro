@@ -3789,3 +3789,11 @@
 "Deliv_Toast_Delivered" = "تم تسليم الطلب للعميل بنجاح";
 "Deliv_Toast_CashCollected" = "تم استلام المبلغ النقدي وتأكيد التسليم";
 "Deliv_PhoneUnavailable" = "رقم الهاتف غير متاح";
+"Deliv_Accessibility_ToggleDutyHint" = "اضغط للتبديل بين الاتصال والاستراحة";
+"Deliv_Accessibility_SlideHint" = "اسحب المؤشر للنهاية للتأكيد";
+"Deliv_Accessibility_OpenCockpitHint" = "يفتح خريطة المسارات وقائمة الطلبات وإدارة الشيفت";
+"Deliv_PaymentCOD" = "تحصيل كاش";
+"Deliv_PaymentPrepaid" = "مدفوع مسبقاً";
+"Deliv_BranchPendingAssignment" = "الفرع الرئيسي";
+"Deliv_Slide_Delivered" = "مكتمل";
+"Deliv_FilterDelivered" = "المكتملة اليوم";

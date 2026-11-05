@@ -14,6 +14,7 @@
 		533CBA5E149AA91874136710 /* QBImagePicker.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = F18B2ED8BBF11FC7A093DEDC /* QBImagePicker.storyboard */; };
 		581500F3F2D98A60E69551A6 /* QBSlomoIconView.m in Sources */ = {isa = PBXBuildFile; fileRef = 38AB14AA34F486C60429D7F7 /* QBSlomoIconView.m */; };
 		6354F03D931845639C592CFF /* PPProRootTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC6A2BB459BAE2B8EAA /* PPProRootTabBarController.swift */; };
+		F5A0B3013005000100A0B301 /* PPProProfileSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC7A2BB459BAE2B8EAB /* PPProProfileSettingsView.swift */; };
 		66213DB3EE11415A8153A6AA /* PPAddEditVetViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 2C97DB99BC4542DD8F31D494 /* PPAddEditVetViewController.m */; };
 		6C65E6AFB8534ED2B64E8AC0 /* PPVetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 35927158F3DE4461BAA4F526 /* PPVetManager.m */; };
 		86200C95A3CA4EA2AD869767 /* PPVetDetailViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = CEFE7BC8BF5E4D1DA7960E4A /* PPVetDetailViewController.m */; };
@@ -165,6 +166,10 @@
 		F2BEEC812F8C8148003E8012 /* PPDeliveryStatusTimelineView.m in Sources */ = {isa = PBXBuildFile; fileRef = F2BEEC7C2F8C8148003E8012 /* PPDeliveryStatusTimelineView.m */; };
 		F2BEEC822F8C8148003E8012 /* PPDeliveryOrderModel.m in Sources */ = {isa = PBXBuildFile; fileRef = F2BEEC7A2F8C8148003E8012 /* PPDeliveryOrderModel.m */; };
 		F2BEEC832F8C8148003E8012 /* PPDeliveryDashboardViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2BEEC722F8C8148003E8012 /* PPDeliveryDashboardViewController.m */; };
+		F4D000100000000000000001 /* PPDeliveryDriverModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000001 /* PPDeliveryDriverModels.swift */; };
+		F4D000100000000000000002 /* PPDeliveryDriverControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000002 /* PPDeliveryDriverControlView.swift */; };
+		F4D000100000000000000003 /* PPDeliveryDriverHomeControlSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000003 /* PPDeliveryDriverHomeControlSection.swift */; };
+		F4D000100000000000000004 /* PPDeliveryDriverDashboardHostController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000004 /* PPDeliveryDriverDashboardHostController.swift */; };
 		F2C111113001000100A1B2C3 /* PPProviderProfileEditorViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2C111103001000100A1B2C3 /* PPProviderProfileEditorViewController.m */; };
 		F2CAD1B32FDB1F6600418D7C /* Waiting.json in Resources */ = {isa = PBXBuildFile; fileRef = F2CAD1B22FDB1F6600418D7C /* Waiting.json */; };
 		F2CAD1B52FDB344B00418D7C /* BePartner.json in Resources */ = {isa = PBXBuildFile; fileRef = F2CAD1B42FDB344B00418D7C /* BePartner.json */; };
@@ -240,6 +245,17 @@
 		F421A0010000000000000005 /* PPDeliveryCompanyDetailViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F421B001000000000000000A /* PPDeliveryCompanyDetailViewController.m */; };
 		F421A0010000000000000006 /* PPDeliveryCompanyMembersViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F421B001000000000000000C /* PPDeliveryCompanyMembersViewController.m */; };
 		F4B100010000000000000001 /* PPMarketplaceBranchesViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F4B200020000000000000002 /* PPMarketplaceBranchesViewController.m */; };
+		F4B100100000000000000001 /* PPMarketplaceBranchesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200100000000000000001 /* PPMarketplaceBranchesView.swift */; };
+		F4B100200000000000000001 /* PPItemEditorHeroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200200000000000000001 /* PPItemEditorHeroView.swift */; };
+		F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000001 /* PPAdminDesignCompat.swift */; };
+		F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000002 /* PPAccessoryVariantError.swift */; };
+		F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */; };
+		F4B100300000000000000004 /* PPAccessoryVariantModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000004 /* PPAccessoryVariantModels.swift */; };
+		F4B100300000000000000005 /* PPAccessoryVariantService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000005 /* PPAccessoryVariantService.swift */; };
+		F4B100300000000000000006 /* PPAccessoryOptionEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000006 /* PPAccessoryOptionEditorView.swift */; };
+		F4B100300000000000000007 /* PPAccessoryVariantMatrixView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000007 /* PPAccessoryVariantMatrixView.swift */; };
+		F4B100300000000000000008 /* PPAccessoryVariantSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000008 /* PPAccessoryVariantSection.swift */; };
+		F4B100300000000000000009 /* PPInventoryFamilyGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000009 /* PPInventoryFamilyGrouping.swift */; };
 		F4B100020000000000000002 /* PackageDelivery.json in Resources */ = {isa = PBXBuildFile; fileRef = F4B200030000000000000003 /* PackageDelivery.json */; };
 		F5A0B1013005000100A0B101 /* PPHero.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5A0B1023005000100A0B102 /* PPHero.swift */; };
 		F5A0B2013005000100A0B201 /* PPProQuickActionsDeck.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5A0B2023005000100A0B202 /* PPProQuickActionsDeck.swift */; };
@@ -304,6 +320,7 @@
 		A0E5C836F3B3CAD482A342C7 /* RPManager.m */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.objc; path = RPManager.m; sourceTree = "<group>"; };
 		A1E5604CF63D542D8056E8CC /* QBSlomoIconView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = QBSlomoIconView.h; sourceTree = "<group>"; };
 		A6DA4CC6A2BB459BAE2B8EAA /* PPProRootTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProRootTabBarController.swift; sourceTree = "<group>"; };
+		A6DA4CC7A2BB459BAE2B8EAB /* PPProProfileSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProProfileSettingsView.swift; sourceTree = "<group>"; };
 		B4B25A3F0AC9C2AC1635B8EF /* PPImageCollectionRow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPImageCollectionRow.h; sourceTree = "<group>"; };
 		B7D4E5F62A1B4C6D8E9F0011 /* PPFirebaseCompat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPFirebaseCompat.h; sourceTree = "<group>"; };
 		C1A000010000000000000102 /* PPAdminWebAppViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPAdminWebAppViewController.h; sourceTree = "<group>"; };
@@ -587,6 +604,10 @@
 		F2BEEC7A2F8C8148003E8012 /* PPDeliveryOrderModel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPDeliveryOrderModel.m; sourceTree = "<group>"; };
 		F2BEEC7B2F8C8148003E8012 /* PPDeliveryStatusTimelineView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPDeliveryStatusTimelineView.h; sourceTree = "<group>"; };
 		F2BEEC7C2F8C8148003E8012 /* PPDeliveryStatusTimelineView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPDeliveryStatusTimelineView.m; sourceTree = "<group>"; };
+		F4D000200000000000000001 /* PPDeliveryDriverModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverModels.swift; sourceTree = "<group>"; };
+		F4D000200000000000000002 /* PPDeliveryDriverControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverControlView.swift; sourceTree = "<group>"; };
+		F4D000200000000000000003 /* PPDeliveryDriverHomeControlSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverHomeControlSection.swift; sourceTree = "<group>"; };
+		F4D000200000000000000004 /* PPDeliveryDriverDashboardHostController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverDashboardHostController.swift; sourceTree = "<group>"; };
 		F2C1110F3001000100A1B2C3 /* PPProviderProfileEditorViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPProviderProfileEditorViewController.h; sourceTree = "<group>"; };
 		F2C111103001000100A1B2C3 /* PPProviderProfileEditorViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPProviderProfileEditorViewController.m; sourceTree = "<group>"; };
 		F2CAD1B22FDB1F6600418D7C /* Waiting.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Waiting.json; sourceTree = "<group>"; };
@@ -727,6 +748,17 @@
 		F421B001000000000000000C /* PPDeliveryCompanyMembersViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPDeliveryCompanyMembersViewController.m; sourceTree = "<group>"; };
 		F4B200010000000000000001 /* PPMarketplaceBranchesViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPMarketplaceBranchesViewController.h; sourceTree = "<group>"; };
 		F4B200020000000000000002 /* PPMarketplaceBranchesViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPMarketplaceBranchesViewController.m; sourceTree = "<group>"; };
+		F4B200100000000000000001 /* PPMarketplaceBranchesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPMarketplaceBranchesView.swift; sourceTree = "<group>"; };
+		F4B200200000000000000001 /* PPItemEditorHeroView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPItemEditorHeroView.swift; sourceTree = "<group>"; };
+		F4B200300000000000000001 /* PPAdminDesignCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdminDesignCompat.swift; sourceTree = "<group>"; };
+		F4B200300000000000000002 /* PPAccessoryVariantError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantError.swift; sourceTree = "<group>"; };
+		F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantMediaService.swift; sourceTree = "<group>"; };
+		F4B200300000000000000004 /* PPAccessoryVariantModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantModels.swift; sourceTree = "<group>"; };
+		F4B200300000000000000005 /* PPAccessoryVariantService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantService.swift; sourceTree = "<group>"; };
+		F4B200300000000000000006 /* PPAccessoryOptionEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryOptionEditorView.swift; sourceTree = "<group>"; };
+		F4B200300000000000000007 /* PPAccessoryVariantMatrixView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantMatrixView.swift; sourceTree = "<group>"; };
+		F4B200300000000000000008 /* PPAccessoryVariantSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantSection.swift; sourceTree = "<group>"; };
+		F4B200300000000000000009 /* PPInventoryFamilyGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPInventoryFamilyGrouping.swift; sourceTree = "<group>"; };
 		F4B200030000000000000003 /* PackageDelivery.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PackageDelivery.json; sourceTree = "<group>"; };
 		F5A0B1023005000100A0B102 /* PPHero.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPHero.swift; sourceTree = "<group>"; };
 		F5A0B2023005000100A0B202 /* PPProQuickActionsDeck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProQuickActionsDeck.swift; sourceTree = "<group>"; };
@@ -897,6 +929,7 @@
 				F20B38652E61FEFE007465EE /* SplashViewController.h */,
 				F20B38632E61FE8F007465EE /* SplashViewController.m */,
 				A6DA4CC6A2BB459BAE2B8EAA /* PPProRootTabBarController.swift */,
+				A6DA4CC7A2BB459BAE2B8EAB /* PPProProfileSettingsView.swift */,
 			);
 			path = "Main Controllers";
 			sourceTree = "<group>";
@@ -1410,6 +1443,10 @@
 				F2BEEC7A2F8C8148003E8012 /* PPDeliveryOrderModel.m */,
 				F2BEEC7B2F8C8148003E8012 /* PPDeliveryStatusTimelineView.h */,
 				F2BEEC7C2F8C8148003E8012 /* PPDeliveryStatusTimelineView.m */,
+				F4D000200000000000000001 /* PPDeliveryDriverModels.swift */,
+				F4D000200000000000000002 /* PPDeliveryDriverControlView.swift */,
+				F4D000200000000000000003 /* PPDeliveryDriverHomeControlSection.swift */,
+				F4D000200000000000000004 /* PPDeliveryDriverDashboardHostController.swift */,
 			);
 			path = DeliverySection;
 			sourceTree = "<group>";
@@ -1469,12 +1506,31 @@
 				F2CCF4552F8CA17F007FBAD4 /* PPProviderMarketplaceManager.m */,
 				F4B200010000000000000001 /* PPMarketplaceBranchesViewController.h */,
 				F4B200020000000000000002 /* PPMarketplaceBranchesViewController.m */,
+				F4B200100000000000000001 /* PPMarketplaceBranchesView.swift */,
+				F4B200200000000000000001 /* PPItemEditorHeroView.swift */,
 				F2CCF4562F8CA17F007FBAD4 /* PPProviderMarketItemsViewController.h */,
 				F2CCF4572F8CA17F007FBAD4 /* PPProviderMarketItemsViewController.m */,
 				F2CCF45A2F8CA17F007FBAD4 /* PPProviderMarketItemEditorViewController.h */,
 				F2CCF45B2F8CA17F007FBAD4 /* PPProviderMarketItemEditorViewController.m */,
+				F4B200300000000000000000 /* Variants */,
 			);
 			path = MarketSection;
+			sourceTree = "<group>";
+		};
+		F4B200300000000000000000 /* Variants */ = {
+			isa = PBXGroup;
+			children = (
+				F4B200300000000000000001 /* PPAdminDesignCompat.swift */,
+				F4B200300000000000000002 /* PPAccessoryVariantError.swift */,
+				F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */,
+				F4B200300000000000000004 /* PPAccessoryVariantModels.swift */,
+				F4B200300000000000000005 /* PPAccessoryVariantService.swift */,
+				F4B200300000000000000006 /* PPAccessoryOptionEditorView.swift */,
+				F4B200300000000000000007 /* PPAccessoryVariantMatrixView.swift */,
+				F4B200300000000000000008 /* PPAccessoryVariantSection.swift */,
+				F4B200300000000000000009 /* PPInventoryFamilyGrouping.swift */,
+			);
+			path = Variants;
 			sourceTree = "<group>";
 		};
 		F2D33B1D2F3FC3760007EC75 /* HXPHPickerBridge */ = {
@@ -1877,6 +1933,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				6354F03D931845639C592CFF /* PPProRootTabBarController.swift in Sources */,
+				F5A0B3013005000100A0B301 /* PPProProfileSettingsView.swift in Sources */,
 				F5A0B1013005000100A0B101 /* PPHero.swift in Sources */,
 				F5A0B2013005000100A0B201 /* PPProQuickActionsDeck.swift in Sources */,
 				D7B2A0022F9C4C1B00000002 /* PPDesignTokens.m in Sources */,
@@ -1982,6 +2039,17 @@
 				F2CCF4502F8CA17F007FBAD4 /* PPProviderMarketItem.m in Sources */,
 				F2CCF4512F8CA17F007FBAD4 /* PPProviderMarketplaceManager.m in Sources */,
 				F4B100010000000000000001 /* PPMarketplaceBranchesViewController.m in Sources */,
+				F4B100100000000000000001 /* PPMarketplaceBranchesView.swift in Sources */,
+				F4B100200000000000000001 /* PPItemEditorHeroView.swift in Sources */,
+				F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */,
+				F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */,
+				F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */,
+				F4B100300000000000000004 /* PPAccessoryVariantModels.swift in Sources */,
+				F4B100300000000000000005 /* PPAccessoryVariantService.swift in Sources */,
+				F4B100300000000000000006 /* PPAccessoryOptionEditorView.swift in Sources */,
+				F4B100300000000000000007 /* PPAccessoryVariantMatrixView.swift in Sources */,
+				F4B100300000000000000008 /* PPAccessoryVariantSection.swift in Sources */,
+				F4B100300000000000000009 /* PPInventoryFamilyGrouping.swift in Sources */,
 				F2CCF45C2F8CA17F007FBAD4 /* PPProviderMarketItemsViewController.m in Sources */,
 				F2CCF45D2F8CA17F007FBAD4 /* PPProviderMarketItemEditorViewController.m in Sources */,
 				F29D11C82E72F535001A3F2E /* UIDevice+SystemVersion.m in Sources */,
@@ -2005,6 +2073,10 @@
 				F2BEEC812F8C8148003E8012 /* PPDeliveryStatusTimelineView.m in Sources */,
 				F2BEEC822F8C8148003E8012 /* PPDeliveryOrderModel.m in Sources */,
 				F2BEEC832F8C8148003E8012 /* PPDeliveryDashboardViewController.m in Sources */,
+				F4D000100000000000000001 /* PPDeliveryDriverModels.swift in Sources */,
+				F4D000100000000000000002 /* PPDeliveryDriverControlView.swift in Sources */,
+				F4D000100000000000000003 /* PPDeliveryDriverHomeControlSection.swift in Sources */,
+				F4D000100000000000000004 /* PPDeliveryDriverDashboardHostController.swift in Sources */,
 				F421A0010000000000000001 /* PPDeliveryCompanyModels.m in Sources */,
 				F421A0010000000000000002 /* PPDeliveryCompanyService.m in Sources */,
 				F421A0010000000000000003 /* PPDeliveryCompanySetupViewController.m in Sources */,
@@ -2220,7 +2292,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -2305,7 +2377,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",

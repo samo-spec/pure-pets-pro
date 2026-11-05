@@ -2,7 +2,8 @@
 //  NotificationSettingsViewController.m
 //  PurePetsPro
 //
-//  Created by Mohammed Ahmed on 24/08/2025.
+//  Reinvented from absolute first principles for iPhone & iPad.
+//  Category-defining Pro Notification Command Cockpit & Gateway Telemetry.
 //
 
 #import "NotificationSettingsViewController.h"
@@ -10,29 +11,72 @@
 #import "PPButtonHelper.h"
 #import "Styling.h"
 #import "UIViewController+PPNavBar.h"
+#import "PPAlertHelper.h"
 #import <UserNotifications/UserNotifications.h>
 
-static NSString * const kPPProNotifMasterPreferenceKey = @"pp_notif_master_enabled";
-static NSString * const kPPProNotifSoundPreferenceKey = @"pp_notif_sound_enabled";
-static NSString * const kPPProNotifCategoryGeneralKey = @"pp_notif_cat_general";
-static NSString * const kPPProNotifCategoryOrdersKey = @"pp_notif_cat_order";
-static NSString * const kPPProNotifCategoryDeliveryKey = @"pp_notif_cat_delivery";
-static NSString * const kPPProNotifCategoryReviewKey = @"pp_notif_cat_review";
-static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
+static NSString * const kPPProNotifMasterPreferenceKey   = @"pp_notif_master_enabled";
+static NSString * const kPPProNotifSoundPreferenceKey    = @"pp_notif_sound_enabled";
+static NSString * const kPPProNotifCategoryOrdersKey     = @"pp_notif_cat_order";
+static NSString * const kPPProNotifCategoryDeliveryKey   = @"pp_notif_cat_delivery";
+static NSString * const kPPProNotifCategoryReviewKey     = @"pp_notif_cat_review";
+static NSString * const kPPProNotifCategoryWarningKey    = @"pp_notif_cat_warning";
+static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_general";
 
-@interface NotificationSettingsViewController () <UIScrollViewDelegate, UIGestureRecognizerDelegate>
+#ifndef PrimaryTextClr
+#define PrimaryTextClr (AppPrimaryTextClr ?: UIColor.labelColor)
+#endif
+
+#ifndef SeconderyTextClr
+#define SeconderyTextClr (AppSecondaryTextClr ?: UIColor.secondaryLabelColor)
+#endif
+
+#ifndef PPFontBold
+#define PPFontBold(size) ([Styling fontBold:(size)] ?: [UIFont systemFontOfSize:(size) weight:UIFontWeightBold])
+#endif
+
+#ifndef PPFontMedium
+#define PPFontMedium(size) ([Styling fontMedium:(size)] ?: [UIFont systemFontOfSize:(size) weight:UIFontWeightMedium])
+#endif
+
+#ifndef PPFontRegular
+#define PPFontRegular(size) ([Styling fontRegular:(size)] ?: [UIFont systemFontOfSize:(size) weight:UIFontWeightRegular])
+#endif
+
+@interface NotificationSettingsViewController () <UIScrollViewDelegate, UIGestureRecognizerDelegate, UIPointerInteractionDelegate>
 
 @property (nonatomic, strong) UIScrollView *scrollView;
-@property (nonatomic, strong) UIStackView *contentStack;
+
+// Layout Containers
+@property (nonatomic, strong) UIView *canvasContainer;
+@property (nonatomic, strong) UIStackView *iphoneStack;
+@property (nonatomic, strong) UIView *ipadContainer;
+@property (nonatomic, strong) UIStackView *ipadLeadingTower;
+@property (nonatomic, strong) UIStackView *ipadTrailingCanvas;
+
+@property (nonatomic, strong) NSArray<NSLayoutConstraint *> *iphoneConstraints;
+@property (nonatomic, strong) NSArray<NSLayoutConstraint *> *ipadConstraints;
+@property (nonatomic, assign) BOOL isIPadLayoutActive;
+
+// UI Components
+@property (nonatomic, strong) UIView *heroSection;
 @property (nonatomic, strong) UIView *statusCard;
+@property (nonatomic, strong) UIView *statusBeaconDot;
 @property (nonatomic, strong) UIImageView *statusIconView;
 @property (nonatomic, strong) UILabel *statusTitleLabel;
 @property (nonatomic, strong) UILabel *statusBodyLabel;
 @property (nonatomic, strong) UIButton *statusActionButton;
+@property (nonatomic, strong) UIButton *diagnosticTestButton;
+
+@property (nonatomic, strong) UIView *primaryControlsCard;
 @property (nonatomic, strong) UISwitch *masterSwitch;
 @property (nonatomic, strong) UISwitch *soundSwitch;
+
+@property (nonatomic, strong) UIView *categorySection;
+@property (nonatomic, strong) UILabel *categorySummaryPill;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UISwitch *> *categorySwitches;
 @property (nonatomic, strong) NSMutableArray<UIView *> *categoryRows;
+@property (nonatomic, strong) UILabel *footnoteLabel;
+
 @property (nonatomic, assign) UNAuthorizationStatus authorizationStatus;
 @property (nonatomic, assign) BOOL didRunEntranceAnimation;
 
@@ -51,8 +95,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     self.view.backgroundColor = AppBackgroundClr;
     self.view.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
 
-    [self pp_buildLayout];
-    [self pp_prepareEntranceAnimation];
+    [self pp_setupHierarchy];
     [self pp_refreshSystemPermissionState];
 }
 
@@ -69,17 +112,25 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     [self pp_runEntranceAnimationIfNeeded];
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self pp_updateLayoutForCurrentGeometry];
+}
+
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
     if ([self.traitCollection hasDifferentColorAppearanceComparedToTraitCollection:previousTraitCollection]) {
         self.view.backgroundColor = AppBackgroundClr;
         [self pp_updateStatusCardForCurrentAuthorization];
     }
+    if (self.traitCollection.horizontalSizeClass != previousTraitCollection.horizontalSizeClass) {
+        [self pp_updateLayoutForCurrentGeometry];
+    }
 }
 
-#pragma mark - Layout
+#pragma mark - Adaptive iPhone & iPad Layout Architecture
 
-- (void)pp_buildLayout {
+- (void)pp_setupHierarchy {
     self.scrollView = [[UIScrollView alloc] init];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.scrollView.alwaysBounceVertical = YES;
@@ -88,45 +139,147 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     self.scrollView.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
     [self.view addSubview:self.scrollView];
 
-    self.contentStack = [[UIStackView alloc] init];
-    self.contentStack.translatesAutoresizingMaskIntoConstraints = NO;
-    self.contentStack.axis = UILayoutConstraintAxisVertical;
-    self.contentStack.alignment = UIStackViewAlignmentFill;
-    self.contentStack.distribution = UIStackViewDistributionFill;
-    self.contentStack.spacing = 18.0;
-    self.contentStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
-    [self.scrollView addSubview:self.contentStack];
-
     [NSLayoutConstraint activateConstraints:@[
         [self.scrollView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.scrollView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-
-        [self.contentStack.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor constant:18.0],
-        [self.contentStack.leadingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.leadingAnchor constant:18.0],
-        [self.contentStack.trailingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.trailingAnchor constant:-18.0],
-        [self.contentStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-34.0],
     ]];
 
-    [self.contentStack addArrangedSubview:[self pp_buildHeroSection]];
-    [self.contentStack addArrangedSubview:[self pp_buildStatusCard]];
-    [self.contentStack addArrangedSubview:[self pp_buildPrimaryControlsCard]];
-    [self.contentStack addArrangedSubview:[self pp_buildCategoryCard]];
-    [self.contentStack addArrangedSubview:[self pp_buildFootnoteLabel]];
+    // Build Reusable Section Components Once
+    self.heroSection = [self pp_buildHeroSection];
+    self.statusCard = [self pp_buildStatusCard];
+    self.primaryControlsCard = [self pp_buildPrimaryControlsCard];
+    self.categorySection = [self pp_buildCategorySection];
+    self.footnoteLabel = [self pp_buildFootnoteLabel];
+
+    // 1. iPhone Stack Container
+    self.iphoneStack = [[UIStackView alloc] init];
+    self.iphoneStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iphoneStack.axis = UILayoutConstraintAxisVertical;
+    self.iphoneStack.alignment = UIStackViewAlignmentFill;
+    self.iphoneStack.distribution = UIStackViewDistributionFill;
+    self.iphoneStack.spacing = 16.0;
+    self.iphoneStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.scrollView addSubview:self.iphoneStack];
+
+    // 2. iPad Split Container
+    self.ipadContainer = [[UIView alloc] init];
+    self.ipadContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.ipadContainer.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.scrollView addSubview:self.ipadContainer];
+
+    self.ipadLeadingTower = [[UIStackView alloc] init];
+    self.ipadLeadingTower.translatesAutoresizingMaskIntoConstraints = NO;
+    self.ipadLeadingTower.axis = UILayoutConstraintAxisVertical;
+    self.ipadLeadingTower.alignment = UIStackViewAlignmentFill;
+    self.ipadLeadingTower.distribution = UIStackViewDistributionFill;
+    self.ipadLeadingTower.spacing = 16.0;
+    self.ipadLeadingTower.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.ipadContainer addSubview:self.ipadLeadingTower];
+
+    self.ipadTrailingCanvas = [[UIStackView alloc] init];
+    self.ipadTrailingCanvas.translatesAutoresizingMaskIntoConstraints = NO;
+    self.ipadTrailingCanvas.axis = UILayoutConstraintAxisVertical;
+    self.ipadTrailingCanvas.alignment = UIStackViewAlignmentFill;
+    self.ipadTrailingCanvas.distribution = UIStackViewDistributionFill;
+    self.ipadTrailingCanvas.spacing = 16.0;
+    self.ipadTrailingCanvas.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.ipadContainer addSubview:self.ipadTrailingCanvas];
+
+    // Constraints Sets
+    self.iphoneConstraints = @[
+        [self.iphoneStack.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor constant:16.0],
+        [self.iphoneStack.leadingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.leadingAnchor constant:18.0],
+        [self.iphoneStack.trailingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.trailingAnchor constant:-18.0],
+        [self.iphoneStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-32.0],
+    ];
+
+    self.ipadConstraints = @[
+        [self.ipadContainer.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor constant:24.0],
+        [self.ipadContainer.leadingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.leadingAnchor constant:28.0],
+        [self.ipadContainer.trailingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.trailingAnchor constant:-28.0],
+        [self.ipadContainer.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-40.0],
+
+        [self.ipadLeadingTower.topAnchor constraintEqualToAnchor:self.ipadContainer.topAnchor],
+        [self.ipadLeadingTower.leadingAnchor constraintEqualToAnchor:self.ipadContainer.leadingAnchor],
+        [self.ipadLeadingTower.widthAnchor constraintEqualToConstant:370.0],
+        [self.ipadLeadingTower.bottomAnchor constraintLessThanOrEqualToAnchor:self.ipadContainer.bottomAnchor],
+
+        [self.ipadTrailingCanvas.topAnchor constraintEqualToAnchor:self.ipadContainer.topAnchor],
+        [self.ipadTrailingCanvas.leadingAnchor constraintEqualToAnchor:self.ipadLeadingTower.trailingAnchor constant:24.0],
+        [self.ipadTrailingCanvas.trailingAnchor constraintEqualToAnchor:self.ipadContainer.trailingAnchor],
+        [self.ipadTrailingCanvas.bottomAnchor constraintEqualToAnchor:self.ipadContainer.bottomAnchor],
+    ];
+
+    // Initial Layout Setup
+    [self pp_applyLayoutMode:NO];
 }
 
+- (void)pp_updateLayoutForCurrentGeometry {
+    BOOL shouldBeIPad = (self.traitCollection.horizontalSizeClass == UIUserInterfaceSizeClassRegular &&
+                         self.view.bounds.size.width >= 700.0);
+
+    if (shouldBeIPad != self.isIPadLayoutActive) {
+        [self pp_applyLayoutMode:shouldBeIPad];
+    }
+}
+
+- (void)pp_applyLayoutMode:(BOOL)isIPad {
+    self.isIPadLayoutActive = isIPad;
+
+    // Cleanly detach views from previous parent
+    [self.heroSection removeFromSuperview];
+    [self.statusCard removeFromSuperview];
+    [self.primaryControlsCard removeFromSuperview];
+    [self.categorySection removeFromSuperview];
+    [self.footnoteLabel removeFromSuperview];
+
+    if (isIPad) {
+        [NSLayoutConstraint deactivateConstraints:self.iphoneConstraints];
+        self.iphoneStack.hidden = YES;
+        self.ipadContainer.hidden = NO;
+
+        // iPad Leading Tower: Hero, Status Gateway, Master Controls
+        [self.ipadLeadingTower addArrangedSubview:self.heroSection];
+        [self.ipadLeadingTower addArrangedSubview:self.statusCard];
+        [self.ipadLeadingTower addArrangedSubview:self.primaryControlsCard];
+
+        // iPad Trailing Canvas: Channels Matrix + Footnote
+        [self.ipadTrailingCanvas addArrangedSubview:self.categorySection];
+        [self.ipadTrailingCanvas addArrangedSubview:self.footnoteLabel];
+
+        [NSLayoutConstraint activateConstraints:self.ipadConstraints];
+    } else {
+        [NSLayoutConstraint deactivateConstraints:self.ipadConstraints];
+        self.ipadContainer.hidden = YES;
+        self.iphoneStack.hidden = NO;
+
+        // iPhone Single Vertical Deck
+        [self.iphoneStack addArrangedSubview:self.heroSection];
+        [self.iphoneStack addArrangedSubview:self.statusCard];
+        [self.iphoneStack addArrangedSubview:self.primaryControlsCard];
+        [self.iphoneStack addArrangedSubview:self.categorySection];
+        [self.iphoneStack addArrangedSubview:self.footnoteLabel];
+
+        [NSLayoutConstraint activateConstraints:self.iphoneConstraints];
+    }
+
+    [self.view layoutIfNeeded];
+}
+
+#pragma mark - Section Builders
+
 - (UIView *)pp_buildHeroSection {
-    PPHero *container = [[PPHero alloc] init];
-    container.translatesAutoresizingMaskIntoConstraints = NO;
-    container.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    UIView *card = [self pp_surfaceCardWithCornerRadius:24.0];
+    card.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
 
     UIView *iconSurface = [[UIView alloc] init];
     iconSurface.translatesAutoresizingMaskIntoConstraints = NO;
-    iconSurface.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10] ?: [[UIColor ppInfo] colorWithAlphaComponent:0.10];
+    iconSurface.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
     iconSurface.layer.cornerRadius = 23.0;
     iconSurface.layer.cornerCurve = kCACornerCurveContinuous;
-    [container addSubview:iconSurface];
+    [card addSubview:iconSurface];
 
     UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"bell.badge.fill"
                                                                        withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:20.0 weight:UIImageSymbolWeightSemibold]]];
@@ -135,56 +288,66 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     iconView.isAccessibilityElement = NO;
     [iconSurface addSubview:iconView];
 
+    UIView *eyebrowCapsule = [[UIView alloc] init];
+    eyebrowCapsule.translatesAutoresizingMaskIntoConstraints = NO;
+    eyebrowCapsule.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.09];
+    eyebrowCapsule.layer.cornerRadius = 10.0;
+    eyebrowCapsule.layer.cornerCurve = kCACornerCurveContinuous;
+    [card addSubview:eyebrowCapsule];
+
     UILabel *eyebrow = [self pp_labelWithText:kLang(@"NotificationSettings_Eyebrow")
-                                         font:[Styling fontBold:11.0]
+                                         font:PPFontBold(10.5)
                                         color:AppPrimaryClr
                                         lines:1];
     eyebrow.text = [eyebrow.text uppercaseString];
-    [container addSubview:eyebrow];
+    [eyebrowCapsule addSubview:eyebrow];
 
     UILabel *title = [self pp_labelWithText:kLang(@"NotificationSettings_HeroTitle")
-                                       font:[Styling fontBold:31.0]
+                                       font:PPFontBold(24.0)
                                       color:PrimaryTextClr
                                       lines:2];
-    title.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleLargeTitle] scaledFontForFont:title.font];
-    [container addSubview:title];
+    [card addSubview:title];
 
     UILabel *subtitle = [self pp_labelWithText:kLang(@"NotificationSettings_HeroSubtitle")
-                                          font:[Styling fontMedium:14.0]
+                                          font:PPFontRegular(13.5)
                                          color:[SeconderyTextClr colorWithAlphaComponent:0.86]
-                                         lines:3];
-    subtitle.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline] scaledFontForFont:subtitle.font];
-    [container addSubview:subtitle];
+                                         lines:0];
+    [card addSubview:subtitle];
 
     [NSLayoutConstraint activateConstraints:@[
-        [iconSurface.topAnchor constraintEqualToAnchor:container.topAnchor constant:4.0],
-        [iconSurface.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [iconSurface.topAnchor constraintEqualToAnchor:card.topAnchor constant:18.0],
+        [iconSurface.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18.0],
         [iconSurface.widthAnchor constraintEqualToConstant:46.0],
         [iconSurface.heightAnchor constraintEqualToConstant:46.0],
+
         [iconView.centerXAnchor constraintEqualToAnchor:iconSurface.centerXAnchor],
         [iconView.centerYAnchor constraintEqualToAnchor:iconSurface.centerYAnchor],
 
-        [eyebrow.topAnchor constraintEqualToAnchor:container.topAnchor constant:6.0],
-        [eyebrow.leadingAnchor constraintEqualToAnchor:iconSurface.trailingAnchor constant:14.0],
-        [eyebrow.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [eyebrowCapsule.topAnchor constraintEqualToAnchor:card.topAnchor constant:18.0],
+        [eyebrowCapsule.leadingAnchor constraintEqualToAnchor:iconSurface.trailingAnchor constant:12.0],
+        [eyebrowCapsule.heightAnchor constraintEqualToConstant:20.0],
 
-        [title.topAnchor constraintEqualToAnchor:eyebrow.bottomAnchor constant:7.0],
-        [title.leadingAnchor constraintEqualToAnchor:eyebrow.leadingAnchor],
-        [title.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [eyebrow.leadingAnchor constraintEqualToAnchor:eyebrowCapsule.leadingAnchor constant:8.0],
+        [eyebrow.trailingAnchor constraintEqualToAnchor:eyebrowCapsule.trailingAnchor constant:-8.0],
+        [eyebrow.centerYAnchor constraintEqualToAnchor:eyebrowCapsule.centerYAnchor],
 
-        [subtitle.topAnchor constraintEqualToAnchor:title.bottomAnchor constant:10.0],
-        [subtitle.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
-        [subtitle.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
-        [subtitle.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-4.0],
+        [title.topAnchor constraintEqualToAnchor:eyebrowCapsule.bottomAnchor constant:6.0],
+        [title.leadingAnchor constraintEqualToAnchor:iconSurface.trailingAnchor constant:12.0],
+        [title.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18.0],
+
+        // Subtitle full-width baseline fix (eliminates "-كم" text clipping bug)
+        [subtitle.topAnchor constraintEqualToAnchor:iconSurface.bottomAnchor constant:12.0],
+        [subtitle.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18.0],
+        [subtitle.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18.0],
+        [subtitle.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-18.0]
     ]];
 
-    return container;
+    return card;
 }
 
 - (UIView *)pp_buildStatusCard {
-    PPHero *card = [[PPHero alloc] init];
-    card.translatesAutoresizingMaskIntoConstraints = NO;
-    self.statusCard = card;
+    UIView *card = [self pp_surfaceCardWithCornerRadius:24.0];
+    card.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
 
     UIView *iconSurface = [[UIView alloc] init];
     iconSurface.translatesAutoresizingMaskIntoConstraints = NO;
@@ -198,53 +361,92 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     self.statusIconView.isAccessibilityElement = NO;
     [iconSurface addSubview:self.statusIconView];
 
+    // Live illuminated pulse beacon dot
+    self.statusBeaconDot = [[UIView alloc] init];
+    self.statusBeaconDot.translatesAutoresizingMaskIntoConstraints = NO;
+    self.statusBeaconDot.layer.cornerRadius = 4.0;
+    self.statusBeaconDot.layer.cornerCurve = kCACornerCurveContinuous;
+    [card addSubview:self.statusBeaconDot];
+
     self.statusTitleLabel = [self pp_labelWithText:kLang(@"NotificationSettings_CheckingStatus")
-                                              font:[Styling fontBold:16.0]
+                                              font:PPFontBold(16.0)
                                              color:PrimaryTextClr
                                              lines:2];
-    self.statusTitleLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleHeadline] scaledFontForFont:self.statusTitleLabel.font];
     [card addSubview:self.statusTitleLabel];
 
     self.statusBodyLabel = [self pp_labelWithText:kLang(@"NotificationSettings_CheckingStatusSubtitle")
-                                             font:[Styling fontMedium:12.5]
-                                            color:[SeconderyTextClr colorWithAlphaComponent:0.84]
-                                            lines:3];
-    self.statusBodyLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleFootnote] scaledFontForFont:self.statusBodyLabel.font];
+                                             font:PPFontRegular(13.0)
+                                            color:[SeconderyTextClr colorWithAlphaComponent:0.86]
+                                            lines:0];
     [card addSubview:self.statusBodyLabel];
 
-    self.statusActionButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    // Action Buttons Row (iOS Settings + Diagnostic Test)
+    UIStackView *actionsRow = [[UIStackView alloc] init];
+    actionsRow.translatesAutoresizingMaskIntoConstraints = NO;
+    actionsRow.axis = UILayoutConstraintAxisHorizontal;
+    actionsRow.spacing = 10.0;
+    actionsRow.distribution = UIStackViewDistributionFill;
+    actionsRow.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [card addSubview:actionsRow];
+
+    self.statusActionButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.statusActionButton.translatesAutoresizingMaskIntoConstraints = NO;
-    self.statusActionButton.titleLabel.font = [Styling fontBold:13.0];
-    self.statusActionButton.layer.cornerRadius = 17.0;
+    self.statusActionButton.titleLabel.font = PPFontBold(13.0);
+    self.statusActionButton.layer.cornerRadius = 16.0;
     self.statusActionButton.layer.cornerCurve = kCACornerCurveContinuous;
     self.statusActionButton.contentEdgeInsets = UIEdgeInsetsMake(0.0, 14.0, 0.0, 14.0);
     [self.statusActionButton setTitle:kLang(@"NotificationSettings_OpenIOSSettings") forState:UIControlStateNormal];
     [self.statusActionButton addTarget:self action:@selector(pp_permissionActionTapped) forControlEvents:UIControlEventTouchUpInside];
-    [PPButtonHelper attachTapAnimationToButton:self.statusActionButton style:PPButtonAnimationStyleDefault];
-    [card addSubview:self.statusActionButton];
+    [actionsRow addArrangedSubview:self.statusActionButton];
+
+    self.diagnosticTestButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.diagnosticTestButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.diagnosticTestButton.titleLabel.font = PPFontMedium(13.0);
+    self.diagnosticTestButton.layer.cornerRadius = 16.0;
+    self.diagnosticTestButton.layer.cornerCurve = kCACornerCurveContinuous;
+    self.diagnosticTestButton.backgroundColor = [AppBackgroundClr colorWithAlphaComponent:0.80];
+    self.diagnosticTestButton.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    self.diagnosticTestButton.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.12].CGColor;
+    [self.diagnosticTestButton setTitleColor:PrimaryTextClr forState:UIControlStateNormal];
+    self.diagnosticTestButton.contentEdgeInsets = UIEdgeInsetsMake(0.0, 12.0, 0.0, 12.0);
+    [self.diagnosticTestButton setTitle:kLang(@"NotificationSettings_SendDiagnosticTest") forState:UIControlStateNormal];
+    [self.diagnosticTestButton addTarget:self action:@selector(pp_sendDiagnosticNotification) forControlEvents:UIControlEventTouchUpInside];
+    [actionsRow addArrangedSubview:self.diagnosticTestButton];
+
+    if (@available(iOS 13.4, *)) {
+        [self.statusActionButton addInteraction:[[UIPointerInteraction alloc] initWithDelegate:self]];
+        [self.diagnosticTestButton addInteraction:[[UIPointerInteraction alloc] initWithDelegate:self]];
+    }
 
     [NSLayoutConstraint activateConstraints:@[
         [iconSurface.topAnchor constraintEqualToAnchor:card.topAnchor constant:18.0],
         [iconSurface.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:18.0],
         [iconSurface.widthAnchor constraintEqualToConstant:42.0],
         [iconSurface.heightAnchor constraintEqualToConstant:42.0],
+
         [self.statusIconView.centerXAnchor constraintEqualToAnchor:iconSurface.centerXAnchor],
         [self.statusIconView.centerYAnchor constraintEqualToAnchor:iconSurface.centerYAnchor],
-        [self.statusIconView.widthAnchor constraintEqualToConstant:19.0],
-        [self.statusIconView.heightAnchor constraintEqualToConstant:19.0],
+        [self.statusIconView.widthAnchor constraintEqualToConstant:20.0],
+        [self.statusIconView.heightAnchor constraintEqualToConstant:20.0],
+
+        [self.statusBeaconDot.centerYAnchor constraintEqualToAnchor:self.statusTitleLabel.centerYAnchor],
+        [self.statusBeaconDot.leadingAnchor constraintEqualToAnchor:iconSurface.trailingAnchor constant:12.0],
+        [self.statusBeaconDot.widthAnchor constraintEqualToConstant:8.0],
+        [self.statusBeaconDot.heightAnchor constraintEqualToConstant:8.0],
 
         [self.statusTitleLabel.topAnchor constraintEqualToAnchor:card.topAnchor constant:18.0],
-        [self.statusTitleLabel.leadingAnchor constraintEqualToAnchor:iconSurface.trailingAnchor constant:13.0],
+        [self.statusTitleLabel.leadingAnchor constraintEqualToAnchor:self.statusBeaconDot.trailingAnchor constant:8.0],
         [self.statusTitleLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18.0],
 
-        [self.statusBodyLabel.topAnchor constraintEqualToAnchor:self.statusTitleLabel.bottomAnchor constant:5.0],
-        [self.statusBodyLabel.leadingAnchor constraintEqualToAnchor:self.statusTitleLabel.leadingAnchor],
-        [self.statusBodyLabel.trailingAnchor constraintEqualToAnchor:self.statusTitleLabel.trailingAnchor],
+        [self.statusBodyLabel.topAnchor constraintEqualToAnchor:self.statusTitleLabel.bottomAnchor constant:6.0],
+        [self.statusBodyLabel.leadingAnchor constraintEqualToAnchor:self.statusBeaconDot.leadingAnchor],
+        [self.statusBodyLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18.0],
 
-        [self.statusActionButton.topAnchor constraintEqualToAnchor:self.statusBodyLabel.bottomAnchor constant:14.0],
-        [self.statusActionButton.leadingAnchor constraintEqualToAnchor:self.statusTitleLabel.leadingAnchor],
-        [self.statusActionButton.heightAnchor constraintEqualToConstant:38.0],
-        [self.statusActionButton.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-18.0],
+        [actionsRow.topAnchor constraintEqualToAnchor:self.statusBodyLabel.bottomAnchor constant:14.0],
+        [actionsRow.leadingAnchor constraintEqualToAnchor:self.statusBeaconDot.leadingAnchor],
+        [actionsRow.trailingAnchor constraintLessThanOrEqualToAnchor:card.trailingAnchor constant:-18.0],
+        [actionsRow.heightAnchor constraintEqualToConstant:36.0],
+        [actionsRow.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-18.0]
     ]];
 
     [self pp_updateStatusCardForCurrentAuthorization];
@@ -252,16 +454,15 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 }
 
 - (UIView *)pp_buildPrimaryControlsCard {
-    PPHero *card = [[PPHero alloc] init];
-    card.translatesAutoresizingMaskIntoConstraints = NO;
+    UIView *card = [self pp_surfaceCardWithCornerRadius:24.0];
     UIStackView *stack = [self pp_verticalStackWithSpacing:0.0];
     [card addSubview:stack];
 
     [NSLayoutConstraint activateConstraints:@[
-        [stack.topAnchor constraintEqualToAnchor:card.topAnchor constant:8.0],
+        [stack.topAnchor constraintEqualToAnchor:card.topAnchor constant:6.0],
         [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
         [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-8.0],
+        [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-6.0],
     ]];
 
     self.masterSwitch = [self pp_addPreferenceRowToStack:stack
@@ -285,38 +486,61 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     return card;
 }
 
-- (UIView *)pp_buildCategoryCard {
+- (UIView *)pp_buildCategorySection {
     UIView *wrapper = [[UIView alloc] init];
     wrapper.translatesAutoresizingMaskIntoConstraints = NO;
 
+    // Section Header with Dynamic Counter Pill
+    UIView *headerRow = [[UIView alloc] init];
+    headerRow.translatesAutoresizingMaskIntoConstraints = NO;
+    [wrapper addSubview:headerRow];
+
     UILabel *sectionTitle = [self pp_labelWithText:kLang(@"NotificationSettings_CategoriesTitle")
-                                              font:[Styling fontBold:13.0]
-                                             color:[PrimaryTextClr colorWithAlphaComponent:0.66]
+                                              font:PPFontBold(13.0)
+                                             color:[PrimaryTextClr colorWithAlphaComponent:0.65]
                                              lines:1];
     sectionTitle.text = [sectionTitle.text uppercaseString];
-    [wrapper addSubview:sectionTitle];
+    [headerRow addSubview:sectionTitle];
 
-    PPHero *card = [[PPHero alloc] init];
-    card.translatesAutoresizingMaskIntoConstraints = NO;
+    self.categorySummaryPill = [self pp_labelWithText:@""
+                                                 font:PPFontBold(11.0)
+                                                color:AppPrimaryClr
+                                                lines:1];
+    self.categorySummaryPill.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
+    self.categorySummaryPill.layer.cornerRadius = 8.0;
+    self.categorySummaryPill.layer.cornerCurve = kCACornerCurveContinuous;
+    self.categorySummaryPill.clipsToBounds = YES;
+    self.categorySummaryPill.textAlignment = NSTextAlignmentCenter;
+    [headerRow addSubview:self.categorySummaryPill];
+
+    UIView *card = [self pp_surfaceCardWithCornerRadius:24.0];
     [wrapper addSubview:card];
 
     UIStackView *stack = [self pp_verticalStackWithSpacing:0.0];
     [card addSubview:stack];
 
     [NSLayoutConstraint activateConstraints:@[
-        [sectionTitle.topAnchor constraintEqualToAnchor:wrapper.topAnchor],
-        [sectionTitle.leadingAnchor constraintEqualToAnchor:wrapper.leadingAnchor constant:2.0],
-        [sectionTitle.trailingAnchor constraintEqualToAnchor:wrapper.trailingAnchor constant:-2.0],
+        [headerRow.topAnchor constraintEqualToAnchor:wrapper.topAnchor],
+        [headerRow.leadingAnchor constraintEqualToAnchor:wrapper.leadingAnchor constant:4.0],
+        [headerRow.trailingAnchor constraintEqualToAnchor:wrapper.trailingAnchor constant:-4.0],
+        [headerRow.heightAnchor constraintEqualToConstant:24.0],
 
-        [card.topAnchor constraintEqualToAnchor:sectionTitle.bottomAnchor constant:10.0],
+        [sectionTitle.leadingAnchor constraintEqualToAnchor:headerRow.leadingAnchor],
+        [sectionTitle.centerYAnchor constraintEqualToAnchor:headerRow.centerYAnchor],
+
+        [self.categorySummaryPill.trailingAnchor constraintEqualToAnchor:headerRow.trailingAnchor],
+        [self.categorySummaryPill.centerYAnchor constraintEqualToAnchor:headerRow.centerYAnchor],
+        [self.categorySummaryPill.heightAnchor constraintEqualToConstant:20.0],
+
+        [card.topAnchor constraintEqualToAnchor:headerRow.bottomAnchor constant:10.0],
         [card.leadingAnchor constraintEqualToAnchor:wrapper.leadingAnchor],
         [card.trailingAnchor constraintEqualToAnchor:wrapper.trailingAnchor],
         [card.bottomAnchor constraintEqualToAnchor:wrapper.bottomAnchor],
 
-        [stack.topAnchor constraintEqualToAnchor:card.topAnchor constant:8.0],
+        [stack.topAnchor constraintEqualToAnchor:card.topAnchor constant:6.0],
         [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor],
         [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor],
-        [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-8.0],
+        [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-6.0],
     ]];
 
     [self pp_addCategoryRowToStack:stack
@@ -369,14 +593,14 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 
 - (UILabel *)pp_buildFootnoteLabel {
     UILabel *label = [self pp_labelWithText:kLang(@"NotificationSettings_Footnote")
-                                       font:[Styling fontMedium:12.0]
-                                      color:[SeconderyTextClr colorWithAlphaComponent:0.78]
+                                       font:PPFontRegular(12.0)
+                                      color:[SeconderyTextClr colorWithAlphaComponent:0.75]
                                       lines:0];
     label.textAlignment = NSTextAlignmentCenter;
     return label;
 }
 
-#pragma mark - Rows
+#pragma mark - Rows Factory
 
 - (UISwitch *)pp_addCategoryRowToStack:(UIStackView *)stack
                                  title:(NSString *)title
@@ -427,24 +651,22 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     [row addSubview:iconSurface];
 
     UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:iconName
-                                                                       withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:15.5 weight:UIImageSymbolWeightSemibold]]];
+                                                                       withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:16.0 weight:UIImageSymbolWeightSemibold]]];
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
     iconView.tintColor = accentColor;
     iconView.isAccessibilityElement = NO;
     [iconSurface addSubview:iconView];
 
     UILabel *titleLabel = [self pp_labelWithText:title
-                                            font:[Styling fontBold:15.0]
+                                            font:PPFontBold(15.0)
                                            color:PrimaryTextClr
                                            lines:2];
-    titleLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody] scaledFontForFont:titleLabel.font];
     [row addSubview:titleLabel];
 
     UILabel *subtitleLabel = [self pp_labelWithText:subtitle
-                                               font:[Styling fontMedium:12.0]
+                                               font:PPFontRegular(12.5)
                                               color:[SeconderyTextClr colorWithAlphaComponent:0.80]
                                               lines:3];
-    subtitleLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleFootnote] scaledFontForFont:subtitleLabel.font];
     [row addSubview:subtitleLabel];
 
     UISwitch *toggle = [[UISwitch alloc] init];
@@ -456,13 +678,18 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     [toggle addTarget:self action:@selector(pp_switchChanged:) forControlEvents:UIControlEventValueChanged];
     [row addSubview:toggle];
 
+    if (@available(iOS 13.4, *)) {
+        [toggle addInteraction:[[UIPointerInteraction alloc] initWithDelegate:self]];
+    }
+
     [NSLayoutConstraint activateConstraints:@[
-        [row.heightAnchor constraintGreaterThanOrEqualToConstant:76.0],
+        [row.heightAnchor constraintGreaterThanOrEqualToConstant:74.0],
 
         [iconSurface.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:18.0],
-        [iconSurface.topAnchor constraintEqualToAnchor:row.topAnchor constant:18.0],
-        [iconSurface.widthAnchor constraintEqualToConstant:36.0],
-        [iconSurface.heightAnchor constraintEqualToConstant:36.0],
+        [iconSurface.topAnchor constraintEqualToAnchor:row.topAnchor constant:17.0],
+        [iconSurface.widthAnchor constraintEqualToConstant:38.0],
+        [iconSurface.heightAnchor constraintEqualToConstant:38.0],
+
         [iconView.centerXAnchor constraintEqualToAnchor:iconSurface.centerXAnchor],
         [iconView.centerYAnchor constraintEqualToAnchor:iconSurface.centerYAnchor],
 
@@ -476,13 +703,13 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
         [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:3.0],
         [subtitleLabel.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
         [subtitleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:toggle.leadingAnchor constant:-12.0],
-        [subtitleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:row.bottomAnchor constant:-14.0],
+        [subtitleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:row.bottomAnchor constant:-15.0],
     ]];
 
     if (separator) {
         UIView *line = [[UIView alloc] init];
         line.translatesAutoresizingMaskIntoConstraints = NO;
-        line.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.08];
+        line.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.07];
         [row addSubview:line];
         [NSLayoutConstraint activateConstraints:@[
             [line.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
@@ -495,7 +722,7 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     return toggle;
 }
 
-#pragma mark - Actions
+#pragma mark - Actions & Haptics
 
 - (void)pp_switchChanged:(UISwitch *)sender {
     NSString *key = sender.accessibilityIdentifier;
@@ -509,13 +736,6 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
         UISelectionFeedbackGenerator *feedback = [[UISelectionFeedbackGenerator alloc] init];
         [feedback selectionChanged];
     }
-
-    [PPToast toast:kLang(@"NotificationSettings_SavedToast")
-             style:PPToastStyleSuccess
-            haptic:NO
-          duration:1.3
-          position:PPToastPositionBottom
-            inView:self.view];
 }
 
 - (void)pp_preferenceRowTapped:(UITapGestureRecognizer *)recognizer {
@@ -549,17 +769,21 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 }
 
 - (void)pp_permissionActionTapped {
-    [PPFunc pp_playTapEffect];
+    if (@available(iOS 10.0, *)) {
+        UIImpactFeedbackGenerator *impact = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+        [impact impactOccurred];
+    }
+
     if (self.authorizationStatus == UNAuthorizationStatusNotDetermined) {
         UNAuthorizationOptions options = UNAuthorizationOptionAlert | UNAuthorizationOptionSound | UNAuthorizationOptionBadge;
         [[UNUserNotificationCenter currentNotificationCenter] requestAuthorizationWithOptions:options
-                                                                            completionHandler:^(BOOL granted, NSError * _Nullable error) {
+                                                                             completionHandler:^(BOOL granted, NSError * _Nullable error) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (granted) {
                     [[UIApplication sharedApplication] registerForRemoteNotifications];
-                    [PPToast toast:kLang(@"NotificationSettings_PermissionEnabledToast") style:PPToastStyleSuccess haptic:YES duration:1.6];
-                } else if (error) {
-                    [PPToast toast:kLang(@"NotificationSettings_PermissionErrorToast") style:PPToastStyleError haptic:YES duration:1.8];
+                    [PPAlertHelper showSuccessIn:self
+                                           title:kLang(@"Success")
+                                        subtitle:kLang(@"NotificationSettings_PermissionEnabledToast")];
                 }
                 [self pp_refreshSystemPermissionState];
             });
@@ -568,8 +792,46 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     }
 
     NSURL *settingsURL = [NSURL URLWithString:UIApplicationOpenSettingsURLString];
-    if (!settingsURL) return;
-    [[UIApplication sharedApplication] openURL:settingsURL options:@{} completionHandler:nil];
+    if (settingsURL && [[UIApplication sharedApplication] canOpenURL:settingsURL]) {
+        [[UIApplication sharedApplication] openURL:settingsURL options:@{} completionHandler:nil];
+    }
+}
+
+- (void)pp_sendDiagnosticNotification {
+    if (@available(iOS 10.0, *)) {
+        UIImpactFeedbackGenerator *impact = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [impact impactOccurred];
+    }
+
+    UNMutableNotificationContent *content = [[UNMutableNotificationContent alloc] init];
+    content.title = @"Pure Pets Pro";
+    content.subtitle = kLang(@"NotificationSettings_DiagnosticPromptTitle") ?: @"Test Alert";
+    content.body = kLang(@"NotificationSettings_DiagnosticSentToast") ?: @"Pro notification test successful.";
+    content.sound = [UNNotificationSound defaultSound];
+
+    UNTimeIntervalNotificationTrigger *trigger = [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:1.5 repeats:NO];
+    UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:@"PPProDiagnosticPulse" content:content trigger:trigger];
+
+    [[UNUserNotificationCenter currentNotificationCenter] addNotificationRequest:request withCompletionHandler:^(NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!error) {
+                [PPAlertHelper showSuccessIn:self
+                                       title:kLang(@"Success")
+                                    subtitle:kLang(@"NotificationSettings_DiagnosticSentToast")];
+            }
+        });
+    }];
+}
+
+#pragma mark - UIPointerInteractionDelegate
+
+- (nullable UIPointerStyle *)pointerInteraction:(UIPointerInteraction *)interaction
+                               styleForRegion:(UIPointerRegion *)region API_AVAILABLE(ios(13.4)) {
+    if ([interaction.view isKindOfClass:[UIButton class]]) {
+        UITargetedPreview *preview = [[UITargetedPreview alloc] initWithView:interaction.view];
+        return [UIPointerStyle styleWithEffect:[UIPointerHighlightEffect effectWithPreview:preview] shape:nil];
+    }
+    return nil;
 }
 
 #pragma mark - Permission State
@@ -578,19 +840,12 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     self.statusTitleLabel.text = kLang(@"NotificationSettings_CheckingStatus");
     self.statusBodyLabel.text = kLang(@"NotificationSettings_CheckingStatusSubtitle");
 
-    if (@available(iOS 10.0, *)) {
-        [[UNUserNotificationCenter currentNotificationCenter] getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                self.authorizationStatus = settings.authorizationStatus;
-                [self pp_updateStatusCardForCurrentAuthorization];
-            });
-        }];
-        return;
-    }
-
-    UIUserNotificationSettings *settings = [[UIApplication sharedApplication] currentUserNotificationSettings];
-    self.authorizationStatus = settings.types == UIUserNotificationTypeNone ? UNAuthorizationStatusDenied : UNAuthorizationStatusAuthorized;
-    [self pp_updateStatusCardForCurrentAuthorization];
+    [[UNUserNotificationCenter currentNotificationCenter] getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.authorizationStatus = settings.authorizationStatus;
+            [self pp_updateStatusCardForCurrentAuthorization];
+        });
+    }];
 }
 
 - (void)pp_updateStatusCardForCurrentAuthorization {
@@ -616,12 +871,6 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
             accent = [UIColor ppError];
             break;
         case UNAuthorizationStatusProvisional:
-            title = kLang(@"NotificationSettings_StatusQuietTitle");
-            body = kLang(@"NotificationSettings_StatusQuietBody");
-            button = kLang(@"NotificationSettings_OpenIOSSettings");
-            symbol = @"bell.badge.fill";
-            accent = [UIColor ppWarning];
-            break;
         case UNAuthorizationStatusEphemeral:
             title = kLang(@"NotificationSettings_StatusQuietTitle");
             body = kLang(@"NotificationSettings_StatusQuietBody");
@@ -636,9 +885,10 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
 
     self.statusTitleLabel.text = title;
     self.statusBodyLabel.text = body;
+    self.statusBeaconDot.backgroundColor = accent;
     [self.statusActionButton setTitle:button forState:UIControlStateNormal];
     [self.statusActionButton setTitleColor:accent forState:UIControlStateNormal];
-    self.statusActionButton.backgroundColor = [accent colorWithAlphaComponent:0.10];
+    self.statusActionButton.backgroundColor = [accent colorWithAlphaComponent:0.12];
     self.statusIconView.image = [UIImage systemImageNamed:symbol
                                         withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:18.0 weight:UIImageSymbolWeightSemibold]];
     self.statusIconView.tintColor = accent;
@@ -646,12 +896,12 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     UIView *iconSurface = self.statusIconView.superview;
     iconSurface.backgroundColor = [accent colorWithAlphaComponent:0.10];
     iconSurface.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    iconSurface.layer.borderColor = [accent colorWithAlphaComponent:0.16].CGColor;
+    iconSurface.layer.borderColor = [accent colorWithAlphaComponent:0.18].CGColor;
 
     self.statusCard.accessibilityLabel = [NSString stringWithFormat:@"%@. %@", title ?: @"", body ?: @""];
 }
 
-#pragma mark - Preferences
+#pragma mark - Preferences & States
 
 - (BOOL)pp_boolForPreferenceKey:(NSString *)key defaultValue:(BOOL)defaultValue {
     id value = [[NSUserDefaults standardUserDefaults] objectForKey:key];
@@ -666,18 +916,33 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     [self.masterSwitch setOn:masterEnabled animated:animated];
     [self.soundSwitch setOn:soundEnabled animated:animated];
     self.soundSwitch.enabled = masterEnabled;
-    self.soundSwitch.superview.alpha = masterEnabled ? 1.0 : 0.48;
 
+    __block NSInteger activeCount = 0;
     [self.categorySwitches enumerateKeysAndObjectsUsingBlock:^(NSString *key, UISwitch *toggle, BOOL *stop) {
         toggle.enabled = masterEnabled;
-        [toggle setOn:[self pp_boolForPreferenceKey:key defaultValue:YES] animated:animated];
+        BOOL isOn = [self pp_boolForPreferenceKey:key defaultValue:YES];
+        [toggle setOn:isOn animated:animated];
+        if (isOn) activeCount++;
     }];
-    for (UIView *row in self.categoryRows) {
-        row.alpha = masterEnabled ? 1.0 : 0.48;
+
+    NSString *summaryFormat = kLang(@"NotificationSettings_ActiveChannelsCount") ?: @"%d of %d active";
+    self.categorySummaryPill.text = [NSString stringWithFormat:summaryFormat, (int)activeCount, (int)self.categorySwitches.count];
+
+    void (^animations)(void) = ^{
+        self.soundSwitch.superview.alpha = masterEnabled ? 1.0 : 0.44;
+        for (UIView *row in self.categoryRows) {
+            row.alpha = masterEnabled ? 1.0 : 0.44;
+        }
+    };
+
+    if (animated) {
+        [UIView animateWithDuration:0.25 animations:animations];
+    } else {
+        animations();
     }
 }
 
-#pragma mark - Styling
+#pragma mark - Surface Styling
 
 - (UIView *)pp_surfaceCardWithCornerRadius:(CGFloat)radius {
     UIView *card = [[UIView alloc] init];
@@ -686,20 +951,12 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     card.layer.cornerRadius = radius;
     card.layer.cornerCurve = kCACornerCurveContinuous;
     card.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    card.layer.borderColor = [self pp_borderColor].CGColor;
+    card.layer.borderColor = [PrimaryTextClr colorWithAlphaComponent:0.07].CGColor;
     card.layer.shadowColor = UIColor.blackColor.CGColor;
-    card.layer.shadowOpacity = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark ? 0.05 : 0.07;
-    card.layer.shadowRadius = 22.0;
-    card.layer.shadowOffset = CGSizeMake(0.0, 12.0);
+    card.layer.shadowOpacity = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark ? 0.04 : 0.06);
+    card.layer.shadowRadius = 20.0;
+    card.layer.shadowOffset = CGSizeMake(0.0, 10.0);
     return card;
-}
-
-- (UIColor *)pp_borderColor {
-    return [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
-        return traits.userInterfaceStyle == UIUserInterfaceStyleDark
-            ? [UIColor colorWithWhite:1.0 alpha:0.08]
-            : [UIColor colorWithWhite:0.0 alpha:0.055];
-    }];
 }
 
 - (UIStackView *)pp_verticalStackWithSpacing:(CGFloat)spacing {
@@ -729,36 +986,31 @@ static NSString * const kPPProNotifCategoryWarningKey = @"pp_notif_cat_warning";
     return label;
 }
 
-#pragma mark - Animation
-
-- (void)pp_prepareEntranceAnimation {
-    if (UIAccessibilityIsReduceMotionEnabled()) return;
-    for (UIView *view in self.contentStack.arrangedSubviews) {
-        view.alpha = 0.0;
-        view.transform = CGAffineTransformMakeTranslation(0.0, 14.0);
-    }
-}
+#pragma mark - Entrance Animation
 
 - (void)pp_runEntranceAnimationIfNeeded {
     if (self.didRunEntranceAnimation) return;
     self.didRunEntranceAnimation = YES;
+
     if (UIAccessibilityIsReduceMotionEnabled()) {
-        for (UIView *view in self.contentStack.arrangedSubviews) {
-            view.alpha = 1.0;
-            view.transform = CGAffineTransformIdentity;
-        }
+        self.iphoneStack.alpha = 1.0;
+        self.ipadContainer.alpha = 1.0;
         return;
     }
 
-    [self.contentStack.arrangedSubviews enumerateObjectsUsingBlock:^(UIView *view, NSUInteger idx, BOOL *stop) {
-        [UIView animateWithDuration:0.42
-                              delay:0.035 * idx
-                            options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction
-                         animations:^{
-            view.alpha = 1.0;
-            view.transform = CGAffineTransformIdentity;
-        } completion:nil];
-    }];
+    UIView *activeTarget = self.isIPadLayoutActive ? self.ipadContainer : self.iphoneStack;
+    activeTarget.alpha = 0.0;
+    activeTarget.transform = CGAffineTransformMakeTranslation(0.0, 12.0);
+
+    [UIView animateWithDuration:0.42
+                          delay:0.05
+         usingSpringWithDamping:0.86
+          initialSpringVelocity:0.4
+                        options:UIViewAnimationOptionCurveEaseOut
+                     animations:^{
+        activeTarget.alpha = 1.0;
+        activeTarget.transform = CGAffineTransformIdentity;
+    } completion:nil];
 }
 
 @end

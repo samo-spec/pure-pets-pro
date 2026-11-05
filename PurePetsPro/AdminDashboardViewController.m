@@ -505,7 +505,7 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
                                                              icon:[UIImage pp_symbolNamed:@"shippingbox.fill" pointSize:pointSize weight:UIImageSymbolWeightLight scale:UIImageSymbolScaleDefault palette:palette makeTemplate:NO]
                                                             title:kLang(@"DeliveryManagement")
                                                          subtitle:kLang(@"DeliveryManagementSubtitle")
-                                                            vcClass:[PPDeliveryDashboardViewController class]];
+                                                            vcClass:[PPDeliveryDriverDashboardHostController class]];
         [deliverySection addFormRow:deliveryRow];
     }
 
@@ -1594,6 +1594,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         strongSelf.providerSubscriptionState = state;
         strongSelf.providerSubscriptionError = error;
         [strongSelf pp_renderSubscriptionFooter];
+        [strongSelf pp_refreshCommandCenterSnapshot];
     }];
 }
 
@@ -4931,12 +4932,76 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
         [signals addObject:signal];
     }
 
+    NSArray<NSDictionary *> *expiringDocs = @[];
+    for (PPProviderApplication *app in self.providerSubscriptionState.applications ?: @[]) {
+        NSArray<NSDictionary *> *exp = [app expiringDocumentsWithinDays:30];
+        if (exp.count > 0) {
+            expiringDocs = [expiringDocs arrayByAddingObjectsFromArray:exp];
+        }
+    }
+    for (PPProviderProfile *profile in self.providerSubscriptionState.profilesByType.allValues ?: @[]) {
+        NSArray<NSDictionary *> *exp = [profile expiringDocumentsWithinDays:30];
+        if (exp.count > 0) {
+            expiringDocs = [expiringDocs arrayByAddingObjectsFromArray:exp];
+        }
+    }
+    if (expiringDocs.count > 0) {
+        BOOL hasExpired = NO;
+        for (NSDictionary *d in expiringDocs) {
+            if ([d[@"isExpired"] boolValue]) {
+                hasExpired = YES;
+                break;
+            }
+        }
+        NSString *title = hasExpired ? kLang(@"PulseCommand_DocExpired_Title") : kLang(@"PulseCommand_DocExpiring_Title");
+        NSString *subtitle = [NSString stringWithFormat:kLang(@"PulseCommand_DocExpiring_SubtitleFormat"), (long)expiringDocs.count];
+        PPProCommandSignalDescriptor *signal = [self pp_commandSignalWithIdentifier:@"expiringDocs"
+                                                               capabilityIdentifiers:@[]
+                                                                              title:title
+                                                                           subtitle:subtitle
+                                                                         symbolName:@"exclamationmark.shield.fill"
+                                                                           routeTag:@"__providerEditor"
+                                                                         badgeCount:expiringDocs.count
+                                                                           priority:hasExpired ? 2 : 1
+                                                                             unseen:YES];
+        signal.actionTarget = [self pp_workspaceCommandActionTargetWithSignalIdentifier:@"expiringDocs"
+                                                                  capabilityIdentifier:@""
+                                                                     workspaceRouteTag:@"__providerEditor"
+                                                                  workspaceActionTitle:kLang(@"PulseCommand_RenewDocument")
+                                                                              priority:hasExpired ? 2 : 1];
+        [signals addObject:signal];
+    }
+
     PPProCommandCenterSnapshotDescriptor *snapshot = [[PPProCommandCenterSnapshotDescriptor alloc] init];
-    snapshot.workspaceEyebrow = kLang(@"PulseCommand_Workspace_Eyebrow");
     snapshot.greeting = [self pp_dashboardGreetingText] ?: @"";
 
     NSString *resolvedName = user.displayName.length ? user.displayName : [user PPBestDisplayName];
-    snapshot.displayName = resolvedName.length ? resolvedName : kLang(@"pp_me_guest");
+    NSString *businessTradeName = @"";
+    for (PPProviderProfile *profile in self.providerSubscriptionState.profilesByType.allValues ?: @[]) {
+        NSString *trade = PPSafeString(profile.form[@"tradeName"]);
+        if (trade.length == 0) trade = PPSafeString(profile.form[@"businessName"]);
+        if (trade.length > 0) {
+            businessTradeName = trade;
+            break;
+        }
+    }
+    if (businessTradeName.length == 0) {
+        for (PPProviderApplication *app in self.providerSubscriptionState.applications ?: @[]) {
+            NSString *trade = PPSafeString(app.form[@"tradeName"]);
+            if (trade.length == 0) trade = PPSafeString(app.form[@"businessName"]);
+            if (trade.length > 0) {
+                businessTradeName = trade;
+                break;
+            }
+        }
+    }
+    if (businessTradeName.length > 0) {
+        snapshot.displayName = businessTradeName;
+        snapshot.workspaceEyebrow = [NSString stringWithFormat:@"%@ · %@", kLang(@"PulseCommand_YourBusiness"), resolvedName.length ? resolvedName : @""];
+    } else {
+        snapshot.displayName = resolvedName.length ? resolvedName : kLang(@"pp_me_guest");
+        snapshot.workspaceEyebrow = kLang(@"PulseCommand_Workspace_Eyebrow");
+    }
     snapshot.roleSummary = [self pp_dashboardRoleBadgeTextForUser:user] ?: @"";
     snapshot.isRTL = Language.isRTL;
     snapshot.workspaceCount = capabilities.count;
@@ -5078,7 +5143,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
 
     // Keep current quick-action reachability if a role-gated XLForm row is absent.
     if ([route isEqualToString:@"delivery"] && [self pp_canManageDelivery]) {
-        PPDeliveryDashboardViewController *controller = [[PPDeliveryDashboardViewController alloc] init];
+        PPDeliveryDriverDashboardHostController *controller = [[PPDeliveryDriverDashboardHostController alloc] init];
         [self.navigationController pushViewController:controller animated:YES];
     } else if ([route isEqualToString:@"profileSettings"]) {
         [self pp_openProfileSettings];
@@ -5086,7 +5151,12 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
                [self.form formRowWithTag:@"providerSupportChats"]) {
         [self pp_openSupportChats];
     } else if ([route isEqualToString:@"deliveryCompany"] && self.isDeliveryCompanyMode) {
-        [self pp_openDeliveryCompanyDashboard];
+        if (self.deliveryCompanyContext.isDriver) {
+            PPDeliveryDriverDashboardHostController *controller = [[PPDeliveryDriverDashboardHostController alloc] init];
+            [self.navigationController pushViewController:controller animated:YES];
+        } else {
+            [self pp_openDeliveryCompanyDashboard];
+        }
     }
 }
 

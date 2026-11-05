@@ -16,6 +16,9 @@
 #import "UIImageView+WebCache.h"
 #import "PPHUD.h"
 #import "PPFunc.h"
+#import "PPAlertHelper.h"
+#import "PurePetsPro-Swift.h"
+#import "PetAccessory.h"
 #import <Photos/Photos.h>
 #import <PhotosUI/PhotosUI.h>
 
@@ -35,7 +38,19 @@
 @property (nonatomic, strong) UITextField *categoryField;
 @property (nonatomic, strong) UITextView *descTextView;
 @property (nonatomic, strong) UITextField *priceField;
+@property (nonatomic, strong) UITextField *wholesalePriceField;
 @property (nonatomic, strong) UITextField *stockField;
+@property (nonatomic, strong) UITextField *skuField;
+@property (nonatomic, strong) UITextField *barcodeField;
+
+// Medical Specs
+@property (nonatomic, strong) UITextField *dosageFormField;
+@property (nonatomic, strong) UITextField *strengthField;
+@property (nonatomic, strong) UITextField *packSizeField;
+
+// Options & Matrix
+@property (nonatomic, strong) UIView *variantStudioContainer;
+
 @property (nonatomic, strong) UISwitch *availableSwitch;
 @property (nonatomic, strong) UISwitch *publishedSwitch;
 
@@ -97,7 +112,9 @@
     
     [self buildPhotoHeader];
     [self buildBasicInfoSection];
+    [self buildMedicalSpecsSection];
     [self buildPricingSection];
+    [self buildVariantStudioSection];
     [self buildAnimalsSection];
     [self buildOptionsSection];
     [self buildSaveButton];
@@ -272,6 +289,46 @@
     self.categoryField.text = [sender titleForState:UIControlStateNormal];
 }
 
+- (void)buildMedicalSpecsSection {
+    UIView *card = [self makeSectionCard];
+    
+    UILabel *header = [self makeSectionHeaderTitle:Language.isRTL ? @"المواصفات والجرعات الطبية" : @"Medical Specifications"];
+    [card addSubview:header];
+    
+    _dosageFormField = [self makeStyledFieldWithPlaceholder:Language.isRTL ? @"الشكل الدوائي (أقراص، شراب، حقن...)" : @"Dosage Form (e.g. Tablets, Syrup, Injection)" icon:@"pills.fill"];
+    [card addSubview:_dosageFormField];
+    
+    _strengthField = [self makeStyledFieldWithPlaceholder:Language.isRTL ? @"التركيز (مثال: 50mg, 100mg...)" : @"Strength (e.g. 50mg, 100mg)" icon:@"cross.vial.fill"];
+    [card addSubview:_strengthField];
+    
+    _packSizeField = [self makeStyledFieldWithPlaceholder:Language.isRTL ? @"حجم العبوة (مثال: 30 قرص، 100 مل...)" : @"Pack Size (e.g. 30 Tablets, 100ml)" icon:@"shippingbox.fill"];
+    [card addSubview:_packSizeField];
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [header.topAnchor constraintEqualToAnchor:card.topAnchor constant:16],
+        [header.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [header.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        
+        [_dosageFormField.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:14],
+        [_dosageFormField.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [_dosageFormField.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [_dosageFormField.heightAnchor constraintEqualToConstant:50],
+        
+        [_strengthField.topAnchor constraintEqualToAnchor:_dosageFormField.bottomAnchor constant:12],
+        [_strengthField.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [_strengthField.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [_strengthField.heightAnchor constraintEqualToConstant:50],
+        
+        [_packSizeField.topAnchor constraintEqualToAnchor:_strengthField.bottomAnchor constant:12],
+        [_packSizeField.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [_packSizeField.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [_packSizeField.heightAnchor constraintEqualToConstant:50],
+        [_packSizeField.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-16]
+    ]];
+    
+    [_stackView addArrangedSubview:card];
+}
+
 - (void)buildPricingSection {
     UIView *card = [self makeSectionCard];
     
@@ -281,10 +338,22 @@
     _priceField = [self makeStyledFieldWithPlaceholder:kLang(@"Pharmacy_Field_Price") icon:@"banknote.fill"];
     _priceField.keyboardType = UIKeyboardTypeDecimalPad;
     [card addSubview:_priceField];
+
+    _wholesalePriceField = [self makeStyledFieldWithPlaceholder:Language.isRTL ? @"سعر الجملة (اختياري)" : @"Wholesale Price (Optional)" icon:@"tag.fill"];
+    _wholesalePriceField.keyboardType = UIKeyboardTypeDecimalPad;
+    [card addSubview:_wholesalePriceField];
     
-    _stockField = [self makeStyledFieldWithPlaceholder:kLang(@"Pharmacy_Field_Quantity") icon:@"number"];
+    _stockField = [self makeStyledFieldWithPlaceholder:kLang(@"Pharmacy_Field_Quantity") icon:@"shippingbox.fill"];
     _stockField.keyboardType = UIKeyboardTypeNumberPad;
     [card addSubview:_stockField];
+
+    _skuField = [self makeStyledFieldWithPlaceholder:Language.isRTL ? @"رمز التخزين SKU (اختياري)" : @"SKU (Optional)" icon:@"barcode"];
+    _skuField.keyboardType = UIKeyboardTypeASCIICapable;
+    [card addSubview:_skuField];
+
+    _barcodeField = [self makeStyledFieldWithPlaceholder:Language.isRTL ? @"الباركود الدولي (اختياري)" : @"Barcode (Optional)" icon:@"barcode.viewfinder"];
+    _barcodeField.keyboardType = UIKeyboardTypeASCIICapable;
+    [card addSubview:_barcodeField];
     
     [NSLayoutConstraint activateConstraints:@[
         [header.topAnchor constraintEqualToAnchor:card.topAnchor constant:16],
@@ -295,15 +364,297 @@
         [_priceField.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
         [_priceField.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
         [_priceField.heightAnchor constraintEqualToConstant:50],
+
+        [_wholesalePriceField.topAnchor constraintEqualToAnchor:_priceField.bottomAnchor constant:12],
+        [_wholesalePriceField.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [_wholesalePriceField.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [_wholesalePriceField.heightAnchor constraintEqualToConstant:50],
         
-        [_stockField.topAnchor constraintEqualToAnchor:_priceField.bottomAnchor constant:12],
+        [_stockField.topAnchor constraintEqualToAnchor:_wholesalePriceField.bottomAnchor constant:12],
         [_stockField.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
         [_stockField.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
         [_stockField.heightAnchor constraintEqualToConstant:50],
-        [_stockField.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-16]
+
+        [_skuField.topAnchor constraintEqualToAnchor:_stockField.bottomAnchor constant:12],
+        [_skuField.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [_skuField.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [_skuField.heightAnchor constraintEqualToConstant:50],
+
+        [_barcodeField.topAnchor constraintEqualToAnchor:_skuField.bottomAnchor constant:12],
+        [_barcodeField.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+        [_barcodeField.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+        [_barcodeField.heightAnchor constraintEqualToConstant:50],
+        [_barcodeField.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-16]
     ]];
     
     [_stackView addArrangedSubview:card];
+}
+
+- (void)buildVariantStudioSection {
+    _variantStudioContainer = [self makeSectionCard];
+    [self pp_populateVariantStudioInto:_variantStudioContainer];
+    [_stackView addArrangedSubview:_variantStudioContainer];
+}
+
+- (void)pp_refreshVariantStudioSection {
+    if (!self.variantStudioContainer) return;
+    for (UIView *sub in self.variantStudioContainer.subviews) {
+        [sub removeFromSuperview];
+    }
+    [self pp_populateVariantStudioInto:self.variantStudioContainer];
+    [self.view setNeedsLayout];
+    [self.view layoutIfNeeded];
+}
+
+- (void)pp_populateVariantStudioInto:(UIView *)card {
+    UILabel *header = [self makeSectionHeaderTitle:Language.isRTL ? @"خيارات ومصفوفة الدواء" : @"Medicine Options & Matrix"];
+    [card addSubview:header];
+
+    UILabel *subHeader = [[UILabel alloc] init];
+    subHeader.translatesAutoresizingMaskIntoConstraints = NO;
+    subHeader.text = Language.isRTL ? @"إدارة التركيزات والأشكال الدوائية والأحجام مع مصفوفة الأسعار والمخزون" : @"Manage strengths, dosage forms & pack sizes with prices & stock matrix";
+    subHeader.font = [Styling fontMedium:12.0];
+    subHeader.textColor = [UIColor ppTextSecondary];
+    subHeader.textAlignment = Language.alignmentForCurrentLanguage;
+    subHeader.numberOfLines = 0;
+    [card addSubview:subHeader];
+
+    if (!self.medicine || self.medicine.medicineID.length == 0) {
+        UIView *banner = [[UIView alloc] init];
+        banner.translatesAutoresizingMaskIntoConstraints = NO;
+        banner.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.08];
+        PPApplyContinuousCorners(banner, PPCornerMedium);
+
+        UIImageView *infoIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"sparkles"]];
+        infoIcon.translatesAutoresizingMaskIntoConstraints = NO;
+        infoIcon.tintColor = [UIColor ppPrimary];
+
+        UILabel *infoLbl = [[UILabel alloc] init];
+        infoLbl.translatesAutoresizingMaskIntoConstraints = NO;
+        infoLbl.font = [Styling fontRegular:12.5];
+        infoLbl.textColor = [UIColor ppTextPrimary];
+        infoLbl.numberOfLines = 0;
+        infoLbl.textAlignment = Language.alignmentForCurrentLanguage;
+        infoLbl.text = Language.isRTL ? @"يمكنك إضافة تركيزات متعددة (مثل: 50mg, 100mg) أو أحجام عبوات مختلفة لنفس الدواء. اضغط أدناه لحفظ البيانات الأساسية وفتح استوديو الخيارات فوراً." : @"You can configure multiple strengths (e.g. 50mg, 100mg) or pack sizes for this medicine. Tap below to stage basic details and open Options & Matrix Studio.";
+
+        [banner addSubview:infoIcon];
+        [banner addSubview:infoLbl];
+
+        [card addSubview:banner];
+
+        UIButton *enableBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+        enableBtn.translatesAutoresizingMaskIntoConstraints = NO;
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightSemibold];
+        [enableBtn setImage:[UIImage systemImageNamed:@"slider.horizontal.2.square.on.square" withConfiguration:cfg] forState:UIControlStateNormal];
+        NSString *btnTitle = Language.isRTL ? @"  تفعيل الخيارات وفتح الاستوديو" : @"  Enable Options & Open Studio";
+        [enableBtn setTitle:btnTitle forState:UIControlStateNormal];
+        enableBtn.titleLabel.font = [Styling fontBold:14.0];
+        enableBtn.tintColor = UIColor.whiteColor;
+        enableBtn.backgroundColor = [UIColor ppPrimary];
+        PPApplyContinuousCorners(enableBtn, PPCornerMedium);
+        PPApplyButtonShadow(enableBtn);
+        [enableBtn addTarget:self action:@selector(pp_stageMedicineForOptionsAndOpenStudio) forControlEvents:UIControlEventTouchUpInside];
+        [card addSubview:enableBtn];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [header.topAnchor constraintEqualToAnchor:card.topAnchor constant:16],
+            [header.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+            [header.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+
+            [subHeader.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:4],
+            [subHeader.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+            [subHeader.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+
+            [banner.topAnchor constraintEqualToAnchor:subHeader.bottomAnchor constant:12],
+            [banner.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+            [banner.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+
+            [infoIcon.leadingAnchor constraintEqualToAnchor:banner.leadingAnchor constant:12],
+            [infoIcon.topAnchor constraintEqualToAnchor:banner.topAnchor constant:12],
+            [infoIcon.widthAnchor constraintEqualToConstant:18],
+            [infoIcon.heightAnchor constraintEqualToConstant:18],
+
+            [infoLbl.leadingAnchor constraintEqualToAnchor:infoIcon.trailingAnchor constant:8],
+            [infoLbl.trailingAnchor constraintEqualToAnchor:banner.trailingAnchor constant:-12],
+            [infoLbl.topAnchor constraintEqualToAnchor:banner.topAnchor constant:10],
+            [infoLbl.bottomAnchor constraintEqualToAnchor:banner.bottomAnchor constant:-10],
+
+            [enableBtn.topAnchor constraintEqualToAnchor:banner.bottomAnchor constant:12],
+            [enableBtn.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+            [enableBtn.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+            [enableBtn.heightAnchor constraintEqualToConstant:46],
+            [enableBtn.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-16]
+        ]];
+    } else {
+        UIView *statusBox = [[UIView alloc] init];
+        statusBox.translatesAutoresizingMaskIntoConstraints = NO;
+        statusBox.backgroundColor = [UIColor ppSurface];
+        statusBox.layer.cornerRadius = PPCornerSmall;
+        statusBox.layer.borderWidth = 0.8;
+        statusBox.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+
+        UILabel *statusBadge = [[UILabel alloc] init];
+        statusBadge.translatesAutoresizingMaskIntoConstraints = NO;
+        statusBadge.font = [Styling fontBold:11.0];
+        statusBadge.layer.cornerRadius = 6;
+        statusBadge.layer.masksToBounds = YES;
+        statusBadge.textAlignment = NSTextAlignmentCenter;
+
+        UILabel *descLbl = [[UILabel alloc] init];
+        descLbl.translatesAutoresizingMaskIntoConstraints = NO;
+        descLbl.font = [Styling fontMedium:13.0];
+        descLbl.textColor = [UIColor ppTextPrimary];
+        descLbl.numberOfLines = 2;
+        descLbl.textAlignment = Language.alignmentForCurrentLanguage;
+
+        BOOL isFamily = (self.medicine.productFamilyId.length > 0 || self.medicine.isVariant);
+        if (isFamily) {
+            statusBadge.text = Language.isRTL ? @"  مجموعة خيارات دوائية  " : @"  Medicine Option Family  ";
+            statusBadge.textColor = [UIColor ppSuccess];
+            statusBadge.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.12];
+            descLbl.text = Language.isRTL ? @"مستحضر دوائي مرتبط بمجموعة تركيزات وأحجام فرعية." : @"Medicine is part of a multi-option family.";
+        } else {
+            statusBadge.text = Language.isRTL ? @"  مستحضر فردي  " : @"  Single Medicine  ";
+            statusBadge.textColor = [UIColor ppTextSecondary];
+            statusBadge.backgroundColor = [[UIColor ppTextSecondary] colorWithAlphaComponent:0.10];
+            descLbl.text = Language.isRTL ? @"مستحضر دوائي فردي. يمكنك تحويله إلى مجموعة تركيزات بضغطة زر." : @"Standalone medicine. You can convert it into an option family in one tap.";
+        }
+
+        [statusBox addSubview:statusBadge];
+        [statusBox addSubview:descLbl];
+        [card addSubview:statusBox];
+
+        UIButton *studioBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+        studioBtn.translatesAutoresizingMaskIntoConstraints = NO;
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightSemibold];
+        [studioBtn setImage:[UIImage systemImageNamed:@"sparkles" withConfiguration:cfg] forState:UIControlStateNormal];
+        NSString *btnTitle = Language.isRTL ? @"  فتح استوديو الخيارات والمصفوفة" : @"  Open Options & Matrix Studio";
+        [studioBtn setTitle:btnTitle forState:UIControlStateNormal];
+        studioBtn.titleLabel.font = [Styling fontBold:14.0];
+        studioBtn.tintColor = UIColor.whiteColor;
+        studioBtn.backgroundColor = [UIColor ppPrimary];
+        PPApplyContinuousCorners(studioBtn, PPCornerMedium);
+        PPApplyButtonShadow(studioBtn);
+        [studioBtn addTarget:self action:@selector(pp_openVariantStudio) forControlEvents:UIControlEventTouchUpInside];
+        [card addSubview:studioBtn];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [header.topAnchor constraintEqualToAnchor:card.topAnchor constant:16],
+            [header.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+            [header.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+
+            [subHeader.topAnchor constraintEqualToAnchor:header.bottomAnchor constant:4],
+            [subHeader.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+            [subHeader.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+
+            [statusBox.topAnchor constraintEqualToAnchor:subHeader.bottomAnchor constant:12],
+            [statusBox.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+            [statusBox.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+
+            [statusBadge.leadingAnchor constraintEqualToAnchor:statusBox.leadingAnchor constant:12],
+            [statusBadge.topAnchor constraintEqualToAnchor:statusBox.topAnchor constant:12],
+            [statusBadge.heightAnchor constraintEqualToConstant:22],
+
+            [descLbl.leadingAnchor constraintEqualToAnchor:statusBadge.trailingAnchor constant:10],
+            [descLbl.trailingAnchor constraintEqualToAnchor:statusBox.trailingAnchor constant:-12],
+            [descLbl.centerYAnchor constraintEqualToAnchor:statusBadge.centerYAnchor],
+            [statusBox.bottomAnchor constraintEqualToAnchor:statusBadge.bottomAnchor constant:12],
+
+            [studioBtn.topAnchor constraintEqualToAnchor:statusBox.bottomAnchor constant:12],
+            [studioBtn.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:16],
+            [studioBtn.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-16],
+            [studioBtn.heightAnchor constraintEqualToConstant:46],
+            [studioBtn.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-16]
+        ]];
+    }
+}
+
+- (void)pp_stageMedicineForOptionsAndOpenStudio {
+    [self.view endEditing:YES];
+    NSString *title = [self.titleField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (title.length == 0) {
+        [PPHUD showError:kLang(@"Error") subtitle:Language.isRTL ? @"يرجى إدخال اسم المستحضر الطبي" : @"Please enter medicine title"];
+        [self.titleField becomeFirstResponder];
+        return;
+    }
+    double price = [self.priceField.text doubleValue];
+    if (price <= 0) {
+        [PPHUD showError:kLang(@"Error") subtitle:Language.isRTL ? @"يرجى إدخال سعر صحيح للدواء" : @"Please enter valid price"];
+        [self.priceField becomeFirstResponder];
+        return;
+    }
+
+    PPVetMedicineModel *edited = [[PPVetMedicineModel alloc] init];
+    edited.title = title;
+    edited.medicineDescription = self.descTextView.text ?: @"";
+    edited.category = [self.categoryField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    edited.price = price;
+    if (self.wholesalePriceField.text.length > 0 && self.wholesalePriceField.text.doubleValue > 0) {
+        edited.wholesalePrice = @(self.wholesalePriceField.text.doubleValue);
+    }
+    edited.stockQuantity = MAX(0, [self.stockField.text integerValue]);
+    edited.sku = [self.skuField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    edited.barcode = [self.barcodeField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    edited.dosageForm = [self.dosageFormField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    edited.strength = [self.strengthField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    edited.packSize = [self.packSizeField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    edited.isAvailable = self.availableSwitch.isOn && (edited.stockQuantity > 0);
+    edited.isPublished = self.publishedSwitch.isOn;
+    edited.animalTypes = self.selectedAnimals.array;
+    edited.currency = @"QAR";
+
+    [PPHUD showIndeterminateIn:self.view title:Language.isRTL ? @"جاري تجهيز المستحضر للاستوديو..." : @"Preparing medicine for options studio..." subtitle:nil];
+    self.saveButton.enabled = NO;
+
+    __weak typeof(self) ws = self;
+    [[PPVetManager sharedManager] addMedicine:edited image:self.selectedImage completion:^(NSError * _Nullable error) {
+        [PPHUD dismiss];
+        __strong typeof(ws) self = ws;
+        if (!self) return;
+        self.saveButton.enabled = YES;
+        if (error) {
+            [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+            return;
+        }
+
+        self.medicine = edited;
+        [self pp_refreshVariantStudioSection];
+        [self pp_openVariantStudio];
+    }];
+}
+
+- (void)pp_openVariantStudio {
+    if (!self.medicine) return;
+    PetAccessory *acc = [self.medicine asPetAccessory];
+    PPAccessoryVariantStudioHostController *host = [[PPAccessoryVariantStudioHostController alloc] initWithAccessory:acc];
+    __weak typeof(self) ws = self;
+    host.onSaved = ^(PetAccessory *savedAcc) {
+        if (!savedAcc) return;
+        ws.medicine.productFamilyId = savedAcc.productFamilyId;
+        ws.medicine.variantSchemaVersion = savedAcc.variantSchemaVersion;
+        ws.medicine.isVariant = savedAcc.isVariant;
+        ws.medicine.isDefaultVariant = savedAcc.isDefaultVariant;
+        ws.medicine.variantSortOrder = savedAcc.variantSortOrder;
+        ws.medicine.selectedOptions = savedAcc.selectedOptions;
+        ws.medicine.selectedOptionsSnapshot = savedAcc.selectedOptionsSnapshot;
+        ws.medicine.variantCombinationKey = savedAcc.variantCombinationKey;
+        ws.medicine.variantAxis = savedAcc.variantAxis;
+        ws.medicine.sku = savedAcc.sku;
+        ws.medicine.barcode = savedAcc.barcode;
+        if (savedAcc.price != nil) ws.medicine.price = savedAcc.price.doubleValue;
+        if (savedAcc.wholesalePrice != nil) ws.medicine.wholesalePrice = savedAcc.wholesalePrice;
+        ws.medicine.stockQuantity = savedAcc.quantity;
+        [ws populateData];
+        [ws pp_refreshVariantStudioSection];
+    };
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:host];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    if (@available(iOS 15.0, *)) {
+        UISheetPresentationController *sheet = nav.sheetPresentationController;
+        sheet.detents = @[[UISheetPresentationControllerDetent largeDetent]];
+        sheet.prefersGrabberVisible = YES;
+    }
+    [self presentViewController:nav animated:YES completion:nil];
 }
 
 - (void)buildAnimalsSection {
@@ -589,7 +940,17 @@
     if (self.medicine.price > 0) {
         self.priceField.text = [NSString stringWithFormat:@"%.2f", self.medicine.price];
     }
+    if (self.medicine.wholesalePrice != nil && self.medicine.wholesalePrice.doubleValue > 0) {
+        self.wholesalePriceField.text = [NSString stringWithFormat:@"%.2f", self.medicine.wholesalePrice.doubleValue];
+    } else {
+        self.wholesalePriceField.text = @"";
+    }
     self.stockField.text = [NSString stringWithFormat:@"%ld", (long)MAX(0, self.medicine.stockQuantity)];
+    self.skuField.text = self.medicine.sku ?: @"";
+    self.barcodeField.text = self.medicine.barcode ?: @"";
+    self.dosageFormField.text = self.medicine.dosageForm ?: @"";
+    self.strengthField.text = self.medicine.strength ?: @"";
+    self.packSizeField.text = self.medicine.packSize ?: @"";
     self.availableSwitch.on = self.medicine.isAvailable;
     self.publishedSwitch.on = self.medicine.isPublished;
     
@@ -688,7 +1049,15 @@
     edited.medicineDescription = self.descTextView.text;
     edited.category = [self.categoryField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     edited.price = price;
+    if (self.wholesalePriceField.text.length > 0 && self.wholesalePriceField.text.doubleValue > 0) {
+        edited.wholesalePrice = @(self.wholesalePriceField.text.doubleValue);
+    }
     edited.stockQuantity = MAX(0, [self.stockField.text integerValue]);
+    edited.sku = [self.skuField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    edited.barcode = [self.barcodeField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    edited.dosageForm = [self.dosageFormField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    edited.strength = [self.strengthField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    edited.packSize = [self.packSizeField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
     edited.isAvailable = self.availableSwitch.isOn && (edited.stockQuantity > 0);
     edited.isPublished = self.publishedSwitch.isOn;
     edited.animalTypes = self.selectedAnimals.array;

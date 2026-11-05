@@ -20,6 +20,8 @@ static NSString * const kPPProviderFunctionSubmitDeliveryCompany = @"submitDeliv
 
 static NSString * const kPPProviderStatusPending = @"pending";
 static NSString * const kPPProviderStatusUnderReview = @"under_review";
+static NSString * const kPPProviderStatusChangesRequested = @"changes_requested";
+static NSString * const kPPProviderStatusResubmitted = @"resubmitted";
 static NSString * const kPPProviderStatusApproved = @"approved";
 static NSString * const kPPProviderStatusRejected = @"rejected";
 static NSString * const kPPProviderStatusArchived = @"archived";
@@ -27,6 +29,7 @@ static NSString * const kPPProviderStatusCancelled = @"cancelled";
 static NSString * const kPPProviderStatusWithdrawn = @"withdrawn";
 static NSString * const kPPProviderStatusExpired = @"expired";
 static NSString * const kPPProviderProfileStatusActive = @"active";
+
 
 NSString *PPProviderTypeIdentifier(PPProviderType type) {
     switch (type) {
@@ -379,6 +382,10 @@ static BOOL PPProviderBool(id value) {
         _planName = @{};
         _planDescription = @{};
         _reviewNotes = @"";
+        _reviewFindings = @[];
+        _rejectionReason = @"";
+        _rejectionCode = @"";
+        _resubmissionCount = 0;
         _form = @{};
     }
     return self;
@@ -393,9 +400,50 @@ static BOOL PPProviderBool(id value) {
     self.planName = PPSafeDict(planSnapshot[@"name"]);
     self.planDescription = PPSafeDict(planSnapshot[@"description"]);
     self.reviewNotes = PPSafeString(dictionary[@"reviewNotes"]);
+    self.reviewFindings = [dictionary[@"reviewFindings"] isKindOfClass:NSArray.class] ? dictionary[@"reviewFindings"] : @[];
+    self.rejectionReason = PPSafeString(dictionary[@"rejectionReason"]);
+    self.rejectionCode = PPSafeString(dictionary[@"rejectionCode"]);
+    self.resubmissionCount = PPSafeIntegerUniversal(dictionary[@"resubmissionCount"]);
     self.submittedAt = PPProviderDateFromValue(dictionary[@"submittedAt"]);
     self.reviewedAt = PPProviderDateFromValue(dictionary[@"reviewedAt"]);
     self.form = [dictionary[@"form"] isKindOfClass:NSDictionary.class] ? dictionary[@"form"] : @{};
+    self.operationalState = PPSafeString(dictionary[@"operationalState"]);
+    self.setupState = PPSafeString(dictionary[@"setupState"]);
+    self.activationChecklist = [dictionary[@"activationChecklist"] isKindOfClass:NSDictionary.class] ? dictionary[@"activationChecklist"] : @{};
+    self.documents = [dictionary[@"documents"] isKindOfClass:NSDictionary.class] ? dictionary[@"documents"] : @{};
+}
+
+- (NSArray<NSDictionary *> *)expiringDocumentsWithinDays:(NSInteger)days {
+    NSMutableArray<NSDictionary *> *expiring = [NSMutableArray array];
+    NSDate *now = [NSDate date];
+    NSTimeInterval maxInterval = (days > 0 ? days : 30) * 86400.0;
+
+    [self.documents enumerateKeysAndObjectsUsingBlock:^(id _Nonnull key, id _Nonnull obj, BOOL * _Nonnull stop) {
+        if (![obj isKindOfClass:NSDictionary.class]) return;
+        NSDictionary *doc = (NSDictionary *)obj;
+        NSString *expiryStr = PPSafeString(doc[@"expiryDate"]);
+        if (expiryStr.length == 0) expiryStr = PPSafeString(doc[@"expiresAt"]);
+        if (expiryStr.length == 0) return;
+
+        NSDate *expiryDate = PPProviderDateFromValue(expiryStr);
+        if (!expiryDate) return;
+
+        NSTimeInterval diff = [expiryDate timeIntervalSinceDate:now];
+        if (diff <= maxInterval) {
+            NSInteger daysRemaining = (NSInteger)ceil(diff / 86400.0);
+            if (daysRemaining < 0) daysRemaining = 0;
+            NSMutableDictionary *entry = [doc mutableCopy];
+            entry[@"key"] = key;
+            entry[@"daysRemaining"] = @(daysRemaining);
+            entry[@"isExpired"] = @(diff <= 0);
+            [expiring addObject:entry];
+        }
+    }];
+
+    [expiring sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
+        return [a[@"daysRemaining"] compare:b[@"daysRemaining"]];
+    }];
+    return expiring.copy;
 }
 
 - (NSString *)localizedPlanName {
@@ -404,6 +452,40 @@ static BOOL PPProviderBool(id value) {
 
 - (NSString *)localizedPlanDescription {
     return PPProviderLocalizedText(self.planDescription);
+}
+
+- (BOOL)isUnderReview {
+    NSString *normalized = PPProviderNormalizedStatus(self.status);
+    return [normalized isEqualToString:kPPProviderStatusUnderReview] ||
+           [normalized isEqualToString:kPPProviderStatusPending] ||
+           [normalized isEqualToString:kPPProviderStatusResubmitted];
+}
+
+- (BOOL)isChangesRequested {
+    NSString *normalized = PPProviderNormalizedStatus(self.status);
+    return [normalized isEqualToString:kPPProviderStatusChangesRequested];
+}
+
+- (BOOL)isRejected {
+    NSString *normalized = PPProviderNormalizedStatus(self.status);
+    return [normalized isEqualToString:kPPProviderStatusRejected];
+}
+
+- (BOOL)isApproved {
+    NSString *normalized = PPProviderNormalizedStatus(self.status);
+    return [normalized isEqualToString:kPPProviderStatusApproved] ||
+           [normalized isEqualToString:kPPProviderProfileStatusActive];
+}
+
+- (BOOL)isSetupRequired {
+    return [self.operationalState isEqualToString:@"setup_required"] ||
+           [self.setupState isEqualToString:@"not_started"] ||
+           [self.setupState isEqualToString:@"in_progress"] ||
+           [self.setupState isEqualToString:@"ready_for_activation"];
+}
+
+- (BOOL)isReadyForActivation {
+    return [self.setupState isEqualToString:@"ready_for_activation"];
 }
 
 @end
@@ -424,6 +506,9 @@ static BOOL PPProviderBool(id value) {
         _form = @{};
         _billingInterval = @"";
         _currency = @"QAR";
+        _operationalState = @"";
+        _setupState = @"";
+        _activationChecklist = @{};
     }
     return self;
 }
@@ -440,10 +525,140 @@ static BOOL PPProviderBool(id value) {
     self.billingInterval = PPSafeString(planSnapshot[@"billingInterval"]);
     self.priceAmount = PPSafeDouble(planSnapshot[@"priceAmount"] ?: planSnapshot[@"costValue"]);
     self.currency = PPSafeString(planSnapshot[@"currency"]).length ? PPSafeString(planSnapshot[@"currency"]) : @"QAR";
+    self.operationalState = PPSafeString(dictionary[@"operationalState"]);
+    self.setupState = PPSafeString(dictionary[@"setupState"]);
+    self.activationChecklist = [dictionary[@"activationChecklist"] isKindOfClass:NSDictionary.class] ? dictionary[@"activationChecklist"] : @{};
+    self.documents = [dictionary[@"documents"] isKindOfClass:NSDictionary.class] ? dictionary[@"documents"] : @{};
+    self.profileDomains = [dictionary[@"profileDomains"] isKindOfClass:NSDictionary.class] ? dictionary[@"profileDomains"] : @{};
+    self.maskedIban = PPSafeString(dictionary[@"maskedIban"]);
+    self.restrictions = [dictionary[@"restrictions"] isKindOfClass:NSArray.class] ? dictionary[@"restrictions"] : @[];
+    self.activeRestrictions = [dictionary[@"activeRestrictions"] isKindOfClass:NSArray.class] ? dictionary[@"activeRestrictions"] : @[];
+}
+
+- (nullable NSDictionary *)publicProfile {
+    return [self.profileDomains[@"public"] isKindOfClass:NSDictionary.class] ? self.profileDomains[@"public"] : nil;
+}
+
+- (nullable NSDictionary *)operationalProfile {
+    return [self.profileDomains[@"operational"] isKindOfClass:NSDictionary.class] ? self.profileDomains[@"operational"] : nil;
+}
+
+- (nullable NSDictionary *)legalProfile {
+    return [self.profileDomains[@"legal"] isKindOfClass:NSDictionary.class] ? self.profileDomains[@"legal"] : nil;
+}
+
+- (nullable NSDictionary *)financialProfile {
+    return [self.profileDomains[@"financial"] isKindOfClass:NSDictionary.class] ? self.profileDomains[@"financial"] : nil;
 }
 
 - (NSString *)localizedPlanName {
     return PPProviderLocalizedText(self.planName);
+}
+
+- (BOOL)isSetupRequired {
+    return [self.operationalState isEqualToString:@"setup_required"] ||
+           [self.setupState isEqualToString:@"not_started"] ||
+           [self.setupState isEqualToString:@"in_progress"] ||
+           [self.setupState isEqualToString:@"ready_for_activation"];
+}
+
+- (BOOL)isReadyForActivation {
+    return [self.setupState isEqualToString:@"ready_for_activation"];
+}
+
+- (BOOL)isRestricted {
+    if ([self.operationalState isEqualToString:@"restricted"]) {
+        return YES;
+    }
+    return self.activeRestrictions.count > 0;
+}
+
+- (BOOL)isSuspended {
+    if ([self.operationalState isEqualToString:@"suspended"]) {
+        return YES;
+    }
+    for (NSDictionary *r in self.activeRestrictions) {
+        if ([r[@"type"] isEqualToString:@"suspension"]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (nullable NSDictionary *)primaryActiveRestriction {
+    if (!self.activeRestrictions.count) return nil;
+    for (NSDictionary *r in self.activeRestrictions) {
+        if ([r[@"type"] isEqualToString:@"suspension"]) {
+            return r;
+        }
+    }
+    return self.activeRestrictions.firstObject;
+}
+
+- (BOOL)isSellingBlocked {
+    if ([self.operationalState isEqualToString:@"suspended"]) return YES;
+    for (NSDictionary *r in self.activeRestrictions) {
+        NSString *scope = PPSafeString(r[@"scope"]);
+        if ([scope isEqualToString:@"full_account"] || [scope isEqualToString:@"selling_only"]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (BOOL)areNewOrdersBlocked {
+    if ([self.operationalState isEqualToString:@"suspended"]) return YES;
+    for (NSDictionary *r in self.activeRestrictions) {
+        NSString *scope = PPSafeString(r[@"scope"]);
+        if ([scope isEqualToString:@"full_account"] || [scope isEqualToString:@"new_orders_only"]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (BOOL)arePayoutsBlocked {
+    if ([self.operationalState isEqualToString:@"suspended"]) return YES;
+    for (NSDictionary *r in self.activeRestrictions) {
+        NSString *scope = PPSafeString(r[@"scope"]);
+        if ([scope isEqualToString:@"full_account"] || [scope isEqualToString:@"payouts_only"]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (NSArray<NSDictionary *> *)expiringDocumentsWithinDays:(NSInteger)days {
+    NSMutableArray<NSDictionary *> *expiring = [NSMutableArray array];
+    NSDate *now = [NSDate date];
+    NSTimeInterval maxInterval = (days > 0 ? days : 30) * 86400.0;
+
+    [self.documents enumerateKeysAndObjectsUsingBlock:^(id _Nonnull key, id _Nonnull obj, BOOL * _Nonnull stop) {
+        if (![obj isKindOfClass:NSDictionary.class]) return;
+        NSDictionary *doc = (NSDictionary *)obj;
+        NSString *expiryStr = PPSafeString(doc[@"expiryDate"]);
+        if (expiryStr.length == 0) expiryStr = PPSafeString(doc[@"expiresAt"]);
+        if (expiryStr.length == 0) return;
+
+        NSDate *expiryDate = PPProviderDateFromValue(expiryStr);
+        if (!expiryDate) return;
+
+        NSTimeInterval diff = [expiryDate timeIntervalSinceDate:now];
+        if (diff <= maxInterval) {
+            NSInteger daysRemaining = (NSInteger)ceil(diff / 86400.0);
+            if (daysRemaining < 0) daysRemaining = 0;
+            NSMutableDictionary *entry = [doc mutableCopy];
+            entry[@"key"] = key;
+            entry[@"daysRemaining"] = @(daysRemaining);
+            entry[@"isExpired"] = @(diff <= 0);
+            [expiring addObject:entry];
+        }
+    }];
+
+    [expiring sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
+        return [a[@"daysRemaining"] compare:b[@"daysRemaining"]];
+    }];
+    return expiring.copy;
 }
 
 @end
@@ -467,8 +682,68 @@ static BOOL PPProviderBool(id value) {
     _city = @"";
         _notes = @"";
         _coverageAreas = @[];
+        _selectedPlanId = @"";
+        _selectedCapabilities = @[];
+        _logoURL = @"";
+        _coverURL = @"";
+        _descriptionText = @"";
+        _idempotencyKey = nil;
     }
     return self;
+}
+
+- (instancetype)initWithDictionary:(NSDictionary *)dict {
+    self = [self init];
+    if (self && [dict isKindOfClass:[NSDictionary class]]) {
+        _providerType = [dict[@"providerType"] respondsToSelector:@selector(integerValue)] ? [dict[@"providerType"] integerValue] : PPProviderTypeUnspecified;
+        _fullName = PPSafeString(dict[@"fullName"]);
+        _phone = PPSafeString(dict[@"phone"]);
+        _email = PPSafeString(dict[@"email"]);
+        _businessName = PPSafeString(dict[@"businessName"]);
+        _companyName = PPSafeString(dict[@"companyName"]);
+        _legalName = PPSafeString(dict[@"legalName"]);
+        _address = PPSafeString(dict[@"address"]);
+        _licenseNumber = PPSafeString(dict[@"licenseNumber"]);
+        _commercialRegistrationNumber = PPSafeString(dict[@"commercialRegistrationNumber"]);
+        _licenseDocumentURL = PPSafeString(dict[@"licenseDocumentURL"]);
+        _commercialRegistrationDocumentURL = PPSafeString(dict[@"commercialRegistrationDocumentURL"]);
+        _city = PPSafeString(dict[@"city"]);
+        _notes = PPSafeString(dict[@"notes"]);
+        _coverageAreas = [dict[@"coverageAreas"] isKindOfClass:[NSArray class]] ? dict[@"coverageAreas"] : @[];
+        _selectedPlanId = PPSafeString(dict[@"selectedPlanId"]);
+        _selectedCapabilities = [dict[@"selectedCapabilities"] isKindOfClass:[NSArray class]] ? dict[@"selectedCapabilities"] : @[];
+        _logoURL = PPSafeString(dict[@"logoURL"]);
+        _coverURL = PPSafeString(dict[@"coverURL"]);
+        _descriptionText = PPSafeString(dict[@"descriptionText"]);
+        _idempotencyKey = PPSafeString(dict[@"idempotencyKey"]).length ? PPSafeString(dict[@"idempotencyKey"]) : nil;
+    }
+    return self;
+}
+
+- (NSDictionary *)dictionaryRepresentation {
+    NSMutableDictionary *dict = [NSMutableDictionary dictionary];
+    dict[@"providerType"] = @(self.providerType);
+    dict[@"fullName"] = self.fullName ?: @"";
+    dict[@"phone"] = self.phone ?: @"";
+    dict[@"email"] = self.email ?: @"";
+    dict[@"businessName"] = self.businessName ?: @"";
+    dict[@"companyName"] = self.companyName ?: @"";
+    dict[@"legalName"] = self.legalName ?: @"";
+    dict[@"address"] = self.address ?: @"";
+    dict[@"licenseNumber"] = self.licenseNumber ?: @"";
+    dict[@"commercialRegistrationNumber"] = self.commercialRegistrationNumber ?: @"";
+    dict[@"licenseDocumentURL"] = self.licenseDocumentURL ?: @"";
+    dict[@"commercialRegistrationDocumentURL"] = self.commercialRegistrationDocumentURL ?: @"";
+    dict[@"city"] = self.city ?: @"";
+    dict[@"notes"] = self.notes ?: @"";
+    dict[@"coverageAreas"] = self.coverageAreas ?: @[];
+    if (self.selectedPlanId.length) dict[@"selectedPlanId"] = self.selectedPlanId;
+    if (self.selectedCapabilities.count) dict[@"selectedCapabilities"] = self.selectedCapabilities;
+    if (self.logoURL.length) dict[@"logoURL"] = self.logoURL;
+    if (self.coverURL.length) dict[@"coverURL"] = self.coverURL;
+    if (self.descriptionText.length) dict[@"descriptionText"] = self.descriptionText;
+    if (self.idempotencyKey.length) dict[@"idempotencyKey"] = self.idempotencyKey;
+    return dict.copy;
 }
 
 @end
@@ -483,6 +758,9 @@ static BOOL PPProviderBool(id value) {
         _email = @"";
         _phone = @"";
         _partnerApplicationStatus = @"not_started";
+        _operationalState = @"";
+        _setupState = @"not_started";
+        _activationChecklist = @{};
         _applications = @[];
         _applicationsByType = @{};
         _profilesByType = @{};
@@ -584,6 +862,40 @@ static BOOL PPProviderBool(id value) {
     return types.copy;
 }
 
+- (BOOL)isSetupRequired {
+    if ([self.operationalState isEqualToString:@"setup_required"]) {
+        return YES;
+    }
+    for (PPProviderApplication *app in self.applications) {
+        if (app.isApproved && app.isSetupRequired) {
+            return YES;
+        }
+    }
+    for (PPProviderProfile *profile in self.profilesByType.allValues) {
+        if (profile.isSetupRequired) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (BOOL)isReadyForActivation {
+    if ([self.setupState isEqualToString:@"ready_for_activation"]) {
+        return YES;
+    }
+    for (PPProviderApplication *app in self.applications) {
+        if (app.isApproved && app.isReadyForActivation) {
+            return YES;
+        }
+    }
+    for (PPProviderProfile *profile in self.profilesByType.allValues) {
+        if (profile.isReadyForActivation) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
 - (BOOL)hasAnyLifecycleRecord {
     BOOL hasDeliveryCompany = self.canDeliveryCompany;
     return self.canOfferServices ||
@@ -594,6 +906,33 @@ static BOOL PPProviderBool(id value) {
            self.applications.count > 0 ||
            self.applicationsByType.count > 0 ||
            self.profilesByType.count > 0;
+}
+
+- (BOOL)isRestricted {
+    if ([self.operationalState isEqualToString:@"restricted"]) {
+        return YES;
+    }
+    if (self.activeRestrictions.count > 0) {
+        return YES;
+    }
+    for (PPProviderProfile *profile in self.profilesByType.allValues) {
+        if ([profile isRestricted]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+- (BOOL)isSuspended {
+    if ([self.operationalState isEqualToString:@"suspended"]) {
+        return YES;
+    }
+    for (PPProviderProfile *profile in self.profilesByType.allValues) {
+        if ([profile isSuspended]) {
+            return YES;
+        }
+    }
+    return NO;
 }
 
 @end
@@ -658,6 +997,36 @@ static BOOL PPProviderBool(id value) {
     return [PPProviderApplicationManager shared];
 }
 
+static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
+    return [NSString stringWithFormat:@"PPProviderApplicationDraft_%@_%ld", uid.length ? uid : @"anon", (long)type];
+}
+
+- (void)saveDraft:(PPProviderApplicationDraft *)draft forProviderType:(PPProviderType)providerType {
+    if (!draft) return;
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    NSString *key = PPProviderDraftStorageKey(authUser.uid, providerType);
+    NSDictionary *dict = [draft dictionaryRepresentation];
+    [[NSUserDefaults standardUserDefaults] setObject:dict forKey:key];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (nullable PPProviderApplicationDraft *)savedDraftForProviderType:(PPProviderType)providerType {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    NSString *key = PPProviderDraftStorageKey(authUser.uid, providerType);
+    NSDictionary *dict = [[NSUserDefaults standardUserDefaults] objectForKey:key];
+    if ([dict isKindOfClass:[NSDictionary class]]) {
+        return [[PPProviderApplicationDraft alloc] initWithDictionary:dict];
+    }
+    return nil;
+}
+
+- (void)clearDraftForProviderType:(PPProviderType)providerType {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    NSString *key = PPProviderDraftStorageKey(authUser.uid, providerType);
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:key];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
 + (NSString *)localizedTitleForProviderType:(PPProviderType)type {
     switch (type) {
         case PPProviderTypeUnspecified:
@@ -705,6 +1074,12 @@ static BOOL PPProviderBool(id value) {
     }
     if ([normalized isEqualToString:kPPProviderStatusUnderReview]) {
         return kLang(@"ProviderStatusUnderReview");
+    }
+    if ([normalized isEqualToString:kPPProviderStatusChangesRequested]) {
+        return kLang(@"ProviderStatusChangesRequested");
+    }
+    if ([normalized isEqualToString:kPPProviderStatusResubmitted]) {
+        return kLang(@"ProviderStatusResubmitted");
     }
     if ([normalized isEqualToString:kPPProviderStatusApproved]) {
         return kLang(@"ProviderStatusApproved");
@@ -1103,9 +1478,15 @@ static BOOL PPProviderBool(id value) {
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:PPProviderSubmitCallableName(draft.providerType)];
     callable.timeoutInterval = 30.0;
 
+    if (draft.idempotencyKey.length == 0) {
+        draft.idempotencyKey = [NSString stringWithFormat:@"sub_%@_%@", authUser.uid, [[NSUUID UUID] UUIDString].lowercaseString];
+    }
+    NSString *idempotencyKey = draft.idempotencyKey;
+
     NSDictionary *payload = @{
         @"providerType": PPProviderTypeIdentifier(draft.providerType),
         @"planId": selectedPlan.planID ?: @"",
+        @"idempotencyKey": idempotencyKey,
         @"form": @{
             @"fullName": PPSafeString(draft.fullName),
             @"phone": PPSafeString(draft.phone),
@@ -1239,6 +1620,44 @@ static BOOL PPProviderBool(id value) {
     }];
     state.profilesByType = profilesByType.copy;
 
+    NSString *rootOpState = PPSafeString(safeRoot[@"operationalState"]);
+    NSString *rootSetupState = PPSafeString(safeRoot[@"setupState"]);
+    NSDictionary *rootChecklist = [safeRoot[@"activationChecklist"] isKindOfClass:NSDictionary.class] ? safeRoot[@"activationChecklist"] : nil;
+
+    for (PPProviderApplication *app in state.applications) {
+        if (rootOpState.length == 0 && app.operationalState.length > 0) {
+            rootOpState = app.operationalState;
+        }
+        if (rootSetupState.length == 0 && app.setupState.length > 0) {
+            rootSetupState = app.setupState;
+        }
+        if (!rootChecklist && app.activationChecklist.count > 0) {
+            rootChecklist = app.activationChecklist;
+        }
+    }
+    for (PPProviderProfile *prof in state.profilesByType.allValues) {
+        if (rootOpState.length == 0 && prof.operationalState.length > 0) {
+            rootOpState = prof.operationalState;
+        }
+        if (rootSetupState.length == 0 && prof.setupState.length > 0) {
+            rootSetupState = prof.setupState;
+        }
+        if (!rootChecklist && prof.activationChecklist.count > 0) {
+            rootChecklist = prof.activationChecklist;
+        }
+    }
+    NSMutableArray *allActiveRestrictions = [NSMutableArray array];
+    for (PPProviderProfile *prof in state.profilesByType.allValues) {
+        if (prof.activeRestrictions.count > 0) {
+            [allActiveRestrictions addObjectsFromArray:prof.activeRestrictions];
+        }
+    }
+    state.activeRestrictions = allActiveRestrictions.copy;
+
+    state.operationalState = rootOpState.length ? rootOpState : @"";
+    state.setupState = rootSetupState.length ? rootSetupState : @"not_started";
+    state.activationChecklist = rootChecklist ?: @{};
+
     return state;
 }
 
@@ -1283,4 +1702,580 @@ static BOOL PPProviderBool(id value) {
     return PPProviderError(message);
 }
 
+- (void)updateChecklistProgressForKey:(NSString *)key
+                            completed:(BOOL)completed
+                           completion:(void(^)(BOOL success, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (authUser.uid.length == 0) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"updatePartnerSetupChecklist"];
+    callable.timeoutInterval = 30.0;
+
+    NSDictionary *payload = @{
+        @"partnerId": authUser.uid ?: @"",
+        @"checklistKey": key ?: @"",
+        @"completed": @(completed),
+    };
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(NO, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            if (completion) {
+                completion(YES, nil);
+            }
+        });
+    }];
+}
+
+- (void)activatePartnerAccountWithCompletion:(void(^)(BOOL success, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (authUser.uid.length == 0) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"activatePartnerAccount"];
+    callable.timeoutInterval = 30.0;
+
+    NSString *idempotencyKey = [NSString stringWithFormat:@"act_%@_%@", authUser.uid, [[NSUUID UUID] UUIDString].lowercaseString];
+    NSDictionary *payload = @{
+        @"partnerId": authUser.uid ?: @"",
+        @"idempotencyKey": idempotencyKey,
+    };
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(NO, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            if (completion) {
+                completion(YES, nil);
+            }
+        });
+    }];
+}
+
+- (void)updateProfileDomain:(NSString *)domain
+                      patch:(NSDictionary *)patch
+            expectedVersion:(nullable NSNumber *)expectedVersion
+                 completion:(void(^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (authUser.uid.length == 0) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, nil, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"updatePartnerProfileDomain"];
+    callable.timeoutInterval = 30.0;
+
+    NSMutableDictionary *payload = [NSMutableDictionary dictionary];
+    payload[@"partnerId"] = authUser.uid ?: @"";
+    payload[@"domain"] = domain ?: @"";
+    payload[@"patch"] = patch ?: @{};
+    if (expectedVersion) {
+        payload[@"expectedVersion"] = expectedVersion;
+    }
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(NO, nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            if (completion) {
+                completion(YES, dict, nil);
+            }
+        });
+    }];
+}
+
+- (void)fetchProfileDomain:(NSString *)domain
+                completion:(void(^)(NSDictionary * _Nullable domainData, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (authUser.uid.length == 0) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerProfileDomain"];
+    callable.timeoutInterval = 30.0;
+
+    NSDictionary *payload = @{
+        @"partnerId": authUser.uid ?: @"",
+        @"domain": domain ?: @"",
+    };
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            NSDictionary *domainData = [dict[@"data"] isKindOfClass:NSDictionary.class] ? dict[@"data"] : nil;
+            if (completion) {
+                completion(domainData, nil);
+            }
+        });
+    }];
+}
+
+- (void)fetchSyncSnapshotWithClientVersion:(nullable NSNumber *)clientVersion
+                                completion:(void(^)(BOOL inSync, BOOL catchUpRequired, NSDictionary * _Nullable snapshot, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (authUser.uid.length == 0) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, NO, nil, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"fetchPartnerSyncSnapshot"];
+    callable.timeoutInterval = 30.0;
+
+    NSMutableDictionary *payload = [NSMutableDictionary dictionary];
+    payload[@"partnerId"] = authUser.uid ?: @"";
+    if (clientVersion) {
+        payload[@"clientVersion"] = clientVersion;
+    }
+
+    [callable callWithObject:payload.copy completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(NO, NO, nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            BOOL inSync = [dict[@"inSync"] boolValue];
+            BOOL catchUp = [dict[@"catchUpRequired"] boolValue];
+            if (completion) {
+                completion(inSync, catchUp, dict, nil);
+            }
+        });
+    }];
+}
+
+- (void)reconcileReadModelsWithServer:(void(^)(BOOL reconciled, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (authUser.uid.length == 0) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"syncPartnerReadModels"];
+    callable.timeoutInterval = 30.0;
+
+    NSDictionary *payload = @{
+        @"partnerId": authUser.uid ?: @"",
+        @"force": @YES,
+    };
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(NO, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            BOOL reconciled = [dict[@"reconciled"] boolValue];
+            if (completion) {
+                completion(reconciled, nil);
+            }
+        });
+    }];
+}
+
+- (void)fetchRestrictionsSummary:(void(^)(NSDictionary * _Nullable summary, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (authUser.uid.length == 0) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerRestrictionsSummary"];
+    callable.timeoutInterval = 30.0;
+
+    NSDictionary *payload = @{
+        @"partnerId": authUser.uid ?: @"",
+    };
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            NSDictionary *summary = [dict[@"summary"] isKindOfClass:NSDictionary.class] ? dict[@"summary"] : dict;
+            if (completion) {
+                completion(summary, nil);
+            }
+        });
+    }];
+}
+
+- (void)submitReactivationRequestWithActionTaken:(NSString *)actionTaken
+                                  actionTakenAr:(nullable NSString *)actionTakenAr
+                              evidenceDocuments:(NSArray<NSDictionary *> *)documents
+                                   partnerNotes:(nullable NSString *)notes
+                                  restrictionId:(nullable NSString *)restrictionId
+                                expectedVersion:(nullable NSNumber *)expectedVersion
+                                 idempotencyKey:(nullable NSString *)idempotencyKey
+                                     completion:(void(^)(BOOL success, NSDictionary * _Nullable response, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (!authUser) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
+                                                        code:401
+                                                    userInfo:@{NSLocalizedDescriptionKey: @"User must be authenticated."}]);
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"submitPartnerReactivationRequest"];
+    callable.timeoutInterval = 30.0;
+
+    NSMutableDictionary *payload = [NSMutableDictionary dictionary];
+    payload[@"partnerId"] = authUser.uid ?: @"";
+    payload[@"actionTaken"] = actionTaken ?: @"";
+    if (actionTakenAr.length > 0) payload[@"actionTaken_ar"] = actionTakenAr;
+    if (documents) payload[@"evidenceDocuments"] = documents;
+    if (notes.length > 0) payload[@"partnerNotes"] = notes;
+    if (restrictionId.length > 0) payload[@"restrictionId"] = restrictionId;
+    if (expectedVersion) payload[@"expectedVersion"] = expectedVersion;
+    if (idempotencyKey.length > 0) payload[@"idempotencyKey"] = idempotencyKey;
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(NO, nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            BOOL ok = [dict[@"ok"] boolValue];
+            if (completion) {
+                completion(ok, dict, nil);
+            }
+        });
+    }];
+}
+
+- (void)fetchReactivationDossierWithCompletion:(void(^)(NSDictionary * _Nullable dossier, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (!authUser) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
+                                                    code:401
+                                                userInfo:@{NSLocalizedDescriptionKey: @"User must be authenticated."}]);
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerReactivationDossierData"];
+    callable.timeoutInterval = 30.0;
+
+    NSDictionary *payload = @{
+        @"partnerId": authUser.uid ?: @"",
+    };
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            NSDictionary *dossier = [dict[@"dossier"] isKindOfClass:NSDictionary.class] ? dict[@"dossier"] : dict;
+            if (completion) {
+                completion(dossier, nil);
+            }
+        });
+    }];
+}
+
+- (void)initiateVoluntaryOffboardingWithReasonCode:(NSString *)reasonCode
+                                           reason:(NSString *)reason
+                                         reasonAr:(nullable NSString *)reasonAr
+                                  expectedVersion:(nullable NSNumber *)expectedVersion
+                                   idempotencyKey:(nullable NSString *)idempotencyKey
+                                       completion:(void(^)(BOOL success, NSDictionary * _Nullable response, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (!authUser) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
+                                                        code:401
+                                                    userInfo:@{NSLocalizedDescriptionKey: @"User must be authenticated."}]);
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"initiatePartnerOffboardingWorkflow"];
+    callable.timeoutInterval = 30.0;
+
+    NSMutableDictionary *payload = [NSMutableDictionary dictionary];
+    payload[@"partnerId"] = authUser.uid ?: @"";
+    payload[@"offboardingType"] = @"voluntary";
+    payload[@"reasonCode"] = reasonCode ?: @"other";
+    payload[@"reason"] = reason ?: @"";
+    if (reasonAr.length > 0) payload[@"reason_ar"] = reasonAr;
+    if (expectedVersion) payload[@"expectedVersion"] = expectedVersion;
+    if (idempotencyKey.length > 0) payload[@"idempotencyKey"] = idempotencyKey;
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(NO, nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            BOOL ok = [dict[@"ok"] boolValue];
+            if (completion) {
+                completion(ok, dict, nil);
+            }
+        });
+    }];
+}
+
+- (void)fetchOffboardingDossierWithCompletion:(void(^)(NSDictionary * _Nullable dossier, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (!authUser) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
+                                                    code:401
+                                                userInfo:@{NSLocalizedDescriptionKey: @"User must be authenticated."}]);
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerOffboardingDossierData"];
+    callable.timeoutInterval = 30.0;
+
+    NSDictionary *payload = @{
+        @"partnerId": authUser.uid ?: @"",
+    };
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            NSDictionary *dossier = [dict[@"dossier"] isKindOfClass:NSDictionary.class] ? dict[@"dossier"] : dict;
+            if (completion) {
+                completion(dossier, nil);
+            }
+        });
+    }];
+}
+
+- (void)fetchPartnerAuditTrailWithLimit:(nullable NSNumber *)limit
+                         filterCategory:(nullable NSString *)filterCategory
+                             completion:(void(^)(BOOL success, NSArray<NSDictionary *> * _Nullable entries, NSDictionary * _Nullable verification, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (!authUser) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, nil, nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
+                                                            code:401
+                                                        userInfo:@{NSLocalizedDescriptionKey: @"User must be authenticated."}]);
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerAuditTrail"];
+    callable.timeoutInterval = 30.0;
+
+    NSMutableDictionary *payload = [NSMutableDictionary dictionary];
+    payload[@"partnerId"] = authUser.uid ?: @"";
+    if (limit) {
+        payload[@"limit"] = limit;
+    }
+    if (filterCategory && filterCategory.length > 0) {
+        payload[@"filterCategory"] = filterCategory;
+    }
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(NO, nil, nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            BOOL ok = [dict[@"ok"] boolValue];
+            NSArray *entries = [dict[@"entries"] isKindOfClass:NSArray.class] ? dict[@"entries"] : @[];
+            NSDictionary *verification = [dict[@"verification"] isKindOfClass:NSDictionary.class] ? dict[@"verification"] : nil;
+            if (completion) {
+                completion(ok, entries, verification, nil);
+            }
+        });
+    }];
+}
+
+- (void)exportPrivacyDataWithCompletion:(void(^)(BOOL success, NSDictionary * _Nullable exportData, NSError * _Nullable error))completion {
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (!authUser) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
+                                                        code:401
+                                                    userInfo:@{NSLocalizedDescriptionKey: @"User must be authenticated."}]);
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"exportPartnerPrivacyData"];
+    callable.timeoutInterval = 30.0;
+
+    NSDictionary *payload = @{
+        @"partnerId": authUser.uid ?: @"",
+    };
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(NO, nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            BOOL ok = [dict[@"ok"] boolValue];
+            NSDictionary *exportData = [dict[@"export"] isKindOfClass:NSDictionary.class] ? dict[@"export"] : dict;
+            if (completion) {
+                completion(ok, exportData, nil);
+            }
+        });
+    }];
+}
+
+- (void)fetchCockpitSummaryWithClientEtag:(nullable NSString *)clientEtag
+                             forceRefresh:(BOOL)forceRefresh
+                               completion:(void(^)(BOOL notModified, NSDictionary * _Nullable cockpit, NSString * _Nullable etag, NSNumber * _Nullable generation, NSError * _Nullable error))completion
+{
+    FIRUser *authUser = [FIRAuth auth].currentUser;
+    if (!authUser) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(NO, nil, nil, nil, [NSError errorWithDomain:@"PPProviderApplicationManager" code:401 userInfo:@{NSLocalizedDescriptionKey: kLang(@"error_not_authenticated")}]);
+            });
+        }
+        return;
+    }
+
+    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerCockpitSummary"];
+    callable.timeoutInterval = 20.0;
+
+    NSMutableDictionary *payload = [NSMutableDictionary dictionary];
+    payload[@"partnerId"] = authUser.uid ?: @"";
+    if (clientEtag.length > 0) {
+        payload[@"clientEtag"] = clientEtag;
+    }
+    if (forceRefresh) {
+        payload[@"forceRefresh"] = @YES;
+    }
+
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                if (completion) {
+                    completion(NO, nil, nil, nil, [self pp_friendlyFunctionsError:error]);
+                }
+                return;
+            }
+            NSDictionary *dict = [result.data isKindOfClass:NSDictionary.class] ? (NSDictionary *)result.data : @{};
+            BOOL notModified = [dict[@"notModified"] boolValue];
+            NSDictionary *cockpit = [dict[@"cockpit"] isKindOfClass:NSDictionary.class] ? dict[@"cockpit"] : nil;
+            NSString *etag = PPSafeString(dict[@"etag"]);
+            NSNumber *generation = [dict[@"generation"] isKindOfClass:NSNumber.class] ? dict[@"generation"] : @(1);
+            if (completion) {
+                completion(notModified, cockpit, etag, generation, nil);
+            }
+        });
+    }];
+}
+
 @end
+

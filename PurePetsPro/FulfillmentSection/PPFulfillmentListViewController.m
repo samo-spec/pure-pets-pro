@@ -700,26 +700,50 @@ UIStackView *summaryStack = [[UIStackView alloc] init];
     self.listener = [[PPFulfillmentManager sharedManager] observeFulfillmentsForOwnerID:uid onChange:^(NSArray<PPFulfillmentModel *> *fulfillments, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || generation != self.listenerGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] || ![self.listenerUID isEqualToString:uid]) return;
+        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] || ![self.listenerUID isEqualToString:uid]) {
+            self.fulfillments = @[];
+            [self.spinner stopAnimating];
+            [self.refreshControl endRefreshing];
+            [self updateUIAnimated:NO];
+            self.tableView.tableFooterView = nil;
+            return;
+        }
         [self.spinner stopAnimating];
         [self.refreshControl endRefreshing];
         self.hasLoaded = YES;
         if (error) {
-            self.fulfillments = self.fulfillments ?: @[];
+            self.fulfillments = fulfillments ?: @[];
             [self updateUIAnimated:YES];
+            [self updatePagingFooter];
             [PPToast toast:kLang(@"Fulfillment_LoadError") style:PPToastStyleError haptic:NO duration:3.0];
             return;
         }
         self.fulfillments = fulfillments ?: @[];
         [self updateUIAnimated:YES];
+        [self updatePagingFooter];
     }];
 }
 
 - (void)refreshPulled:(UIRefreshControl *)refreshControl {
-    [self refreshFilteredFulfillments];
-    [self.tableView reloadData];
-    [self updateSummary];
-    [refreshControl endRefreshing];
+    [self startListening];
+}
+
+- (void)updatePagingFooter {
+    if (![[PPFulfillmentManager sharedManager] canLoadMoreFulfillmentsForListener:self.listener]) {
+        self.tableView.tableFooterView = nil;
+        return;
+    }
+    UIButton *more = [UIButton buttonWithType:UIButtonTypeSystem];
+    more.frame = CGRectMake(0, 0, CGRectGetWidth(self.tableView.bounds), 52);
+    [more setTitle:kLang(@"Fulfillment_LoadMore") forState:UIControlStateNormal];
+    more.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [more addTarget:self action:@selector(loadMoreFulfillments:) forControlEvents:UIControlEventTouchUpInside];
+    self.tableView.tableFooterView = more;
+}
+
+- (void)loadMoreFulfillments:(UIButton *)sender {
+    sender.enabled = NO;
+    [[PPFulfillmentManager sharedManager] loadMoreFulfillmentsForListener:self.listener];
 }
 
 - (void)updateUIAnimated:(BOOL)animated {

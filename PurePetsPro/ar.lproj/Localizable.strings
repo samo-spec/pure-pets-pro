@@ -14,6 +14,20 @@
 "Success_Title"                = "نجاح";
 "OK_Title"                     = "موافق";
 
+/* ===================== Semantic Alert Eyebrows ===================== */
+"alert_eyebrow_success"        = "اكتمل";
+"alert_eyebrow_error"          = "إجراء مطلوب";
+"alert_eyebrow_warning"        = "تتطلب المراجعة";
+"alert_eyebrow_info"           = "معلومات";
+"alert_eyebrow_confirmation"   = "تأكيد الإجراء";
+"alert_eyebrow_input"          = "بيانات مطلوبة";
+"Alert_Eyebrow_Success"        = "اكتمل";
+"Alert_Eyebrow_Error"          = "إجراء مطلوب";
+"Alert_Eyebrow_Warning"        = "تتطلب المراجعة";
+"Alert_Eyebrow_Info"           = "معلومات";
+"Alert_Eyebrow_Confirmation"   = "تأكيد الإجراء";
+"Alert_Eyebrow_TextInput"      = "بيانات مطلوبة";
+
 /* ===================== Dashboard ===================== */
 "AdminDashboard"               = "لوحة التحكم";
 "Welcome"                      = "مرحباً";
@@ -132,6 +146,7 @@
 "Save" = "حفظ";
 "Delete" = "حذف";
 "Cancel" = "إلغاء";
+"Back" = "رجوع";
 "Confirm Delete" = "تأكيد الحذف";
 "Are you sure you want to delete this accessory?" = "هل أنت متأكد أنك تريد حذف هذا الإكسسوار؟";
 
@@ -979,6 +994,8 @@
 "ProviderStatusEyebrow" = "مراجعة الشريك";
 "ProviderStatusPending" = "قيد الانتظار";
 "ProviderStatusUnderReview" = "قيد المراجعة";
+"ProviderStatusChangesRequested" = "مطلوب تعديلات";
+"ProviderStatusResubmitted" = "تمت إعادة الإرسال";
 "ProviderStatusApproved" = "تمت الموافقة";
 "ProviderStatusRejected" = "يحتاج تحديث";
 "ProviderStatusArchived" = "مؤرشف";
@@ -999,6 +1016,17 @@
 "ProviderStateReviewTitle" = "طلبك قيد المراجعة";
 "ProviderStateReviewSubtitle" = "فريق Pure Pets يراجع الآن طلب الشريك الخاص بك.";
 "ProviderStateNoActionFootnote" = "سنقوم بإشعارك فور صدور القرار.";
+"ProviderStateChangesRequestedTitle" = "مطلوب اتخاذ إجراء بشأن طلبك";
+"ProviderStateChangesRequestedSubtitle" = "طلب فريق المراجعة تعديلات محددة على بياناتك أو مستنداتك. راجع الملاحظات أدناه وقم بتحديث الطلب.";
+"ProviderStartCardChangesRequestedTitle" = "تحديث العناصر المطلوبة";
+"ProviderStartCardChangesRequestedSubtitle" = "يرجى تصحيح المستندات أو البيانات المحددة لإكمال عملية المراجعة والاعتماد.";
+"ProviderStateChangesRequestedFootnote" = "بمجرد تحديث البيانات، اضغط إعادة الإرسال لإرجاع طلبك إلى قائمة المراجعة.";
+"ProviderStateResubmittedTitle" = "تم إرسال التعديلات بنجاح";
+"ProviderStateResubmittedSubtitle" = "تم استلام تعديلاتك وسيقوم فريق المراجعة بتدقيقها في أقرب وقت.";
+"ProviderResubmitButton" = "تحديث وإعادة إرسال الطلب";
+"ProviderContactSupportButton" = "التواصل مع الدعم";
+"ProviderCardRejectionReasonLabel" = "سبب الرفض";
+"ProviderCardFindingsSectionTitle" = "ملاحظات المراجع";
 "ProviderStateRejectedTitle" = "طلبك يحتاج إلى تحديث";
 "ProviderStateRejectedSubtitle" = "راجع الملاحظات أدناه ثم أرسل طلباً جديداً عندما تصبح جاهزاً.";
 "ProviderStateRejectedFootnote" = "يمكنك التقديم مرة أخرى بعد تحديث بياناتك.";
@@ -1007,6 +1035,8 @@
 "ProviderHeroErrorBadge" = "مشكلة في الاتصال";
 "ProviderHeroBlockedBadge" = "غير متاح";
 "ProviderHeroReviewBadge" = "قيد المراجعة";
+"ProviderHeroChangesRequestedBadge" = "مطلوب تعديلات";
+"ProviderHeroResubmittedBadge" = "تمت إعادة الإرسال";
 "ProviderHeroRejectedBadge" = "يحتاج إلى تعديل";
 "ProviderHeroReadyBadge" = "جاهز للتقديم";
 "ProviderApplyGenericButton" = "ابدأ طلب الشريك";
@@ -2096,6 +2126,25 @@
 "Notification_CTA_OpenDelivery" = "فتح تفاصيل التوصيل";
 "Notification_CTA_OpenChat" = "فتح المحادثة";
 "Notification_CTA_OpenDeliveryRequest" = "فتح طلب التوصيل";
+"Notification_CTA_ChatSubtitle" = "فتح محادثة الدعم المباشر ومتابعة استفسارات العملاء.";
+"Notification_CTA_OrderSubtitle" = "مراجعة وتجهيز أصناف الطلب ومطابقة المخزون بالفرع.";
+"Notification_CTA_DeliverySubtitle" = "موقع الاستلام ومنطقة التوصيل وحالة التوصيل الحالية.";
+"Notification_CTA_SystemSubtitle" = "سجل الإشعارات الرسمية المعتمدة لمنصة بيور بيتس برو.";
+"Notification_Dossier_Category_Support" = "رسالة دعم ومحادثة مباشرة";
+"Notification_Dossier_Category_Order" = "طلب متجر جديد";
+"Notification_Dossier_Category_Fulfillment" = "أمر تجهيز واستلام";
+"Notification_Dossier_Category_Delivery" = "مهمة توصيل وشحن";
+"Notification_Dossier_Category_System" = "تنبيه منصة رسمي";
+"Notification_Dossier_Action_CopyText" = "نسخ نص الإشعار";
+"Notification_Dossier_Action_Copied" = "تم نسخ النص بنجاح";
+"Notification_Dossier_Context_SupportTitle" = "سياق خدمة العملاء والدعم";
+"Notification_Dossier_Context_SupportTip" = "محادثة مباشرة مع العميل: يُوصى بسرعة الاستجابة لضمان جودة الخدمة ورفع تقييم المتجر.";
+"Notification_Dossier_Meta_Title" = "البيانات الإدارية والتشغيلية";
+"Notification_Dossier_Meta_NID" = "معرف الإشعار";
+"Notification_Dossier_Meta_Target" = "المستخدم المستهدف";
+"Notification_Dossier_Meta_Route" = "المسار التشغيلي";
+"Notification_Dossier_Meta_Source" = "خادم ومسار المصدر";
+"Notification_Dossier_Error_ChatUnavailable" = "تعذر فتح المحادثة مباشرة، جاري نقلك إلى قائمة محادثات الدعم…";
 "pp_pro_notification_new_delivery_request_title" = "طلب توصيل جديد";
 "pp_pro_notification_new_delivery_request_body" = "يوجد طلب جديد جاهز للاستلام. راجع التفاصيل واقبل طلب التوصيل.";
 "pp_pro_notification_delivery_request_closed_title" = "تم إغلاق طلب التوصيل";
@@ -2573,6 +2622,84 @@
 "MarketplaceBranches_SelectHero" = "أين ينتظر هذا الطرد؟";
 "MarketplaceBranches_SelectSubtitle" = "يظهر الفرع المحدد وعنوان الاستلام لشركات التوصيل قبل قبول الطلب.";
 "MarketplaceBranches_ConfirmPickup" = "استخدام فرع الاستلام";
+"MarketplaceBranches_SelectEyebrow" = "نقطة انطلاق الشحنة";
+"MarketplaceBranches_ActiveNodesFormat" = "%d/%d نشطة";
+"MarketplaceBranches_DefaultHubFormat" = "الرئيسي: %@";
+"MarketplaceBranches_Active" = "نشط";
+"MarketplaceBranches_Paused" = "متوقف";
+"MarketplaceBranches_ActiveOnly" = "النشطة فقط";
+"MarketplaceBranches_PausedOnly" = "المتوقفة";
+"MarketplaceBranches_SelectSubtitleShort" = "تحديد نقطة استلام الطرد";
+"MarketplaceBranches_ManageSubtitleShort" = "شبكة منافذ الشحن";
+"MarketplaceBranches_IPadSubtitle" = "مركز قيادة شبكة الاستلام والتوزيع لشركاء المتجر";
+"MarketplaceBranches_SelectToInspect" = "اختر فرعاً من القائمة للاطلاع على تفاصيل شبكة التوصيل";
+"MarketplaceBranches_CourierHandoverDetails" = "إحداثيات تسليم الطرود للسائقين";
+"MarketplaceBranches_DriverNotice" = "سيصل مندوب التوصيل إلى هذا الموقع مباشرة عند قبول مهمة الاستلام. يرجى التأكد من جهوزية الطرود بالرقم المرجعي قبل وصول السائق.";
+"MarketplaceBranches_PlaceholderNameAr" = "مثال: فرع لوسيل الرئيسي";
+"MarketplaceBranches_PlaceholderNameEn" = "e.g. Lusail Main Hub";
+"MarketplaceBranches_PlaceholderAddress" = "الشارع، المنطقة، رقم المبنى أو علامة مميزة";
+"MarketplaceBranches_PlaceholderPhone" = "+974 0000 0000";
+"MarketplaceBranches_DefaultSubLabel" = "يتم اختياره تلقائياً عند طلب تسليم الطلبات الجديدة";
+"MarketplaceBranches_ActivatedToast" = "تم تفعيل الفرع بنجاح";
+"MarketplaceBranches_DeactivatedToast" = "تم إيقاف الفرع مؤقتاً";
+"MarketplaceBranches_CannotSelectInactive" = "هذا الفرع متوقف حالياً ولا يمكن اختياره";
+"MarketplaceBranches_AddressCopied" = "تم نسخ عنوان الاستلام";
+"MarketplaceBranches_Editor_LiveSimulatorTitle" = "بطاقة السائق المباشرة";
+"MarketplaceBranches_Editor_LiveSimulatorSubtitle" = "معاينة حية لما يظهر لمندوب التوصيل على هاتفه";
+"MarketplaceBranches_Editor_VerifiedNode" = "نقطة استلام معتمدة";
+"MarketplaceBranches_Editor_RoleChips_Title" = "نوع الفرع والنشاط اللوجستي";
+"MarketplaceBranches_Editor_Role_Main" = "مركز رئيسي";
+"MarketplaceBranches_Editor_Role_Showroom" = "معرض ومحل";
+"MarketplaceBranches_Editor_Role_Warehouse" = "مستودع تخزين";
+"MarketplaceBranches_Editor_Role_Express" = "تسليم سريع";
+"MarketplaceBranches_Editor_DistrictChips_Title" = "المناطق الشائعة في قطر (اضغط للإضافة)";
+"MarketplaceBranches_Editor_District_Lusail" = "لوسيل";
+"MarketplaceBranches_Editor_District_Pearl" = "اللؤلؤة";
+"MarketplaceBranches_Editor_District_AlSadd" = "السد";
+"MarketplaceBranches_Editor_District_WestBay" = "الخليج الغربي";
+"MarketplaceBranches_Editor_District_AlRayyan" = "الريان";
+"MarketplaceBranches_Editor_District_Industrial" = "المنطقة الصناعية";
+"MarketplaceBranches_Editor_District_AlWakrah" = "الوكرة";
+"MarketplaceBranches_Editor_District_OldAirport" = "المطار القديم";
+"MarketplaceBranches_Editor_ReadyTelemetry" = "جاهز للاعتماد";
+"MarketplaceBranches_Editor_MissingTelemetry" = "حقول مطلوبة";
+"MarketplaceBranches_Editor_PhoneHint" = "هاتف مباشر للتنسيق السريع عند وصول السائق لبوابة الاستلام";
+"MarketplaceBranches_Editor_ReadinessScore" = "مؤشر جهوزية الشحن";
+"MarketplaceBranches_Editor_Checklist_NameAr" = "اسم الفرع بالعربية للمراسلات المحلية";
+"MarketplaceBranches_Editor_Checklist_NameEn" = "اسم الفرع بالإنجليزية للأنظمة اللوجستية";
+"MarketplaceBranches_Editor_Checklist_Address" = "عنوان دقيق مع علامة مميزة للمندوب";
+"MarketplaceBranches_Editor_Checklist_Phone" = "رقم اتصال محلي فعال للتنسيق (+974)";
+"MarketplaceBranches_Editor_IPadNavTitle" = "استوديو فروع الاستلام والتسليم";
+"MarketplaceBranches_Editor_IPadNavSubtitle" = "تهيئة بيانات استلام الطرود والتكامل المباشر مع أسطول التوصيل";
+"MarketplaceBranches_Editor_DriverView" = "واجهة المندوب";
+"MarketplaceBranches_Editor_WaybillView" = "بوليصة الشحن";
+"MarketplaceBranches_Editor_EstimatedETA" = "زمن استجابة السائق المقدر: 15 دقيقة";
+"MarketplaceBranches_Editor_PlaceholderLiveHub" = "اسم الفرع يظهر هنا مباشرة...";
+"MarketplaceBranches_Editor_PlaceholderLiveAddress" = "أدخل عنوان الاستلام الدقيق ليظهر على خريطة المندوب...";
+"MarketplaceBranches_Editor_Role_Main_Desc" = "استلام مركزي لجميع منتجات المتجر";
+"MarketplaceBranches_Editor_Role_Showroom_Desc" = "استلام فوري للعملاء ومندوبي التوصيل";
+"MarketplaceBranches_Editor_Role_Warehouse_Desc" = "تجهيز الشحنات الكبيرة وتخزين المخزون";
+"MarketplaceBranches_Editor_Role_Express_Desc" = "نقطة شحن فائق السرعة للطلبات العاجلة";
+"MarketplaceBranches_Editor_CancelShortcut" = "إلغاء (Esc)";
+"MarketplaceBranches_Editor_SaveShortcut" = "حفظ الفرع (⌘S)";
+"MarketplaceBranches_Editor_WaybillNetwork" = "منظومة بيور بيتس اللوجستية";
+"MarketplaceBranches_Editor_BarcodeLabel" = "رمز التحقق المعتمد للمندوب";
+"MarketplaceBranches_Editor_DigitCount_Format" = "%d من ٨ أرقام";
+"MarketplaceBranches_Editor_ClearField" = "مسح الحقل";
+"MarketplaceBranches_EmptyGuide_Title" = "كيف تعمل شبكة فروع الاستلام؟";
+"MarketplaceBranches_EmptyGuide_Step1" = "١. أضف موقع الفرع وعنوانه الدقيق";
+"MarketplaceBranches_EmptyGuide_Step2" = "٢. عيّن الفرع الافتراضي للمتجر";
+"MarketplaceBranches_EmptyGuide_Step3" = "٣. وجّه مندوب التوصيل للاستلام فوراً";
+"MarketplaceBranches_Template_Lusail" = "فرع لوسيل مارينا";
+"MarketplaceBranches_Template_Industrial" = "مستودع المنطقة الصناعية";
+"MarketplaceBranches_Filter_Default" = "الافتراضي";
+"MarketplaceBranches_ErrorTitle" = "تعذر تحميل فروع الاستلام";
+"MarketplaceBranches_ErrorSubtitle" = "تحقق من اتصال الإنترنت ثم اضغط لإعادة المحاولة";
+"MarketplaceBranches_Retry" = "إعادة المحاولة";
+"MarketplaceBranches_SetDefault" = "تعيين كافتراضي";
+"MarketplaceBranches_SetDefaultToast" = "تم تعيين الفرع الافتراضي";
+"MarketplaceBranches_DeleteConfirmTitle" = "تأكيد حذف الفرع";
+"MarketplaceBranches_DeleteConfirmMessage" = "هل أنت متأكد من حذف هذا الفرع من شبكة نقاط الاستلام؟";
 "New notification" = "إشعار جديد";
 
 /* إعدادات إشعارات برو المميزة */
@@ -2823,6 +2950,24 @@
 "Market_FilterSheet_SortStockHigh" = "المخزون: الأكثر أولاً";
 "Market_FilterSheet_SortStockLow" = "المخزون: الأقل أولاً";
 "Market_Filter_ActiveIndicator" = "نشط";
+"Market_FilterSheet_Preset_All" = "الكل";
+"Market_FilterSheet_Preset_LowStock" = "مخزون حرج";
+"Market_FilterSheet_Preset_Deals" = "تخفيضات نشطة";
+"Market_FilterSheet_Preset_Food" = "أطعمة";
+"Market_FilterSheet_Preset_Accessories" = "إكسسوارات";
+"Market_FilterSheet_Preset_Hidden" = "مخفي ومعطل";
+"Market_FilterSheet_ActiveFiltersFormat" = "%ld عوامل نشطة";
+"Market_FilterSheet_ZeroMatches" = "لا توجد منتجات مطابقة";
+"Market_FilterSheet_ShowAllFormat" = "عرض جميع المنتجات (%ld)";
+"Market_FilterSheet_Reset_Success" = "تمت استعادة الإعدادات الافتراضية";
+"Market_FilterSheet_QuickPresets" = "فلاتر سريعة ذكية";
+"Market_FilterSheet_CatalogDistribution" = "مؤشرات المخزون الحيّة";
+"Market_FilterSheet_TotalSKUsFormat" = "%ld صنف إجمالي";
+"Market_FilterSheet_InStockSummaryFormat" = "%ld متوفر";
+"Market_FilterSheet_LowStockSummaryFormat" = "%ld حرج";
+"Market_FilterSheet_OffersSummaryFormat" = "%ld عليه عرض";
+"Market_FilterSheet_ApplyShortcut" = "تطبيق التصفية ⌘ ↩";
+"Market_FilterSheet_ResetShortcut" = "إعادة ضبط ⌘ R";
 
 
 /* Delivery Operations Cockpit */
@@ -2864,3 +3009,780 @@
 "Deliv_Route_Pickup" = "نقطة الاستلام:";
 "Deliv_Route_Dropoff" = "وجهة العميل:";
 "Deliv_Call_Unavailable" = "رقم الهاتف غير متاح للاتصال";
+
+/* Pro More Tactical Deck */
+"ProMore_Section_Operations" = "مركز العمليات الميدانية والتجارية";
+"ProMore_Section_Operations_Eyebrow" = "العمليات الحية والخدمات";
+"ProMore_Section_System" = "المنظومة والتهيئة المعتمدة";
+"ProMore_Section_System_Eyebrow" = "إدارة الحساب والمنشأة";
+"ProMore_SupportChats_Subtitle" = "الرد الفوري على استفسارات ورسائل العملاء";
+"ProMore_Fulfillment_Subtitle" = "تجهيز وفحص وتسليم طلبات المنتجات والخدمات";
+"ProMore_Branches_Subtitle" = "فروع الاستلام ومواقع التسليم وساعات العمل المعتمدة";
+"ProMore_DeliveryMembers_Subtitle" = "طاقم التوصيل وتوزيع خطوط السير الميدانية";
+"ProMore_Notifications_Subtitle" = "قنوات التنبيه الفوري والأصوات وتحديثات الحساب";
+"ProMore_Profile_Subtitle" = "بيانات المنشأة، السجل التجاري والتراخيص الموثقة";
+"ProMore_Verified_Partner" = "مزود معتمد";
+"ProMore_Operational_Status" = "المنظومة السيادية نشطة";
+"ProMore_Active_Workspaces_Format" = "%d مساحات عمل مفعلة";
+"ProMore_Support_Badge_Format" = "%d استفسارات جديدة";
+"ProMore_Dossier_Title" = "ملف الاعتماد والسيادة";
+"ProMore_Dossier_Subtitle" = "لوحة التحكم الاستراتيجية للمزود المعتمد";
+"ProMore_Fast_Support_Action" = "فتح محادثات الدعم الفوري";
+
+/* Alert Helper NextGen V6 Eyebrows */
+"Alert_Eyebrow_Success" = "تم بنجاح";
+"Alert_Eyebrow_Error" = "تنبيه مهم";
+"Alert_Eyebrow_Warning" = "يرجى الانتباه";
+"Alert_Eyebrow_Info" = "تفاصيل";
+"Alert_Eyebrow_Confirmation" = "تأكيد الإجراء";
+"Alert_Eyebrow_TextInput" = "إدخال بيانات";
+
+/* Notification Command Cockpit NextGen V6 Additions */
+"NotificationSettings_SendDiagnosticTest" = "إرسال تنبيه تجريبي";
+"NotificationSettings_DiagnosticSentToast" = "تم إرسال إشعار تجريبي بنجاح إلى هذا الجهاز.";
+"NotificationSettings_ActiveChannelsCount" = "%d من %d قنوات نشطة";
+"NotificationSettings_ChannelActive" = "مفعلة";
+"NotificationSettings_ChannelDisabled" = "متوقفة";
+"NotificationSettings_CommandTowerTitle" = "بوابة الإشعارات والتحكم الميداني";
+"NotificationSettings_ChannelsGridTitle" = "قنوات التنبيه المباشرة";
+"NotificationSettings_SignalBeacon_Active" = "بوابة التنبيهات متصلة ونشطة";
+"NotificationSettings_SignalBeacon_Quiet" = "استقبال التنبيهات بوضع الوصول الهادئ";
+"NotificationSettings_SignalBeacon_Off" = "التنبيهات متوقفة في إعدادات النظام";
+"NotificationSettings_DiagnosticPromptTitle" = "اختبار استقبال التنبيهات";
+"NotificationSettings_DiagnosticPromptBody" = "سيتم إرسال تنبيه فوري لهذا الجهاز للتحقق من وصول الصوت والبانرات بنجاح.";
+
+/* Market Item Editor Hero Card NextGen V6 */
+"Market_HeroStudioTitle" = "استوديو المنتج";
+"Market_HeroStudioSubtitle" = "التقط تفاصيل منتجك بأعلى جودة لجذب عملاء السوق.";
+"Market_CoverBadge" = "غلاف";
+"Market_AddCoverPhoto" = "أضف صورة الغلاف";
+"Market_AddPhoto" = "إضافة صورة";
+"Market_ReplacePhoto" = "تغيير الغلاف";
+"Market_PhotoGuidance" = "نسبة ١:١ موصى بها";
+"Market_PhotosCountFormat" = "%ld من ٥ صور";
+"Market_LiveStatus" = "معروض بالسوق";
+"Market_DraftStatus" = "مسودة غير منشورة";
+"Market_ItemReady" = "جاهز للنشر";
+"Market_AspectHint" = "مربع 1:1";
+"Market_StudioTipsTitle" = "نصيحة الاستوديو الاحترافي";
+"Market_StudioTipsBody" = "الصور ذات الإضاءة الطبيعية والخلفية الهادئة تزيد ثقة المشتري بنسبة ٤٠٪.";
+"Market_UploadError" = "تعذر تحميل الصورة، اضغط لإعادة المحاولة.";
+"Market_Retry" = "إعادة المحاولة";
+"Market_Completeness" = "اكتمال البيانات";
+"Market_HeroEmptyPrompt" = "المس لإضافة أول صورة تُمثل منتجك في السوق";
+
+/* Partner Guided Setup & Activation Gate Phase 10 */
+"PartnerSetupChecklistTitle" = "قائمة إعداد وتفعيل المتجر";
+"PartnerSetupChecklistSubtitle" = "أكمل المتطلبات الإلزامية التالية لتفعيل حساب منشأتك والبدء في استقبال طلبات العملاء.";
+"PartnerSetupBadgeRequired" = "مطلوب الإعداد";
+"PartnerSetupBadgeReady" = "جاهز للتفعيل";
+"PartnerSetupProgressFormat" = "%ld من %ld مكتمل";
+"PartnerSetupItemProfile" = "إكمال ملف المنشأة وصور الهوية";
+"PartnerSetupItemProfileDesc" = "تأكيد شعار المتجر، الاسم التجاري، وصور الهوية المعتمدة.";
+"PartnerSetupItemCatalog" = "إضافة أول خدمة أو منتج معتمد";
+"PartnerSetupItemCatalogDesc" = "إدراج أول صنف معتمد في قائمة خدماتك أو متجرك.";
+"PartnerSetupItemHours" = "تحديد ساعات العمل ومناطق التغطية";
+"PartnerSetupItemHoursDesc" = "ضبط أوقات الدوام ونطاقات التوصيل أو استقبال المواعيد.";
+"PartnerSetupItemPayout" = "تأكيد الحساب البنكي للتسويات";
+"PartnerSetupItemPayoutDesc" = "ربط وتأكيد الحساب البنكي لتحويل المستحقات والمبيعات.";
+"PartnerSetupItemDone" = "مكتمل";
+"PartnerSetupItemPending" = "قيد الإجراء";
+"PartnerActivateAccountButton" = "تفعيل المتجر وبدء استقبال الطلبات";
+"PartnerActivatingButton" = "جارٍ تفعيل الحساب…";
+"PartnerActivatedSuccessToast" = "تم تفعيل حساب متجرك بنجاح! مرحباً بك في Pure Pets Pro.";
+
+/* Partner Operational Cockpit Phase 11 */
+"PulseCommand_YourBusiness" = "منشأتك المعتمدة";
+"PulseCommand_DocExpired_Title" = "وثيقة رسمية منتهية الصلاحية";
+"PulseCommand_DocExpiring_Title" = "وثيقة تقترب من الانتهاء";
+"PulseCommand_DocExpiring_SubtitleFormat" = "%ld وثيقة تتطلب التجديد";
+"PulseCommand_RenewDocument" = "مراجعة وتحديث الوثائق";
+"PulseCommand_AllExpiringDocsPrompt" = "الامتثال والتراخيص الرسمية";
+"PulseCommand_AllStockAlertsPrompt" = "المخزون وإعادة التوريد";
+"PulseCommand_StockAlerts_Title" = "تنبيه نقص المخزون";
+"PulseCommand_StockAlerts_Subtitle" = "أصناف نفدت أو أوشكت على النفاد";
+"ProModule_Orders_Title" = "الطلبات";
+"ProModule_Inventory_Title" = "المخزون";
+"ProModule_Products_Title" = "المنتجات";
+"ProModule_LivePets_Title" = "التبني والحيوانات";
+"ProModule_Services_Title" = "الخدمات";
+"ProModule_Veterinary_Title" = "العيادة البيطرية";
+"ProModule_Pharmacy_Title" = "الصيدلية";
+"ProModule_Analytics_Title" = "التحليلات والمبيعات";
+"ProModule_Finance_Title" = "المالية والتسويات";
+"ProModule_Team_Title" = "فريق العمل";
+
+/* Partner Profile Domain Separation Phase 12 */
+"ProfileDomain_Public_Title" = "الملف التعريفي العام للمتجر";
+"ProfileDomain_Operational_Title" = "العمليات والقدرات التشغيلية";
+"ProfileDomain_Legal_Title" = "البيانات والتراخيص القانونية";
+"ProfileDomain_Financial_Title" = "البيانات المالية وحساب التسوية";
+"ProfileDomain_MaskedIban_Hint" = "رقم الآيبان محمي لأمان حسابك";
+"ProfileDomain_PermissionDenied" = "ليس لديك الصلاحية الكافية لتعديل هذا القسم.";
+"ProfileDomain_Saved" = "تم تحديث بيانات القسم بنجاح.";
+"ProfileDomain_IbanRequired" = "يرجى إدخال رقم آيبان صالح للتسويات المالية.";
+"ProfileDomain_CrRequired" = "يرجى إدخال رقم السجل التجاري الرسمي.";
+
+/* Partner Real-time Synchronization Phase 13 */
+"PartnerSync_InSync" = "البيانات متزامنة تماماً";
+"PartnerSync_OutOfSync" = "يوجد تحديث متاح من الخادم";
+"PartnerSync_CatchUpRequired" = "جارٍ تحديث أحدث البيانات الواردة من جهاز آخر…";
+"PartnerSync_StaleVersionError" = "تم تحديث البيانات من جهاز آخر. اضغط تحديث لتحميل أحدث حالة.";
+"PartnerSync_ReconciledSuccess" = "تمت مزامنة البيانات وقنوات العرض بنجاح.";
+"PartnerSync_ReconcileFailed" = "تعذرت مزامنة قنوات العرض. يرجى المحاولة مرة أخرى.";
+
+/* Partner Command Idempotency Phase 15 */
+"PartnerIdempotency_InProgress" = "هذه العملية قيد المعالجة حالياً. يرجى الانتظار لحظات.";
+"PartnerIdempotency_PayloadMismatch" = "تم استخدام مفتاح هذه العملية مسبقاً بمعلمات مختلفة.";
+"PartnerIdempotency_AlreadyCompleted" = "تم تنفيذ هذه العملية مسبقاً بنجاح.";
+
+/* Partner Granular Restriction & Scoped Suspension Phase 16 */
+"PartnerRestriction_RestrictedTitle" = "الحساب مقيد مؤقتاً";
+"PartnerRestriction_SuspendedTitle" = "تم تعليق الحساب";
+"PartnerRestriction_SellingBlocked" = "إيقاف البيع وعرض المنتجات";
+"PartnerRestriction_NewOrdersBlocked" = "إيقاف استقبال الطلبات الجديدة";
+"PartnerRestriction_PayoutsBlocked" = "إيقاف المستحقات المالية مؤقتاً";
+"PartnerRestriction_BranchBlocked" = "إيقاف عمليات الفرع المحدد";
+"PartnerRestriction_ModuleBlocked" = "إيقاف الوصول للقسم المحدد";
+"PartnerRestriction_ActionRequired" = "إجراء تصحيحي مطلوب";
+"PartnerRestriction_RequestReactivation" = "طلب إعادة التنشيط";
+"PartnerRestriction_ViewDetails" = "عرض تفاصيل القيد";
+"PartnerRestriction_LiftedSuccess" = "تم رفع القيد واستعادة الصلاحية بنجاح.";
+
+/* Partner Reactivation Workflow & Evidence Review Phase 17 */
+"PartnerReactivation_Title" = "طلب إعادة التنشيط";
+"PartnerReactivation_Subtitle" = "قدّم الوثائق وإجراءات التصحيح المتخذة لإعادة تنشيط حسابك";
+"PartnerReactivation_ActionTaken" = "الإجراءات التصحيحية المتخذة";
+"PartnerReactivation_ActionTakenPlaceholder" = "اشرح الخطوات التي تم اتخاذها لمعالجة سبب التقييد أو إشعار الامتثال…";
+"PartnerReactivation_EvidenceDocs" = "الوثائق والأدلة الثبوتية";
+"PartnerReactivation_AddDoc" = "إرفاق وثيقة";
+"PartnerReactivation_Notes" = "ملاحظات إضافية (اختياري)";
+"PartnerReactivation_Submit" = "إرسال طلب إعادة التنشيط";
+"PartnerReactivation_Pending" = "طلب التنشيط قيد المراجعة";
+"PartnerReactivation_PendingDesc" = "تم تقديم طلبك والوثائق بنجاح. فريق التدقيق يراجع الطلب حالياً.";
+"PartnerReactivation_SubmittedSuccess" = "تم إرسال طلب إعادة التنشيط بنجاح.";
+
+/* Partner Offboarding, Retention & Safe Archival Phase 18 */
+"PartnerOffboarding_Title" = "إغلاق الحساب وإنهاء الشراكة";
+"PartnerOffboarding_Subtitle" = "إغلاق حساب الشريك بأمان وتسوية كافة الالتزامات التشغيلية والمالية";
+"PartnerOffboarding_Initiate" = "طلب إغلاق الحساب";
+"PartnerOffboarding_Reason" = "سبب إنهاء الشراكة";
+"PartnerOffboarding_Reason_Fees" = "رسوم المنصة أو الشروط التجارية";
+"PartnerOffboarding_Reason_Operations" = "إغلاق النشاط التجاري أو إعادة هيكلة";
+"PartnerOffboarding_Reason_Other" = "أسباب أخرى شخصية أو تجارية";
+"PartnerOffboarding_RetentionBanner" = "نعتز بشراكتنا معك. قبل المغادرة، فريقنا جاهز لمناقشة حلول مخصصة أو شروط تجارية مرنة.";
+"PartnerOffboarding_OpenOrdersWarning" = "لديك %ld طلبات نشطة. يجب إكمال أو إلغاء جميع الطلبات قبل إتمام إغلاق الحساب.";
+"PartnerOffboarding_DataRetentionNotice" = "وفقاً للأنظمة واللوائح المالية، سيتم أرشفة سجلات الطلبات والعمليات المالية بأمان لأغراض التدقيق المالي.";
+"PartnerOffboarding_Status_Requested" = "طلب إنهاء الشراكة قيد المراجعة";
+"PartnerOffboarding_Status_InProgress" = "إنهاء الشراكة قيد التنفيذ";
+"PartnerOffboarding_Status_Settlement" = "بانتظار التسوية المالية النهائية";
+"PartnerOffboarding_Status_Completed" = "تم إغلاق الحساب وأرشفته";
+"PartnerOffboarding_SubmittedSuccess" = "تم تقديم طلب إنهاء الشراكة بنجاح.";
+
+/* Partner Event-Driven Notifications Phase 19 */
+"Notification_CTA_OpenPartnerAction" = "عرض تفاصيل الإشعار";
+
+/* Partner Immutable Audit Trail & Provenance Ledger Phase 20 */
+"PartnerAudit_Title" = "سجل التدقيق والموثوقية التشفيرية";
+"PartnerAudit_VerifiedBadge" = "موثق تشفيرياً بنجاح";
+"PartnerAudit_TamperedWarning" = "تنبيه في سلامة البيانات";
+"PartnerAudit_FilterAll" = "جميع الوقائع";
+"PartnerAudit_FilterOnboarding" = "الانضمام والاعتماد";
+"PartnerAudit_FilterSanctions" = "التقييدات والقرارات";
+"PartnerAudit_FilterSettlements" = "التسويات المالية";
+"PartnerAudit_EmptyState" = "لا توجد وقائع تدقيقية مسجلة حتى الآن.";
+"PartnerAudit_ChainIntegrity" = "سلامة السلسلة التشفيرية";
+"PartnerAudit_LatestSeal" = "الختم التشفيري الأحدث";
+
+/* Partner Data Protection, GDPR / Privacy & PII Masking Phase 21 */
+"PartnerPrivacy_Title" = "حماية وخصوصية البيانات";
+"PartnerPrivacy_ExportData" = "تصدير البيانات الشخصية";
+"PartnerPrivacy_ExportSubtitle" = "تنزيل نسخة قابلة للنقل من سجلات وبيانات حسابك الشخصية.";
+"PartnerPrivacy_ExportSuccess" = "تم إنشاء أرشيف البيانات الشخصية بنجاح.";
+"PartnerPrivacy_MaskedDataNotice" = "يتم حجب وإخفاء الأرقام المالية والهوية الشخصية لحماية بياناتك.";
+"PartnerPrivacy_RightToBeForgotten" = "الحق في النسيان ومحو البيانات";
+"PartnerPrivacy_RedactedNotice" = "تم محو وحجب البيانات الشخصية لهذا الشريك وفقاً للأنظمة واللوائح المعتمدة.";
+
+/* Partner High-Performance Caching & Invalidation Phase 22 */
+"PartnerCache_UpToDate" = "البيانات محدثة بالكامل";
+"PartnerCache_Refreshing" = "جاري تحديث بيانات الشريك...";
+"PartnerCache_CachedBadge" = "نسخة سريعة مخزنة";
+"PartnerCache_CachePurged" = "تم تفريغ الذاكرة المؤقتة بنجاح.";
+"PartnerCache_SyncIndicator" = "مزامنة سحابية فورية";
+
+/* Partner Observability, OpenTelemetry Tracing & Telemetry Phase 23 */
+"PartnerTelemetry_Title" = "جاهزية واستقرار النظام";
+"PartnerTelemetry_LatencyNormal" = "زمن استجابة العمليات: طبيعي وسريع";
+"PartnerTelemetry_TraceIdFormat" = "الرقم المرجعي للتتبع: %@";
+"PartnerTelemetry_SLANormal" = "مستوى التوافق مع اتفاقية الخدمة: 100٪";
+
+/* Partner Disaster Recovery & State Reconstruction Phase 24 */
+"PartnerDR_Title" = "سلامة وتوافق بيانات الحساب";
+"PartnerDR_InSync" = "حالة الحساب موثقة ومطابقة لسجل التدقيق";
+"PartnerDR_ReconstructedNotice" = "تم التحقق من تطابق حالة الحساب مع سلسلة الموثوقية التشفيرية.";
+"PartnerDR_SelfHealingActive" = "نظام الإصلاح الذاتي والتوافر العالي نشط";
+
+
+
+
+"Fulfillment_LoadMore" = "تحميل المزيد من الطلبات";
+
+
+/* ========================================================================= */
+/* ── Product Variant Options & Matrix Localization ── */
+/* ========================================================================= */
+
+/* ── Accessory colour variants ── */
+"Variant_State_Archived" = "مؤرشف";
+"Variant_State_OutOfStock" = "غير متوفر";
+"Variant_State_AvailableCount" = "%@ متوفر";
+"Variant_State_Default" = "اللون الافتراضي";
+"Variant_State_Selected" = "محدد";
+
+"Variant_Error_ColorIdentifier" = "معرف اللون غير صالح.";
+"Variant_Error_ColorNameAr" = "اسم اللون بالعربية مطلوب.";
+"Variant_Error_ColorNameEn" = "اسم اللون بالإنجليزية مطلوب.";
+"Variant_Error_ColorHex" = "قيمة اللون غير صالحة.";
+"Variant_Error_FamilyName" = "اسم المنتج مطلوب.";
+"Variant_Error_NoVariants" = "أضف لونًا واحدًا على الأقل.";
+"Variant_Error_TooMany" = "الحد الأقصى %@ لون.";
+"Variant_Error_LivePet" = "الحيوانات الحية لا تدعم الألوان المتعددة.";
+"Variant_Error_AllArchived" = "يجب أن يبقى لون واحد نشطًا.";
+"Variant_Error_DefaultMissing" = "اختر اللون الافتراضي.";
+"Variant_Error_DefaultArchived" = "اللون الافتراضي مؤرشف. اختر لونًا نشطًا.";
+"Variant_Error_DuplicateColor" = "اللون %@ مستخدم أكثر من مرة.";
+"Variant_Error_DuplicateSku" = "رمز SKU مكرر بين %@ و %@.";
+"Variant_Error_DuplicateBarcode" = "الباركود مكرر بين %@ و %@.";
+"Variant_Error_NonDefaultPublished" = "أوقف عرض اللون %@ في المتجر قبل الحفظ.";
+"Variant_Error_ArchivedWithStock" = "اللون %@ لا يزال يحتوي على مخزون ولا يمكن أرشفته.";
+
+"Variant_Error_DuplicateColorServer" = "هذا اللون مستخدم بالفعل في هذا المنتج.";
+"Variant_Error_DuplicateProductServer" = "نفس المنتج مضاف أكثر من مرة.";
+"Variant_Error_DuplicateSkuServer" = "رمز SKU مستخدم بلون آخر. لكل لون رمز خاص.";
+"Variant_Error_DuplicateBarcodeServer" = "الباركود مستخدم بلون آخر. لكل لون باركود خاص.";
+"Variant_Error_DefaultRequiredServer" = "يجب تحديد لون افتراضي نشط.";
+"Variant_Error_DefaultArchivedServer" = "اللون الافتراضي مؤرشف. اختر لونًا نشطًا أولًا.";
+"Variant_Error_ArchivedWithStockServer" = "لا يمكن أرشفة لون لا يزال يحتوي على مخزون.";
+"Variant_Error_KindMismatchServer" = "كل ألوان المنتج يجب أن تكون من نفس النوع.";
+"Variant_Error_LivePetServer" = "الحيوانات الحية تُتابع فرديًا ولا تدعم الألوان المتعددة.";
+"Variant_Error_ConsumerVisibilityServer" = "اللون غير الافتراضي معروض في المتجر. أوقف عرضه ثم اعرض اللون الافتراضي الجديد قبل الحفظ.";
+"Variant_Error_ProductClaimedServer" = "هذا المنتج ينتمي بالفعل إلى مجموعة ألوان أخرى.";
+"Variant_Error_ProductMissingServer" = "أحد الألوان لم يعد موجودًا. أعد تحميل البيانات.";
+"Variant_Error_FamilyMissingServer" = "مجموعة الألوان غير موجودة. أعد تحميل البيانات.";
+"Variant_Error_FamilyArchivedServer" = "مجموعة الألوان مؤرشفة ولا يمكن تعديلها.";
+"Variant_Error_StaleRevisionServer" = "عدّل موظف آخر هذا المنتج أثناء تعديلك. أعد التحميل وقارن قبل الحفظ.";
+"Variant_Error_CommandConflictServer" = "تم تنفيذ عملية أخرى بنفس المعرف. أعد التحميل للتحقق من النتيجة.";
+"Variant_Error_ContractMismatchServer" = "إصدار التطبيق غير متوافق مع الخادم. حدّث التطبيق.";
+"Variant_Error_PermissionDenied" = "لا تملك صلاحية تعديل ألوان هذا المنتج.";
+"Variant_Error_Unauthenticated" = "انتهت الجلسة. أعد تسجيل الدخول.";
+"Variant_Error_Transport" = "تعذر إكمال العملية. تحقق من الاتصال وأعد المحاولة.";
+"Variant_Error_Unknown" = "تعذر حفظ الألوان.";
+
+
+/* Inventory — rejected-field failures (fail closed, never silently dropped) */
+"Inventory_UnsupportedFields_Generic" = "رفض الخادم بعض الحقول. لم يتم الحفظ. حدّث التطبيق وحاول مرة أخرى.";
+"Inventory_UnsupportedFields_Named" = "رفض الخادم هذه الحقول ولم يتم الحفظ: %@. حدّث التطبيق.";
+"Inventory_UnsupportedCatalogFields" = "هذه الحقول لا تُحدَّث من هذه الشاشة ولم يتم الحفظ: %@.";
+
+
+/* ── Accessory colour variants — editor section ── */
+"Variant_Section_Title" = "الألوان والوسائط";
+"Variant_Section_Summary_A11y" = "%@ لون، %@ متوفر إجمالاً";
+"Variant_Loading" = "جاري تحميل الألوان...";
+"Variant_Availability" = "المتوفر";
+"Variant_Save" = "حفظ الألوان";
+"Discard" = "تجاهل";
+
+"Variant_Convert_Explainer" = "هذا المنتج بلون واحد. أضف لونًا لتحويله إلى مجموعة ألوان دون فقدان المخزون أو السجل.";
+"Variant_Convert_Action" = "تحديد لون هذا المنتج";
+"Variant_Convert_Hint" = "يحدد لون المنتج الحالي قبل إضافة ألوان أخرى.";
+"Variant_Convert_ColorAssigned" = "تم تحديد لون هذا المنتج. يمكنك تغيير اللون أو حفظ الألوان للمتابعة.";
+"Variant_Selected_Badge" = "اللون المحدد";
+"Variant_Convert_Selected_A11y" = "اللون المحدد: %@، رمز اللون: %@";
+"Variant_Convert_Selected_Hint" = "اضغط لتعديل أو تغيير اللون المحدد لهذا المنتج.";
+
+"Variant_Action_EditColor" = "تغيير اللون";
+"Variant_Action_MakeDefault" = "تعيين كافتراضي";
+"Variant_Action_Archive" = "أرشفة";
+"Variant_Action_Restore" = "استعادة";
+"Variant_Action_MoveEarlier" = "تحريك للأمام";
+"Variant_Action_MoveLater" = "تحريك للخلف";
+"Variant_OpenProduct" = "تعديل سعر ومخزون وصور هذا اللون";
+
+"Variant_ChooseColor" = "اختيار اللون";
+"Variant_Library" = "مكتبة الألوان";
+"Variant_Custom" = "لون مخصص";
+"Variant_NameAr" = "الاسم بالعربية";
+"Variant_NameEn" = "الاسم بالإنجليزية";
+"Variant_Hex" = "قيمة اللون";
+"Variant_AlreadyUsed" = "مستخدم بالفعل";
+"Variant_Error_ColorTaken" = "هذا اللون مستخدم بالفعل في هذا المنتج.";
+
+"Variant_Save_Confirmed" = "تم حفظ الألوان.";
+"Variant_Save_AlreadyApplied" = "كانت هذه التغييرات محفوظة بالفعل.";
+"Variant_Recovery_Reload" = "إعادة التحميل والمقارنة";
+"Variant_Recovery_Retry" = "إعادة المحاولة";
+"Variant_Recovery_TransferListing" = "نقل العرض ثم الحفظ";
+"Variant_Recovery_Refresh" = "تحديث للتحقق";
+"Variant_Recovery_DraftKept" = "تم الاحتفاظ بتعديلاتك.";
+"Variant_Error_InvalidFamilyId" = "معرف مجموعة الألوان غير صالح.";
+"Variant_Error_InvalidResponse" = "تعذر تأكيد استجابة الخادم. أعد التحميل للتحقق.";
+
+
+/* ── Accessory colour variants — per-colour media ── */
+"Variant_Media_Title" = "صور هذا اللون";
+"Variant_Media_Empty" = "لا توجد صور لهذا اللون بعد.";
+"Variant_Media_Primary" = "الرئيسية";
+"Variant_Media_MakePrimary" = "تعيين كصورة رئيسية";
+"Variant_Media_Remove" = "إزالة الصورة";
+"Variant_Media_Pending" = "غير محفوظة";
+"Variant_Media_Uploaded" = "تم الرفع";
+"Variant_Media_Save" = "حفظ الصور";
+"Variant_Media_Saved" = "تم حفظ صور اللون.";
+"Variant_Media_Add_A11y" = "إضافة صورة للون %@";
+"Variant_Media_Primary_A11y" = "الصورة الرئيسية للون %@";
+"Variant_Media_Item_A11y" = "صورة %@ للون %@";
+"Variant_Media_NotAuthenticated" = "يجب تسجيل الدخول لتحميل الصور.";
+"Variant_Media_BadImage" = "تعذر تجهيز إحدى الصور. اختر صورة أخرى.";
+"Variant_Media_UploadFailed" = "فشل تحميل الصور. تم الاحتفاظ باختيارك، أعد المحاولة.";
+"Variant_Media_TooMany" = "الحد الأقصى %@ صور لكل لون.";
+
+
+/* ── Accessory colour variants — inventory list grouping ── */
+"Inventory_Family_ColourCount" = "%@ ألوان";
+"Inventory_Family_TotalAvailable" = "%@ متوفر";
+"Inventory_Family_HasOutOfStock" = "لون غير متوفر";
+"Inventory_Family_HasLowStock" = "مخزون منخفض";
+"Inventory_Family_ArchivedCount" = "%@ مؤرشف";
+"Inventory_Family_Expand_Hint" = "اختر لوناً لعرض سعره ومخزونه وإجراءاته";
+"Inventory_Family_Collapse_Hint" = "طي الألوان";
+"Inventory_Family_SelectColour_Hint" = "يعرض سعر ومخزون وإجراءات هذا اللون";
+"Inventory_Family_Summary_A11y" = "%@، %@ ألوان، %@ متوفر إجمالاً";
+
+/* ── Dynamic Variant Dimensions (Color, Size, Weight, Flavor, Material, General) ── */
+"POS_SelectColorVariant" = "اختر اللون";
+"POS_SelectSizeVariant" = "اختر المقاس";
+"POS_SelectWeightVariant" = "اختر الوزن";
+"POS_SelectFlavorVariant" = "اختر النكهة";
+"POS_SelectMaterialVariant" = "اختر المادة";
+"POS_SelectOptionVariant" = "اختر الخيار";
+"POS_VariantsCount" = "خيارات ألوان";
+"POS_VariantsSizeCount" = "خيارات مقاس";
+"POS_VariantsWeightCount" = "خيارات وزن";
+"POS_VariantsFlavorCount" = "خيارات نكهة";
+"POS_VariantsMaterialCount" = "خيارات خامة";
+"POS_VariantsGeneralCount" = "خيارات";
+"Inventory_Family_SizeCount" = "%@ مقاسات";
+"Inventory_Family_WeightCount" = "%@ أوزان";
+"Inventory_Family_FlavorCount" = "%@ نكهات";
+"Inventory_Family_MaterialCount" = "%@ خامات";
+"Inventory_Family_OptionCount" = "%@ خيارات";
+"Inventory_Family_HasOutOfStockSize" = "مقاس غير متوفر";
+"Inventory_Family_HasOutOfStockWeight" = "وزن غير متوفر";
+"Inventory_Family_HasOutOfStockFlavor" = "نكهة غير متوفرة";
+"Inventory_Family_HasOutOfStockMaterial" = "خامة غير متوفرة";
+"Inventory_Family_HasOutOfStockOption" = "خيار غير متوفر";
+"Inventory_Family_SelectSize_Hint" = "يعرض سعر ومخزون وإجراءات هذا المقاس";
+"Inventory_Family_SelectWeight_Hint" = "يعرض سعر ومخزون وإجراءات هذا الوزن";
+"Inventory_Family_SelectOption_Hint" = "يعرض سعر ومخزون وإجراءات هذا الخيار";
+"Inventory_Family_CollapseSize_Hint" = "طي المقاسات";
+"Inventory_Family_CollapseWeight_Hint" = "طي الأوزان";
+"Inventory_Family_CollapseOption_Hint" = "طي الخيارات";
+"Inventory_Family_ExpandSize_Hint" = "اختر مقاساً لعرض سعره ومخزونه وإجراءاته";
+"Inventory_Family_ExpandWeight_Hint" = "اختر وزناً لعرض سعره ومخزونه وإجراءاته";
+"Inventory_Family_ExpandOption_Hint" = "اختر خياراً لعرض سعره ومخزونه وإجراءاته";
+
+
+/* ── POS — exact scan resolution ── */
+"POS_Scanner_Resolved_Format" = "تم تحديد %@";
+"POS_Scanner_Ambiguous" = "الرمز مرتبط بأكثر من منتج. اختر المنتج الصحيح.";
+
+/* ── Color Atelier Studio ── */
+"Variant_Palette_Neutrals" = "الأساسيات والمحايدة";
+"Variant_Palette_Warm" = "الدرجات الدافئة والحيوية";
+"Variant_Palette_Cool" = "الدرجات الباردة والعميقة";
+"Variant_Spectrum_Picker" = "لوحة الألوان التفاعلية";
+"Variant_Contrast_Optimal" = "تباين ممتاز (مقروء بوضوح)";
+"Variant_Contrast_Attention" = "قد يحتاج لإطار تباين";
+"Variant_Hex_Copied" = "تم نسخ رمز اللون";
+"Variant_Custom_Section" = "استوديو التخصيص والمسميات";
+"Variant_Preset_Palettes" = "المجموعات اللونية المتناسقة";
+
+"CatalogCategorySyncError" = "تعذر تحديث تصنيف الصنف";
+
+
+/* Variant commerce hardening */
+"Variant_Add_Action" = "إضافة لون";
+"Variant_Add_Hint" = "ينشئ صنفاً مستقلاً بالسعر والرمز الخاصين بهذا اللون ثم يربطه بالمنتج.";
+"Variant_Add_Title" = "إضافة لون";
+"Variant_Add_Create" = "إنشاء اللون";
+"Variant_Add_Color" = "اللون";
+"Variant_Add_Color_A11y" = "اللون المحدد %@. اضغط للتغيير";
+"Variant_Add_Pricing" = "تسعير هذا اللون";
+"Variant_Add_Wholesale" = "سعر جملة مستقل";
+"Variant_Add_Identifiers" = "هوية اللون في المخزون";
+"Variant_Add_SKU_Placeholder" = "مثال: BAG-BLU";
+"Variant_Add_Barcode_Placeholder" = "امسح أو أدخل باركود اللون";
+"Variant_Add_SafetyNote" = "سيُنشأ اللون بدون مخزون وبدون صور. أضف المخزون والصور بعد الإنشاء من سجل هذا اللون حتى تبقى كل حركة مرتبطة بالصنف الصحيح.";
+"Variant_Add_Failed" = "تعذر إكمال إضافة اللون. لم يتم تكرار أي صنف؛ يمكنك إعادة المحاولة.";
+"Variant_Add_SaveFamilyFirst" = "احفظ لون المنتج الحالي أولاً، ثم أضف لوناً جديداً.";
+"Variant_Add_InvalidPrice" = "أدخل سعر بيع صالحاً للون الجديد.";
+"Variant_Add_Confirmed" = "تمت إضافة اللون وحفظه.";
+"Variant_RetailPrice" = "سعر البيع";
+"Variant_WholesalePrice" = "سعر الجملة";
+"Variant_iPad_Colours" = "ألوان المنتج";
+"Inventory_Family_PriceRange_Format" = "%@ – %@";
+"Inventory_Family_Price_A11y" = "نطاق السعر: %@";
+"Inventory_Family_Price_A11y_Suffix" = "، نطاق السعر %@";
+"Variant_Price_A11y" = "السعر %@";
+"Variant_OpenProduct_Failed" = "تعذر فتح سجل هذا اللون";
+"Variant_Section_Count_Format" = "%@ ألوان · %@ متوفر";
+"BranchCommerce_ProjectionMissing" = "تعذر تأكيد سعر الفرع لبعض الأصناف. أعد حفظ تسعير الفرع قبل البيع.";
+
+/* Inventory product cells */
+"InventoryCell_SelectBranch" = "اختر فرعاً لتعديل الرصيد";
+"InventoryCell_Loading" = "جارٍ تحميل رصيد الفرع";
+"InventoryCell_Unconfirmed" = "الرصيد غير مؤكد · اسحب للتحديث";
+"InventoryCell_Missing" = "رصيد الفرع غير متاح";
+"InventoryCell_Unnamed" = "صنف بدون اسم";
+"InventoryCell_Available" = "المتاح";
+"InventoryCell_Low" = "رصيد منخفض";
+"InventoryCell_CatalogQuantity" = "رصيد الصنف";
+"InventoryCell_LotTracking" = "تتبع الشحنات والصلاحية";
+"InventoryCell_Lots" = "الشحنات والصلاحية";
+"InventoryCell_AnimalRecords" = "سجل الحيوانات";
+"InventoryCell_OpenHint" = "يفتح التفاصيل وإجراءات الصنف";
+"InventoryCell_QuantityHint" = "يفتح لوحة إدخال الكمية";
+"InventoryCell_Decrease" = "إنقاص الكمية بمقدار واحد";
+"InventoryCell_Increase" = "زيادة الكمية بمقدار واحد";
+"InventoryCell_QuantityChanged" = "تغير رصيد الصنف";
+"InventoryCell_QuantityChangedDetail" = "راجع الرصيد الحالي ثم أعد التعديل.";
+"InventoryCell_WholesaleMargin" = "فرق الجملة %@%%";
+"InventoryCell_ReadbackPending" = "تم استلام التعديل، وتعذر تأكيد الرصيد. اسحب للتحديث قبل تعديل الصنف مرة أخرى.";
+"InventoryCell_ReadOnly" = "عرض فقط";
+"InventoryCell_Inactive" = "الصنف غير نشط";
+"InventoryCell_PreviousPrice" = "السعر السابق";
+"InventoryCell_PhotoCount" = "عدد الصور %@";
+
+/* Variant Atelier & Studio Reinvention */
+"Variant_Stock_InStock" = "متوفر في المستودع";
+"Variant_Stock_OutOfStock" = "نفد من المخزون";
+"Variant_Stock_Low" = "مخزون منخفض";
+"Variant_Identifier_Unset" = "غير محدد";
+"Variant_Order_Index_Format" = "الترتيب: %@ من %@";
+"Variant_Copied_Hex" = "تم نسخ كود اللون";
+"Variant_OpenProduct_Subtitle" = "فتح سجل هذا اللون لإدارة الكميات والتسعير والموردين";
+"Variant_Media_Empty_Tip" = "أضف صوراً مخصصة لهذا اللون لتظهر للعملاء عند اختياره في المتجر.";
+"Variant_Reorder_Title" = "ترتيب الظهور";
+"Variant_Color_Spec_Title" = "مواصفات وتفاصيل اللون";
+"Variant_Spec_Retail" = "سعر البيع المعتمد";
+"Variant_Spec_Wholesale" = "سعر الجملة";
+"Variant_Spec_Stock" = "حالة المخزون";
+"Variant_Spec_SKU" = "رمز الصنف SKU";
+"Variant_Spec_Barcode" = "الباركود الدولي";
+"Variant_Quick_SetDefault" = "جعله الافتراضي";
+
+/* Variant Studio Sheet Keys */
+"Variant_Studio_CreateTitle" = "إضافة لون جديد";
+"Variant_Studio_EditTitle" = "استوديو اللون: %@";
+"Variant_Studio_Save" = "حفظ التعديلات";
+"Variant_Studio_SaveFailed" = "تعذر حفظ التعديلات. لم يتم فقدان أي بيانات، يرجى المحاولة مرة أخرى.";
+"Variant_Studio_UpdateSuccess" = "تم حفظ وتحديث اللون بنجاح.";
+"Variant_Studio_Stock_Title" = "الكمية والمخزون الحالي";
+"Variant_Studio_Stock_InStock_Format" = "متوفر (%@ حبة)";
+"Variant_Studio_Stock_Low_Format" = "مخزون محدود (%@ حبة)";
+"Variant_Studio_Stock_Zero" = "نفد المخزون (0 حبة)";
+"Variant_Studio_Photos_Title" = "صور هذا اللون";
+"Variant_Studio_Photos_Subtitle" = "الصور المخصصة لهذا اللون. تظهر تلقائياً للعميل عند اختيار هذا اللون.";
+"Variant_Studio_Photos_Add" = "إضافة صور";
+"Variant_Studio_Photos_Primary" = "الرئيسية";
+"Variant_Studio_Photos_MakePrimary" = "اضغط على أي صورة لجعلها الرئيسية";
+"Variant_Studio_Custom_Palette" = "استوديو الألوان الكامل";
+"Variant_Studio_Margin_Delta" = "فارق السعر: %@ (هامش الربح: %@%%)";
+"Variant_Studio_SafetyNote" = "ترتبط كل حركة مخزون وصور بهذا اللون بالتحديد وبشكل مستقل وآمن داخل النظام.";
+"Variant_Studio_OpenFullRecord" = "فتح السجل الكامل في إدارة الأصناف";
+"Variant_Studio_Banner_Subtitle" = "تعديل فوري للون، الصور، الكمية، السعر، والرموز";
+"Validation_Duplicate" = "مكرر";
+
+/* Pury Vision Smart-Fill */
+"Pury_Vision_SmartFill" = "تعبئة ذكية مع بيوري";
+"Pury_Vision_Scanning" = "بيوري يحلل الصورة والعبوة...";
+"Pury_Vision_ExtractingName" = "بيوري يستخرج الاسم التجاري...";
+"Pury_Vision_TranslatingName" = "بيوري يترجم ويوثق الاسم ثنائياً...";
+"Pury_Vision_WritingDesc" = "بيوري يصيغ الوصف الاحترافي...";
+"Pury_Vision_Completed" = "تمت التعبئة الذكية بنجاح!";
+
+/* Product Option Editor & Matrix Keys */
+"Options_Tab_Options" = "الخيارات";
+"Options_Tab_Variants" = "المتغيرات والوسائط";
+"Options_Section_Title" = "خيارات المنتج";
+"Options_Section_Subtitle" = "عرّف الخيارات مثل الألوان والمقاسات والأوزان وقيم كل خيار.";
+"Options_Add_Option" = "إضافة خيار";
+"Options_Preset_Color" = "اللون";
+"Options_Preset_Size" = "المقاس";
+"Options_Preset_Weight" = "الوزن";
+"Options_Preset_Material" = "المادة";
+"Options_Preset_Flavor" = "النكهة";
+"Options_Preset_Custom" = "خيار مخصص...";
+"Options_Add_Modal_Title" = "إضافة خيار للمنتج";
+"Options_Remaining_Capacity" = "متبقي %d من %d خيارات";
+"Options_Already_Added" = "مضاف";
+"Options_Max_Reached" = "تم الوصول للحد الأقصى (3)";
+"Options_Preset_Custom_Desc" = "عرّف خياراً خاصاً كالحجم، الطول، الرائحة، أو التعبئة";
+"Options_Preset_Size_Hint" = "مثل: S، M، L، XL";
+"Options_Preset_Weight_Hint" = "مثل: 2 كجم، 5 كجم";
+"Options_Preset_Material_Hint" = "مثل: جلد، قماش، معدن";
+"Options_Preset_Flavor_Hint" = "مثل: دجاج، سلمون، لحم";
+"Options_Preset_Color_Hint" = "مثل: أحمر، أزرق، أسود";
+"Options_Empty_Title" = "لا توجد خيارات بعد";
+"Options_Empty_Subtitle" = "أضف خيارًا كالألوان أو المقاسات لإنشاء متغيرات متعددة للمنتج.";
+"Options_Values_Count" = "%@ قيم";
+"Options_No_Values_Yet" = "لم يتم إضافة أي قيمة بعد لهذا الخيار.";
+"Options_Value_Add_Custom" = "قيمة مخصصة...";
+"Options_Delete_Confirm_Title" = "حذف الخيار";
+"Options_Delete_Confirm_Message" = "هل أنت متأكد من حذف هذا الخيار؟ لن يتم حذف المنتجات الحالية المرتبطة به.";
+"Options_Value_Delete_InUse_Warning" = "هذه القيمة مستخدمة بالفعل في بعض المتغيرات. هل أنت متأكد من حذفها؟";
+"Options_Custom_Details" = "بيانات الخيار";
+"Options_Key_Identifier" = "المعرف (مثال: material)";
+"Options_Value_Details" = "بيانات القيمة";
+"Options_Canonical_Value" = "القيمة (مثال: M أو 500g)";
+"Options_Error_TooMany" = "الحد الأقصى %@ خيارات.";
+"Options_Error_Duplicate_Option" = "هذا الخيار مكرر.";
+"Options_Error_NoValues" = "الخيار %@ يحتاج إلى قيمة واحدة على الأقل.";
+"Options_Error_TooManyValues" = "الخيار %@ يتجاوز الحد الأقصى (%@ قيمة).";
+"Options_Error_Duplicate_Value" = "القيمة %@ مكررة في الخيار %@.";
+"Options_Error_ColorHexRequired" = "اللون %@ يحتاج إلى رمز لون صالح.";
+"Options_Studio_ValuePreview" = "معاينة القيمة الحية";
+"Options_Studio_AddValueTo" = "إضافة القيمة إلى %@";
+"Options_Studio_QuickUnits" = "الوحدات القياسية السريعة";
+"Options_Studio_QuickSizes" = "المقاسات الجاهزة";
+"Options_Studio_DuplicateWarning" = "هذه القيمة موجودة مسبقاً في هذا الخيار (%@).";
+"Options_Studio_BilingualHelp" = "توليد تلقائي ثنائي اللغة ذكي يدعم العربية والإنجليزية";
+"Options_Studio_CustomOptionTitle" = "استوديو إنشاء خيار جديد";
+"Options_Studio_OptionPreview" = "معاينة الخيار في النظام";
+"Options_Studio_CustomerView" = "عرض المتجر";
+"Options_Studio_Presets" = "اقتراحات ذكية جاهزة";
+"Options_Studio_ColorPicker" = "لوحة الألوان المعتمدة";
+"Options_Studio_SmartTranslate" = "ترجمة بيوري الذكية";
+"Options_Studio_AddValueAction" = "إضافة القيمة إلى الخيار";
+"Options_Studio_DimensionArchetype" = "نوع البعد • DIMENSION ARCHETYPE";
+"Options_Studio_IdentitySection" = "بيانات الهوية اللغوية • BILINGUAL IDENTITY";
+"Options_Studio_SeedValuesSection" = "القيم الأولية المقترحة • SEED VALUES";
+"Options_Studio_SeedValuesDesc" = "حدد القيم لتجهيز الخيار بها فوراً، أو أضف قيماً مخصصة";
+"Options_Studio_StorefrontSimulation" = "معاينة ظهور الخيارات في تطبيق المتجر";
+"Options_Studio_StorefrontSimulationEmpty" = "لا توجد قيم أولية (يمكن إضافتها لاحقاً)";
+"Options_Studio_ValuesPreppedCount" = "%d قيم مجهزة";
+"Options_Studio_SelectAll" = "تحديد الكل";
+"Options_Studio_ClearAll" = "إلغاء";
+"Options_Studio_AddCustomTag" = "إضافة قيمة مخصصة...";
+"Options_Studio_AddTagButton" = "إضافة";
+"Options_Studio_CreateWithCount" = "إنشاء خيار %@ مع %d قيم";
+"Options_Studio_CreateWithoutValues" = "إنشاء خيار %@ في الكتالوج";
+"Options_Studio_KeyExplanation" = "المعرف البرمجي الموحد المستخدم في قاعدة البيانات والربط البرمجي";
+"Options_Studio_AutoSync" = "المزامنة الذكية مفعلة";
+"Options_Studio_TapToTranslate" = "ترجمة بيوري الذكية ✨";
+"Options_Studio_StatusReady" = "جاهز للإضافة";
+"Options_Studio_StatusAwaiting" = "بانتظار الاسم";
+"Options_Studio_CatalogAxis" = "بُعد كتالوج • AXIS";
+"Options_Studio_SyncedBadge" = "متطابق ومتزامن ✓";
+"Options_Studio_TranslateToEn" = "ترجمة فورية إلى الإنجليزية ✨";
+"Options_Studio_TranslateToAr" = "ترجمة فورية إلى العربية ✨";
+"Common_Close" = "إغلاق";
+"MoveEarlier" = "تحريك للأمام";
+"MoveLater" = "تحريك للخلف";
+
+/* Variant Matrix — Phase 6 */
+"Options_Tab_Variants_Matrix" = "المصفوفة والمتغيرات";
+"Variant_Mode_Matrix" = "المصفوفة";
+"Variant_Mode_Atelier" = "الاستوديو";
+"Variant_Mode_Atelier_Hint" = "تعديل تفصيلي للصور والباركود ومخزون المتغير المحدد";
+"Variant_Mode_Matrix_Hint" = "جدول شبكي موحد للتسعير الجماعي وتتبع كافة المتغيرات";
+"Variant_Matrix_Title" = "مصفوفة المتغيرات";
+"Variant_Matrix_Subtitle" = "إدارة أسعار ورموز وحالات التوليفات الناتجة عن الخيارات.";
+"Variant_Bulk_Pricing_Action" = "تسعير جماعي";
+"Variant_Matrix_Combinations_Count" = "%@ / %@ مهيأة";
+"Variant_Matrix_Group_Configured" = "%@ / %@ مهيأة";
+"Variant_Group_BulkPrice_A11y" = "تسعير متغيرات %@";
+"Variant_Default_Badge" = "الافتراضي";
+"SKU_Copied" = "تم نسخ SKU";
+"Barcode_Copied" = "تم نسخ الباركود";
+"Variant_No_Identifiers" = "بدون باركود أو SKU";
+"Variant_Not_Created_Yet" = "لم يتم إنشاء الصنف بعد في المخزون.";
+"Variant_Activate" = "تفعيل المتغير";
+"Variant_Deactivate" = "تعطيل المتغير";
+"Variant_Set_Default" = "تعيين كافتراضي";
+"Variant_Edit_A11y" = "تعديل متغير %@";
+"Variant_Lots_A11y" = "تشغيلات ومخزون متغير %@";
+"Variant_Create_Combination" = "إنشاء";
+"Variant_Create_Combination_A11y" = "إنشاء متغير جديد للتوليفة %@";
+"Variant_Stock_InStock_Count" = "%@ متوفر";
+"Variant_Status_Unconfigured" = "غير مهيأ";
+"Variant_Status_Inactive" = "معطل";
+"Variant_Matrix_Empty_Title" = "لا توجد خيارات لتوليد المصفوفة";
+"Variant_Matrix_Empty_Subtitle" = "أضف خيارات للمنتج (مثل الألوان أو المقاسات) من تبويب الخيارات أولاً.";
+"Variant_BulkPricing_Scope" = "نطاق التطبيق";
+"Variant_BulkPricing_Target" = "المتغيرات المستهدفة";
+"Variant_BulkPricing_All" = "كافة المتغيرات";
+"Variant_BulkPricing_Count" = "عدد الأصناف";
+"Variant_BulkPricing_Values" = "الأسعار الجديدة";
+"Price_Retail" = "سعر البيع";
+"Price_Cost" = "سعر التكلفة (اختياري)";
+"Price_Wholesale" = "سعر الجملة (اختياري)";
+"Variant_CostPrice" = "سعر التكلفة";
+"Variant_Studio_Profit_Format" = "الربح: %@ (هامش الربح: %@%%)";
+"Variant_Studio_Cost_Exceeds_Retail" = "تنبيه: سعر التكلفة أعلى من سعر البيع!";
+"Variant_Bulk_Pricing_Title" = "تسعير جماعي";
+"Apply" = "تطبيق";
+"Variant_Combination_Details" = "تفاصيل التوليفة";
+"Variant_Combination_Title" = "الخيارات";
+"Variant_Pricing_Stock" = "السعر والمخزون";
+"Inventory_Initial_Quantity" = "الكمية الأولية";
+"Variant_Identifiers" = "الرموز والباركود";
+"SKU_Placeholder" = "رمز الصنف";
+"Barcode_Placeholder" = "الباركود الدولي";
+"Variant_Create_Title" = "إنشاء متغير جديد";
+"Create" = "إنشاء";
+"Variant_Matrix_AllVariants" = "كافة المتغيرات";
+"Variant_BulkPricing_Success" = "تم تحديث أسعار المتغيرات بنجاح.";
+"Variant_Error_CombinationTaken" = "هذه التوليفة مستخدمة بالفعل في هذا المنتج.";
+"Variant_Error_SelectionIncomplete" = "يجب تحديد قيمة لكل خيار في جميع المتغيرات. انتقل إلى المصفوفة لتعيينها.";
+"Variant_Error_DuplicateCombinationServer" = "توجد توليفة خيارات مكررة بين متغيرين. لكل متغير توليفة فريدة.";
+"Variant_Error_OptionInvalidServer" = "توجد بيانات غير صالحة في تعريف الخيارات أو قيمها.";
+"Options_Save_Changes" = "حفظ الخيارات والمتغيرات";
+"Options_Save_Confirmed" = "تم حفظ خيارات ومتغيرات المنتج.";
+"Options_Convert_Title" = "خيارات وتوليفات المنتج";
+"Options_Convert_Subtitle" = "اختر نوع المتغيرات التي يتوفر بها هذا المنتج للبدء (المقاسات، الأوزان، الألوان، النكهات...):";
+"Options_Convert_Action_Size" = "المقاسات";
+"Options_Convert_Action_Weight" = "الأوزان والحجم";
+"Options_Convert_Action_Color" = "الألوان";
+"Options_Convert_Action_Flavor" = "النكهات";
+"Options_Convert_Action_Material" = "المواد";
+"Options_Convert_Action_Custom" = "خيار مخصص...";
+"Options_Error_Incomplete_Variant" = "المتغير %@: اختر قيمة للخيار %@.";
+"Options_Error_Duplicate_Combination" = "توجد توليفة خيارات مكررة بين متغيرين. لكل متغير توليفة فريدة.";
+"Variant_Error_OptionsNotEnabledServer" = "خيارات المنتجات غير مفعّلة في إعدادات النظام حالياً.";
+"Variant_Error_PublicationNotReadyServer" = "يجب تفعيل عرض الخيارات للعملاء في النظام قبل نشر هذا الصنف.";
+"Variant_Error_ClientUpgradeRequiredServer" = "يتطلب هذا الصنف تحديث التطبيق إلى أحدث إصدار.";
+"Variant_Error_ProviderUpgradeRequiredServer" = "تخصيص الخيارات لمزودي الخدمة يتطلب مساراً متوافقاً.";
+"Variant_Error_BranchLimitServer" = "يتجاوز هذا المنتج الحد المسموح لنطاق الفروع المتاح.";
+"Variant_Error_RemovalRequiresArchiveServer" = "يرجى أرشفة المتغير بدلاً من حذفه مباشرة للحفاظ على سلامة المخزون.";
+"Inventory_Family_VariantCount" = "%@ متغيرات";
+"Variant_Studio_Hero_Title" = "إنشاء وتثبيت المتغير";
+"Variant_Studio_Option_Capsule" = "خصائص التوليفة";
+"Variant_Studio_Margin_Profit" = "هامش الربح";
+"Variant_Studio_Margin_Markup" = "مضاعف التكلفة";
+"Variant_Studio_Margin_Warning" = "تنبيه: سعر الجملة أعلى من سعر البيع!";
+"Variant_Studio_Match_Base_Price" = "مطابقة سعر الأساس";
+"Variant_Studio_Stock_Out" = "غير متوفر بالمخزن";
+"Variant_Studio_Stock_Low" = "مخزون محدود";
+"Variant_Studio_Stock_Good" = "مخزون وافر";
+"Variant_Studio_Barcode_Hologram" = "معاينة الباركود الرقمي";
+"Variant_Studio_Media_Title" = "صور المتغير";
+"Variant_Studio_Media_Add" = "إضافة صور";
+"Variant_Studio_Media_Inherit" = "استخدام صورة المنتج الأساسي";
+"Variant_Studio_Create_Action" = "إنشاء المتغير وتثبيته في المصفوفة";
+"Variant_Studio_SKU_Copied" = "تم نسخ رمز SKU";
+"Variant_Studio_Barcode_Copied" = "تم نسخ الباركود";
+"Common_Done" = "تم";
+"Hotel_Belongings_Count_Format" = "إجمالي العهد المسجلة: %d أغراض ومحتويات";
+"Hotel_CheckIn_Date" = "تاريخ الدخول";
+"Hotel_Checkout_IncompleteHint" = "يرجى استكمال متطلبات التحقق";
+"Hotel_Guardian_DirectContact" = "بيانات التواصل المباشر مع المالك";
+"Hotel_NoBelongingsRegistered" = "لا توجد أمانات شخصية مسجلة في هذا الحجز";
+"Hotel_Readiness_ProtocolPill" = "بروتوكول التسليم الرباعي المعتمد";
+"Hotel_StayHorizon_Title" = "أفق الإقامة والفترة الفندقية";
+
+/* Bulk Pricing Command Studio */
+"Variant_Bulk_Target_Count_Format" = "%d صنف مستهدف";
+"Variant_Bulk_Total_Stock_Format" = "%d وحدة متأثرة";
+"Variant_Bulk_Target_List_Header" = "الأصناف المشمولة بالتسعير";
+"Variant_Bulk_Quick_Presets" = "نسب تسعير سريعة";
+"Variant_Bulk_Current_Avg_Format" = "متوسط: %.2f %@";
+"Variant_Bulk_Wholesale_Warning_Title" = "تنبيه: سعر الجملة يتجاوز سعر البيع!";
+"Variant_Bulk_Wholesale_Loss_Format" = "خسارة لكل وحدة: -%.2f %@";
+"Variant_Bulk_Margin_Percent" = "نسبة الهامش";
+"Variant_Bulk_Unit_Profit" = "الربح الصافي للوحدة";
+"Variant_Bulk_Cost_Multiplier" = "مضاعف التكلفة";
+"Variant_Bulk_Projection_Title" = "أثر التسعير على المحفظة";
+"Variant_Bulk_Applying" = "جاري تطبيق الأسعار...";
+"Variant_Bulk_Apply_Action_Format" = "تطبيق السعر على %d أصناف";
+"Variant_Bulk_Apply_Single" = "تطبيق السعر على الصنف المستهدف";
+"Variant_Bulk_Subtitle" = "تسعير ذكي موحد للمتغيرات مع تحليل فوري للهوامش والأرباح.";
+"Variant_Bulk_Total_Value_Title" = "إجمالي قيمة المخزون";
+"Variant_Bulk_Shift_Title" = "التغير في متوسط السعر";
+"Variant_Bulk_Cost_Tip" = "أدخل سعر الجملة لعرض هامش الربح والتحليلات المالية فورياً.";
+"Price_Unset" = "غير محدد";
+"Variant_Studio_Options_Title" = "خيارات ومواصفات هذا المتغير";
+"Variant_Studio_Options_Subtitle" = "حدد قيمة كل خيار لربط هذا المتغير بالمواصفات المحددة بدقة داخل النظام.";
+"Options_Error_IdentityImmutable" = "لا يمكن تغيير قيمة خيار محفوظ لصنف موجود. أنشئ متغيرًا جديدًا للتوليفة الجديدة للحفاظ على المخزون والسجل.";
+"Options_Error_LastOption" = "احتفظ بخيار واحد على الأقل لهذه المجموعة.";
+"Options_Error_RemoveCollapsesVariants" = "هذا الخيار يميّز بين أصناف موجودة. حذفه سيجعل توليفاتها متطابقة؛ احتفظ به لحماية مخزون كل صنف.";
+"Options_Error_ValueInUse" = "هذه القيمة مرتبطة بصنف موجود. احتفظ بها، ويمكنك أرشفة الصنف من المصفوفة عند عدم الحاجة إليه.";
+"Options_Value_InUse_Title" = "القيمة مستخدمة";
+"Options_Assign_Existing" = "حدد قيمة الخيار لكل صنف موجود";
+"Options_Assign_Choose" = "اختر قيمة";
+"Options_Save_AwaitingReadback" = "استلم الخادم الحفظ، وتعذر تأكيد البيانات المحدثة. أعد المحاولة للتحقق من نفس العملية.";
+"Options_Error_Incomplete" = "اختر قيمة لكل خيار قبل إنشاء المتغير.";
+"Options_Create_Pending" = "هناك إنشاء متغير بانتظار التأكيد. أعد محاولة المتغير السابق بنفس بياناته قبل إنشاء متغير آخر.";
+"Options_Cannot_Delete_Title" = "تعذر حذف الخيار";
+"Options_GoToMatrix_Resolve" = "انتقل إلى تبويب المتغيرات لحل التعارض ←";
+"Variant_Delete_From_Family" = "حذف المتغير من المجموعة";
+"Variant_Delete_Confirm_Title" = "حذف المتغير من المجموعة";
+"Variant_Delete_Confirm_Message" = "هل أنت متأكد من إزالة هذا المتغير من مجموعة المنتج؟ لن يتم حذف المنتج نفسه من النظام بل سيفك ارتباطه بالمجموعة.";
+"Variant_Delete_Confirmed" = "تم حذف المتغير من المجموعة بنجاح.";
+"Variant_Error_CannotDeleteOnlyVariant" = "لا يمكن حذف المتغير الوحيد في المنتج.";
+"Variant_RevertToNormal_Action" = "إلغاء المتغيرات والتحويل لمنتج عادي";
+"Variant_RevertToNormal_Confirm_Desc" = "هل أنت متأكد من رغبتك في إلغاء مجموعة المتغيرات؟ سيتم الاحتفاظ بهذا المنتج كصنف عادي مستقل وحذف باقي المتغيرات التابعة له.";
+"Variant_RevertToNormal_Success" = "تم تحويل المنتج إلى صنف عادي وإلغاء المتغيرات بنجاح.";
+"Variant_Error_CannotRevertNoRetained" = "تعذر تحديد المنتج الأساسي للاحتفاظ به.";
+
+/* NextGen V6 Delivery Driver Cockpit & Mission Control */
+"Deliv_Duty_OnDuty" = "متصل · جاهز للمهام";
+"Deliv_Duty_BusyFlight" = "في مهمة توصيل نشطة";
+"Deliv_Duty_OffDuty" = "غير متصل · استراحة";
+"Deliv_Duty_Online" = "متصل";
+"Deliv_Duty_Active" = "نشط";
+"Deliv_Duty_Offline" = "استراحة";
+"Deliv_Section_ControlTitle" = "مركز عمليات التوصيل الميداني";
+"Deliv_ActiveEnRoute" = "مهمة جارية الآن";
+"Deliv_Waypoint_Pickup" = "الاستلام من الفرع";
+"Deliv_Waypoint_Dropoff" = "التوصيل للعميل";
+"Deliv_StopsToday" = "تم تسليمها";
+"Deliv_Earnings" = "أرباح الشيفت";
+"Deliv_ReadyPickup" = "جاهزة للاستلام";
+"Deliv_LaunchCockpit" = "فتح غرفة عمليات ومسارات التوصيل";
+"Deliv_Metric_Stops" = "توصيلات اليوم";
+"Deliv_Metric_OnTrack" = "ممتاز";
+"Deliv_Metric_Earnings" = "أرباح الشيفت";
+"Deliv_Metric_Live" = "مباشر";
+"Deliv_Metric_CODHand" = "كاش في العهدة";
+"Deliv_Metric_Remit" = "للتحصيل";
+"Deliv_Metric_OnTime" = "دقة المواعيد";
+"Deliv_Metric_Target" = "98%+";
+"Deliv_ActiveMission_Title" = "مهمة التوصيل الحالية";
+"Deliv_Pickup_Store" = "نقطة الاستلام (المتجر)";
+"Deliv_NavToPickup" = "خريطة الفرع";
+"Deliv_Dropoff_Customer" = "وجهة التوصيل (العميل)";
+"Deliv_Directions" = "الملاحة للعميل";
+"Deliv_Slide_Accept" = "اسحب لقبول المهمة";
+"Deliv_Slide_Pickup" = "اسحب لتأكيد استلام الطرد";
+"Deliv_Slide_InTransit" = "اسحب لبدء خط السير للعميل";
+"Deliv_Slide_CashDeliver" = "اسحب لتحصيل الكاش وتسليم الطلب";
+"Deliv_Slide_Complete" = "اسحب لتأكيد تسليم الطلب";
+"Deliv_Radar_Title" = "رادار المهام الجاهزة";
+"Deliv_OrdersReady" = "طلب متاح";
+"Deliv_ItemsCount" = "%ld أغراض";
+"Deliv_AcceptJob" = "استلام المهمة";
+"Deliv_CashCollection_Title" = "تحصيل الدفع عند الاستلام";
+"Deliv_RequiredAmount" = "المبلغ المطلوب تحصيله نقداً";
+"Deliv_ChangeDueToCustomer" = "المتبقي لإرجاعه للعميل:";
+"Deliv_NotesOptional" = "ملاحظة التسليم (اختياري)";
+"Deliv_NotesPlaceholder" = "تم التسليم عند الباب / للعميل شخصياً...";
+"Deliv_ConfirmCashAndDeliver" = "تأكيد التحصيل وتسليم الطلب";
+"Deliv_Pilot_Title" = "كابتن التوصيل";
+"Deliv_Toast_Accepted" = "تم قبول مهمة التوصيل بنجاح";
+"Deliv_Toast_PickedUp" = "تم تأكيد استلام الشحنة من المتجر";
+"Deliv_Toast_InTransit" = "تم بدء خط السير للعميل";
+"Deliv_Toast_Delivered" = "تم تسليم الطلب للعميل بنجاح";
+"Deliv_Toast_CashCollected" = "تم استلام المبلغ النقدي وتأكيد التسليم";
+"Deliv_PhoneUnavailable" = "رقم الهاتف غير متاح";

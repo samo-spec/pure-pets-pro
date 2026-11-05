@@ -21,7 +21,10 @@ typedef NS_ENUM(NSInteger, PPProNotificationTargetKind) {
     PPProNotificationTargetKindFulfillment,
     PPProNotificationTargetKindDeliveryOrder,
     PPProNotificationTargetKindChat,
+    PPProNotificationTargetKindPartnerLifecycle,
 };
+
+FOUNDATION_EXPORT NSString * _Nonnull const PPPartnerLifecycleRouteNotification;
 
 @interface NotificationManager (Targets)
 

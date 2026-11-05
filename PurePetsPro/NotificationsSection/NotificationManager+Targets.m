@@ -22,6 +22,7 @@
 #import "AppDelegate.h"
 
 static NSString * const kUsersCollection = @"UsersCol"; // ✅ your collection name
+NSString * const PPPartnerLifecycleRouteNotification = @"PPPartnerLifecycleRouteNotification";
 
 static NSString *PPProNotificationTargetsTrimmedString(id value)
 {
@@ -275,6 +276,18 @@ static void PPProNotificationTargetsComplete(BOOL handled, void (^completion)(BO
         return PPProNotificationTargetKindDeliveryOrder;
     }
 
+    NSString *lifecycleEvent = PPProNotificationTargetsNormalizedString(PPProNotificationTargetsFirstStringForKeys(safePayload, @[@"lifecycleEvent"]));
+    NSString *route = PPProNotificationTargetsNormalizedString(PPProNotificationTargetsFirstStringForKeys(safePayload, @[@"route"]));
+    if ([lifecycleEvent hasPrefix:@"partner."] ||
+        [route isEqualToString:@"onboarding"] ||
+        [route isEqualToString:@"restrictions"] ||
+        [route isEqualToString:@"dashboard"] ||
+        [route isEqualToString:@"offboarding"] ||
+        [type isEqualToString:@"provider_account_updated"] ||
+        [type isEqualToString:@"partner_lifecycle"]) {
+        return PPProNotificationTargetKindPartnerLifecycle;
+    }
+
     return PPProNotificationTargetKindUnknown;
 }
 
@@ -294,6 +307,8 @@ static void PPProNotificationTargetsComplete(BOOL handled, void (^completion)(BO
             return kLang(@"Notification_CTA_OpenDelivery");
         case PPProNotificationTargetKindChat:
             return kLang(@"Notification_CTA_OpenChat");
+        case PPProNotificationTargetKindPartnerLifecycle:
+            return kLang(@"Notification_CTA_OpenPartnerAction");
         case PPProNotificationTargetKindUnknown:
         default:
             return @"";
@@ -439,6 +454,20 @@ fromNavigationController:(UINavigationController *)navigationController
                     PPProNotificationTargetsComplete(YES, completion);
                 });
             }];
+            return;
+        }
+
+        case PPProNotificationTargetKindPartnerLifecycle: {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:routeUID]) {
+                    PPProNotificationTargetsComplete(NO, completion);
+                    return;
+                }
+                [[NSNotificationCenter defaultCenter] postNotificationName:PPPartnerLifecycleRouteNotification
+                                                                    object:nil
+                                                                  userInfo:safePayload];
+                PPProNotificationTargetsComplete(YES, completion);
+            });
             return;
         }
 

@@ -1,0 +1,12 @@
+# Cursor Rules — Pure Pets Pro iOS Satellite
+
+You are in `pure-pets-pro`, the provider/professional iOS application for Pure Pets (`pure-pets-49199`).
+Pointer: `project-brain.json`. Cross-repo umbrella brain is at `../PurePetsProjects/docs/agent/INDEX.md`.
+
+Invariants:
+- Provider workflows: delivery, vet, pharmacy, services, marketplace, adoption.
+- App Check, provider auth, and biometric security gates.
+- Sensitive mutations route through audited Cloud Functions.
+- Physical connected device only (iPhone 13 Pro Max). Never simulator.
+- Arabic primary (RTL) localization.
+- Never ingest secrets.

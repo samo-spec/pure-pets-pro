@@ -6,6 +6,7 @@
 #import "PPVetManager.h"
 #import "PPVetModel.h"
 #import "PPFirebaseCompat.h"
+#import "PetAccessory.h"
 
 static NSString * const kColVets = @"veterinarians";
 static NSString * const kColPetAccessories = @"petAccessories";
@@ -174,6 +175,26 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     } mutableCopy];
     if (self.createdAt) dict[@"createdAt"] = self.createdAt;
     if (self.updatedAt) dict[@"updatedAt"] = self.updatedAt;
+
+    if (self.productFamilyId.length > 0) dict[@"productFamilyId"] = self.productFamilyId;
+    if (self.variantSchemaVersion > 0) dict[@"variantSchemaVersion"] = @(self.variantSchemaVersion);
+    dict[@"isVariant"] = @(self.isVariant);
+    dict[@"isDefaultVariant"] = @(self.isDefaultVariant);
+    if (self.variantSortOrder > 0) dict[@"variantSortOrder"] = @(self.variantSortOrder);
+    if (self.selectedOptions.count > 0) dict[@"selectedOptions"] = self.selectedOptions;
+    if (self.selectedOptionsSnapshot.count > 0) dict[@"selectedOptionsSnapshot"] = self.selectedOptionsSnapshot;
+    if (self.variantCombinationKey.length > 0) dict[@"variantCombinationKey"] = self.variantCombinationKey;
+    if (self.variantAxis.length > 0) dict[@"variantAxis"] = self.variantAxis;
+    if (self.sku.length > 0) dict[@"sku"] = self.sku;
+    if (self.barcode.length > 0) dict[@"barcode"] = self.barcode;
+    if (self.wholesalePrice != nil && self.wholesalePrice.doubleValue > 0) dict[@"wholesalePrice"] = self.wholesalePrice;
+    if (self.dosageForm.length > 0) dict[@"dosageForm"] = self.dosageForm;
+    if (self.strength.length > 0) dict[@"strength"] = self.strength;
+    if (self.packSize.length > 0) dict[@"packSize"] = self.packSize;
+    if (self.volume.length > 0) dict[@"volume"] = self.volume;
+    if (self.batchNumber.length > 0) dict[@"batchNumber"] = self.batchNumber;
+    if (self.expiryDate) dict[@"expiryDate"] = self.expiryDate;
+
     return dict.copy;
 }
 
@@ -213,6 +234,32 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     model.isDisabled = [dict[@"isDisabled"] boolValue] || blocked || deleted || archived;
     model.createdAt = PPVetManagerDateFromValue(dict[@"createdAt"]);
     model.updatedAt = PPVetManagerDateFromValue(dict[@"updatedAt"]);
+
+    model.productFamilyId = PPVetManagerSafeString(dict[@"productFamilyId"]);
+    model.variantSchemaVersion = [dict[@"variantSchemaVersion"] respondsToSelector:@selector(integerValue)] ? [dict[@"variantSchemaVersion"] integerValue] : 0;
+    model.isVariant = PPVetManagerBoolFromValue(dict[@"isVariant"]);
+    model.isDefaultVariant = PPVetManagerBoolFromValue(dict[@"isDefaultVariant"]);
+    model.variantSortOrder = [dict[@"variantSortOrder"] respondsToSelector:@selector(integerValue)] ? [dict[@"variantSortOrder"] integerValue] : 0;
+    if ([dict[@"selectedOptions"] isKindOfClass:[NSDictionary class]]) {
+        model.selectedOptions = dict[@"selectedOptions"];
+    }
+    if ([dict[@"selectedOptionsSnapshot"] isKindOfClass:[NSArray class]]) {
+        model.selectedOptionsSnapshot = dict[@"selectedOptionsSnapshot"];
+    }
+    model.variantCombinationKey = PPVetManagerSafeString(dict[@"variantCombinationKey"]);
+    model.variantAxis = PPVetManagerSafeString(dict[@"variantAxis"]);
+    model.sku = PPVetManagerSafeString(dict[@"sku"]);
+    model.barcode = PPVetManagerSafeString(dict[@"barcode"]);
+    if ([dict[@"wholesalePrice"] respondsToSelector:@selector(doubleValue)]) {
+        model.wholesalePrice = dict[@"wholesalePrice"];
+    }
+    model.dosageForm = PPVetManagerSafeString(dict[@"dosageForm"]);
+    model.strength = PPVetManagerSafeString(dict[@"strength"]);
+    model.packSize = PPVetManagerSafeString(dict[@"packSize"]);
+    model.volume = PPVetManagerSafeString(dict[@"volume"]);
+    model.batchNumber = PPVetManagerSafeString(dict[@"batchNumber"]);
+    model.expiryDate = PPVetManagerDateFromValue(dict[@"expiryDate"]);
+
     return model;
 }
 
@@ -235,7 +282,66 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     copy.isDisabled = self.isDisabled;
     copy.createdAt = self.createdAt;
     copy.updatedAt = self.updatedAt;
+
+    copy.productFamilyId = self.productFamilyId;
+    copy.variantSchemaVersion = self.variantSchemaVersion;
+    copy.isVariant = self.isVariant;
+    copy.isDefaultVariant = self.isDefaultVariant;
+    copy.variantSortOrder = self.variantSortOrder;
+    copy.selectedOptions = [self.selectedOptions copy];
+    copy.selectedOptionsSnapshot = [self.selectedOptionsSnapshot copy];
+    copy.variantCombinationKey = self.variantCombinationKey;
+    copy.variantAxis = self.variantAxis;
+    copy.sku = self.sku;
+    copy.barcode = self.barcode;
+    copy.wholesalePrice = self.wholesalePrice;
+    copy.dosageForm = self.dosageForm;
+    copy.strength = self.strength;
+    copy.packSize = self.packSize;
+    copy.volume = self.volume;
+    copy.batchNumber = self.batchNumber;
+    copy.expiryDate = self.expiryDate;
+
     return copy;
+}
+
+- (PetAccessory *)asPetAccessory {
+    PetAccessory *acc = [[PetAccessory alloc] init];
+    acc.accessoryID = self.medicineID ?: @"";
+    acc.name = self.title ?: @"";
+    acc.nameEn = self.title;
+    acc.desc = self.medicineDescription ?: @"";
+    acc.descEn = self.medicineDescription;
+    if (self.imageUrl.length > 0) {
+        acc.imageURLsArray = @[self.imageUrl];
+    } else {
+        acc.imageURLsArray = @[];
+    }
+    acc.price = @(self.price);
+    acc.quantity = self.stockQuantity;
+    acc.noStock = self.stockQuantity <= 0;
+    acc.accessKindType = AccessTypePetMedicine;
+    acc.ownerID = self.userId ?: (self.vetId ?: @"");
+    acc.ownerType = @"partner";
+    acc.showInAppMarket = self.isPublished && !self.isDisabled;
+    acc.active = self.isPublished && !self.isDisabled;
+    acc.createdAt = self.createdAt;
+
+    acc.productFamilyId = self.productFamilyId;
+    acc.variantSchemaVersion = self.variantSchemaVersion;
+    acc.isVariant = self.isVariant;
+    acc.isDefaultVariant = self.isDefaultVariant;
+    acc.variantSortOrder = self.variantSortOrder;
+    acc.selectedOptions = self.selectedOptions;
+    acc.selectedOptionsSnapshot = self.selectedOptionsSnapshot;
+    acc.variantCombinationKey = self.variantCombinationKey;
+    acc.variantAxis = self.variantAxis;
+
+    acc.sku = self.sku;
+    acc.barcode = self.barcode;
+    acc.wholesalePrice = self.wholesalePrice;
+    [acc normalizeInventoryState];
+    return acc;
 }
 
 @end
@@ -649,7 +755,16 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         if (completion) completion(PPVetError(400, @"Medicine ID is required for deletion."));
         return;
     }
-    [[[self medicineCol] documentWithPath:medicine.medicineID] deleteDocumentWithCompletion:completion];
+    NSDictionary *patch = @{
+        @"isDeleted": @YES,
+        @"active": @NO,
+        @"isAvailable": @NO,
+        @"showInAppMarket": @NO,
+        @"noStock": @YES,
+        @"quantity": @0,
+        @"updatedAt": [FIRTimestamp timestampWithDate:[NSDate date]]
+    };
+    [[[self medicineCol] documentWithPath:medicine.medicineID] updateData:patch completion:completion];
 }
 
 #pragma mark - Count

@@ -1,0 +1,373 @@
+//
+//  PPAccessoryVariantService.swift
+//  PurePetsPro
+//
+//  Command facade for accessory variant families in Pure Pets Pro.
+//
+
+import Foundation
+import FirebaseAuth
+import FirebaseFirestore
+import FirebaseFunctions
+
+@objc public final class PPAccessoryVariantSaveResult: NSObject, @unchecked Sendable {
+    @objc public let familyId: String
+    @objc public let revision: Int
+    @objc public let idempotent: Bool
+    @objc public let resultKind: String
+    @objc public let defaultVariantProductId: String
+    @objc public let variantProductIds: [String]
+
+    init(
+        familyId: String,
+        revision: Int,
+        idempotent: Bool,
+        resultKind: String,
+        defaultVariantProductId: String,
+        variantProductIds: [String]
+    ) {
+        self.familyId = familyId
+        self.revision = revision
+        self.idempotent = idempotent
+        self.resultKind = resultKind
+        self.defaultVariantProductId = defaultVariantProductId
+        self.variantProductIds = variantProductIds
+        super.init()
+    }
+}
+
+@objc public final class PPAccessoryVariantService: NSObject, @unchecked Sendable {
+    @objc public static let shared = PPAccessoryVariantService()
+
+    private let functions = Functions.functions()
+    private let db = Firestore.firestore()
+
+    private override init() { super.init() }
+
+    // MARK: - Authorization surface
+
+    @objc public var canManageVariants: Bool {
+        guard let user = UserManager.shared.currentUser else { return false }
+        if user.isBlocked { return false }
+        let status = (user.status ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if status == "blocked" || status == "deleted" || status == "suspended" || status == "disabled" {
+            return false
+        }
+        return user.canAccessProviderMarketplaceFeature || user.canPharmacyFeature
+    }
+
+    // MARK: - Read
+
+    public func loadFamily(familyId: String, minimumRevision: Int = 0) async throws -> PPAccessoryVariantFamily {
+        let trimmed = familyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw PPAccessoryVariantServiceError.invalidFamilyIdentifier }
+
+        let snapshot = try await db.collection("ProductFamilies").document(trimmed).getDocument(source: .server)
+        guard snapshot.exists, let data = snapshot.data() else {
+            throw PPAccessoryVariantServiceError.familyNotFound
+        }
+
+        let productIds = (data["variantProductIds"] as? [Any])?
+            .compactMap { $0 as? String }
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty } ?? []
+
+        let products = try await loadProducts(ids: productIds)
+        let missing = productIds.filter { products[$0] == nil || products[$0]?.isDeleted == true }
+        guard missing.isEmpty else {
+            throw Self.unavailableProducts(missing)
+        }
+        guard ((data["revision"] as? NSNumber)?.intValue ?? 0) >= minimumRevision else {
+            throw PPAccessoryVariantServiceError.invalidResponse
+        }
+
+        guard let family = PPAccessoryVariantFamily.family(
+            fromDocument: data,
+            documentID: trimmed,
+            products: products
+        ) else {
+            throw PPAccessoryVariantServiceError.familyNotFound
+        }
+        return family
+    }
+
+    public func resolveFamily(for accessory: PetAccessory) async throws -> PPAccessoryVariantFamily {
+        let familyId = (accessory.productFamilyId ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !familyId.isEmpty else {
+            return PPAccessoryVariantFamily.legacySingleVariant(from: accessory)
+        }
+        do {
+            return try await loadFamily(familyId: familyId)
+        } catch PPAccessoryVariantServiceError.familyNotFound,
+                PPAccessoryVariantServiceError.invalidFamilyIdentifier {
+            print("[PPAccessoryVariantService] Family \(familyId) missing for accessory \(accessory.accessoryID). Self-healing to legacy single-variant.")
+            accessory.productFamilyId = nil
+            return PPAccessoryVariantFamily.legacySingleVariant(from: accessory)
+        }
+    }
+
+    public func resolveFamily(for item: PPProviderMarketItem) async throws -> PPAccessoryVariantFamily {
+        return try await resolveFamily(for: item.asPetAccessory())
+    }
+
+    private func loadProducts(ids: [String]) async throws -> [String: PetAccessory] {
+        guard !ids.isEmpty else { return [:] }
+        var result: [String: PetAccessory] = [:]
+        for chunk in stride(from: 0, to: ids.count, by: 30).map({ Array(ids[$0..<min($0 + 30, ids.count)]) }) {
+            let snapshot = try await db.collection("petAccessories")
+                .whereField(FieldPath.documentID(), in: chunk)
+                .getDocuments(source: .server)
+            for document in snapshot.documents {
+                result[document.documentID] = PetAccessory(
+                    dictionary: document.data(),
+                    documentID: document.documentID
+                )
+            }
+        }
+        return result
+    }
+
+    public func loadProduct(productId: String) async throws -> PetAccessory {
+        let trimmed = productId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { throw PPAccessoryVariantServiceError.invalidFamilyIdentifier }
+        let snapshot = try await db.collection("petAccessories").document(trimmed).getDocument(source: .server)
+        guard snapshot.exists, let data = snapshot.data() else {
+            throw Self.unavailableProducts([trimmed])
+        }
+        let product = PetAccessory(dictionary: data, documentID: trimmed)
+        guard !product.isDeleted else { throw Self.unavailableProducts([trimmed]) }
+        return product
+    }
+
+    private static func unavailableProducts(_ ids: [String]) -> PPAccessoryVariantServiceError {
+        .server(PPAccessoryVariantError(
+            domainCode: PPAccessoryVariantError.Code.productNotFound,
+            message: Language.get("Variant_Error_ProductMissingServer", alter: "أحد الألوان لم يعد موجودًا. أعد تحميل البيانات."),
+            recovery: .reloadAndCompare,
+            affectedProductIds: ids
+        ))
+    }
+
+    func validateStudioFamily(_ family: PPAccessoryVariantFamily) async throws {
+        guard !family.familyId.isEmpty, !family.isLegacySingleVariant else { return }
+        let current = try await loadFamily(familyId: family.familyId)
+        guard current.revision == family.revision else {
+            throw Self.staleRevision(expected: family.revision, current: current.revision)
+        }
+        for variant in family.variants {
+            guard let member = current.variant(forProductId: variant.productId) else {
+                throw Self.unavailableProducts([variant.productId])
+            }
+            guard member.revision == variant.revision else {
+                throw Self.staleRevision(expected: variant.revision, current: member.revision)
+            }
+        }
+    }
+
+    static func staleRevision(expected: Int, current: Int) -> PPAccessoryVariantServiceError {
+        .server(PPAccessoryVariantError(
+            domainCode: PPAccessoryVariantError.Code.staleVariantRevision,
+            message: Language.get("Variant_Error_StaleRevisionServer", alter: "عدّل موظف آخر هذا المنتج أثناء تعديلك. أعد التحميل وقارن قبل الحفظ."),
+            recovery: .reloadAndCompare,
+            expectedRevision: NSNumber(value: expected),
+            currentRevision: NSNumber(value: current)
+        ))
+    }
+
+    public func createStandaloneVariantProduct(
+        template: PetAccessory,
+        sku: String,
+        barcode: String,
+        retailPrice: Double,
+        wholesalePrice: Double?,
+        costPrice: Double? = nil,
+        quantity: Int = 0,
+        commandId: String
+    ) async throws -> PetAccessory {
+        guard retailPrice.isFinite, retailPrice > 0, retailPrice <= 999_999_999.99,
+              wholesalePrice == nil || (wholesalePrice!.isFinite && wholesalePrice! > 0 && wholesalePrice! <= 999_999_999.99),
+              costPrice == nil || (costPrice!.isFinite && costPrice! >= 0 && costPrice! <= 999_999_999.99), quantity >= 0 else {
+            throw PPAccessoryVariantServiceError.validationFailed([Language.get("Variant_Add_InvalidPrice", alter: "أدخل سعر بيع صالحاً للون الجديد.")])
+        }
+
+        let created = PetAccessory.deepCopy(from: template)
+        created.accessoryID = ""
+        created.productFamilyId = nil
+        created.variantSchemaVersion = 0
+        created.isVariant = true
+        created.isDefaultVariant = false
+        created.variantSortOrder = 0
+        created.variantColorDictionary = nil
+        created.revision = 0
+        created.createdAt = Date()
+        created.quantity = max(0, quantity)
+        created.noStock = (quantity <= 0)
+        created.showInAppMarket = false
+        created.sku = sku.trimmingCharacters(in: .whitespacesAndNewlines)
+        created.barcode = barcode.trimmingCharacters(in: .whitespacesAndNewlines)
+        created.price = NSNumber(value: retailPrice)
+        created.wholesalePrice = wholesalePrice.map { NSNumber(value: $0) }
+        created.costPrice = costPrice.map { NSNumber(value: $0) }
+        created.discountPercent = nil
+        created.discountAmount = nil
+        created.hasOffer = false
+        created.imageURLsArray = []
+        created.imageMeta = []
+        created.normalizeInventoryState()
+
+        let payload = created.toFirestoreDictionary()
+
+        let confirmedId: String = try await withCheckedThrowingContinuation { continuation in
+            PPProviderMarketplaceManager.shared().createMarketItem(payload) { success, itemID, message, error in
+                if success, let itemID = itemID, !itemID.isEmpty {
+                    continuation.resume(returning: itemID)
+                } else if let error = error {
+                    continuation.resume(throwing: error)
+                } else {
+                    let msg = message ?? "Failed to create variant product"
+                    continuation.resume(throwing: NSError(domain: "PPVariantService", code: -1, userInfo: [NSLocalizedDescriptionKey: msg]))
+                }
+            }
+        }
+
+        created.accessoryID = confirmedId
+        return created
+    }
+
+    // MARK: - Write
+
+    public func saveFamily(
+        _ family: PPAccessoryVariantFamily,
+        commandId: String
+    ) async throws -> PPAccessoryVariantSaveResult {
+        family.autoBindMissingOptionSelections()
+        let messages = family.validationMessages()
+        if !messages.isEmpty {
+            throw PPAccessoryVariantServiceError.validationFailed(messages)
+        }
+
+        return try await invokeFamilyCommand(family.commandEnvelope(commandId: commandId))
+    }
+
+    @objc public func dissolveFamily(
+        familyId: String,
+        retainedProductId: String,
+        deleteOtherVariants: Bool = true
+    ) async throws {
+        let trimmedFamilyId = familyId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedFamilyId.isEmpty else {
+            throw PPAccessoryVariantServiceError.invalidFamilyIdentifier
+        }
+        let commandId = "dissolve-\(trimmedFamilyId)-\(UUID().uuidString)"
+        let envelope: [String: Any] = [
+            "contractVersion": PPAccessoryVariantContract.contractVersionGeneric,
+            "action": "dissolve",
+            "familyId": trimmedFamilyId,
+            "retainedProductId": retainedProductId.trimmingCharacters(in: .whitespacesAndNewlines),
+            "deleteOtherVariants": deleteOtherVariants,
+            "commandId": commandId
+        ]
+        _ = try await invokeFamilyCommand(envelope)
+    }
+
+    private func invokeFamilyCommand(_ envelope: [String: Any]) async throws -> PPAccessoryVariantSaveResult {
+        guard let currentUser = Auth.auth().currentUser else {
+            throw PPAccessoryVariantServiceError.notAuthenticated
+        }
+        _ = try? await currentUser.getIDToken(forcingRefresh: false)
+
+        let boxed = PPVariantSendableDictionary(dict: envelope)
+        let callable = functions.httpsCallable(PPAccessoryVariantContract.callableName)
+        callable.timeoutInterval = PPAccessoryVariantService.callableTimeout
+
+        do {
+            return try parseResult(from: try await callable.call(boxed.dict))
+        } catch let error as PPAccessoryVariantServiceError {
+            throw error
+        } catch {
+            let nsError = error as NSError
+            let isUnauthenticated = nsError.code == FunctionsErrorCode.unauthenticated.rawValue
+            if isUnauthenticated, let currentUser = Auth.auth().currentUser {
+                _ = try? await currentUser.getIDToken(forcingRefresh: true)
+                do {
+                    return try parseResult(from: try await callable.call(boxed.dict))
+                } catch let retryError as PPAccessoryVariantServiceError {
+                    throw retryError
+                } catch {
+                    throw PPAccessoryVariantServiceError.server(
+                        PPAccessoryVariantError.error(from: error as NSError)
+                    )
+                }
+            }
+            throw PPAccessoryVariantServiceError.server(PPAccessoryVariantError.error(from: nsError))
+        }
+    }
+
+    private func parseResult(from response: HTTPSCallableResult) throws -> PPAccessoryVariantSaveResult {
+        guard let payload = response.data as? [String: Any],
+              payload["ok"] as? Bool == true,
+              let familyId = payload["familyId"] as? String, !familyId.isEmpty else {
+            throw PPAccessoryVariantServiceError.invalidResponse
+        }
+        return PPAccessoryVariantSaveResult(
+            familyId: familyId,
+            revision: (payload["revision"] as? NSNumber)?.intValue ?? 0,
+            idempotent: payload["idempotent"] as? Bool ?? false,
+            resultKind: (payload["resultKind"] as? String) ?? "confirmed",
+            defaultVariantProductId: (payload["defaultVariantProductId"] as? String) ?? "",
+            variantProductIds: (payload["variantProductIds"] as? [String]) ?? []
+        )
+    }
+
+    private static let callableTimeout: TimeInterval = 30
+}
+
+private struct PPVariantSendableDictionary: @unchecked Sendable {
+    let dict: [String: Any]
+}
+
+// MARK: - Errors
+
+public enum PPAccessoryVariantServiceError: LocalizedError {
+    case invalidFamilyIdentifier
+    case familyNotFound
+    case invalidResponse
+    case notAuthenticated
+    case validationFailed([String])
+    case server(PPAccessoryVariantError)
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidFamilyIdentifier:
+            return Language.get("Variant_Error_InvalidFamilyId", alter: "معرف مجموعة الخيارات غير صالح.")
+        case .familyNotFound:
+            return Language.get("Variant_Error_FamilyMissingServer", alter: "مجموعة الخيارات غير موجودة. أعد تحميل البيانات.")
+        case .invalidResponse:
+            return Language.get("Variant_Error_InvalidResponse", alter: "تعذر تأكيد استجابة الخادم. أعد التحميل للتحقق.")
+        case .notAuthenticated:
+            return Language.get("Variant_Error_Unauthenticated", alter: "انتهت الجلسة. أعد تسجيل الدخول.")
+        case .validationFailed(let messages):
+            return messages.first
+        case .server(let error):
+            return error.message
+        }
+    }
+
+    public var recovery: PPAccessoryVariantRecovery {
+        switch self {
+        case .validationFailed:
+            return .correctInput
+        case .invalidFamilyIdentifier, .notAuthenticated:
+            return .fatal
+        case .familyNotFound, .invalidResponse:
+            return .reloadAndCompare
+        case .server(let error):
+            return error.recovery
+        }
+    }
+
+    public var validationMessages: [String] {
+        if case .validationFailed(let messages) = self { return messages }
+        return []
+    }
+}

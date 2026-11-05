@@ -1,5 +1,8 @@
 #import <Foundation/Foundation.h>
 #import "PetImageItem.h"
+
+@class UIViewController, UIView;
+
 typedef NS_ENUM(NSInteger, AccessConditions)
 {
     AccessConditionsNew = 1,
@@ -7,20 +10,19 @@ typedef NS_ENUM(NSInteger, AccessConditions)
     AccessConditionsNone = -1
 };
 
-
-
-
-
 typedef NS_ENUM(NSInteger, AccessKindType)
 {
     AccessTypeAccessory = 1,
-    AccessTypeFood = 2
+    AccessTypeFood = 2,
+    AccessTypeLivePets = 3,
+    AccessTypeLivePet = 3,
+    AccessTypePetMedicine = 4
 };
 
 NS_ASSUME_NONNULL_BEGIN
 
 @interface PetAccessory : NSObject
-@property (nonatomic, copy)   NSString *blurHash;
+@property (nonatomic, copy) NSString *blurHash;
 
 // Search-normalized title for Arabic/English safe queries
 @property (nonatomic, readonly) NSString *searchTitle;
@@ -28,25 +30,65 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, strong) NSString *accessoryID;
 @property (nonatomic, strong) NSString *name;
+@property (nonatomic, copy, nullable) NSString *nameEn;
+@property (nonatomic, copy, nullable) NSString *sku;
+@property (nonatomic, copy, nullable) NSString *barcode;
+@property (nonatomic, strong, nullable) NSNumber *costPrice;
 @property (nonatomic, strong) NSString *desc;
+@property (nonatomic, copy, nullable) NSString *descEn;
 @property (nonatomic, strong) NSNumber *price;                     // Base/original price
+@property (nonatomic, readonly) BOOL hasResolvedSellingPrice;      // NO when the catalog projection has no priced available unit
 @property (nonatomic, strong, nullable) NSNumber *discountPercent;  // % discount (0–100)
 @property (nonatomic, strong, nullable) NSNumber *discountAmount;   // Absolute discount (e.g. 15.0)
 @property (nonatomic, readonly) NSNumber *finalPrice;               // Auto-calculated final price
+@property (nonatomic, strong, nullable) NSNumber *wholesalePrice;
+@property (nonatomic, assign) BOOL hasCommerceConfig;
+@property (nonatomic, copy, nullable) NSArray<NSDictionary *> *quantityGroups;
+@property (nonatomic, copy, nullable) NSString *weightText;          // Display-ready package weight, e.g. "2 kg"
+@property (nonatomic, strong, nullable) NSNumber *weight;            // Numeric package weight when stored separately
+@property (nonatomic, copy, nullable) NSString *weightUnit;          // Unit for numeric package weight
+@property (nonatomic, copy, nullable) NSString *size;                // Item size (e.g. "XS", "S", "M", "L", "XL", "Free Size")
+@property (nonatomic, strong, nullable) NSNumber *dimensionWidth;      // Numeric width
+@property (nonatomic, strong, nullable) NSNumber *dimensionHeight;     // Numeric height
+@property (nonatomic, copy, nullable) NSString *dimensionUnit;         // Measurement unit ("cm", "m", "in", "mm")
 
 @property (nonatomic, strong) NSArray<NSString *> *imageURLsArray;
 @property (nonatomic, copy, nullable) NSArray<NSDictionary *> *imageMeta;
-@property (nonatomic, copy, readonly)  NSArray<PetImageItem *> *imageItems;
-
+@property (nonatomic, copy, readonly) NSArray<PetImageItem *> *imageItems;
 
 @property (nonatomic, assign) NSInteger petMainCategoryID;
 @property (nonatomic, assign) NSInteger petSubCategoryID;
+@property (nonatomic, strong, nullable) NSArray<NSNumber *> *petMainCategoryIDs;
+@property (nonatomic, strong, nullable) NSArray<NSNumber *> *petSubCategoryIDs;
+@property (nonatomic, assign) BOOL isAllCategories;
+@property (nonatomic, assign) BOOL isAllSubCategories;
+@property (nonatomic, copy, nullable) NSString *AccessoryCategoryID;
+@property (nonatomic, readonly, nullable) NSString *accessoryCategoryName;
+@property (nonatomic, readonly, nullable) NSString *category;
+@property (nonatomic, copy, nullable) NSArray<NSString *> *relatedAccessories;
+@property (nonatomic, assign) NSInteger cityID;
 
 @property (nonatomic, strong) NSDate *createdAt;
 @property (nonatomic, strong, nullable) NSDate *expiryDate; // Expiry date for food/accessories (nil = no expiry)
 @property (nonatomic, strong) NSString *ownerID;
-@property (nonatomic, copy) NSString *storeID;
-@property (nonatomic, copy) NSString *storeName;
+@property (nonatomic, copy, nullable) NSString *storeID;
+@property (nonatomic, copy, nullable) NSString *storeName;
+@property (nonatomic, copy, nullable) NSString *branchID;
+@property (nonatomic, copy, nullable) NSString *branchCode;
+- (NSString *)resolvedBranchID;
+- (NSString *)resolvedBranchName;
+@property (nonatomic, strong, nullable) NSString *ownerType;
+@property (nonatomic, strong, nullable) NSString *source;
+@property (nonatomic, copy, nullable) NSString *inventoryMode;
+@property (nonatomic, copy, nullable) NSString *inventoryTrackingPolicy;
+@property (nonatomic, strong, nullable) NSNumber *shelfLifeDays;
+@property (nonatomic, strong, nullable) NSNumber *guaranteedShelfLifeDays;
+@property (nonatomic, strong, nullable) NSNumber *expiryCutoffDays;
+@property (nonatomic, assign) NSInteger inventorySchemaVersion;
+@property (nonatomic, assign) NSInteger revision;
+@property (nonatomic, strong, nullable) NSNumber *standardSellingPrice;
+@property (nonatomic, assign) NSInteger reservedQuantity;
+@property (nonatomic, assign) BOOL isArchived;
 @property (nonatomic, assign) AccessKindType accessKindType;
 @property (nonatomic, assign) AccessConditions condition;
 @property (nonatomic, assign) NSInteger quantity; // how many in stock
@@ -55,6 +97,43 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSString *)stockStatusText;
 @property (nonatomic, assign) BOOL isNew;
 @property (nonatomic, assign) BOOL hasOffer;
+@property (nonatomic, assign) BOOL showInAppMarket;
+@property (nonatomic, assign) BOOL isBlocked;
+@property (nonatomic, assign) BOOL isDeleted;
+@property (nonatomic, assign) BOOL isDisabled;
+
+#pragma mark - Colour-variant identity (server-owned, read-only)
+
+@property (nonatomic, copy, nullable) NSString *productFamilyId;
+@property (nonatomic, assign) NSInteger variantSchemaVersion;
+@property (nonatomic, assign) BOOL isVariant;
+@property (nonatomic, assign) BOOL isDefaultVariant;
+@property (nonatomic, assign) NSInteger variantSortOrder;
+/// Raw `variantAttributes.color` map: { id, nameAr, nameEn, hex }.
+@property (nonatomic, strong, nullable) NSDictionary<NSString *, id> *variantColorDictionary;
+
+/// Raw `selectedOptions` map: { [optionKey]: valueId }.
+@property (nonatomic, strong, nullable) NSDictionary<NSString *, id> *selectedOptions;
+
+/// Frozen snapshot of selected options from server: [{ optionKey, optionName, valueId, valueName, hex }].
+@property (nonatomic, strong, nullable) NSArray<NSDictionary<NSString *, id> *> *selectedOptionsSnapshot;
+
+/// Canonical variant combination key, e.g. "size=xs" or "color=black|size=s".
+@property (nonatomic, copy, nullable) NSString *variantCombinationKey;
+
+/// Primary variant axis declared for the family (e.g. "color", "size", "options").
+@property (nonatomic, copy, nullable) NSString *variantAxis;
+
+/// YES when this product belongs to a colour family.
+@property (nonatomic, readonly) BOOL belongsToVariantFamily;
+
+/// Swift-friendly alias for the historically capitalized `AccessoryCategoryID`.
+@property (nonatomic, readonly, copy, nullable) NSString *catalogCategoryIdentifier;
+
+// Computed type helpers
+@property (nonatomic, readonly) BOOL isLivePet;
+@property (nonatomic, readonly) BOOL isFood;
+@property (nonatomic, readonly) BOOL isPetMedicine;
 
 // Firestore helpers
 - (instancetype)initWithDictionary:(NSDictionary *)dict documentID:(NSString *)docID;
@@ -64,10 +143,6 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSNumber *)calculateFinalPrice;
 - (NSInteger)normalizedQuantity;
 - (void)normalizeInventoryState;
-
-
-
-
 
 + (nullable NSURL *)firstImageURLForAccessory:(PetAccessory *)accessory;
 + (NSString *)typeTextForAccessory:(PetAccessory *)accessory;
@@ -82,10 +157,6 @@ NS_ASSUME_NONNULL_BEGIN
                sourceView:(nullable UIView *)sourceView;
 + (void)sharePetAccessory:(PetAccessory *)accessory fromViewController:(UIViewController *)vc;
 
-
-
 @end
 
 NS_ASSUME_NONNULL_END
-
-

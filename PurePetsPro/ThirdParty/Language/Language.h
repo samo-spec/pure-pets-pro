@@ -5,11 +5,13 @@
 //  Copyright (c) 2015 The EST Group. All rights reserved.
 //
 //
-//  Language.h
-//
+#import <UIKit/UIKit.h>
+#import <Foundation/Foundation.h>
 #import <objc/message.h>
 #define kLang(key) [Language get:key alter:nil]
 #define LanguageCode @[@"en", @"ar"]
+
+NS_ASSUME_NONNULL_BEGIN
 
 @interface Language : NSObject
 
@@ -17,11 +19,12 @@
 + (NSString *)currentLanguageCode;        // normalized ("en" / "ar")
 + (NSInteger)languageVal;                 // 0 = en, 1 = ar
 + (void)userSelectedLanguage:(NSString *)selectedLanguage;
-+ (NSString *)get:(NSString *)key alter:(NSString *)alternate;
++ (NSString *)get:(NSString *)key alter:(nullable NSString *)alternate;
 
 + (BOOL)isRTL;
 + (UISemanticContentAttribute)semanticAttributeForCurrentLanguage;
 + (NSTextAlignment)alignmentForCurrentLanguage;
 
-
 @end
+
+NS_ASSUME_NONNULL_END

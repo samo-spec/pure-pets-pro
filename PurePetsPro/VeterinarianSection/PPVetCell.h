@@ -17,6 +17,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, readonly) UILabel *statusBadge;
 @property (nonatomic, strong, readonly) UILabel *subscriptionLabel;
 @property (nonatomic, strong, readonly) UILabel *costLabel;
+@property (nonatomic, assign) BOOL isSplitSelected;
 @property (nonatomic, copy, nullable) void (^onCallTapped)(PPVetModel *vet);
 @property (nonatomic, copy, nullable) void (^onWhatsAppTapped)(PPVetModel *vet);
 @property (nonatomic, copy, nullable) void (^onToggleStatusTapped)(PPVetModel *vet);
@@ -24,6 +25,7 @@ NS_ASSUME_NONNULL_BEGIN
 + (NSString *)reuseID;
 + (CGFloat)preferredHeight;
 - (void)configureWithVet:(PPVetModel *)vet;
+- (void)setSplitSelected:(BOOL)selected animated:(BOOL)animated;
 
 @end
 

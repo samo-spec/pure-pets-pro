@@ -20,7 +20,7 @@ public final class PPHero: UIView, UIGestureRecognizerDelegate {
     }
 
     /// Pure Pets raspberry from the shared PPDesignTokens bridge.
-    @objc public var accentColor: UIColor = UIColor.ppPrimary ?? .systemPink {
+    @objc public var accentColor: UIColor = UIColor.ppPrimary {
         didSet { applyPalette() }
     }
 

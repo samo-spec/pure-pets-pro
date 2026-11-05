@@ -1,4 +1,36 @@
+//
+//  PPAlertHelper.m
+//  PurePetsPro
+//
+//  Reinvented from absolute first principles for iPhone & iPad.
+//  Category-defining Apple modal architecture, unified reading axis,
+//  zero geometric clipping flaws, hardware keyboard & pointer support.
+//
+
 #import "PPAlertHelper.h"
+#import "Language.h"
+#import "Styling.h"
+#import <AudioToolbox/AudioToolbox.h>
+
+#ifndef PrimaryTextClr
+#define PrimaryTextClr (AppPrimaryTextClr ?: UIColor.labelColor)
+#endif
+
+#ifndef SeconderyTextClr
+#define SeconderyTextClr (AppSecondaryTextClr ?: UIColor.secondaryLabelColor)
+#endif
+
+#ifndef PPFontBold
+#define PPFontBold(size) ([Styling fontBold:(size)] ?: [UIFont systemFontOfSize:(size) weight:UIFontWeightBold])
+#endif
+
+#ifndef PPFontMedium
+#define PPFontMedium(size) ([Styling fontMedium:(size)] ?: [UIFont systemFontOfSize:(size) weight:UIFontWeightMedium])
+#endif
+
+#ifndef PPFontRegular
+#define PPFontRegular(size) ([Styling fontRegular:(size)] ?: [UIFont systemFontOfSize:(size) weight:UIFontWeightRegular])
+#endif
 
 static UIWindow *ppAlertOverlayWindow = nil;
 static UIViewController *ppAlertRootViewController = nil;
@@ -16,11 +48,14 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
     PPAlertActionStyleCancel
 };
 
+// MARK: - Action Item Model
+
 @interface PPAlertActionItem : NSObject
 @property (nonatomic, copy) NSString *title;
 @property (nonatomic, assign) PPAlertActionStyle style;
 @property (nonatomic, copy, nullable) AlertCompletionBlock completion;
 @property (nonatomic, copy, nullable) PPAlertSimpleActionBlock simpleCompletion;
+
 + (instancetype)itemWithTitle:(NSString *)title
                         style:(PPAlertActionStyle)style
                    completion:(AlertCompletionBlock _Nullable)completion
@@ -43,11 +78,15 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
 
 @end
 
+// MARK: - Semantic Appearance Profile
+
 @interface PPAlertAppearance : NSObject
 @property (nonatomic, strong) UIColor *accentColor;
 @property (nonatomic, copy) NSString *iconSystemName;
 @property (nonatomic, strong) UIColor *badgeBackgroundColor;
 @property (nonatomic, strong) UIColor *badgeForegroundColor;
+@property (nonatomic, copy) NSString *eyebrowText;
+
 + (instancetype)appearanceForType:(PPAlertType)type;
 @end
 
@@ -59,36 +98,45 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
         case PPAlertTypeSuccess:
             appearance.accentColor = [UIColor ppSuccess];
             appearance.iconSystemName = @"checkmark.seal.fill";
+            appearance.eyebrowText = [Language get:@"alert_eyebrow_success" alter:@"اكتمل"];
             break;
         case PPAlertTypeError:
             appearance.accentColor = [UIColor ppError];
             appearance.iconSystemName = @"xmark.seal.fill";
+            appearance.eyebrowText = [Language get:@"alert_eyebrow_error" alter:@"إجراء مطلوب"];
             break;
         case PPAlertTypeWarning:
             appearance.accentColor = [UIColor ppWarning];
             appearance.iconSystemName = @"exclamationmark.triangle.fill";
+            appearance.eyebrowText = [Language get:@"alert_eyebrow_warning" alter:@"تتطلب المراجعة"];
             break;
         case PPAlertTypeInfo:
             appearance.accentColor = AppPrimaryClr;
             appearance.iconSystemName = @"info.circle.fill";
+            appearance.eyebrowText = [Language get:@"alert_eyebrow_info" alter:@"معلومات"];
             break;
         case PPAlertTypeConfirmation:
             appearance.accentColor = AppPrimaryClr;
             appearance.iconSystemName = @"questionmark.circle.fill";
+            appearance.eyebrowText = nil;
             break;
         case PPAlertTypeTextInput:
             appearance.accentColor = AppPrimaryClr;
             appearance.iconSystemName = @"square.and.pencil.circle.fill";
+            appearance.eyebrowText = nil;
             break;
     }
-    appearance.badgeBackgroundColor = [appearance.accentColor colorWithAlphaComponent:0.13];
+    appearance.badgeBackgroundColor = [appearance.accentColor colorWithAlphaComponent:0.12];
     appearance.badgeForegroundColor = appearance.accentColor;
     return appearance;
 }
 
 @end
 
-@interface PPAlert ()
+// MARK: - PPAlert View
+
+@interface PPAlert () <UITextFieldDelegate, UIPointerInteractionDelegate>
+
 @property (nonatomic, assign) PPAlertType type;
 @property (nonatomic, copy) NSString *alertTitle;
 @property (nonatomic, copy) NSString *alertSubtitle;
@@ -99,13 +147,14 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
 @property (nonatomic, assign) BOOL secureEntry;
 @property (nonatomic, assign) UIKeyboardType keyboardType;
 @property (nonatomic, assign) BOOL shouldDismissOnBackgroundTap;
+
 @property (nonatomic, strong) UIVisualEffectView *backdropView;
 @property (nonatomic, strong) UIView *dimmingView;
-@property (nonatomic, strong) UIView *cardView;
-@property (nonatomic, strong) UIView *heroGlowView;
+@property (nonatomic, strong) UIView *cardContainerView;
 @property (nonatomic, strong) UIView *badgeView;
 @property (nonatomic, strong) UIImageView *iconView;
-@property (nonatomic, strong) UILabel *eyebrowLabel;
+@property (nonatomic, strong, nullable) UIView *eyebrowCapsule;
+@property (nonatomic, strong, nullable) UILabel *eyebrowLabel;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *subtitleLabel;
 @property (nonatomic, strong) UIView *inputContainerView;
@@ -113,13 +162,18 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
 @property (nonatomic, strong) UILabel *footnoteLabel;
 @property (nonatomic, strong) UIStackView *buttonStackView;
 @property (nonatomic, strong) NSLayoutConstraint *cardCenterYConstraint;
-@property (nonatomic, assign) BOOL isPresentingAlert;
+@property (nonatomic, strong) NSLayoutConstraint *cardWidthConstraint;
+
 @property (nonatomic, strong) PPAlertAppearance *appearance;
 @property (nonatomic, assign) BOOL didPreparePresentation;
 @property (nonatomic, assign) BOOL didRunPresentation;
+@property (nonatomic, assign) BOOL isPresentingAlert;
+
 @end
 
 @implementation PPAlert
+
+#pragma mark - Initializers
 
 - (instancetype)initWithType:(PPAlertType)type
                        title:(NSString *)title
@@ -130,7 +184,7 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
                confirmAction:(AlertCompletionBlock _Nullable)confirmAction
                 cancelAction:(void(^ _Nullable)(void))cancelAction {
     NSMutableArray<PPAlertActionItem *> *actions = [NSMutableArray array];
-    NSString *safeConfirmTitle = confirmTitle.length ? confirmTitle : kLang(@"OK");
+    NSString *safeConfirmTitle = confirmTitle.length ? confirmTitle : (kLang(@"OK") ?: @"OK");
     if (cancelTitle.length > 0) {
         [actions addObject:[PPAlertActionItem itemWithTitle:cancelTitle
                                                       style:PPAlertActionStyleCancel
@@ -151,7 +205,7 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
                   initialText:nil
                   secureEntry:NO
                  keyboardType:UIKeyboardTypeDefault
-  shouldDismissOnBackgroundTap:(cancelTitle.length > 0)];
+ shouldDismissOnBackgroundTap:(cancelTitle.length > 0)];
 }
 
 - (instancetype)initWithType:(PPAlertType)type
@@ -178,6 +232,7 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
     _secureEntry = secureEntry;
     _keyboardType = keyboardType;
     _shouldDismissOnBackgroundTap = shouldDismissOnBackgroundTap;
+
     self.backgroundColor = UIColor.clearColor;
     self.translatesAutoresizingMaskIntoConstraints = NO;
     self.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
@@ -194,97 +249,117 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
     [NSNotificationCenter.defaultCenter removeObserver:self];
 }
 
+#pragma mark - First-Principles Hierarchy Construction
+
 - (void)buildHierarchy {
-    UIBlurEffect *backdropEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark];
+    // 1. Ambient Blur Backdrop
+    UIBlurEffect *backdropEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterial];
     self.backdropView = [[UIVisualEffectView alloc] initWithEffect:backdropEffect];
     self.backdropView.translatesAutoresizingMaskIntoConstraints = NO;
     self.backdropView.userInteractionEnabled = YES;
     [self addSubview:self.backdropView];
 
+    // 2. Soft Dimming
     self.dimmingView = [[UIView alloc] init];
     self.dimmingView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.dimmingView.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.30];
+    self.dimmingView.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.35];
     [self addSubview:self.dimmingView];
 
+    // 3. Background Dismiss Trigger
     UIButton *dismissButton = [UIButton buttonWithType:UIButtonTypeCustom];
     dismissButton.translatesAutoresizingMaskIntoConstraints = NO;
     dismissButton.backgroundColor = UIColor.clearColor;
     [dismissButton addTarget:self action:@selector(backgroundTapped) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:dismissButton];
 
-    self.cardView = [[UIView alloc] init];
-    self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.cardView.backgroundColor = [AppForgroundColr colorWithAlphaComponent:0.94];
-    self.cardView.layer.cornerRadius = 30.0;
-    self.cardView.layer.cornerCurve = kCACornerCurveContinuous;
-    self.cardView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    self.cardView.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.08].CGColor;
-    self.cardView.layer.shadowColor = UIColor.blackColor.CGColor;
-    self.cardView.layer.shadowOpacity = 0.18;
-    self.cardView.layer.shadowRadius = 26.0;
-    self.cardView.layer.shadowOffset = CGSizeMake(0.0, 18.0);
-    [self addSubview:self.cardView];
+    // 4. Elevated Continuous Card Container
+    self.cardContainerView = [[UIView alloc] init];
+    self.cardContainerView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.cardContainerView.backgroundColor = AppForgroundColr;
+    self.cardContainerView.layer.cornerRadius = 28.0;
+    self.cardContainerView.layer.cornerCurve = kCACornerCurveContinuous;
+    self.cardContainerView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    self.cardContainerView.layer.borderColor = [PrimaryTextClr colorWithAlphaComponent:0.08].CGColor;
+    self.cardContainerView.layer.shadowColor = UIColor.blackColor.CGColor;
+    self.cardContainerView.layer.shadowOpacity = 0.16;
+    self.cardContainerView.layer.shadowRadius = 32.0;
+    self.cardContainerView.layer.shadowOffset = CGSizeMake(0.0, 16.0);
+    self.cardContainerView.clipsToBounds = NO;
+    self.cardContainerView.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self addSubview:self.cardContainerView];
 
-    self.heroGlowView = [[UIView alloc] init];
-    self.heroGlowView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.heroGlowView.layer.cornerRadius = 112.0;
-    self.heroGlowView.layer.cornerCurve = kCACornerCurveContinuous;
-    [self.cardView addSubview:self.heroGlowView];
-
+    // 5. Tactile Icon Badge
     self.badgeView = [[UIView alloc] init];
     self.badgeView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.badgeView.layer.cornerRadius = 30.0;
+    self.badgeView.layer.cornerRadius = 24.0;
     self.badgeView.layer.cornerCurve = kCACornerCurveContinuous;
-    [self.cardView addSubview:self.badgeView];
+    self.badgeView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    self.badgeView.layer.borderColor = [self.appearance.accentColor colorWithAlphaComponent:0.20].CGColor;
+    [self.cardContainerView addSubview:self.badgeView];
 
     self.iconView = [[UIImageView alloc] initWithImage:self.iconImage];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+    self.iconView.isAccessibilityElement = NO;
     [self.badgeView addSubview:self.iconView];
 
-    self.eyebrowLabel = [[UILabel alloc] init];
-    self.eyebrowLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.eyebrowLabel.font = PPFontBold(11);
-    self.eyebrowLabel.textColor = self.appearance.accentColor;
-    self.eyebrowLabel.adjustsFontForContentSizeCategory = YES;
-    self.eyebrowLabel.textAlignment = Language.alignmentForCurrentLanguage;
-    self.eyebrowLabel.numberOfLines = 1;
-    self.eyebrowLabel.text = [self eyebrowTextForType:self.type];
-    [self.cardView addSubview:self.eyebrowLabel];
+    // 6. Optional Eyebrow Semantic Pill (Only for alerts requiring category guidance)
+    BOOL hasEyebrow = (self.appearance.eyebrowText.length > 0);
+    if (hasEyebrow) {
+        self.eyebrowCapsule = [[UIView alloc] init];
+        self.eyebrowCapsule.translatesAutoresizingMaskIntoConstraints = NO;
+        self.eyebrowCapsule.backgroundColor = [self.appearance.accentColor colorWithAlphaComponent:0.10];
+        self.eyebrowCapsule.layer.cornerRadius = 11.0;
+        self.eyebrowCapsule.layer.cornerCurve = kCACornerCurveContinuous;
+        [self.cardContainerView addSubview:self.eyebrowCapsule];
 
+        self.eyebrowLabel = [[UILabel alloc] init];
+        self.eyebrowLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        self.eyebrowLabel.font = PPFontBold(10.5);
+        self.eyebrowLabel.textColor = self.appearance.accentColor;
+        self.eyebrowLabel.textAlignment = NSTextAlignmentCenter;
+        self.eyebrowLabel.numberOfLines = 1;
+        self.eyebrowLabel.text = self.appearance.eyebrowText;
+        self.eyebrowLabel.adjustsFontForContentSizeCategory = YES;
+        [self.eyebrowCapsule addSubview:self.eyebrowLabel];
+    }
+
+    // 8. Title Label (Centered Harmonic Axis)
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.font = PPFontBold(26);
+    self.titleLabel.font = PPFontBold(23.0);
     self.titleLabel.textColor = PrimaryTextClr;
     self.titleLabel.adjustsFontForContentSizeCategory = YES;
     self.titleLabel.numberOfLines = 0;
-    self.titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    self.titleLabel.textAlignment = NSTextAlignmentCenter;
     self.titleLabel.text = self.alertTitle;
-    [self.cardView addSubview:self.titleLabel];
+    [self.cardContainerView addSubview:self.titleLabel];
 
+    // 9. Subtitle Label
     self.subtitleLabel = [[UILabel alloc] init];
     self.subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.subtitleLabel.font = PPFontRegular(15);
-    self.subtitleLabel.textColor = SeconderyTextClr;
+    self.subtitleLabel.font = PPFontRegular(14.5);
+    self.subtitleLabel.textColor = [SeconderyTextClr colorWithAlphaComponent:0.86];
     self.subtitleLabel.adjustsFontForContentSizeCategory = YES;
     self.subtitleLabel.numberOfLines = 0;
-    self.subtitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    self.subtitleLabel.textAlignment = NSTextAlignmentCenter;
     self.subtitleLabel.text = self.alertSubtitle;
-    [self.cardView addSubview:self.subtitleLabel];
+    [self.cardContainerView addSubview:self.subtitleLabel];
 
+    // 10. Optional Text Input Container
     self.inputContainerView = [[UIView alloc] init];
     self.inputContainerView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.inputContainerView.backgroundColor = [AppBackgroundClr colorWithAlphaComponent:0.78];
-    self.inputContainerView.layer.cornerRadius = 22.0;
+    self.inputContainerView.backgroundColor = [AppBackgroundClr colorWithAlphaComponent:0.85];
+    self.inputContainerView.layer.cornerRadius = 16.0;
     self.inputContainerView.layer.cornerCurve = kCACornerCurveContinuous;
     self.inputContainerView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    self.inputContainerView.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.06].CGColor;
-    self.inputContainerView.hidden = self.type != PPAlertTypeTextInput;
-    [self.cardView addSubview:self.inputContainerView];
+    self.inputContainerView.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.12].CGColor;
+    self.inputContainerView.hidden = (self.type != PPAlertTypeTextInput);
+    [self.cardContainerView addSubview:self.inputContainerView];
 
     self.textField = [[UITextField alloc] init];
     self.textField.translatesAutoresizingMaskIntoConstraints = NO;
-    self.textField.font = PPFontMedium(17);
+    self.textField.font = PPFontMedium(16.0);
     self.textField.textColor = PrimaryTextClr;
     self.textField.tintColor = AppPrimaryClr;
     self.textField.placeholder = self.textPlaceholder ?: @"";
@@ -296,122 +371,133 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
     self.textField.borderStyle = UITextBorderStyleNone;
     self.textField.textAlignment = Language.alignmentForCurrentLanguage;
     self.textField.adjustsFontForContentSizeCategory = YES;
+    self.textField.delegate = self;
     [self.textField addTarget:self action:@selector(textFieldDidChange:) forControlEvents:UIControlEventEditingChanged];
-    [self.textField addTarget:self action:@selector(textFieldEditingDidBegin:) forControlEvents:UIControlEventEditingDidBegin];
-    [self.textField addTarget:self action:@selector(textFieldEditingDidEnd:) forControlEvents:UIControlEventEditingDidEnd];
     [self.inputContainerView addSubview:self.textField];
 
     self.footnoteLabel = [[UILabel alloc] init];
-    
     self.footnoteLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.footnoteLabel.font = PPFontRegular(12);
+    self.footnoteLabel.font = PPFontRegular(12.0);
     self.footnoteLabel.textColor = SeconderyTextClr;
     self.footnoteLabel.adjustsFontForContentSizeCategory = YES;
     self.footnoteLabel.numberOfLines = 0;
-    self.footnoteLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    self.footnoteLabel.textAlignment = NSTextAlignmentCenter;
     self.footnoteLabel.hidden = YES;
-    self.footnoteLabel.text = @"";
-    [self.cardView addSubview:self.footnoteLabel];
+    [self.cardContainerView addSubview:self.footnoteLabel];
 
+    // 11. Button Stack View
     self.buttonStackView = [[UIStackView alloc] init];
     self.buttonStackView.translatesAutoresizingMaskIntoConstraints = NO;
     self.buttonStackView.spacing = 10.0;
     self.buttonStackView.distribution = UIStackViewDistributionFillEqually;
-    [self.cardView addSubview:self.buttonStackView];
+    self.buttonStackView.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.cardContainerView addSubview:self.buttonStackView];
 
-    self.cardCenterYConstraint = [self.cardView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor];
+    // Constraints Architecture
+    self.cardCenterYConstraint = [self.cardContainerView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor];
 
-    [NSLayoutConstraint activateConstraints:@[
-        
+    BOOL isIPad = (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad);
+    CGFloat maxCardWidth = isIPad ? 460.0 : 380.0;
+    NSLayoutConstraint *cardWidthConstraint = [self.cardContainerView.widthAnchor constraintEqualToConstant:maxCardWidth];
+    cardWidthConstraint.priority = 999.0f;
+
+    NSMutableArray<NSLayoutConstraint *> *constraints = [NSMutableArray arrayWithArray:@[
+        // Backdrop
         [self.backdropView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.backdropView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.backdropView.topAnchor constraintEqualToAnchor:self.topAnchor],
         [self.backdropView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-        
+
+        // Dimming
         [self.dimmingView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [self.dimmingView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [self.dimmingView.topAnchor constraintEqualToAnchor:self.topAnchor],
         [self.dimmingView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-        
+
+        // Dismiss trigger
         [dismissButton.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
         [dismissButton.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
         [dismissButton.topAnchor constraintEqualToAnchor:self.topAnchor],
         [dismissButton.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
 
+        // Card Container Position & Proportions
         self.cardCenterYConstraint,
-        
-        [self.cardView.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.safeAreaLayoutGuide.leadingAnchor constant:20.0],
-        [self.cardView.trailingAnchor constraintLessThanOrEqualToAnchor:self.safeAreaLayoutGuide.trailingAnchor constant:-20.0],
-        [self.cardView.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
-        [self.cardView.widthAnchor constraintLessThanOrEqualToConstant:420.0],
-        [self.cardView.widthAnchor constraintEqualToAnchor:self.widthAnchor multiplier:0.86],
+        [self.cardContainerView.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+        [self.cardContainerView.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.safeAreaLayoutGuide.leadingAnchor constant:24.0],
+        [self.cardContainerView.trailingAnchor constraintLessThanOrEqualToAnchor:self.safeAreaLayoutGuide.trailingAnchor constant:-24.0],
+        cardWidthConstraint,
 
-        [self.heroGlowView.widthAnchor constraintEqualToConstant:224.0],
-        [self.heroGlowView.heightAnchor constraintEqualToConstant:224.0],
-        [self.heroGlowView.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:-84.0],
-        [self.heroGlowView.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:78.0],
+        // Centered Badge View
+        [self.badgeView.topAnchor constraintEqualToAnchor:self.cardContainerView.topAnchor constant:26.0],
+        [self.badgeView.centerXAnchor constraintEqualToAnchor:self.cardContainerView.centerXAnchor],
+        [self.badgeView.widthAnchor constraintEqualToConstant:56.0],
+        [self.badgeView.heightAnchor constraintEqualToConstant:56.0],
 
-        [self.badgeView.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:20.0],
-        [self.badgeView.centerXAnchor constraintEqualToAnchor:self.cardView.centerXAnchor],
-        [self.badgeView.widthAnchor constraintEqualToConstant:60.0],
-        [self.badgeView.heightAnchor constraintEqualToConstant:60.0],
-        
         [self.iconView.centerXAnchor constraintEqualToAnchor:self.badgeView.centerXAnchor],
         [self.iconView.centerYAnchor constraintEqualToAnchor:self.badgeView.centerYAnchor],
-        [self.iconView.widthAnchor constraintEqualToConstant:32.0],
-        [self.iconView.heightAnchor constraintEqualToConstant:32.0],
+        [self.iconView.widthAnchor constraintEqualToConstant:28.0],
+        [self.iconView.heightAnchor constraintEqualToConstant:28.0],
 
-        [self.eyebrowLabel.topAnchor constraintEqualToAnchor:self.badgeView.bottomAnchor constant:16.0],
-        [self.eyebrowLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:20.0],
-        [self.eyebrowLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-20.0],
+        // Title Horizontal Bounds
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.cardContainerView.leadingAnchor constant:22.0],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.cardContainerView.trailingAnchor constant:-22.0],
 
-        [self.titleLabel.topAnchor constraintEqualToAnchor:self.eyebrowLabel.bottomAnchor constant:8.0],
-        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.eyebrowLabel.leadingAnchor],
-        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.eyebrowLabel.trailingAnchor],
-
+        // Subtitle
         [self.subtitleLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:8.0],
-        [self.subtitleLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
-        [self.subtitleLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
+        [self.subtitleLabel.leadingAnchor constraintEqualToAnchor:self.cardContainerView.leadingAnchor constant:22.0],
+        [self.subtitleLabel.trailingAnchor constraintEqualToAnchor:self.cardContainerView.trailingAnchor constant:-22.0],
 
+        // Text Input
         [self.inputContainerView.topAnchor constraintEqualToAnchor:self.subtitleLabel.bottomAnchor constant:16.0],
-        [self.inputContainerView.leadingAnchor constraintEqualToAnchor:self.subtitleLabel.leadingAnchor],
-        [self.inputContainerView.trailingAnchor constraintEqualToAnchor:self.subtitleLabel.trailingAnchor],
+        [self.inputContainerView.leadingAnchor constraintEqualToAnchor:self.cardContainerView.leadingAnchor constant:22.0],
+        [self.inputContainerView.trailingAnchor constraintEqualToAnchor:self.cardContainerView.trailingAnchor constant:-22.0],
 
-        [self.textField.topAnchor constraintEqualToAnchor:self.inputContainerView.topAnchor constant:14.0],
-        [self.textField.leadingAnchor constraintEqualToAnchor:self.inputContainerView.leadingAnchor constant:16.0],
-        [self.textField.trailingAnchor constraintEqualToAnchor:self.inputContainerView.trailingAnchor constant:-16.0],
-        [self.textField.bottomAnchor constraintEqualToAnchor:self.inputContainerView.bottomAnchor constant:-14.0],
-        [self.textField.heightAnchor constraintGreaterThanOrEqualToConstant:24.0],
+        [self.textField.topAnchor constraintEqualToAnchor:self.inputContainerView.topAnchor constant:12.0],
+        [self.textField.leadingAnchor constraintEqualToAnchor:self.inputContainerView.leadingAnchor constant:14.0],
+        [self.textField.trailingAnchor constraintEqualToAnchor:self.inputContainerView.trailingAnchor constant:-14.0],
+        [self.textField.bottomAnchor constraintEqualToAnchor:self.inputContainerView.bottomAnchor constant:-12.0],
 
-        [self.footnoteLabel.topAnchor constraintEqualToAnchor:self.inputContainerView.bottomAnchor constant:10.0],
-        [self.footnoteLabel.leadingAnchor constraintEqualToAnchor:self.subtitleLabel.leadingAnchor constant:2.0],
-        [self.footnoteLabel.trailingAnchor constraintEqualToAnchor:self.subtitleLabel.trailingAnchor constant:-2.0],
+        // Footnote
+        [self.footnoteLabel.topAnchor constraintEqualToAnchor:self.inputContainerView.bottomAnchor constant:8.0],
+        [self.footnoteLabel.leadingAnchor constraintEqualToAnchor:self.cardContainerView.leadingAnchor constant:22.0],
+        [self.footnoteLabel.trailingAnchor constraintEqualToAnchor:self.cardContainerView.trailingAnchor constant:-22.0],
 
-        [self.buttonStackView.topAnchor constraintEqualToAnchor:(self.type == PPAlertTypeTextInput ? self.footnoteLabel.bottomAnchor : self.subtitleLabel.bottomAnchor) constant:(self.type == PPAlertTypeTextInput ? 18.0 : 20.0)],
-        [self.buttonStackView.leadingAnchor constraintEqualToAnchor:self.subtitleLabel.leadingAnchor],
-        [self.buttonStackView.trailingAnchor constraintEqualToAnchor:self.subtitleLabel.trailingAnchor],
-        [self.buttonStackView.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor constant:-20.0]
+        // Action Buttons
+        [self.buttonStackView.topAnchor constraintEqualToAnchor:(self.type == PPAlertTypeTextInput ? self.footnoteLabel.bottomAnchor : self.subtitleLabel.bottomAnchor) constant:22.0],
+        [self.buttonStackView.leadingAnchor constraintEqualToAnchor:self.cardContainerView.leadingAnchor constant:20.0],
+        [self.buttonStackView.trailingAnchor constraintEqualToAnchor:self.cardContainerView.trailingAnchor constant:-20.0],
+        [self.buttonStackView.bottomAnchor constraintEqualToAnchor:self.cardContainerView.bottomAnchor constant:-22.0]
     ]];
+
+    if (hasEyebrow && self.eyebrowCapsule && self.eyebrowLabel) {
+        [constraints addObjectsFromArray:@[
+            [self.eyebrowCapsule.topAnchor constraintEqualToAnchor:self.badgeView.bottomAnchor constant:14.0],
+            [self.eyebrowCapsule.centerXAnchor constraintEqualToAnchor:self.cardContainerView.centerXAnchor],
+            [self.eyebrowCapsule.heightAnchor constraintEqualToConstant:22.0],
+
+            [self.eyebrowLabel.leadingAnchor constraintEqualToAnchor:self.eyebrowCapsule.leadingAnchor constant:10.0],
+            [self.eyebrowLabel.trailingAnchor constraintEqualToAnchor:self.eyebrowCapsule.trailingAnchor constant:-10.0],
+            [self.eyebrowLabel.centerYAnchor constraintEqualToAnchor:self.eyebrowCapsule.centerYAnchor],
+
+            [self.titleLabel.topAnchor constraintEqualToAnchor:self.eyebrowCapsule.bottomAnchor constant:10.0]
+        ]];
+    } else {
+        [constraints addObject:[self.titleLabel.topAnchor constraintEqualToAnchor:self.badgeView.bottomAnchor constant:16.0]];
+    }
+
+    [NSLayoutConstraint activateConstraints:constraints];
 }
 
 - (void)applyStyling {
-    self.heroGlowView.backgroundColor = [self.appearance.accentColor colorWithAlphaComponent:0.08];
     self.badgeView.backgroundColor = self.appearance.badgeBackgroundColor;
     self.iconView.tintColor = self.appearance.badgeForegroundColor;
-    self.inputContainerView.backgroundColor = [AppForgroundColr colorWithAlphaComponent:0.98];
-    self.inputContainerView.layer.borderColor = [PrimaryTextClr colorWithAlphaComponent:0.10].CGColor;
-    self.textField.attributedPlaceholder = [[NSAttributedString alloc] initWithString:self.textPlaceholder ?: @""
-                                                                            attributes:@{
-        NSForegroundColorAttributeName: [SeconderyTextClr colorWithAlphaComponent:0.72],
-        NSFontAttributeName: self.textField.font ?: PPFontMedium(17)
-    }];
-    [self pp_updateInputFieldAppearanceFocused:NO hasText:PPAlertTrimmedText(self.textField.text).length > 0];
 }
 
+#pragma mark - Action Buttons & iPad Pointer Interactions
+
 - (void)buildActions {
-    self.buttonStackView.axis = self.actionItems.count >= 3 ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal;
-    self.buttonStackView.spacing = self.actionItems.count >= 3 ? 10.0 : 12.0;
-    self.buttonStackView.distribution = UIStackViewDistributionFillEqually;
+    self.buttonStackView.axis = (self.actionItems.count >= 3) ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal;
+    self.buttonStackView.spacing = 10.0;
 
     for (NSInteger idx = 0; idx < self.actionItems.count; idx += 1) {
         PPAlertActionItem *item = self.actionItems[idx];
@@ -419,70 +505,100 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
         button.tag = idx;
         [button addTarget:self action:@selector(actionButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
         [self.buttonStackView addArrangedSubview:button];
-        [button.heightAnchor constraintEqualToConstant:54.0].active = YES;
+        [button.heightAnchor constraintEqualToConstant:50.0].active = YES;
+
+        // iPad Pointer Hover Integration
+        if (@available(iOS 13.4, *)) {
+            UIPointerInteraction *pointer = [[UIPointerInteraction alloc] initWithDelegate:self];
+            [button addInteraction:pointer];
+        }
     }
 }
 
 - (UIButton *)actionButtonForItem:(PPAlertActionItem *)item {
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
     button.translatesAutoresizingMaskIntoConstraints = NO;
-    button.layer.cornerRadius = 20.0;
+    button.layer.cornerRadius = 18.0;
     button.layer.cornerCurve = kCACornerCurveContinuous;
-    button.titleLabel.font = (item.style == PPAlertActionStylePrimary || item.style == PPAlertActionStyleCancel) ? PPFontBold(16) : PPFontMedium(16);
+    button.titleLabel.font = (item.style == PPAlertActionStylePrimary || item.style == PPAlertActionStyleDestructive) ? PPFontBold(16.0) : PPFontMedium(15.5);
     button.titleLabel.adjustsFontForContentSizeCategory = YES;
     [button setTitle:item.title forState:UIControlStateNormal];
 
-    UIColor *backgroundColor = AppForgroundColr;
-    UIColor *titleColor = PrimaryTextClr;
-    UIColor *borderColor = [SeconderyTextClr colorWithAlphaComponent:0.08];
-
     switch (item.style) {
         case PPAlertActionStylePrimary:
-            backgroundColor = self.appearance.accentColor;
-            titleColor = UIColor.whiteColor;
-            borderColor = UIColor.clearColor;
+            button.backgroundColor = self.appearance.accentColor;
+            [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+            button.layer.shadowColor = self.appearance.accentColor.CGColor;
+            button.layer.shadowOpacity = 0.28;
+            button.layer.shadowRadius = 8.0;
+            button.layer.shadowOffset = CGSizeMake(0.0, 4.0);
             break;
-        case PPAlertActionStyleDestructive:
-            backgroundColor = [UIColor ppError];
-            titleColor = UIColor.whiteColor;
-            borderColor = UIColor.clearColor;
-            break;
-        case PPAlertActionStyleSecondary:
-            backgroundColor = [AppBackgroundClr colorWithAlphaComponent:0.82];
-            titleColor = PrimaryTextClr;
-            borderColor = [SeconderyTextClr colorWithAlphaComponent:0.08];
-            break;
-        case PPAlertActionStyleCancel:
-            backgroundColor = [AppForgroundColr colorWithAlphaComponent:0.98];
-            titleColor = [PrimaryTextClr colorWithAlphaComponent:0.92];
-            borderColor = [PrimaryTextClr colorWithAlphaComponent:0.14];
-            break;
-    }
 
-    button.backgroundColor = backgroundColor;
-    button.layer.borderWidth = borderColor == UIColor.clearColor ? 0.0 : (1.0 / UIScreen.mainScreen.scale);
-    button.layer.borderColor = borderColor.CGColor;
-    [button setTitleColor:titleColor forState:UIControlStateNormal];
-    if (item.style == PPAlertActionStyleCancel) {
-        button.layer.shadowColor = UIColor.blackColor.CGColor;
-        button.layer.shadowOpacity = 0.05;
-        button.layer.shadowRadius = 10.0;
-        button.layer.shadowOffset = CGSizeMake(0.0, 4.0);
+        case PPAlertActionStyleDestructive:
+            button.backgroundColor = [UIColor ppError];
+            [button setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+            button.layer.shadowColor = [UIColor ppError].CGColor;
+            button.layer.shadowOpacity = 0.28;
+            button.layer.shadowRadius = 8.0;
+            button.layer.shadowOffset = CGSizeMake(0.0, 4.0);
+            break;
+
+        case PPAlertActionStyleCancel:
+        case PPAlertActionStyleSecondary:
+        default:
+            button.backgroundColor = [AppBackgroundClr colorWithAlphaComponent:0.92];
+            [button setTitleColor:PrimaryTextClr forState:UIControlStateNormal];
+            button.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+            button.layer.borderColor = [SeconderyTextClr colorWithAlphaComponent:0.12].CGColor;
+            break;
     }
 
     return button;
 }
 
-- (NSString *)eyebrowTextForType:(PPAlertType)type {
-    switch (type) {
-        case PPAlertTypeSuccess: return @"SUCCESS";
-        case PPAlertTypeError: return @"ACTION REQUIRED";
-        case PPAlertTypeWarning: return @"PLEASE REVIEW";
-        case PPAlertTypeInfo: return @"DETAILS";
-        case PPAlertTypeConfirmation: return @"CONFIRMATION";
-        case PPAlertTypeTextInput: return @"INPUT";
+#pragma mark - Hardware Keyboard Support (iPad & Simulators)
+
+- (BOOL)canBecomeFirstResponder {
+    return YES;
+}
+
+- (NSArray<UIKeyCommand *> *)keyCommands {
+    return @[
+        [UIKeyCommand keyCommandWithInput:@"\r"
+                            modifierFlags:0
+                                   action:@selector(pp_keyboardConfirmAction)],
+        [UIKeyCommand keyCommandWithInput:UIKeyInputEscape
+                            modifierFlags:0
+                                   action:@selector(pp_keyboardCancelAction)]
+    ];
+}
+
+- (void)pp_keyboardConfirmAction {
+    for (NSInteger i = (NSInteger)self.actionItems.count - 1; i >= 0; i--) {
+        PPAlertActionItem *item = self.actionItems[i];
+        if (item.style == PPAlertActionStylePrimary || item.style == PPAlertActionStyleDestructive) {
+            [self handleActionIndex:i];
+            return;
+        }
     }
 }
+
+- (void)pp_keyboardCancelAction {
+    [self backgroundTapped];
+}
+
+#pragma mark - UIPointerInteractionDelegate (iPad)
+
+- (nullable UIPointerStyle *)pointerInteraction:(UIPointerInteraction *)interaction
+                               styleForRegion:(UIPointerRegion *)region API_AVAILABLE(ios(13.4)) {
+    if ([interaction.view isKindOfClass:[UIButton class]]) {
+        UITargetedPreview *preview = [[UITargetedPreview alloc] initWithView:interaction.view];
+        return [UIPointerStyle styleWithEffect:[UIPointerHighlightEffect effectWithPreview:preview] shape:nil];
+    }
+    return nil;
+}
+
+#pragma mark - Keyboard Management
 
 - (void)registerForKeyboard {
     if (self.type != PPAlertTypeTextInput) return;
@@ -490,298 +606,209 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
     [NSNotificationCenter.defaultCenter addObserver:self selector:@selector(keyboardWillHide:) name:UIKeyboardWillHideNotification object:nil];
 }
 
-- (void)preparePresentationState {
-    if (self.didPreparePresentation) return;
-    self.didPreparePresentation = YES;
-    self.backdropView.alpha = 0.0;
-    self.dimmingView.alpha = 0.0;
-    self.cardView.alpha = 0.0;
-    self.cardView.transform = CGAffineTransformMakeScale(1.04, 1.04);
-    self.titleLabel.alpha = 0.0;
-    self.titleLabel.transform = CGAffineTransformMakeTranslation(0.0, 10.0);
-    self.subtitleLabel.alpha = 0.0;
-    self.subtitleLabel.transform = CGAffineTransformMakeTranslation(0.0, 12.0);
-    self.buttonStackView.alpha = 0.0;
-    self.buttonStackView.transform = CGAffineTransformMakeTranslation(0.0, 10.0);
-    self.inputContainerView.alpha = self.type == PPAlertTypeTextInput ? 0.0 : 1.0;
-    if (self.type == PPAlertTypeTextInput) {
-        self.inputContainerView.transform = CGAffineTransformMakeTranslation(0.0, 12.0);
-        self.footnoteLabel.alpha = 0.0;
-        self.footnoteLabel.transform = CGAffineTransformMakeTranslation(0.0, 10.0);
-    }
-}
-
-- (void)showInViewController:(UIViewController *)vc {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self prepareOverlayWindowForViewController:vc];
-        [ppAlertRootViewController.view addSubview:self];
-        [NSLayoutConstraint activateConstraints:@[
-            [self.leadingAnchor constraintEqualToAnchor:ppAlertRootViewController.view.leadingAnchor],
-            [self.trailingAnchor constraintEqualToAnchor:ppAlertRootViewController.view.trailingAnchor],
-            [self.topAnchor constraintEqualToAnchor:ppAlertRootViewController.view.topAnchor],
-            [self.bottomAnchor constraintEqualToAnchor:ppAlertRootViewController.view.bottomAnchor]
-        ]];
-        [ppAlertRootViewController.view layoutIfNeeded];
-        [self runPresentationIfNeeded];
-    });
-}
-
-- (void)prepareOverlayWindowForViewController:(UIViewController *)vc {
-    if (ppAlertOverlayWindow) return;
-
-    UIWindowScene *scene = vc.view.window.windowScene;
-    if (!scene) {
-        for (UIScene *connectedScene in UIApplication.sharedApplication.connectedScenes) {
-            if ([connectedScene isKindOfClass:[UIWindowScene class]] &&
-                connectedScene.activationState == UISceneActivationStateForegroundActive) {
-                scene = (UIWindowScene *)connectedScene;
-                break;
-            }
-        }
-    }
-
-    if (scene) {
-        ppAlertOverlayWindow = [[UIWindow alloc] initWithWindowScene:scene];
-    } else {
-        ppAlertOverlayWindow = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
-    }
-    ppAlertOverlayWindow.backgroundColor = UIColor.clearColor;
-    ppAlertOverlayWindow.windowLevel = UIWindowLevelAlert + 1;
-    ppAlertRootViewController = [[UIViewController alloc] init];
-    ppAlertRootViewController.view.backgroundColor = UIColor.clearColor;
-    ppAlertOverlayWindow.rootViewController = ppAlertRootViewController;
-    ppAlertOverlayWindow.hidden = NO;
-}
-
-- (void)runPresentationIfNeeded {
-    if (self.didRunPresentation) return;
-    self.didRunPresentation = YES;
-
-    BOOL reduceMotion = UIAccessibilityIsReduceMotionEnabled();
-    if (reduceMotion) {
-        self.backdropView.alpha = 1.0;
-        self.dimmingView.alpha = 1.0;
-        self.cardView.alpha = 1.0;
-        self.cardView.transform = CGAffineTransformIdentity;
-        self.titleLabel.alpha = 1.0;
-        self.titleLabel.transform = CGAffineTransformIdentity;
-        self.subtitleLabel.alpha = 1.0;
-        self.subtitleLabel.transform = CGAffineTransformIdentity;
-        self.buttonStackView.alpha = 1.0;
-        self.buttonStackView.transform = CGAffineTransformIdentity;
-        self.inputContainerView.alpha = 1.0;
-        self.inputContainerView.transform = CGAffineTransformIdentity;
-        self.footnoteLabel.alpha = 1.0;
-        self.footnoteLabel.transform = CGAffineTransformIdentity;
-        if (self.type == PPAlertTypeTextInput) {
-            [self.textField becomeFirstResponder];
-        }
-        return;
-    }
-
-    UIImpactFeedbackGenerator *feedback = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleSoft];
-    [feedback prepare];
-
-    [UIView animateWithDuration:0.22 delay:0.0 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
-        self.backdropView.alpha = 1.0;
-        self.dimmingView.alpha = 1.0;
-    } completion:nil];
-
-    [UIView animateWithDuration:0.46
-                          delay:0.0
-         usingSpringWithDamping:0.88
-          initialSpringVelocity:0.28
-                        options:UIViewAnimationOptionAllowUserInteraction
-                     animations:^{
-        self.cardView.alpha = 1.0;
-        self.cardView.transform = CGAffineTransformIdentity;
-    } completion:^(__unused BOOL finished) {
-        [feedback impactOccurred];
-        if (self.type == PPAlertTypeTextInput) {
-            [self.textField becomeFirstResponder];
-        }
-    }];
-
-    [UIView animateWithDuration:0.30 delay:0.06 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
-        self.titleLabel.alpha = 1.0;
-        self.titleLabel.transform = CGAffineTransformIdentity;
-    } completion:nil];
-    [UIView animateWithDuration:0.30 delay:0.10 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
-        self.subtitleLabel.alpha = 1.0;
-        self.subtitleLabel.transform = CGAffineTransformIdentity;
-    } completion:nil];
-    [UIView animateWithDuration:0.32 delay:0.14 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
-        self.inputContainerView.alpha = 1.0;
-        self.inputContainerView.transform = CGAffineTransformIdentity;
-        self.footnoteLabel.alpha = 1.0;
-        self.footnoteLabel.transform = CGAffineTransformIdentity;
-    } completion:nil];
-    [UIView animateWithDuration:0.34 delay:0.18 options:UIViewAnimationOptionCurveEaseOut | UIViewAnimationOptionAllowUserInteraction animations:^{
-        self.buttonStackView.alpha = 1.0;
-        self.buttonStackView.transform = CGAffineTransformIdentity;
-    } completion:nil];
-}
-
-- (void)backgroundTapped {
-    if (!self.shouldDismissOnBackgroundTap) return;
-    PPAlertActionItem *cancelItem = nil;
-    for (PPAlertActionItem *item in self.actionItems) {
-        if (item.style == PPAlertActionStyleCancel) {
-            cancelItem = item;
-            break;
-        }
-    }
-    [self dismissWithSelectedAction:cancelItem didConfirm:NO];
-}
-
-- (void)actionButtonTapped:(UIButton *)sender {
-    NSInteger idx = sender.tag;
-    if (idx < 0 || idx >= self.actionItems.count) return;
-    [self dismissWithSelectedAction:self.actionItems[idx] didConfirm:(self.actionItems[idx].style != PPAlertActionStyleCancel)];
-}
-
-- (void)dismissWithSelectedAction:(PPAlertActionItem * _Nullable)selectedAction didConfirm:(BOOL)didConfirm {
-    if (!self.superview || self.isPresentingAlert) return;
-    self.isPresentingAlert = YES;
-
-    if (selectedAction.style == PPAlertActionStylePrimary || selectedAction.style == PPAlertActionStyleDestructive) {
-        UINotificationFeedbackGenerator *feedback = [[UINotificationFeedbackGenerator alloc] init];
-        [feedback notificationOccurred:(selectedAction.style == PPAlertActionStyleDestructive ? UINotificationFeedbackTypeWarning : UINotificationFeedbackTypeSuccess)];
-    }
-
-    [self endEditing:YES];
-    BOOL reduceMotion = UIAccessibilityIsReduceMotionEnabled();
-    NSTimeInterval duration = reduceMotion ? 0.12 : 0.22;
-    [UIView animateWithDuration:duration
-                          delay:0.0
-                        options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionBeginFromCurrentState
-                     animations:^{
-        self.backdropView.alpha = 0.0;
-        self.dimmingView.alpha = 0.0;
-        self.cardView.alpha = 0.0;
-        self.cardView.transform = reduceMotion ? CGAffineTransformIdentity : CGAffineTransformConcat(CGAffineTransformMakeTranslation(0.0, 12.0), CGAffineTransformMakeScale(0.96, 0.96));
-    } completion:^(__unused BOOL finished) {
-        [self removeFromSuperview];
-        [self cleanupOverlayWindowIfPossible];
-        if (selectedAction.completion) {
-            selectedAction.completion(self.textField.text, didConfirm);
-        }
-        if (selectedAction.simpleCompletion) {
-            selectedAction.simpleCompletion();
-        }
-        self.isPresentingAlert = NO;
-    }];
-}
-
-- (void)cleanupOverlayWindowIfPossible {
-    if (ppAlertRootViewController.view.subviews.count > 0) return;
-    ppAlertOverlayWindow.hidden = YES;
-    ppAlertOverlayWindow.rootViewController = nil;
-    ppAlertOverlayWindow = nil;
-    ppAlertRootViewController = nil;
-}
-
 - (void)keyboardWillChangeFrame:(NSNotification *)notification {
-    if (self.type != PPAlertTypeTextInput) return;
-    NSDictionary *info = notification.userInfo ?: @{};
-    CGRect keyboardFrame = [info[UIKeyboardFrameEndUserInfoKey] CGRectValue];
-    NSTimeInterval duration = [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
-    UIViewAnimationCurve curve = [info[UIKeyboardAnimationCurveUserInfoKey] integerValue];
-    CGRect keyboardFrameInSelf = [self convertRect:keyboardFrame fromView:nil];
-    CGFloat overlap = CGRectGetMaxY(self.cardView.frame) - keyboardFrameInSelf.origin.y + 20.0;
-    self.cardCenterYConstraint.constant = overlap > 0.0 ? -MIN(overlap * 0.5, 120.0) : 0.0;
-    [UIView animateWithDuration:duration
-                          delay:0.0
-                        options:(curve << 16) | UIViewAnimationOptionBeginFromCurrentState
-                     animations:^{
+    CGRect keyboardFrame = [notification.userInfo[UIKeyboardFrameEndUserInfoKey] CGRectValue];
+    NSTimeInterval duration = [notification.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    UIViewAnimationOptions curve = [notification.userInfo[UIKeyboardAnimationCurveUserInfoKey] unsignedIntegerValue] << 16;
+
+    CGFloat keyboardHeight = CGRectGetHeight(keyboardFrame);
+    self.cardCenterYConstraint.constant = -keyboardHeight * 0.42;
+
+    [UIView animateWithDuration:duration delay:0.0 options:curve animations:^{
         [self layoutIfNeeded];
     } completion:nil];
 }
 
 - (void)keyboardWillHide:(NSNotification *)notification {
-    NSDictionary *info = notification.userInfo ?: @{};
-    NSTimeInterval duration = [info[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
-    UIViewAnimationCurve curve = [info[UIKeyboardAnimationCurveUserInfoKey] integerValue];
+    NSTimeInterval duration = [notification.userInfo[UIKeyboardAnimationDurationUserInfoKey] doubleValue];
+    UIViewAnimationOptions curve = [notification.userInfo[UIKeyboardAnimationCurveUserInfoKey] unsignedIntegerValue] << 16;
+
     self.cardCenterYConstraint.constant = 0.0;
-    [UIView animateWithDuration:duration
-                          delay:0.0
-                        options:(curve << 16) | UIViewAnimationOptionBeginFromCurrentState
-                     animations:^{
+    [UIView animateWithDuration:duration delay:0.0 options:curve animations:^{
         [self layoutIfNeeded];
     } completion:nil];
 }
 
-- (void)textFieldEditingDidBegin:(UITextField *)textField {
-    if (self.type != PPAlertTypeTextInput) return;
-    [self pp_updateInputFieldAppearanceFocused:YES hasText:PPAlertTrimmedText(textField.text).length > 0];
-}
-
-- (void)textFieldEditingDidEnd:(UITextField *)textField {
-    if (self.type != PPAlertTypeTextInput) return;
-    [self pp_updateInputFieldAppearanceFocused:NO hasText:PPAlertTrimmedText(textField.text).length > 0];
-}
-
 - (void)textFieldDidChange:(UITextField *)textField {
-    if (self.type != PPAlertTypeTextInput) return;
-    BOOL hasText = PPAlertTrimmedText(textField.text).length > 0;
-    [self pp_updateInputFieldAppearanceFocused:textField.isEditing hasText:hasText];
+    // Dynamic validation hook if needed
 }
 
-- (void)pp_updateInputFieldAppearanceFocused:(BOOL)focused hasText:(BOOL)hasText {
-    UIColor *borderColor = focused
-        ? [self.appearance.accentColor colorWithAlphaComponent:0.28]
-        : (hasText ? [PrimaryTextClr colorWithAlphaComponent:0.16] : [PrimaryTextClr colorWithAlphaComponent:0.10]);
-    UIColor *backgroundColor = focused
-        ? [self.appearance.accentColor colorWithAlphaComponent:0.05]
-        : [AppForgroundColr colorWithAlphaComponent:0.98];
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [textField resignFirstResponder];
+    [self pp_keyboardConfirmAction];
+    return YES;
+}
 
-    self.inputContainerView.backgroundColor = backgroundColor;
-    self.inputContainerView.layer.borderColor = borderColor.CGColor;
+#pragma mark - Presentation & Dismissal Lifecycle
+
+- (void)preparePresentationState {
+    if (self.didPreparePresentation) return;
+    self.didPreparePresentation = YES;
+
+    self.backdropView.alpha = 0.0;
+    self.dimmingView.alpha = 0.0;
+    self.cardContainerView.alpha = 0.0;
+
+    if (!UIAccessibilityIsReduceMotionEnabled()) {
+        self.cardContainerView.transform = CGAffineTransformMakeScale(0.92, 0.92);
+    }
+}
+
+- (void)showInViewController:(UIViewController *)vc {
+    UIWindow *window = vc.view.window ?: [UIApplication sharedApplication].keyWindow;
+    if (!window) {
+        window = [UIApplication sharedApplication].windows.firstObject;
+    }
+    if (!window) return;
+
+    [window addSubview:self];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.leadingAnchor constraintEqualToAnchor:window.leadingAnchor],
+        [self.trailingAnchor constraintEqualToAnchor:window.trailingAnchor],
+        [self.topAnchor constraintEqualToAnchor:window.topAnchor],
+        [self.bottomAnchor constraintEqualToAnchor:window.bottomAnchor]
+    ]];
+
+    [self layoutIfNeeded];
+    [self becomeFirstResponder];
+
+    // Trigger Authentic Apple Semantic Haptic Feedback
+    if (@available(iOS 10.0, *)) {
+        UINotificationFeedbackGenerator *feedback = [[UINotificationFeedbackGenerator alloc] init];
+        switch (self.type) {
+            case PPAlertTypeSuccess:
+                [feedback notificationOccurred:UINotificationFeedbackTypeSuccess];
+                break;
+            case PPAlertTypeError:
+                [feedback notificationOccurred:UINotificationFeedbackTypeError];
+                break;
+            case PPAlertTypeWarning:
+            case PPAlertTypeConfirmation:
+                [feedback notificationOccurred:UINotificationFeedbackTypeWarning];
+                break;
+            default:
+                break;
+        }
+    }
+
+    // Spring Animation Presentation
+    if (UIAccessibilityIsReduceMotionEnabled()) {
+        [UIView animateWithDuration:0.18 animations:^{
+            self.backdropView.alpha = 1.0;
+            self.dimmingView.alpha = 1.0;
+            self.cardContainerView.alpha = 1.0;
+        } completion:^(BOOL finished) {
+            if (self.type == PPAlertTypeTextInput) {
+                [self.textField becomeFirstResponder];
+            }
+        }];
+    } else {
+        [UIView animateWithDuration:0.38
+                              delay:0.0
+             usingSpringWithDamping:0.82
+              initialSpringVelocity:0.5
+                            options:UIViewAnimationOptionCurveEaseOut
+                         animations:^{
+            self.backdropView.alpha = 1.0;
+            self.dimmingView.alpha = 1.0;
+            self.cardContainerView.alpha = 1.0;
+            self.cardContainerView.transform = CGAffineTransformIdentity;
+        } completion:^(BOOL finished) {
+            if (self.type == PPAlertTypeTextInput) {
+                [self.textField becomeFirstResponder];
+            }
+        }];
+    }
+}
+
+- (void)dismissWithCompletion:(void(^ _Nullable)(void))completion {
+    [self endEditing:YES];
+    [self resignFirstResponder];
+
+    if (UIAccessibilityIsReduceMotionEnabled()) {
+        [UIView animateWithDuration:0.15 animations:^{
+            self.backdropView.alpha = 0.0;
+            self.dimmingView.alpha = 0.0;
+            self.cardContainerView.alpha = 0.0;
+        } completion:^(BOOL finished) {
+            [self removeFromSuperview];
+            if (completion) completion();
+        }];
+    } else {
+        [UIView animateWithDuration:0.22
+                              delay:0.0
+                            options:UIViewAnimationOptionCurveEaseIn
+                         animations:^{
+            self.backdropView.alpha = 0.0;
+            self.dimmingView.alpha = 0.0;
+            self.cardContainerView.alpha = 0.0;
+            self.cardContainerView.transform = CGAffineTransformMakeScale(0.94, 0.94);
+        } completion:^(BOOL finished) {
+            [self removeFromSuperview];
+            if (completion) completion();
+        }];
+    }
+}
+
+- (void)backgroundTapped {
+    if (!self.shouldDismissOnBackgroundTap) return;
+
+    for (NSInteger idx = 0; idx < self.actionItems.count; idx += 1) {
+        if (self.actionItems[idx].style == PPAlertActionStyleCancel) {
+            [self handleActionIndex:idx];
+            return;
+        }
+    }
+    [self dismissWithCompletion:nil];
+}
+
+- (void)actionButtonTapped:(UIButton *)sender {
+    if (@available(iOS 10.0, *)) {
+        UIImpactFeedbackGenerator *impact = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+        [impact impactOccurred];
+    }
+    [self handleActionIndex:sender.tag];
+}
+
+- (void)handleActionIndex:(NSInteger)idx {
+    if (idx < 0 || idx >= self.actionItems.count) return;
+    PPAlertActionItem *item = self.actionItems[idx];
+    NSString *inputText = PPAlertTrimmedText(self.textField.text);
+
+    [self dismissWithCompletion:^{
+        if (item.completion) {
+            item.completion(inputText, (item.style != PPAlertActionStyleCancel));
+        } else if (item.simpleCompletion) {
+            item.simpleCompletion();
+        }
+    }];
 }
 
 @end
 
+// MARK: - PPAlertHelper Facade Implementation
+
 @implementation PPAlertHelper
 
-+ (UIViewController *)presenterForViewController:(UIViewController *)vc {
-    UIViewController *presenter = vc;
-    if (!presenter) {
-        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
-            UIWindowScene *windowScene = (UIWindowScene *)scene;
-            for (UIWindow *window in windowScene.windows) {
-                if (window.isKeyWindow && window.rootViewController) {
-                    presenter = window.rootViewController;
-                    break;
-                }
-            }
-            if (presenter) break;
-        }
-    }
-    if (!presenter) {
-        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-            if (![scene isKindOfClass:[UIWindowScene class]]) continue;
-            UIWindowScene *windowScene = (UIWindowScene *)scene;
-            for (UIWindow *window in windowScene.windows) {
-                if (window.rootViewController) {
-                    presenter = window.rootViewController;
-                    break;
-                }
-            }
-            if (presenter) break;
-        }
-    }
-    while (presenter.presentedViewController) {
-        presenter = presenter.presentedViewController;
-    }
-    return presenter;
++ (void)showSuccessIn:(UIViewController *)vc
+                title:(NSString *)title
+             subtitle:(NSString *)subtitle {
+    [self showSuccessIn:vc title:title subtitle:subtitle OKAction:nil];
 }
 
-+ (UIImage *)symbolImageNamed:(NSString *)systemName fallbackType:(PPAlertType)type {
-    UIImage *image = [UIImage systemImageNamed:systemName];
-    if (image) return image;
-    PPAlertAppearance *appearance = [PPAlertAppearance appearanceForType:type];
-    return [UIImage systemImageNamed:appearance.iconSystemName];
++ (void)showSuccessIn:(UIViewController *)vc
+                title:(NSString *)title
+             subtitle:(NSString *)subtitle
+             OKAction:(AlertCompletionBlock _Nullable)okAction {
+    PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeSuccess
+                                             title:title
+                                          subtitle:subtitle
+                                              icon:nil
+                                      confirmTitle:kLang(@"OK") ?: @"OK"
+                                       cancelTitle:nil
+                                     confirmAction:okAction
+                                      cancelAction:nil];
+    [alert showInViewController:vc];
 }
 
 + (void)showSuccessIn:(UIViewController *)vc
@@ -789,100 +816,81 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
              subtitle:(NSString *)subtitle
         confirmAction:(AlertCompletionBlock _Nullable)confirmAction
          cancelAction:(void (^)(void))cancelAction {
-    UIImage *icon = [self symbolImageNamed:@"checkmark.seal.fill" fallbackType:PPAlertTypeSuccess];
     PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeSuccess
                                              title:title
-                                          subtitle:subtitle ?: @""
-                                              icon:icon
-                                       confirmTitle:kLang(@"OK")
-                                        cancelTitle:nil
-                                      confirmAction:confirmAction
-                                       cancelAction:cancelAction];
-    [alert showInViewController:[self presenterForViewController:vc]];
+                                          subtitle:subtitle
+                                              icon:nil
+                                      confirmTitle:kLang(@"OK") ?: @"OK"
+                                       cancelTitle:kLang(@"Cancel") ?: @"Cancel"
+                                     confirmAction:confirmAction
+                                      cancelAction:cancelAction];
+    [alert showInViewController:vc];
 }
 
-+ (void)showSuccessIn:(UIViewController *)vc
-                title:(NSString *)title
-             subtitle:(NSString *)subtitle
-             OKAction:(AlertCompletionBlock _Nullable)okAction {
-    [self showSuccessIn:vc title:title subtitle:subtitle confirmAction:okAction cancelAction:nil];
-}
-
-+ (void)showSuccessIn:(UIViewController *)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle {
-    [self showSuccessIn:vc title:title subtitle:subtitle ?: @"" confirmAction:nil cancelAction:nil];
-}
-
-+ (void)showErrorIn:(UIViewController *)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle {
-    UIImage *icon = [self symbolImageNamed:@"xmark.seal.fill" fallbackType:PPAlertTypeError];
++ (void)showFailIn:(UIViewController *)vc
+             title:(NSString *)title
+          subtitle:(NSString * _Nullable)subtitle
+        completion:(void (^ _Nullable)(void))completion {
     PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeError
                                              title:title
                                           subtitle:subtitle ?: @""
-                                              icon:icon
-                                       confirmTitle:kLang(@"OK")
-                                        cancelTitle:nil
-                                      confirmAction:nil
-                                       cancelAction:nil];
-    [alert showInViewController:[self presenterForViewController:vc]];
+                                              icon:nil
+                                      confirmTitle:kLang(@"OK") ?: @"OK"
+                                       cancelTitle:nil
+                                     confirmAction:^(__unused NSString * _Nullable text, __unused BOOL didConfirm) {
+        if (completion) completion();
+    } cancelAction:completion];
+    [alert showInViewController:vc];
 }
 
-+ (void)showWarningIn:(UIViewController *)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle {
-    UIImage *icon = [self symbolImageNamed:@"exclamationmark.triangle.fill" fallbackType:PPAlertTypeWarning];
-    PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeWarning
-                                             title:title
-                                          subtitle:subtitle ?: @""
-                                              icon:icon
-                                       confirmTitle:kLang(@"OK")
-                                        cancelTitle:nil
-                                      confirmAction:nil
-                                       cancelAction:nil];
-    [alert showInViewController:[self presenterForViewController:vc]];
++ (void)showErrorIn:(UIViewController *)vc
+              title:(NSString *)title
+           subtitle:(NSString * _Nullable)subtitle {
+    [self showFailIn:vc title:title subtitle:subtitle completion:nil];
 }
 
-+ (void)showInfoIn:(UIViewController *)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle {
-    UIImage *icon = [self symbolImageNamed:@"info.circle.fill" fallbackType:PPAlertTypeInfo];
-    PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeInfo
-                                             title:title
-                                          subtitle:subtitle ?: @""
-                                              icon:icon
-                                       confirmTitle:kLang(@"OK")
-                                        cancelTitle:nil
-                                      confirmAction:nil
-                                       cancelAction:nil];
-    [alert showInViewController:[self presenterForViewController:vc]];
++ (void)showWarningIn:(UIViewController *)vc
+                title:(NSString *)title
+             subtitle:(NSString * _Nullable)subtitle {
+    [self showWarningIn:vc title:title subtitle:subtitle completion:nil];
 }
 
 + (void)showWarningIn:(UIViewController *)vc
                 title:(NSString *)title
              subtitle:(NSString * _Nullable)subtitle
            completion:(void (^ _Nullable)(void))completion {
-    UIImage *icon = [self symbolImageNamed:@"exclamationmark.triangle.fill" fallbackType:PPAlertTypeWarning];
-    AlertCompletionBlock wrapped = completion ? ^(__unused NSString * _Nullable text, __unused BOOL didConfirm) { completion(); } : nil;
     PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeWarning
                                              title:title
                                           subtitle:subtitle ?: @""
-                                              icon:icon
-                                       confirmTitle:kLang(@"OK")
-                                        cancelTitle:nil
-                                      confirmAction:wrapped
-                                       cancelAction:nil];
-    [alert showInViewController:[self presenterForViewController:vc]];
+                                              icon:nil
+                                      confirmTitle:kLang(@"OK") ?: @"OK"
+                                       cancelTitle:nil
+                                     confirmAction:^(__unused NSString * _Nullable text, __unused BOOL didConfirm) {
+        if (completion) completion();
+    } cancelAction:completion];
+    [alert showInViewController:vc];
+}
+
++ (void)showInfoIn:(UIViewController *)vc
+             title:(NSString *)title
+          subtitle:(NSString * _Nullable)subtitle {
+    [self showInfoIn:vc title:title subtitle:subtitle completion:nil];
 }
 
 + (void)showInfoIn:(UIViewController *)vc
              title:(NSString *)title
           subtitle:(NSString * _Nullable)subtitle
         completion:(void (^ _Nullable)(void))completion {
-    UIImage *icon = [self symbolImageNamed:@"info.circle.fill" fallbackType:PPAlertTypeInfo];
-    AlertCompletionBlock wrapped = completion ? ^(__unused NSString * _Nullable text, __unused BOOL didConfirm) { completion(); } : nil;
     PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeInfo
                                              title:title
                                           subtitle:subtitle ?: @""
-                                              icon:icon
-                                       confirmTitle:kLang(@"OK")
-                                        cancelTitle:nil
-                                      confirmAction:wrapped
-                                       cancelAction:nil];
-    [alert showInViewController:[self presenterForViewController:vc]];
+                                              icon:nil
+                                      confirmTitle:kLang(@"OK") ?: @"OK"
+                                       cancelTitle:nil
+                                     confirmAction:^(__unused NSString * _Nullable text, __unused BOOL didConfirm) {
+        if (completion) completion();
+    } cancelAction:completion];
+    [alert showInViewController:vc];
 }
 
 + (void)showConfirmationIn:(UIViewController *)vc
@@ -891,98 +899,17 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
              confirmButton:(NSString *)confirmTitle
               cancelButton:(NSString *)cancelTitle
                       icon:(UIImage * _Nullable)icon
-              confirmBlock:(AlertCompletionBlock _Nullable)confirmBlock
-               cancelBlock:(void(^ _Nullable)(void))cancelBlock {
-    UIImage *iconImage = icon ?: [self symbolImageNamed:@"questionmark.circle.fill" fallbackType:PPAlertTypeConfirmation];
+               confirmBlock:(AlertCompletionBlock _Nullable)confirmBlock
+                cancelBlock:(void(^ _Nullable)(void))cancelBlock {
     PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeConfirmation
                                              title:title
-                                          subtitle:subtitle ?: @""
-                                              icon:iconImage
-                                       confirmTitle:confirmTitle.length ? confirmTitle : kLang(@"Confirm")
-                                        cancelTitle:cancelTitle.length ? cancelTitle : kLang(@"Cancel")
-                                      confirmAction:confirmBlock
-                                       cancelAction:cancelBlock];
-    [alert showInViewController:[self presenterForViewController:vc]];
-}
-
-+ (void)showThreeActionConfirmationIn:(UIViewController *)vc
-                                title:(NSString *)title
-                             subtitle:(NSString * _Nullable)subtitle
-                        primaryButton:(NSString *)primaryTitle
-                         primaryStyle:(UIAlertActionStyle)primaryStyle
-                      secondaryButton:(NSString *)secondaryTitle
-                       secondaryStyle:(UIAlertActionStyle)secondaryStyle
-                       tertiaryButton:(NSString *)tertiaryTitle
-                        tertiaryStyle:(UIAlertActionStyle)tertiaryStyle
-                         primaryBlock:(PPAlertSimpleActionBlock _Nullable)primaryBlock
-                       secondaryBlock:(PPAlertSimpleActionBlock _Nullable)secondaryBlock
-                        tertiaryBlock:(PPAlertSimpleActionBlock _Nullable)tertiaryBlock {
-    NSMutableArray<PPAlertActionItem *> *actions = [NSMutableArray array];
-    [actions addObject:[PPAlertActionItem itemWithTitle:primaryTitle
-                                                  style:(primaryStyle == UIAlertActionStyleDestructive ? PPAlertActionStyleDestructive : PPAlertActionStylePrimary)
-                                             completion:nil
-                                       simpleCompletion:primaryBlock]];
-    [actions addObject:[PPAlertActionItem itemWithTitle:secondaryTitle
-                                                  style:(secondaryStyle == UIAlertActionStyleCancel ? PPAlertActionStyleCancel : (secondaryStyle == UIAlertActionStyleDestructive ? PPAlertActionStyleDestructive : PPAlertActionStyleSecondary))
-                                             completion:nil
-                                       simpleCompletion:secondaryBlock]];
-    [actions addObject:[PPAlertActionItem itemWithTitle:tertiaryTitle
-                                                  style:(tertiaryStyle == UIAlertActionStyleCancel ? PPAlertActionStyleCancel : (tertiaryStyle == UIAlertActionStyleDestructive ? PPAlertActionStyleDestructive : PPAlertActionStyleSecondary))
-                                             completion:nil
-                                       simpleCompletion:tertiaryBlock]];
-
-    PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeConfirmation
-                                             title:title
-                                          subtitle:subtitle ?: @""
-                                              icon:[self symbolImageNamed:@"sparkles" fallbackType:PPAlertTypeConfirmation]
-                                           actions:actions
-                                       placeholder:nil
-                                       initialText:nil
-                                       secureEntry:NO
-                                      keyboardType:UIKeyboardTypeDefault
-                       shouldDismissOnBackgroundTap:YES];
-    [alert showInViewController:[self presenterForViewController:vc]];
-}
-
-+ (void)showFailIn:(UIViewController *)vc
-             title:(NSString *)title
-          subtitle:(NSString * _Nullable)subtitle
-        completion:(void (^ _Nullable)(void))completion {
-    UIImage *icon = [self symbolImageNamed:@"xmark.octagon.fill" fallbackType:PPAlertTypeError];
-    AlertCompletionBlock wrapped = completion ? ^(__unused NSString * _Nullable text, __unused BOOL didConfirm) { completion(); } : nil;
-    PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeError
-                                             title:title
-                                          subtitle:subtitle ?: @""
+                                          subtitle:subtitle
                                               icon:icon
-                                       confirmTitle:kLang(@"OK")
-                                        cancelTitle:nil
-                                      confirmAction:wrapped
-                                       cancelAction:nil];
-    [alert showInViewController:[self presenterForViewController:vc]];
-}
-
-+ (void)showTextFieldAlertIn:(UIViewController *)vc
-                       title:(NSString *)title
-                    subtitle:(NSString * _Nullable)subtitle
-                 placeholder:(NSString * _Nullable)placeholder
-                 initialText:(NSString * _Nullable)initialText
-                 confirmText:(NSString * _Nullable)confirmText
-                  cancelText:(NSString * _Nullable)cancelText
-                  completion:(AlertCompletionBlock)completion {
-    [self showTextPromptIn:vc
-                     title:title
-                  subtitle:subtitle
-               placeholder:placeholder
-               initialText:initialText
-               confirmText:confirmText
-                cancelText:cancelText
-               secureEntry:NO
-              keyboardType:UIKeyboardTypeDefault
-                completion:^(NSString * _Nullable text) {
-        if (completion) {
-            completion(text, text != nil);
-        }
-    }];
+                                      confirmTitle:confirmTitle
+                                       cancelTitle:cancelTitle
+                                     confirmAction:confirmBlock
+                                      cancelAction:cancelBlock];
+    [alert showInViewController:vc];
 }
 
 + (void)showConfirmationIn:(UIViewController *)vc
@@ -1013,20 +940,79 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
                       icon:(UIImage * _Nullable)icon
               confirmBlock:(void(^_Nullable)(void))confirmBlock
                cancelBlock:(void(^_Nullable)(void))cancelBlock {
-    AlertCompletionBlock wrappedConfirm = nil;
-    if (confirmBlock) {
-        wrappedConfirm = ^(__unused NSString * _Nullable text, __unused BOOL didConfirm) {
-            confirmBlock();
-        };
+    PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeConfirmation
+                                             title:title
+                                          subtitle:subtitle
+                                              icon:icon
+                                      confirmTitle:confirmTitle
+                                       cancelTitle:cancelTitle
+                                     confirmAction:^(__unused NSString * _Nullable text, __unused BOOL didConfirm) {
+        if (confirmBlock) confirmBlock();
+    } cancelAction:cancelBlock];
+    [alert showInViewController:vc];
+}
+
++ (void)showThreeActionConfirmationIn:(UIViewController *)vc
+                                title:(NSString *)title
+                             subtitle:(NSString * _Nullable)subtitle
+                        primaryButton:(NSString *)primaryTitle
+                         primaryStyle:(UIAlertActionStyle)primaryStyle
+                      secondaryButton:(NSString *)secondaryTitle
+                       secondaryStyle:(UIAlertActionStyle)secondaryStyle
+                       tertiaryButton:(NSString *)tertiaryTitle
+                        tertiaryStyle:(UIAlertActionStyle)tertiaryStyle
+                         primaryBlock:(PPAlertSimpleActionBlock _Nullable)primaryBlock
+                       secondaryBlock:(PPAlertSimpleActionBlock _Nullable)secondaryBlock
+                        tertiaryBlock:(PPAlertSimpleActionBlock _Nullable)tertiaryBlock {
+    NSMutableArray<PPAlertActionItem *> *actions = [NSMutableArray array];
+
+    PPAlertActionStyle pStyle = (primaryStyle == UIAlertActionStyleDestructive) ? PPAlertActionStyleDestructive : PPAlertActionStylePrimary;
+    PPAlertActionStyle sStyle = (secondaryStyle == UIAlertActionStyleDestructive) ? PPAlertActionStyleDestructive : PPAlertActionStyleSecondary;
+    PPAlertActionStyle tStyle = (tertiaryStyle == UIAlertActionStyleCancel) ? PPAlertActionStyleCancel : PPAlertActionStyleSecondary;
+
+    if (primaryTitle.length) {
+        [actions addObject:[PPAlertActionItem itemWithTitle:primaryTitle style:pStyle completion:nil simpleCompletion:primaryBlock]];
     }
-    [self showConfirmationIn:vc
-                       title:title
-                    subtitle:subtitle
-               confirmButton:confirmTitle
-                cancelButton:cancelTitle
-                        icon:icon
-                confirmBlock:wrappedConfirm
-                 cancelBlock:cancelBlock];
+    if (secondaryTitle.length) {
+        [actions addObject:[PPAlertActionItem itemWithTitle:secondaryTitle style:sStyle completion:nil simpleCompletion:secondaryBlock]];
+    }
+    if (tertiaryTitle.length) {
+        [actions addObject:[PPAlertActionItem itemWithTitle:tertiaryTitle style:tStyle completion:nil simpleCompletion:tertiaryBlock]];
+    }
+
+    PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeConfirmation
+                                             title:title
+                                          subtitle:subtitle ?: @""
+                                              icon:nil
+                                           actions:actions
+                                       placeholder:nil
+                                       initialText:nil
+                                       secureEntry:NO
+                                      keyboardType:UIKeyboardTypeDefault
+                      shouldDismissOnBackgroundTap:(tStyle == PPAlertActionStyleCancel)];
+    [alert showInViewController:vc];
+}
+
++ (void)showTextFieldAlertIn:(UIViewController *)vc
+                   title:(NSString *)title
+                subtitle:(NSString * _Nullable)subtitle
+             placeholder:(NSString * _Nullable)placeholder
+             initialText:(NSString * _Nullable)initialText
+             confirmText:(NSString * _Nullable)confirmText
+              cancelText:(NSString * _Nullable)cancelText
+             completion:(AlertCompletionBlock)completion {
+    [self showTextPromptIn:vc
+                     title:title
+                  subtitle:subtitle
+               placeholder:placeholder
+               initialText:initialText
+               confirmText:confirmText
+                cancelText:cancelText
+               secureEntry:NO
+              keyboardType:UIKeyboardTypeDefault
+                completion:^(NSString * _Nullable text) {
+        if (completion) completion(text, (text != nil));
+    }];
 }
 
 + (void)showTextPromptIn:(UIViewController *)vc
@@ -1059,33 +1045,34 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
              secureEntry:(BOOL)secureEntry
             keyboardType:(UIKeyboardType)keyboardType
               completion:(void(^)(NSString * _Nullable text))completion {
-    NSString *safeConfirm = confirmText.length ? confirmText : kLang(@"OK");
-    NSString *safeCancel = cancelText.length ? cancelText : kLang(@"Cancel");
     NSMutableArray<PPAlertActionItem *> *actions = [NSMutableArray array];
-    [actions addObject:[PPAlertActionItem itemWithTitle:safeCancel
-                                                  style:PPAlertActionStyleCancel
-                                             completion:^(__unused NSString * _Nullable text, __unused BOOL didConfirm) {
-        if (completion) completion(nil);
+
+    if (cancelText.length > 0) {
+        [actions addObject:[PPAlertActionItem itemWithTitle:cancelText
+                                                      style:PPAlertActionStyleCancel
+                                                 completion:^(__unused NSString * _Nullable text, __unused BOOL didConfirm) {
+            if (completion) completion(nil);
+        } simpleCompletion:nil]];
     }
-                                       simpleCompletion:nil]];
-    [actions addObject:[PPAlertActionItem itemWithTitle:safeConfirm
+
+    NSString *safeConfirmText = confirmText.length ? confirmText : (kLang(@"OK") ?: @"OK");
+    [actions addObject:[PPAlertActionItem itemWithTitle:safeConfirmText
                                                   style:PPAlertActionStylePrimary
                                              completion:^(NSString * _Nullable text, __unused BOOL didConfirm) {
         if (completion) completion(text);
-    }
-                                       simpleCompletion:nil]];
+    } simpleCompletion:nil]];
 
     PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeTextInput
                                              title:title
                                           subtitle:subtitle ?: @""
-                                              icon:[self symbolImageNamed:@"square.and.pencil.circle.fill" fallbackType:PPAlertTypeTextInput]
+                                              icon:nil
                                            actions:actions
                                        placeholder:placeholder
                                        initialText:initialText
                                        secureEntry:secureEntry
                                       keyboardType:keyboardType
-                       shouldDismissOnBackgroundTap:YES];
-    [alert showInViewController:[self presenterForViewController:vc]];
+                      shouldDismissOnBackgroundTap:(cancelText.length > 0)];
+    [alert showInViewController:vc];
 }
 
 @end

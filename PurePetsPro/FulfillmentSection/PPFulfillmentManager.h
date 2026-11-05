@@ -18,6 +18,10 @@
                                                                          NSError *error,
                                                                          BOOL fromCache))stateHandler;
 
+/// Expands the live, newest-first prefix by 50 records per authorized profile.
+- (BOOL)canLoadMoreFulfillmentsForListener:(id<FIRListenerRegistration>)listener;
+- (void)loadMoreFulfillmentsForListener:(id<FIRListenerRegistration>)listener;
+
 - (id<FIRListenerRegistration>)observeEventsForFulfillmentID:(NSString *)fulfillmentID
                                                      onChange:(void (^)(NSArray<NSDictionary *> *events))onChange;
 

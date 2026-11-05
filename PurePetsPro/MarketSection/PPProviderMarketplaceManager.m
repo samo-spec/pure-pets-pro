@@ -170,8 +170,15 @@ static BOOL PPMarketplaceErrorLooksUnavailable(NSError *error, NSString *message
 }
 
 - (void)createMarketItem:(NSDictionary *)fields completion:(void (^)(BOOL, NSString *, NSString *, NSError *))completion {
-    [self callFunction:@"providerCreateMarketItem" payload:fields completion:^(BOOL ok, NSString *msg, NSError *err) {
-        if (completion) completion(ok, nil, msg, err);
+    [self callFunctionResult:@"providerCreateMarketItem" payload:fields completion:^(NSDictionary *result, NSError *err) {
+        if (err) {
+            if (completion) completion(NO, nil, err.localizedDescription, err);
+            return;
+        }
+        BOOL ok = result[@"ok"] ? [result[@"ok"] boolValue] : YES;
+        NSString *itemID = [result[@"itemID"] isKindOfClass:NSString.class] ? result[@"itemID"] : nil;
+        NSString *msg = [result[@"message"] isKindOfClass:NSString.class] ? result[@"message"] : nil;
+        if (completion) completion(ok, itemID, msg, nil);
     }];
 }
 

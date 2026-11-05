@@ -23,6 +23,8 @@
 #import "UserModel.h"
 #import "UserManager.h"
 #import "AppManager.h"
+#import "PurePetsPro-Swift.h"
+#import "PetAccessory.h"
 #import <objc/runtime.h>
 
 #pragma mark - Filter Rail Enums
@@ -640,6 +642,20 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     [animalsCard addSubview:self.animalTagsStack];
     
     // Bottom Action Buttons
+    UIButton *variantStudioBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    variantStudioBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    variantStudioBtn.backgroundColor = [UIColor ppSurface];
+    UIImageSymbolConfiguration *symCfg = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightSemibold];
+    [variantStudioBtn setImage:[UIImage systemImageNamed:@"slider.horizontal.2.square.on.square" withConfiguration:symCfg] forState:UIControlStateNormal];
+    [variantStudioBtn setTitle:Language.isRTL ? @"  استوديو الخيارات والمصفوفة" : @"  Options & Matrix Studio" forState:UIControlStateNormal];
+    [variantStudioBtn setTitleColor:[UIColor ppPrimary] forState:UIControlStateNormal];
+    variantStudioBtn.titleLabel.font = [Styling fontBold:15.0];
+    variantStudioBtn.layer.borderWidth = 1.0;
+    variantStudioBtn.layer.borderColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.35].CGColor;
+    PPApplyContinuousCorners(variantStudioBtn, PPCornerMedium);
+    [variantStudioBtn addTarget:self action:@selector(openVariantStudio) forControlEvents:UIControlEventTouchUpInside];
+    [contentView addSubview:variantStudioBtn];
+
     UIButton *editBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     editBtn.translatesAutoresizingMaskIntoConstraints = NO;
     editBtn.backgroundColor = [UIColor ppPrimary];
@@ -757,7 +773,12 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
         [self.animalTagsStack.trailingAnchor constraintLessThanOrEqualToAnchor:animalsCard.trailingAnchor constant:-16],
         [self.animalTagsStack.bottomAnchor constraintEqualToAnchor:animalsCard.bottomAnchor constant:-16],
         
-        [editBtn.topAnchor constraintEqualToAnchor:animalsCard.bottomAnchor constant:24],
+        [variantStudioBtn.topAnchor constraintEqualToAnchor:animalsCard.bottomAnchor constant:20],
+        [variantStudioBtn.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor constant:20],
+        [variantStudioBtn.trailingAnchor constraintEqualToAnchor:contentView.trailingAnchor constant:-20],
+        [variantStudioBtn.heightAnchor constraintEqualToConstant:50],
+
+        [editBtn.topAnchor constraintEqualToAnchor:variantStudioBtn.bottomAnchor constant:12],
         [editBtn.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor constant:20],
         [editBtn.trailingAnchor constraintEqualToAnchor:contentView.trailingAnchor constant:-20],
         [editBtn.heightAnchor constraintEqualToConstant:54],
@@ -896,6 +917,42 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
             });
         }];
     } cancelBlock:nil];
+}
+
+- (void)openVariantStudio {
+    [PPFunc pp_playTapEffect];
+    PetAccessory *acc = [self.medicine asPetAccessory];
+    PPAccessoryVariantStudioHostController *host = [[PPAccessoryVariantStudioHostController alloc] initWithAccessory:acc];
+    __weak typeof(self) weakSelf = self;
+    host.onSaved = ^(PetAccessory *savedAcc) {
+        if (!savedAcc) return;
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        self.medicine.productFamilyId = savedAcc.productFamilyId;
+        self.medicine.variantSchemaVersion = savedAcc.variantSchemaVersion;
+        self.medicine.isVariant = savedAcc.isVariant;
+        self.medicine.isDefaultVariant = savedAcc.isDefaultVariant;
+        self.medicine.variantSortOrder = savedAcc.variantSortOrder;
+        self.medicine.selectedOptions = savedAcc.selectedOptions;
+        self.medicine.selectedOptionsSnapshot = savedAcc.selectedOptionsSnapshot;
+        self.medicine.variantCombinationKey = savedAcc.variantCombinationKey;
+        self.medicine.variantAxis = savedAcc.variantAxis;
+        self.medicine.sku = savedAcc.sku;
+        self.medicine.barcode = savedAcc.barcode;
+        if (savedAcc.price != nil) self.medicine.price = savedAcc.price.doubleValue;
+        if (savedAcc.wholesalePrice != nil) self.medicine.wholesalePrice = savedAcc.wholesalePrice;
+        self.medicine.stockQuantity = savedAcc.quantity;
+        [self reloadMedicineData];
+        if (self.onUpdated) self.onUpdated();
+    };
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:host];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    if (@available(iOS 15.0, *)) {
+        UISheetPresentationController *sheet = nav.sheetPresentationController;
+        sheet.detents = @[[UISheetPresentationControllerDetent largeDetent]];
+        sheet.prefersGrabberVisible = YES;
+    }
+    [self presentViewController:nav animated:YES completion:nil];
 }
 
 @end
@@ -1202,9 +1259,16 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     BOOL isLive = medicine.isAvailable && (medicine.stockQuantity > 0) && medicine.isPublished && !medicine.isDisabled;
     _statusDot.backgroundColor = isLive ? [UIColor ppSuccess] : [UIColor ppError];
     
-    // Animals snippet
+    // Animals snippet or Variant/Medical Spec snippet
+    NSMutableArray *snippets = [NSMutableArray array];
+    if (medicine.strength.length > 0) [snippets addObject:medicine.strength];
+    if (medicine.dosageForm.length > 0) [snippets addObject:medicine.dosageForm];
+    if (medicine.packSize.length > 0) [snippets addObject:medicine.packSize];
     if (medicine.animalTypes.count > 0) {
-        _animalsSnippetLabel.text = [NSString stringWithFormat:@"🐾 %@", [medicine.animalTypes componentsJoinedByString:@" · "]];
+        [snippets addObject:[NSString stringWithFormat:@"🐾 %@", [medicine.animalTypes componentsJoinedByString:@" · "]]];
+    }
+    if (snippets.count > 0) {
+        _animalsSnippetLabel.text = [snippets componentsJoinedByString:@" · "];
         _animalsSnippetLabel.hidden = NO;
     } else {
         _animalsSnippetLabel.hidden = YES;
@@ -1902,7 +1966,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
         
         // Search query filter
         if (query.length > 0) {
-            NSString *haystack = [NSString stringWithFormat:@"%@ %@ %@", med.title, med.medicineDescription, med.category].lowercaseString;
+            NSString *haystack = [NSString stringWithFormat:@"%@ %@ %@ %@ %@ %@ %@ %@", med.title, med.medicineDescription, med.category, med.sku ?: @"", med.barcode ?: @"", med.strength ?: @"", med.dosageForm ?: @"", med.packSize ?: @""].lowercaseString;
             if (![haystack containsString:query]) return NO;
         }
         return YES;

@@ -18,6 +18,8 @@ typedef void(^PPVetArrayBlock)(NSArray<PPVetModel *> * _Nullable vets, NSError *
 typedef void(^PPVetVoidBlock)(NSError * _Nullable error);
 typedef void(^PPVetCountBlock)(NSInteger count);
 
+@class PetAccessory;
+
 @interface PPVetMedicineModel : NSObject <NSCopying>
 @property (nonatomic, copy) NSString *medicineID;
 @property (nonatomic, copy) NSString *title;
@@ -37,8 +39,30 @@ typedef void(^PPVetCountBlock)(NSInteger count);
 @property (nonatomic, assign) BOOL isDisabled;
 @property (nonatomic, strong, nullable) NSDate *createdAt;
 @property (nonatomic, strong, nullable) NSDate *updatedAt;
+
+// Variant & Medical Dimensions
+@property (nonatomic, copy, nullable) NSString *productFamilyId;
+@property (nonatomic, assign) NSInteger variantSchemaVersion;
+@property (nonatomic, assign) BOOL isVariant;
+@property (nonatomic, assign) BOOL isDefaultVariant;
+@property (nonatomic, assign) NSInteger variantSortOrder;
+@property (nonatomic, strong, nullable) NSDictionary<NSString *, id> *selectedOptions;
+@property (nonatomic, strong, nullable) NSArray<NSDictionary<NSString *, id> *> *selectedOptionsSnapshot;
+@property (nonatomic, copy, nullable) NSString *variantCombinationKey;
+@property (nonatomic, copy, nullable) NSString *variantAxis;
+@property (nonatomic, copy, nullable) NSString *sku;
+@property (nonatomic, copy, nullable) NSString *barcode;
+@property (nonatomic, strong, nullable) NSNumber *wholesalePrice;
+@property (nonatomic, copy, nullable) NSString *dosageForm;
+@property (nonatomic, copy, nullable) NSString *strength;
+@property (nonatomic, copy, nullable) NSString *packSize;
+@property (nonatomic, copy, nullable) NSString *volume;
+@property (nonatomic, copy, nullable) NSString *batchNumber;
+@property (nonatomic, strong, nullable) NSDate *expiryDate;
+
 - (NSDictionary *)toDictionary;
 + (instancetype)fromDictionary:(NSDictionary *)dict withID:(NSString *)medicineID;
+- (PetAccessory *)asPetAccessory;
 @end
 
 @interface PPVetManager : NSObject

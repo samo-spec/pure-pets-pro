@@ -11,6 +11,7 @@
 #import "PPProviderProfileEditorViewController.h"
 #import "PPServicesListViewController.h"
 #import "PPVetsListViewController.h"
+#import "PurePetsPro-Swift.h"
 
 static NSString *PPProCurrentThemePreference(void) {
     NSString *saved = [[NSUserDefaults standardUserDefaults] stringForKey:@"themePreference"];
@@ -388,6 +389,7 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
 @property (nonatomic, strong) UIButton *providerCTAButton;
 @property (nonatomic, strong) UIView *settingsSectionCard;
 
+@property (nonatomic, strong) PPProProfileSettingsHostController *hostingController;
 @property (nonatomic, strong) UIButton *saveButton;
 @property (nonatomic, strong) id<FIRListenerRegistration> providerStateListener;
 @property (nonatomic, strong) PPProviderOnboardingState *providerState;
@@ -411,25 +413,77 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     [super viewDidLoad];
     self.view.backgroundColor = pp_canvasColor();
     self.coverImageURLs = [NSMutableArray array];
-    [self pp_syncEditedFieldsFromUser];
-    [self pp_buildScrollSurface];
-    [self pp_buildNavigation];
+
+    __weak typeof(self) weakSelf = self;
+    PPProProfileSnapshot *snapshot = [self pp_currentProfileSnapshot];
+    self.hostingController = [PPProProfileSettingsHostingBridge makeViewControllerWithSnapshot:snapshot
+                                                                                       onSave:^(NSString *name, NSString *email, NSString *phone) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf pp_saveProfileWithName:name email:email phone:phone];
+    }
+                                                                        onEditProviderProfile:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf pp_openProviderProfileEditor];
+    }
+                                                                          onOpenNotifications:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        NotificationSettingsViewController *vc = [[NotificationSettingsViewController alloc] init];
+        [strongSelf.navigationController pushViewController:vc animated:YES];
+    }
+                                                                                onSelectTheme:^(NSString *theme) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        PPProApplyThemePreference(theme);
+        [PPToast toast:kLang(@"ThemeUpdated") style:PPToastStyleSuccess haptic:YES duration:1.5];
+        [strongSelf pp_refreshAllContent];
+    }
+                                                                             onSelectLanguage:^(NSString *code) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf pp_applyLanguageCode:code];
+    }
+                                                                                     onLogout:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf pp_logoutAction];
+    }
+                                                                                    onDismiss:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (strongSelf.navigationController && strongSelf.navigationController.viewControllers.count > 1) {
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+        } else {
+            [strongSelf dismissViewControllerAnimated:YES completion:nil];
+        }
+    }];
+
+    [self addChildViewController:self.hostingController];
+    [self.view addSubview:self.hostingController.view];
+    self.hostingController.view.translatesAutoresizingMaskIntoConstraints = NO;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.hostingController.view.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.hostingController.view.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.hostingController.view.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.hostingController.view.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+
+    [self.hostingController didMoveToParentViewController:self];
+
     [self pp_loadCoverImageURLs];
     [self pp_startProviderStateObservation];
     [self pp_refreshAllContent];
-    [self pp_prepareEntranceState];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    [self pp_buildNavigation];
-    [self pp_syncEditedFieldsFromUser];
+    if (self.navigationController) {
+        [self.navigationController setNavigationBarHidden:YES animated:animated];
+    }
     [self pp_refreshAllContent];
-}
-
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    [self pp_runEntranceIfNeeded];
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
@@ -1104,7 +1158,35 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     }];
 }
 
+- (PPProProfileSnapshot *)pp_currentProfileSnapshot {
+    UserModel *user = UsrMgr.currentUser;
+    NSString *displayName = [self pp_displayNameForUser:user];
+    NSString *roleName = [PPRolePermission localizedRoleName:user.role] ?: @"";
+    NSString *email = user.UserEmail.length ? user.UserEmail : (user.email.length ? user.email : @"");
+    NSString *phone = user.MobileNo.length ? user.MobileNo : @"";
+    NSString *avatarURL = [self pp_avatarURLStringForUser:user];
+    NSString *workspace = [self pp_primaryProviderWorkspaceTitle] ?: @"";
+    NSString *status = [self pp_providerStatusTitle] ?: @"";
+    NSString *planSummary = [self pp_providerPlanSummary] ?: @"";
+    NSString *themeKey = PPProCurrentThemePreference() ?: PPProThemePreferenceSystem;
+    NSString *langCode = [Language currentLanguageCode] ?: @"ar";
+
+    return [[PPProProfileSnapshot alloc] initWithDisplayName:displayName ?: @""
+                                                       email:email ?: @""
+                                                       phone:phone ?: @""
+                                                    roleName:roleName ?: @""
+                                                   avatarURL:avatarURL.length ? avatarURL : nil
+                                                   coverURLs:self.coverImageURLs.copy ?: @[]
+                                              workspaceTitle:workspace
+                                                 statusTitle:status
+                                                 planSummary:planSummary
+                                             currentThemeKey:themeKey
+                                         currentLanguageCode:langCode];
+}
+
 - (void)pp_refreshAllContent {
+    PPProProfileSnapshot *snapshot = [self pp_currentProfileSnapshot];
+    [self.hostingController updateSnapshot:snapshot];
     [self pp_refreshHero];
     [self pp_refreshEditableFields];
     [self pp_refreshProviderPreview];
@@ -1227,6 +1309,86 @@ typedef NS_ENUM(NSInteger, PPProProfileSettingsAction) {
     self.saveButton.alpha = enabled ? 1.0 : 0.58;
     self.saveButton.backgroundColor = enabled ? AppPrimaryClr : [[AppPrimaryClr colorWithAlphaComponent:0.42] copy];
     self.saveFootnoteLabel.textColor = enabled ? SeconderyTextClr : [UIColor ppTextTertiary];
+}
+
+- (void)pp_saveProfileWithName:(NSString *)name email:(NSString *)email phone:(NSString *)phone {
+    UserModel *user = UsrMgr.currentUser;
+    if (!user) {
+        [self.hostingController didFinishSaving];
+        return;
+    }
+
+    NSString *trimmedName = [PPSafeString(name) stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSString *trimmedEmail = [PPSafeString(email) stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSString *trimmedPhone = [PPSafeString(phone) stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+
+    if (trimmedName.length == 0) {
+        [self.hostingController didFinishSaving];
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"ProfileSettings_NameRequired")];
+        return;
+    }
+
+    [self.view endEditing:YES];
+    [PPHUD showIndeterminateIn:self.view title:kLang(@"Saving") subtitle:nil];
+
+    NSString *currentName = [self pp_displayNameForUser:user];
+    NSString *currentEmail = user.UserEmail.length ? user.UserEmail : (user.email.length ? user.email : @"");
+    NSString *currentPhone = user.MobileNo.length ? user.MobileNo : @"";
+
+    BOOL nameChanged = ![trimmedName isEqualToString:currentName];
+    BOOL emailChanged = ![trimmedEmail isEqualToString:currentEmail];
+    BOOL phoneChanged = ![trimmedPhone isEqualToString:currentPhone];
+
+    dispatch_group_t group = dispatch_group_create();
+    __block NSError *firstError = nil;
+
+    if (nameChanged) {
+        dispatch_group_enter(group);
+        user.displayName = trimmedName;
+        [UsrMgr p_cacheUser:user];
+        [user SYNC:^(NSError *error) {
+            if (error && !firstError) firstError = error;
+            dispatch_group_leave(group);
+        }];
+    }
+
+    if (emailChanged && trimmedEmail.length > 0) {
+        dispatch_group_enter(group);
+        [FUM updateEmail:trimmedEmail completion:^(NSError *error) {
+            if (!error) {
+                user.UserEmail = trimmedEmail;
+                user.email = trimmedEmail;
+                [UsrMgr p_cacheUser:user];
+            } else if (!firstError) {
+                firstError = error;
+            }
+            dispatch_group_leave(group);
+        }];
+    }
+
+    if (phoneChanged) {
+        dispatch_group_enter(group);
+        user.MobileNo = trimmedPhone;
+        [UsrMgr p_cacheUser:user];
+        [user SYNC:^(NSError *error) {
+            if (error && !firstError) firstError = error;
+            dispatch_group_leave(group);
+        }];
+    }
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [PPHUD dismiss];
+        [strongSelf.hostingController didFinishSaving];
+        if (firstError) {
+            [PPAlertHelper showErrorIn:strongSelf title:kLang(@"Error") subtitle:firstError.localizedDescription];
+            return;
+        }
+        [strongSelf pp_refreshAllContent];
+        [PPToast toast:kLang(@"ProfileUpdated") style:PPToastStyleSuccess haptic:YES duration:1.8];
+    });
 }
 
 - (void)pp_saveProfile {

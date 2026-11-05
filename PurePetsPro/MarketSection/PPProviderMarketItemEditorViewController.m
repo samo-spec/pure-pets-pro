@@ -3,6 +3,8 @@
 #import "PPProviderMarketplaceManager.h"
 #import "PPFirebaseCompat.h"
 #import "MainKindsArrayManager.h"
+#import "PurePetsPro-Swift.h"
+
 @interface PPProviderMarketItemEditorViewController () <UITextViewDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, PHPickerViewControllerDelegate, UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout>
 
 @property (nonatomic, strong) PPProviderMarketItem *editItem;
@@ -15,6 +17,7 @@
 
 @property (nonatomic, strong) UIView *heroArea;
 @property (nonatomic, strong) NSLayoutConstraint *heroAreaHeightConstraint;
+@property (nonatomic, strong) PPItemEditorHeroHostView *heroHostView;
 @property (nonatomic, strong) UIImageView *itemImageView;
 @property (nonatomic, strong) UIButton *imagePickerButton;
 @property (nonatomic, strong) UIImage *selectedImage;
@@ -29,7 +32,11 @@
 @property (nonatomic, strong) UILabel *descriptionEnPlaceholder;
 
 @property (nonatomic, strong) UITextField *priceField;
+@property (nonatomic, strong) UITextField *wholesalePriceField;
 @property (nonatomic, strong) UITextField *qtyField;
+@property (nonatomic, strong) UITextField *skuField;
+@property (nonatomic, strong) UITextField *barcodeField;
+@property (nonatomic, strong) UIView *variantStudioContainer;
 @property (nonatomic, strong) UITextField *accessTypeField;
 @property (nonatomic, strong) UISegmentedControl *kindControl;
 @property (nonatomic, strong) CAGradientLayer *kindControlLiquidLayer;
@@ -76,26 +83,31 @@
     return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
 }
 
-/// The hero has a fixed image plate, but its editorial copy participates in
-/// Dynamic Type.  Size the surrounding scroll content from the scaled two-line
-/// worst case so Accessibility text never compresses the hierarchy.
+/// Tailored ergonomic height for iPhone (185pt compact high-density deck)
+/// and iPad (236pt widescreen panoramic studio deck).
 - (CGFloat)pp_heroAreaHeight {
-    UIFont *titleFont = PPScaledFont([Styling fontBold:23.0], UIFontTextStyleTitle3);
-    UIFont *subtitleFont = PPScaledFont([Styling fontMedium:13.0], UIFontTextStyleFootnote);
-    CGFloat copyHeight = ceil(titleFont.lineHeight * 2.0)
-        + PPSpaceXS
-        + ceil(subtitleFont.lineHeight * 2.0);
-    CGFloat cardContentHeight = PPSpaceXL + PPSpaceXS + MAX(84.0, copyHeight) + PPSpaceBase;
-    return MAX(220.0, ceil(cardContentHeight + (PPSpaceXS * 2.0)));
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        return 236.0;
+    }
+    return 185.0;
 }
 
 - (instancetype)initForCreate {
-    if (self = [super init]) { _isCreate = YES; }
+    if (self = [super init]) {
+        _isCreate = YES;
+        _imageURLs = [NSMutableArray array];
+        _selectedImages = [NSMutableArray array];
+    }
     return self;
 }
 
 - (instancetype)initWithItem:(PPProviderMarketItem *)item {
-    if (self = [super init]) { _isCreate = NO; _editItem = item; }
+    if (self = [super init]) {
+        _isCreate = NO;
+        _editItem = item;
+        _imageURLs = [NSMutableArray array];
+        _selectedImages = [NSMutableArray array];
+    }
     return self;
 }
 
@@ -295,6 +307,64 @@
     return hero;
 }
 
+- (PPItemEditorHeroSnapshot *)pp_currentHeroSnapshot {
+    NSString *title = self.isCreate ? kLang(@"Market_AddTitle") : kLang(@"Market_EditTitle");
+    NSString *subtitle = kLang(@"Market_FormSubtitle");
+    NSString *itemName = self.nameField.text ?: (self.editItem.name ?: @"");
+    NSString *categoryName = self.selectedMainKindName ?: (self.editItem.petMainCategoryName ?: @"");
+    
+    NSString *primaryUrl = self.imageURLs.count > 0 ? self.imageURLs.firstObject : nil;
+    UIImage *primaryLocal = (self.imageURLs.count == 0 && self.selectedImages.count > 0) ? self.selectedImages.firstObject : nil;
+    NSInteger totalImages = (NSInteger)(self.imageURLs.count + self.selectedImages.count);
+    
+    CGFloat progress = 0.1;
+    if (itemName.length > 0) progress += 0.25;
+    if (self.priceField.text.doubleValue > 0) progress += 0.25;
+    if (self.selectedMainCategoryID > 0) progress += 0.25;
+    if (totalImages > 0) progress += 0.25;
+    if (progress > 1.0) progress = 1.0;
+    
+    BOOL isPublished = self.publishedSwitch ? self.publishedSwitch.on : YES;
+    BOOL isAvailable = self.availabilitySwitch ? self.availabilitySwitch.on : YES;
+    
+    NSInteger stateIndex = (totalImages == 0) ? 2 : 0;
+    
+    return [[PPItemEditorHeroSnapshot alloc] initWithIsCreate:self.isCreate
+                                                       title:title
+                                                    subtitle:subtitle
+                                                    itemName:itemName
+                                                categoryName:categoryName
+                                             primaryImageURL:primaryUrl
+                                                primaryImage:primaryLocal
+                                                  imageCount:totalImages
+                                                allImageURLs:self.imageURLs ?: @[]
+                                           allSelectedImages:self.selectedImages ?: @[]
+                                                 isPublished:isPublished
+                                                 isAvailable:isAvailable
+                                          completionProgress:progress
+                                                  stateIndex:stateIndex
+                                                errorMessage:nil];
+}
+
+- (void)pp_updateHeroCardState {
+    if (!self.heroHostView) return;
+    PPItemEditorHeroSnapshot *snapshot = [self pp_currentHeroSnapshot];
+    [self.heroHostView updateSnapshot:snapshot];
+}
+
+- (void)pp_removeHeroImageAtIndex:(NSInteger)index {
+    if (index < (NSInteger)self.imageURLs.count) {
+        [self.imageURLs removeObjectAtIndex:index];
+    } else {
+        NSInteger localIdx = index - (NSInteger)self.imageURLs.count;
+        if (localIdx >= 0 && localIdx < (NSInteger)self.selectedImages.count) {
+            [self.selectedImages removeObjectAtIndex:localIdx];
+        }
+    }
+    [self.imageCollectionView reloadData];
+    [self pp_updateHeroCardState];
+}
+
 - (void)pp_buildUI {
     // The editor is presented from an Objective-C dashboard, so make its root
     // direction explicit rather than relying on a navigation-controller default.
@@ -314,58 +384,26 @@
     _heroArea.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     [self.scrollView addSubview:_heroArea];
     
-    // The Market editor uses the same warm, quiet hero composition as Pulse:
-    // a restrained image plate plus a concise editorial hierarchy.
-    PPHero *heroCard = [[PPHero alloc] init];
-    heroCard.translatesAutoresizingMaskIntoConstraints = NO;
-    heroCard.accentColor = AppPrimaryClr;
-    heroCard.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    [_heroArea addSubview:heroCard];
-    
+    // First-Principles Category-Defining Hero Card Host View (SwiftUI iPhone & iPad architectures)
+    self.heroHostView = [[PPItemEditorHeroHostView alloc] initWithSnapshot:[self pp_currentHeroSnapshot]];
+    self.heroHostView.translatesAutoresizingMaskIntoConstraints = NO;
+    __weak typeof(self) weakSelf = self;
+    self.heroHostView.onPickImage = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) [strongSelf pickImage];
+    };
+    self.heroHostView.onRemoveImageAtIndex = ^(NSInteger index) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) [strongSelf pp_removeHeroImageAtIndex:index];
+    };
+    self.heroHostView.onRetry = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) [strongSelf pp_updateHeroCardState];
+    };
+    [_heroArea addSubview:self.heroHostView];
+
     _itemImageView = [[UIImageView alloc] init];
-    _itemImageView.translatesAutoresizingMaskIntoConstraints = NO;
-    _itemImageView.contentMode = UIViewContentModeScaleAspectFill;
-    _itemImageView.clipsToBounds = YES;
-    PPApplyContinuousCorners(_itemImageView, PPCornerMedium);
-    _itemImageView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
-    _itemImageView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    _itemImageView.layer.borderColor = [self pp_borderColor].CGColor;
-    [heroCard addSubview:_itemImageView];
-    
-    _imagePickerButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _imagePickerButton.translatesAutoresizingMaskIntoConstraints = NO;
-    UIImageSymbolConfiguration *camCfg = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightBold];
-    [_imagePickerButton setImage:[UIImage systemImageNamed:@"camera.fill" withConfiguration:camCfg] forState:UIControlStateNormal];
-    _imagePickerButton.tintColor = AppPrimaryClr;
-    _imagePickerButton.backgroundColor = [self pp_surfaceColor];
-    PPApplyContinuousCorners(_imagePickerButton, PPTouchTargetMin / 2.0);
-    _imagePickerButton.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    _imagePickerButton.layer.borderColor = [self pp_borderColor].CGColor;
-    PPApplyButtonShadow(_imagePickerButton);
-    _imagePickerButton.alpha = 1.0;
-    _imagePickerButton.accessibilityLabel = kLang(@"Market_SectionImages");
-    [_imagePickerButton addTarget:self action:@selector(pickImage) forControlEvents:UIControlEventTouchUpInside];
-    [heroCard addSubview:_imagePickerButton];
-    
-    UILabel *heroTitle = [[UILabel alloc] init];
-    heroTitle.translatesAutoresizingMaskIntoConstraints = NO;
-    heroTitle.font = [Styling fontBold:23.0];
-    heroTitle.textColor = PrimaryTextClr;
-    heroTitle.textAlignment = Language.alignmentForCurrentLanguage;
-    heroTitle.numberOfLines = 2;
-    heroTitle.text = self.isCreate ? kLang(@"Market_AddTitle") : kLang(@"Market_EditTitle");
-    PPEnableDynamicType(heroTitle, UIFontTextStyleTitle3);
-    [heroCard addSubview:heroTitle];
-    
-    UILabel *heroSubtitle = [[UILabel alloc] init];
-    heroSubtitle.translatesAutoresizingMaskIntoConstraints = NO;
-    heroSubtitle.font = [Styling fontMedium:13.0];
-    heroSubtitle.textColor = SeconderyTextClr;
-    heroSubtitle.textAlignment = Language.alignmentForCurrentLanguage;
-    heroSubtitle.numberOfLines = 2;
-    heroSubtitle.text = kLang(@"Market_FormSubtitle");
-    PPEnableDynamicType(heroSubtitle, UIFontTextStyleFootnote);
-    [heroCard addSubview:heroSubtitle];
+    _imagePickerButton = [UIButton buttonWithType:UIButtonTypeCustom];
     
     self.contentStack = [[UIStackView alloc] init];
     self.contentStack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -402,29 +440,10 @@
         [_heroArea.trailingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.trailingAnchor],
         self.heroAreaHeightConstraint,
         
-        [heroCard.topAnchor constraintEqualToAnchor:_heroArea.topAnchor constant:PPSpaceXS],
-        [heroCard.leadingAnchor constraintEqualToAnchor:_heroArea.leadingAnchor constant:PPSpaceBase],
-        [heroCard.trailingAnchor constraintEqualToAnchor:_heroArea.trailingAnchor constant:-PPSpaceBase],
-        [heroCard.bottomAnchor constraintEqualToAnchor:_heroArea.bottomAnchor constant:-PPSpaceXS],
-        
-        [_itemImageView.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:PPSpaceXL],
-        [_itemImageView.leadingAnchor constraintEqualToAnchor:heroCard.leadingAnchor constant:PPSpaceBase],
-        [_itemImageView.widthAnchor constraintEqualToConstant:84.0],
-        [_itemImageView.heightAnchor constraintEqualToConstant:84.0],
-        
-        [_imagePickerButton.bottomAnchor constraintEqualToAnchor:_itemImageView.bottomAnchor constant:4.0],
-        [_imagePickerButton.trailingAnchor constraintEqualToAnchor:_itemImageView.trailingAnchor constant:4.0],
-        [_imagePickerButton.widthAnchor constraintEqualToConstant:PPTouchTargetMin],
-        [_imagePickerButton.heightAnchor constraintEqualToConstant:PPTouchTargetMin],
-        
-        [heroTitle.leadingAnchor constraintEqualToAnchor:_itemImageView.trailingAnchor constant:PPSpaceBase],
-        [heroTitle.topAnchor constraintEqualToAnchor:_itemImageView.topAnchor constant:PPSpaceXS],
-        [heroTitle.trailingAnchor constraintEqualToAnchor:heroCard.trailingAnchor constant:-PPSpaceBase],
-        
-        [heroSubtitle.topAnchor constraintEqualToAnchor:heroTitle.bottomAnchor constant:PPSpaceXS],
-        [heroSubtitle.leadingAnchor constraintEqualToAnchor:heroTitle.leadingAnchor],
-        [heroSubtitle.trailingAnchor constraintEqualToAnchor:heroTitle.trailingAnchor],
-        [heroSubtitle.bottomAnchor constraintLessThanOrEqualToAnchor:heroCard.bottomAnchor constant:-PPSpaceBase],
+        [self.heroHostView.topAnchor constraintEqualToAnchor:_heroArea.topAnchor],
+        [self.heroHostView.leadingAnchor constraintEqualToAnchor:_heroArea.leadingAnchor],
+        [self.heroHostView.trailingAnchor constraintEqualToAnchor:_heroArea.trailingAnchor],
+        [self.heroHostView.bottomAnchor constraintEqualToAnchor:_heroArea.bottomAnchor],
         
         [self.contentStack.topAnchor constraintEqualToAnchor:_heroArea.bottomAnchor constant:PPSpaceBase],
         [self.contentStack.leadingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.leadingAnchor constant:PPSpaceBase],
@@ -514,13 +533,18 @@
     return textView;
 }
 
-- (UIView *)pp_sectionBlockWithTitle:(NSString *)title subtitle:(NSString *)subtitle icon:(NSString *)iconName views:(NSArray<UIView *> *)views {
-    // Pulse groups related work inside one quiet surface rather than treating
-    // every input as an isolated floating card.
+- (UIView *)pp_cardSurface {
     UIView *surface = [[UIView alloc] init];
     surface.translatesAutoresizingMaskIntoConstraints = NO;
     surface.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     PPStyleCardSurface(surface, PPCornerCard);
+    return surface;
+}
+
+- (UIView *)pp_sectionBlockWithTitle:(NSString *)title subtitle:(NSString *)subtitle icon:(NSString *)iconName views:(NSArray<UIView *> *)views {
+    // Pulse groups related work inside one quiet surface rather than treating
+    // every input as an isolated floating card.
+    UIView *surface = [self pp_cardSurface];
 
     UIStackView *stack = [[UIStackView alloc] init];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
@@ -669,13 +693,15 @@
 }
 
 - (void)pp_setupFormSections {
-    self.selectedImages = [NSMutableArray array];
-    self.imageURLs = [NSMutableArray array];
+    if (!self.selectedImages) self.selectedImages = [NSMutableArray array];
+    if (!self.imageURLs) self.imageURLs = [NSMutableArray array];
 
     UIView *nameRow = [self pp_textFieldWithPlaceholder:kLang(@"Market_NameReq") icon:@"square.and.pencil" field:&_nameField];
     self.nameField.keyboardType = UIKeyboardTypeDefault;
+    [self.nameField addTarget:self action:@selector(pp_updateHeroCardState) forControlEvents:UIControlEventEditingChanged];
     UIView *nameEnRow = [self pp_textFieldWithPlaceholder:kLang(@"Market_NameEn") icon:@"character.cursor.ibeam" field:&_nameEnField];
     self.nameEnField.keyboardType = UIKeyboardTypeASCIICapable;
+    [self.nameEnField addTarget:self action:@selector(pp_updateHeroCardState) forControlEvents:UIControlEventEditingChanged];
 
     UIView *descBlock = [[UIView alloc] init];
     descBlock.translatesAutoresizingMaskIntoConstraints = NO;
@@ -717,8 +743,19 @@
 
     UIView *priceRow = [self pp_textFieldWithPlaceholder:kLang(@"Market_PriceReq") icon:@"banknote.fill" field:&_priceField];
     self.priceField.keyboardType = UIKeyboardTypeASCIICapableNumberPad;
+    [self.priceField addTarget:self action:@selector(pp_updateHeroCardState) forControlEvents:UIControlEventEditingChanged];
+
+    UIView *wholesaleRow = [self pp_textFieldWithPlaceholder:Language.isRTL ? @"سعر الجملة (اختياري)" : @"Wholesale Price (Optional)" icon:@"tag.fill" field:&_wholesalePriceField];
+    self.wholesalePriceField.keyboardType = UIKeyboardTypeASCIICapableNumberPad;
+
     UIView *qtyRow = [self pp_textFieldWithPlaceholder:kLang(@"Market_QuantityReq") icon:@"shippingbox.fill" field:&_qtyField];
     self.qtyField.keyboardType = UIKeyboardTypeASCIICapableNumberPad;
+
+    UIView *skuRow = [self pp_textFieldWithPlaceholder:Language.isRTL ? @"رمز التخزين SKU (اختياري)" : @"SKU (Optional)" icon:@"barcode" field:&_skuField];
+    self.skuField.keyboardType = UIKeyboardTypeASCIICapable;
+
+    UIView *barcodeRow = [self pp_textFieldWithPlaceholder:Language.isRTL ? @"الباركود الدولي (اختياري)" : @"Barcode (Optional)" icon:@"barcode.viewfinder" field:&_barcodeField];
+    self.barcodeField.keyboardType = UIKeyboardTypeASCIICapable;
 
     self.kindControl = [[UISegmentedControl alloc] initWithItems:@[kLang(@"Market_Accessory"), kLang(@"Market_Food")]];
     self.kindControl.translatesAutoresizingMaskIntoConstraints = NO;
@@ -800,11 +837,300 @@
     [self.contentStack addArrangedSubview:[self pp_sectionBlockWithTitle:kLang(@"Market_SectionIdentity") subtitle:@"" icon:@"info.circle.fill" views:@[nameRow, nameEnRow]]];
     [self.contentStack addArrangedSubview:descBlock];
     [self.contentStack addArrangedSubview:descEnBlock];
-    [self.contentStack addArrangedSubview:[self pp_sectionBlockWithTitle:kLang(@"Market_SectionCommerce") subtitle:@"" icon:@"dollarsign.circle.fill" views:@[priceRow, qtyRow]]];
+    [self.contentStack addArrangedSubview:[self pp_sectionBlockWithTitle:kLang(@"Market_SectionCommerce") subtitle:@"" icon:@"dollarsign.circle.fill" views:@[priceRow, wholesaleRow, qtyRow, skuRow, barcodeRow]]];
+    [self.contentStack addArrangedSubview:[self pp_variantStudioBlock]];
     [self.contentStack addArrangedSubview:[self pp_sectionBlockWithTitle:kLang(@"Market_SectionClassification") subtitle:kLang(@"Market_CategoryPickerSubtitle") icon:@"pawprint.circle.fill" views:@[mainRow, subRow]]];
     [self.contentStack addArrangedSubview:imagesBlock];
     [self.contentStack addArrangedSubview:[self pp_sectionBlockWithTitle:kLang(@"Market_SectionPromotion") subtitle:@"" icon:@"sparkles" views:@[discPctRow, discAmtRow]]];
 }
+
+- (UIView *)pp_variantStudioBlock {
+    UIView *surface = [self pp_cardSurface];
+    self.variantStudioContainer = surface;
+    [self pp_populateVariantStudioContentInto:surface];
+    return surface;
+}
+
+- (void)pp_refreshVariantStudioBlock {
+    if (!self.variantStudioContainer) return;
+    for (UIView *sub in self.variantStudioContainer.subviews) {
+        [sub removeFromSuperview];
+    }
+    [self pp_populateVariantStudioContentInto:self.variantStudioContainer];
+    [self.view setNeedsLayout];
+    [self.view layoutIfNeeded];
+}
+
+- (void)pp_populateVariantStudioContentInto:(UIView *)surface {
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = PPSpaceBase;
+    stack.layoutMarginsRelativeArrangement = YES;
+    stack.layoutMargins = UIEdgeInsetsMake(PPSpaceBase, PPSpaceBase, PPSpaceBase, PPSpaceBase);
+    stack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [surface addSubview:stack];
+
+    NSString *title = Language.isRTL ? @"خيارات الصنف والمصفوفة" : @"Product Options & Matrix";
+    NSString *sub = Language.isRTL ? @"إدارة ألوان ومقاسات وأوزان الصنف ومصفوفة التوليدات والباركود" : @"Manage multi-axis options & combinations matrix";
+    [stack addArrangedSubview:[self pp_sectionHeader:title subtitle:sub icon:@"slider.horizontal.2.square.on.square"]];
+
+    if (self.isCreate || self.editItem.itemID.length == 0) {
+        UIView *banner = [[UIView alloc] init];
+        banner.translatesAutoresizingMaskIntoConstraints = NO;
+        banner.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.08];
+        banner.layer.cornerRadius = PPCornerMedium;
+        banner.layer.cornerCurve = kCACornerCurveContinuous;
+
+        UIImageView *infoIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"sparkles"]];
+        infoIcon.translatesAutoresizingMaskIntoConstraints = NO;
+        infoIcon.tintColor = AppPrimaryClr;
+
+        UILabel *infoLbl = [[UILabel alloc] init];
+        infoLbl.translatesAutoresizingMaskIntoConstraints = NO;
+        infoLbl.font = [Styling fontRegular:13.0];
+        infoLbl.textColor = PrimaryTextClr;
+        infoLbl.numberOfLines = 0;
+        infoLbl.textAlignment = Language.alignmentForCurrentLanguage;
+        infoLbl.text = Language.isRTL ? @"يمكنك إضافة ألوان ومقاسات وأوزان للمنتج مع تحديد سعر ومخزون وباركود لكل تركيبة. اضغط أدناه لتجهيز المنتج وتفعيل استوديو الخيارات فوراً." : @"You can configure sizes, colors, and weights with custom price, stock, and barcode per variant. Tap below to stage basic details and open Options & Matrix Studio.";
+
+        [banner addSubview:infoIcon];
+        [banner addSubview:infoLbl];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [infoIcon.leadingAnchor constraintEqualToAnchor:banner.leadingAnchor constant:12],
+            [infoIcon.topAnchor constraintEqualToAnchor:banner.topAnchor constant:12],
+            [infoIcon.widthAnchor constraintEqualToConstant:18],
+            [infoIcon.heightAnchor constraintEqualToConstant:18],
+            [infoLbl.leadingAnchor constraintEqualToAnchor:infoIcon.trailingAnchor constant:8],
+            [infoLbl.trailingAnchor constraintEqualToAnchor:banner.trailingAnchor constant:-12],
+            [infoLbl.topAnchor constraintEqualToAnchor:banner.topAnchor constant:10],
+            [infoLbl.bottomAnchor constraintEqualToAnchor:banner.bottomAnchor constant:-10]
+        ]];
+        [stack addArrangedSubview:banner];
+
+        UIButton *enableStudioBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+        enableStudioBtn.translatesAutoresizingMaskIntoConstraints = NO;
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightSemibold];
+        [enableStudioBtn setImage:[UIImage systemImageNamed:@"slider.horizontal.2.square.on.square" withConfiguration:cfg] forState:UIControlStateNormal];
+        NSString *btnTitle = Language.isRTL ? @"  تفعيل الخيارات وفتح الاستوديو" : @"  Enable Options & Open Studio";
+        [enableStudioBtn setTitle:btnTitle forState:UIControlStateNormal];
+        enableStudioBtn.titleLabel.font = [Styling fontBold:14.0];
+        enableStudioBtn.tintColor = UIColor.whiteColor;
+        enableStudioBtn.backgroundColor = AppPrimaryClr;
+        enableStudioBtn.layer.cornerRadius = PPCornerMedium;
+        enableStudioBtn.layer.cornerCurve = kCACornerCurveContinuous;
+        enableStudioBtn.layer.shadowColor = AppPrimaryClr.CGColor;
+        enableStudioBtn.layer.shadowOpacity = 0.25;
+        enableStudioBtn.layer.shadowOffset = CGSizeMake(0, 3);
+        enableStudioBtn.layer.shadowRadius = 6;
+        [enableStudioBtn addTarget:self action:@selector(pp_stageProductForOptionsAndOpenStudio) forControlEvents:UIControlEventTouchUpInside];
+        [enableStudioBtn.heightAnchor constraintEqualToConstant:46.0].active = YES;
+        [stack addArrangedSubview:enableStudioBtn];
+    } else {
+        UIView *statusBox = [[UIView alloc] init];
+        statusBox.translatesAutoresizingMaskIntoConstraints = NO;
+        statusBox.backgroundColor = [UIColor ppBackground];
+        statusBox.layer.cornerRadius = PPCornerSmall;
+        statusBox.layer.cornerCurve = kCACornerCurveContinuous;
+        statusBox.layer.borderWidth = 0.8;
+        statusBox.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
+
+        UILabel *statusBadge = [[UILabel alloc] init];
+        statusBadge.translatesAutoresizingMaskIntoConstraints = NO;
+        statusBadge.font = [Styling fontBold:11.0];
+        statusBadge.layer.cornerRadius = 6;
+        statusBadge.layer.masksToBounds = YES;
+        statusBadge.textAlignment = NSTextAlignmentCenter;
+
+        UILabel *descLbl = [[UILabel alloc] init];
+        descLbl.translatesAutoresizingMaskIntoConstraints = NO;
+        descLbl.font = [Styling fontMedium:13.0];
+        descLbl.textColor = PrimaryTextClr;
+        descLbl.numberOfLines = 2;
+        descLbl.textAlignment = Language.alignmentForCurrentLanguage;
+
+        BOOL isFamily = (self.editItem.productFamilyId.length > 0 || self.editItem.isVariant);
+        if (isFamily) {
+            statusBadge.text = Language.isRTL ? @"  مجموعة خيارات  " : @"  Option Family  ";
+            statusBadge.textColor = [UIColor ppSuccess];
+            statusBadge.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.12];
+            NSString *desc = self.editItem.pos_smartVariantDescription;
+            descLbl.text = desc.length > 0 ? desc : (Language.isRTL ? @"صنف مرتبط بمجموعة متغيرات وخيارات." : @"Product is part of a variant family.");
+        } else {
+            statusBadge.text = Language.isRTL ? @"  صنف فردي  " : @"  Single Item  ";
+            statusBadge.textColor = SeconderyTextClr;
+            statusBadge.backgroundColor = [[UIColor ppTextSecondary] colorWithAlphaComponent:0.10];
+            descLbl.text = Language.isRTL ? @"صنف فردي بدون مقاسات أو ألوان فرعية. يمكنك تحويله إلى مجموعة بضغطة زر." : @"Standalone item without sub-options. You can convert it into a family in one tap.";
+        }
+
+        [statusBox addSubview:statusBadge];
+        [statusBox addSubview:descLbl];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [statusBadge.leadingAnchor constraintEqualToAnchor:statusBox.leadingAnchor constant:12],
+            [statusBadge.topAnchor constraintEqualToAnchor:statusBox.topAnchor constant:12],
+            [statusBadge.heightAnchor constraintEqualToConstant:22],
+
+            [descLbl.leadingAnchor constraintEqualToAnchor:statusBadge.trailingAnchor constant:10],
+            [descLbl.trailingAnchor constraintEqualToAnchor:statusBox.trailingAnchor constant:-12],
+            [descLbl.centerYAnchor constraintEqualToAnchor:statusBadge.centerYAnchor],
+            [statusBox.bottomAnchor constraintEqualToAnchor:statusBadge.bottomAnchor constant:12]
+        ]];
+        [stack addArrangedSubview:statusBox];
+
+        UIButton *studioBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+        studioBtn.translatesAutoresizingMaskIntoConstraints = NO;
+        UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightSemibold];
+        [studioBtn setImage:[UIImage systemImageNamed:@"sparkles" withConfiguration:cfg] forState:UIControlStateNormal];
+        NSString *btnTitle = Language.isRTL ? @"  فتح استوديو الخيارات والمصفوفة" : @"  Open Options & Matrix Studio";
+        [studioBtn setTitle:btnTitle forState:UIControlStateNormal];
+        studioBtn.titleLabel.font = [Styling fontBold:14.0];
+        studioBtn.tintColor = UIColor.whiteColor;
+        studioBtn.backgroundColor = AppPrimaryClr;
+        studioBtn.layer.cornerRadius = PPCornerMedium;
+        studioBtn.layer.cornerCurve = kCACornerCurveContinuous;
+        studioBtn.layer.shadowColor = AppPrimaryClr.CGColor;
+        studioBtn.layer.shadowOpacity = 0.25;
+        studioBtn.layer.shadowOffset = CGSizeMake(0, 3);
+        studioBtn.layer.shadowRadius = 6;
+        [studioBtn addTarget:self action:@selector(pp_openVariantStudio) forControlEvents:UIControlEventTouchUpInside];
+        [studioBtn.heightAnchor constraintEqualToConstant:46.0].active = YES;
+        [stack addArrangedSubview:studioBtn];
+    }
+
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:surface.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:surface.bottomAnchor],
+    ]];
+}
+
+- (void)pp_stageProductForOptionsAndOpenStudio {
+    NSString *name = [self.nameField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    if (name.length == 0) {
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"Market_NameRequired")];
+        [self.nameField becomeFirstResponder];
+        return;
+    }
+    double price = self.priceField.text.doubleValue;
+    if (price <= 0) {
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"Market_PriceInvalid")];
+        [self.priceField becomeFirstResponder];
+        return;
+    }
+    NSInteger qty = (NSInteger)self.qtyField.text.integerValue;
+    if (qty < 0) qty = 0;
+    NSInteger cat = self.selectedMainCategoryID;
+    if (cat <= 0) {
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"Market_CategoryRequired")];
+        return;
+    }
+
+    NSMutableDictionary *fields = [NSMutableDictionary dictionary];
+    fields[@"name"] = name;
+    fields[@"nameEn"] = [self.nameEnField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    fields[@"desc"] = self.descriptionView.text ?: @"";
+    fields[@"descEn"] = self.descriptionEnView.text ?: @"";
+    fields[@"price"] = @(price);
+    fields[@"quantity"] = @(qty);
+    fields[@"petMainCategoryID"] = @(cat);
+    fields[@"petMainCategoryName"] = self.selectedMainKindName ?: @"";
+    fields[@"petSubCategoryID"] = @(self.selectedSubCategoryID);
+    fields[@"accessKindType"] = @(self.kindControl.selectedSegmentIndex == 1 ? 2 : 1);
+    if (self.skuField.text.length > 0) {
+        fields[@"sku"] = [self.skuField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    }
+    if (self.barcodeField.text.length > 0) {
+        fields[@"barcode"] = [self.barcodeField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    }
+    if (self.wholesalePriceField.text.length > 0) {
+        double wp = self.wholesalePriceField.text.doubleValue;
+        if (wp > 0) fields[@"wholesalePrice"] = @(wp);
+    }
+    double dp = self.discountPctField.text.doubleValue;
+    double da = self.discountAmtField.text.doubleValue;
+    if (dp > 0) fields[@"discountPercent"] = @(dp);
+    if (da > 0) fields[@"discountAmount"] = @(da);
+    fields[@"hasOffer"] = @((dp > 0) || (da > 0));
+
+    [PPHUD showIndeterminateIn:self.view title:Language.isRTL ? @"جاري تجهيز الصنف لخيارات المصفوفة..." : @"Preparing product for options studio..." subtitle:nil];
+    self.saveButton.enabled = NO;
+
+    __weak typeof(self) ws = self;
+    [[PPProviderMarketplaceManager sharedManager] createMarketItem:fields completion:^(BOOL ok, NSString *itemID, NSString *msg, NSError *err) {
+        [PPHUD dismiss];
+        __strong typeof(ws) self = ws;
+        if (!self) return;
+        self.saveButton.enabled = YES;
+        if (!ok || itemID.length == 0) {
+            [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:msg ?: err.localizedDescription];
+            return;
+        }
+
+        // Successfully created root item document!
+        self.isCreate = NO;
+        if (!self.editItem) {
+            self.editItem = [[PPProviderMarketItem alloc] init];
+        }
+        self.editItem.itemID = itemID;
+        self.editItem.name = name;
+        self.editItem.nameEn = fields[@"nameEn"];
+        self.editItem.desc = fields[@"desc"];
+        self.editItem.descEn = fields[@"descEn"];
+        self.editItem.price = price;
+        self.editItem.quantity = qty;
+        self.editItem.petMainCategoryID = cat;
+        self.editItem.petMainCategoryName = fields[@"petMainCategoryName"];
+        self.editItem.petSubCategoryID = self.selectedSubCategoryID;
+        self.editItem.accessKindType = [fields[@"accessKindType"] integerValue];
+        self.editItem.sku = fields[@"sku"];
+        self.editItem.barcode = fields[@"barcode"];
+        self.editItem.wholesalePrice = fields[@"wholesalePrice"];
+
+        // Refresh UI state & studio button block
+        [self pp_refreshVariantStudioBlock];
+        // And directly open variant studio
+        [self pp_openVariantStudio];
+    }];
+}
+
+- (void)pp_openVariantStudio {
+    if (!self.editItem) return;
+    PPAccessoryVariantStudioHostController *host = [[PPAccessoryVariantStudioHostController alloc] initWithMarketItem:self.editItem];
+    __weak typeof(self) ws = self;
+    host.onSaved = ^(PetAccessory *acc) {
+        if (!acc) return;
+        ws.editItem.productFamilyId = acc.productFamilyId;
+        ws.editItem.isVariant = acc.isVariant;
+        ws.editItem.isDefaultVariant = acc.isDefaultVariant;
+        ws.editItem.variantSortOrder = acc.variantSortOrder;
+        ws.editItem.variantColorDictionary = acc.variantColorDictionary;
+        ws.editItem.selectedOptions = acc.selectedOptions;
+        ws.editItem.selectedOptionsSnapshot = acc.selectedOptionsSnapshot;
+        ws.editItem.variantCombinationKey = acc.variantCombinationKey;
+        ws.editItem.variantAxis = acc.variantAxis;
+        ws.editItem.sku = acc.sku;
+        ws.editItem.barcode = acc.barcode;
+        if (acc.price != nil) ws.editItem.price = acc.price.doubleValue;
+        if (acc.wholesalePrice != nil) ws.editItem.wholesalePrice = acc.wholesalePrice;
+        if (acc.costPrice != nil) ws.editItem.costPrice = acc.costPrice;
+        ws.editItem.quantity = acc.quantity;
+        ws.editItem.revision = acc.revision;
+        [ws pp_applyValues];
+        [ws pp_refreshVariantStudioBlock];
+    };
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:host];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    if (@available(iOS 15.0, *)) {
+        UISheetPresentationController *sheet = nav.sheetPresentationController;
+        sheet.detents = @[[UISheetPresentationControllerDetent largeDetent]];
+        sheet.prefersGrabberVisible = YES;
+    }
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
@@ -852,7 +1178,10 @@
     self.itemImageView.tintColor = [AppPrimaryClr colorWithAlphaComponent:0.2];
     self.itemImageView.contentMode = UIViewContentModeCenter;
 
-    if (self.isCreate) return;
+    if (self.isCreate) {
+        [self pp_updateHeroCardState];
+        return;
+    }
 
     self.nameField.text = self.editItem.name;
     self.nameEnField.text = self.editItem.nameEn;
@@ -860,6 +1189,13 @@
     self.descriptionEnView.text = self.editItem.descEn;
     self.priceField.text = self.editItem.price > 0 ? [NSString stringWithFormat:@"%.0f", self.editItem.price] : @"";
     self.qtyField.text = [NSString stringWithFormat:@"%ld", (long)self.editItem.quantity];
+    self.skuField.text = self.editItem.sku ?: @"";
+    self.barcodeField.text = self.editItem.barcode ?: @"";
+    if (self.editItem.wholesalePrice != nil && self.editItem.wholesalePrice.doubleValue > 0) {
+        self.wholesalePriceField.text = [NSString stringWithFormat:@"%.0f", self.editItem.wholesalePrice.doubleValue];
+    } else {
+        self.wholesalePriceField.text = @"";
+    }
     self.selectedMainCategoryID = self.editItem.petMainCategoryID;
     self.selectedSubCategoryID = self.editItem.petSubCategoryID;
     self.selectedMainKindName = self.editItem.petMainCategoryName;
@@ -870,6 +1206,7 @@
         [self.imageURLs addObjectsFromArray:self.editItem.imageURLsArray ?: @[]];
         [self.imageCollectionView reloadData];
     }
+    [self pp_updateHeroCardState];
 }
 
 - (void)saveTapped {
@@ -892,6 +1229,16 @@
     fields[@"petMainCategoryID"] = @(cat);
     fields[@"petMainCategoryName"] = self.selectedMainKindName ?: @"";
     fields[@"petSubCategoryID"] = @(self.selectedSubCategoryID);
+    if (self.skuField.text.length > 0) {
+        fields[@"sku"] = [self.skuField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    }
+    if (self.barcodeField.text.length > 0) {
+        fields[@"barcode"] = [self.barcodeField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    }
+    if (self.wholesalePriceField.text.length > 0) {
+        double wp = self.wholesalePriceField.text.doubleValue;
+        if (wp > 0) fields[@"wholesalePrice"] = @(wp);
+    }
     double dp = self.discountPctField.text.doubleValue;
     double da = self.discountAmtField.text.doubleValue;
     if (dp > 0) fields[@"discountPercent"] = @(dp);
@@ -1013,7 +1360,10 @@
             dispatch_group_leave(group);
         }];
     }
-    dispatch_group_notify(group, dispatch_get_main_queue(), ^{ [self.imageCollectionView reloadData]; });
+    dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+        [self.imageCollectionView reloadData];
+        [self pp_updateHeroCardState];
+    });
 }
 
 #pragma mark - Image Collection View
@@ -1101,6 +1451,7 @@
     if (idx < (NSInteger)self.imageURLs.count) [self.imageURLs removeObjectAtIndex:idx];
     else { NSInteger i = idx - (NSInteger)self.imageURLs.count; if (i < (NSInteger)self.selectedImages.count) [self.selectedImages removeObjectAtIndex:i]; }
     [self.imageCollectionView reloadData];
+    [self pp_updateHeroCardState];
 }
 
 #pragma mark - Lifecycle
@@ -1162,6 +1513,7 @@
     self.subKindField.enabled = (self.selectedMainCategoryID > 0);
     self.subKindField.userInteractionEnabled = (self.selectedMainCategoryID > 0);
     self.subKindField.alpha = self.selectedMainCategoryID > 0 ? 1.0 : 0.5;
+    [self pp_updateHeroCardState];
 }
 
 - (void)updateSubKindPickerTitle {

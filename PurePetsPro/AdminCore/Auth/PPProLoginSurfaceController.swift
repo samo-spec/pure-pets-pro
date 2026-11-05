@@ -3008,6 +3008,8 @@ struct PPProCommandFocusView: View {
         case "delivery": return localized("PulseCommand_AllDeliveriesPrompt")
         case "deliveryCompany": return localized("PulseCommand_AllCompanyDeliveriesPrompt")
         case "supportChats": return localized("PulseCommand_AllSupportChatsPrompt")
+        case "expiringDocs": return localized("PulseCommand_AllExpiringDocsPrompt")
+        case "stockAlerts": return localized("PulseCommand_AllStockAlertsPrompt")
         default: return localized("PulseCommand_AllWorkspacePrompt")
         }
     }
@@ -3638,13 +3640,49 @@ struct PPProPulseScope {
     }
 }
 
+// MARK: - Capability Theme (Domain Semantic Palette)
+
+enum PPProCapabilityTheme {
+    static func resolve(for capability: PPProCommandCapability, isDark: Bool) -> (accent: Color, soft: Color, gradient: [Color]) {
+        let key = (capability.id + " " + capability.title).lowercased()
+        let symbol = capability.symbolName.lowercased()
+
+        if key.contains("pharmacy") || key.contains("صيدلي") || symbol.contains("cross") || symbol.contains("pills") {
+            // Pharmacy: Mint / Emerald
+            let c = Color(red: 0.14, green: 0.72, blue: 0.54)
+            return (c, c.opacity(isDark ? 0.22 : 0.12), [c, Color(red: 0.08, green: 0.56, blue: 0.42)])
+        } else if key.contains("deliver") || key.contains("توصيل") || symbol.contains("box") || symbol.contains("shipping") || symbol.contains("truck") {
+            // Deliveries: Amber / Tangerine
+            let c = Color(red: 0.96, green: 0.58, blue: 0.16)
+            return (c, c.opacity(isDark ? 0.22 : 0.12), [c, Color(red: 0.88, green: 0.44, blue: 0.10)])
+        } else if key.contains("vet") || key.contains("بيطري") || symbol.contains("stethoscope") {
+            // Veterinarian: Cobalt / Royal Blue
+            let c = Color(red: 0.24, green: 0.52, blue: 0.95)
+            return (c, c.opacity(isDark ? 0.22 : 0.12), [c, Color(red: 0.15, green: 0.38, blue: 0.85)])
+        } else if key.contains("service") || key.contains("خدم") || symbol.contains("scissors") || symbol.contains("wrench") {
+            // Services: Cyan / Sky
+            let c = Color(red: 0.12, green: 0.68, blue: 0.86)
+            return (c, c.opacity(isDark ? 0.22 : 0.12), [c, Color(red: 0.08, green: 0.52, blue: 0.72)])
+        } else if key.contains("adopt") || key.contains("تبني") || symbol.contains("paw") || symbol.contains("heart") {
+            // Adoption: Coral / Rose
+            let c = Color(red: 0.94, green: 0.36, blue: 0.52)
+            return (c, c.opacity(isDark ? 0.22 : 0.12), [c, Color(red: 0.84, green: 0.24, blue: 0.40)])
+        } else if key.contains("product") || key.contains("منتج") || symbol.contains("bag") || symbol.contains("cart") {
+            // Products: Violet / Lavender
+            let c = Color(red: 0.60, green: 0.36, blue: 0.94)
+            return (c, c.opacity(isDark ? 0.22 : 0.12), [c, Color(red: 0.48, green: 0.25, blue: 0.84)])
+        } else {
+            // Fallback: Primary Brand Accent
+            let c = Color(uiColor: UIColor.ppPrimary)
+            return (c, c.opacity(isDark ? 0.22 : 0.12), [c, Color(uiColor: UIColor.ppPressedAction)])
+        }
+    }
+}
+
 // MARK: - Vitals strip
 
-/// The scope's three counts as one thin monospaced line.
-///
-/// `signalCount` is now the count of what is actually rendered below it. It used
-/// to be `snapshot.signals.count`, so selecting a lens that owned no signals
-/// left this line asserting a global figure the screen was not showing.
+/// High-density telemetry strip presenting the operator's operational state
+/// as three tactile instrument capsules with live status cues.
 private struct PPProVitalsStrip: View {
     let workspaceCount: Int
     let signalCount: Int
@@ -3654,59 +3692,106 @@ private struct PPProVitalsStrip: View {
 
     @Environment(\.sizeCategory) private var sizeCategory
 
-    private func localized(_ key: String) -> String { Language.get(key, alter: nil) }
+    private func localized(_ key: String, alter: String? = nil) -> String {
+        Language.get(key, alter: alter)
+    }
 
     var body: some View {
-        let items: [(Int, String)] = [
-            (workspaceCount, localized("DashboardHero_Metric_Workspaces")),
-            (signalCount, localized("PulseCommand_LiveSignal")),
-            (unreadCount, localized("Unread"))
-        ]
-
         Group {
             if sizeCategory.isAccessibilityCategory {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                        vital(item.0, item.1, emphasised: isScoped && index == 1)
-                    }
+                VStack(spacing: 8) {
+                    capsuleItem(
+                        icon: "square.grid.2x2.fill",
+                        value: workspaceCount,
+                        label: localized("DashboardHero_Metric_Workspaces"),
+                        isAlert: false,
+                        isHighlight: false
+                    )
+                    capsuleItem(
+                        icon: "waveform.path.ecg",
+                        value: signalCount,
+                        label: localized("PulseCommand_LiveSignal"),
+                        isAlert: false,
+                        isHighlight: isScoped || signalCount > 0
+                    )
+                    capsuleItem(
+                        icon: unreadCount > 0 ? "bell.badge.fill" : "bell.fill",
+                        value: unreadCount,
+                        label: localized("Unread"),
+                        isAlert: unreadCount > 0,
+                        isHighlight: false
+                    )
                 }
             } else {
-                HStack(spacing: 0) {
-                    ForEach(Array(items.enumerated()), id: \.offset) { index, item in
-                        if index > 0 {
-                            Circle()
-                                .fill(palette.secondary.opacity(0.35))
-                                .frame(width: 3, height: 3)
-                                .padding(.horizontal, 9)
-                        }
-                        vital(item.0, item.1, emphasised: isScoped && index == 1)
-                    }
-                    Spacer(minLength: 0)
+                HStack(spacing: 8) {
+                    capsuleItem(
+                        icon: "square.grid.2x2.fill",
+                        value: workspaceCount,
+                        label: localized("DashboardHero_Metric_Workspaces"),
+                        isAlert: false,
+                        isHighlight: false
+                    )
+                    capsuleItem(
+                        icon: "waveform.path.ecg",
+                        value: signalCount,
+                        label: localized("PulseCommand_LiveSignal"),
+                        isAlert: false,
+                        isHighlight: isScoped || signalCount > 0
+                    )
+                    capsuleItem(
+                        icon: unreadCount > 0 ? "bell.badge.fill" : "bell.fill",
+                        value: unreadCount,
+                        label: localized("Unread"),
+                        isAlert: unreadCount > 0,
+                        isHighlight: false
+                    )
                 }
             }
         }
         .accessibilityElement(children: .combine)
     }
 
-    private func vital(_ value: Int, _ title: String, emphasised: Bool) -> some View {
-        HStack(spacing: 5) {
+    private func capsuleItem(
+        icon: String,
+        value: Int,
+        label: String,
+        isAlert: Bool,
+        isHighlight: Bool
+    ) -> some View {
+        let alertColor = Color(red: 0.95, green: 0.35, blue: 0.25)
+        return HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(isAlert ? alertColor : (isHighlight ? palette.accentText : palette.secondary))
+
             Text(value, format: .number)
                 .font(PPProType.bold(12, relativeTo: .caption))
                 .monospacedDigit()
-                .foregroundStyle(emphasised ? palette.accentText : palette.text)
-            Text(title)
-                .font(PPProType.regular(11, relativeTo: .caption))
+                .foregroundStyle(isAlert ? alertColor : (isHighlight ? palette.accentText : palette.text))
+
+            Text(label)
+                .font(PPProType.medium(10, relativeTo: .caption2))
                 .foregroundStyle(palette.secondary)
                 .lineLimit(1)
         }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: PPProRadius.chip, style: .continuous)
+                .fill(isAlert ? alertColor.opacity(palette.isDark ? 0.20 : 0.10) : (isHighlight ? palette.accentSoft : palette.surface))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: PPProRadius.chip, style: .continuous)
+                .stroke(isAlert ? alertColor.opacity(0.35) : (isHighlight ? palette.accent.opacity(0.35) : palette.hairline), lineWidth: 0.8)
+        )
     }
 }
 
 // MARK: - Lens rail
 
-/// Replaces the legacy prism dropdown (overlay + scrim + anchor preference key +
-/// 7 geometry constants) for what is a cheap, reversible, local filter. A
-/// horizontal rail keeps every lens one tap away and always visible.
+/// Replaces the legacy prism dropdown with a fluid horizontal filter rail
+/// featuring domain-themed category colors and matched geometry springs.
 private struct PPProLensRail: View {
     let capabilities: [PPProCommandCapability]
     let selectedID: String
@@ -3717,35 +3802,40 @@ private struct PPProLensRail: View {
 
     @Namespace private var lensNamespace
 
-    private func localized(_ key: String) -> String { Language.get(key, alter: nil) }
+    private func localized(_ key: String, alter: String? = nil) -> String {
+        Language.get(key, alter: alter)
+    }
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 7) {
+            HStack(spacing: 8) {
                 lensChip(
                     id: "all",
                     title: localized("PulseCommand_AllCapabilities"),
                     symbol: "square.grid.2x2",
                     count: 0,
-                    isReadOnly: false
+                    isReadOnly: false,
+                    accentColor: palette.accent
                 )
                 ForEach(capabilities) { capability in
+                    let theme = PPProCapabilityTheme.resolve(for: capability, isDark: palette.isDark)
                     lensChip(
                         id: capability.id,
                         title: capability.title,
                         symbol: capability.symbolName,
                         count: capability.actionCount,
-                        isReadOnly: capability.isReadOnly
+                        isReadOnly: capability.isReadOnly,
+                        accentColor: theme.accent
                     )
                 }
             }
             .padding(.horizontal, PPProPulseRhythm.screenMargin)
-            .padding(.vertical, 2)
+            .padding(.vertical, 3)
         }
         .accessibilityLabel(localized("PulseCommand_CapabilityPrism"))
     }
 
-    private func lensChip(id: String, title: String, symbol: String, count: Int, isReadOnly: Bool) -> some View {
+    private func lensChip(id: String, title: String, symbol: String, count: Int, isReadOnly: Bool, accentColor: Color) -> some View {
         let isSelected = selectedID == id
         return Button {
             onSelect(id)
@@ -3753,9 +3843,12 @@ private struct PPProLensRail: View {
             HStack(spacing: 6) {
                 Image(systemName: symbol)
                     .font(.system(size: PPProGlyph.small, weight: .semibold))
+                    .foregroundStyle(isSelected ? Color.white : accentColor)
+
                 Text(title)
                     .font(PPProType.medium(13, relativeTo: .subheadline))
                     .lineLimit(1)
+
                 if isReadOnly {
                     Image(systemName: "eye.fill")
                         .font(.system(size: PPProGlyph.micro, weight: .bold))
@@ -3767,23 +3860,25 @@ private struct PPProLensRail: View {
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(
-                            Capsule().fill(isSelected ? Color.white.opacity(0.22) : palette.accentSoft)
+                            Capsule().fill(isSelected ? Color.white.opacity(0.25) : palette.accentSoft)
                         )
                 }
             }
             .foregroundStyle(isSelected ? Color.white : palette.text)
-            .padding(.horizontal, 13)
+            .padding(.horizontal, 14)
             .frame(minHeight: 38)
             .background {
                 if isSelected {
                     Capsule()
-                        .fill(palette.accent)
+                        .fill(accentColor)
                         .matchedGeometryEffect(
                             id: reduceMotion ? "lens-static-\(id)" : "lens-active",
                             in: lensNamespace
                         )
+                        .shadow(color: accentColor.opacity(palette.isDark ? 0.35 : 0.22), radius: 6, x: 0, y: 2)
                 } else {
-                    Capsule().fill(palette.surface)
+                    Capsule()
+                        .fill(palette.surface)
                         .overlay(Capsule().stroke(palette.hairline, lineWidth: 0.8))
                 }
             }
@@ -3946,9 +4041,9 @@ private struct PPProAttentionStage: View {
 
     private var actionControl: some View {
         Button(action: isAct ? onExecute : onWorkspace) {
-            HStack(spacing: 8) {
+            HStack(spacing: 9) {
                 Text(actionTitle)
-                    .font(PPProType.bold(14, relativeTo: .subheadline))
+                    .font(PPProType.bold(15, relativeTo: .subheadline))
                     .lineLimit(isAccessibilitySize ? 3 : 1)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
@@ -3959,20 +4054,25 @@ private struct PPProAttentionStage: View {
                     .font(.system(size: PPProGlyph.small, weight: .bold))
             }
             .foregroundStyle(isAct ? Color.white : palette.accentText)
-            .padding(.horizontal, 15)
+            .padding(.horizontal, 16)
             .frame(minHeight: 50)
             .frame(maxWidth: .infinity)
             .background(
                 RoundedRectangle(cornerRadius: PPProRadius.control, style: .continuous)
-                    .fill(isAct ? palette.accent : palette.accentSoft)
+                    .fill(
+                        isAct
+                            ? LinearGradient(colors: [palette.accent, palette.accentStrong], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            : LinearGradient(colors: [palette.accentSoft, palette.accentSoft], startPoint: .topLeading, endPoint: .bottomTrailing)
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: PPProRadius.control, style: .continuous)
                     .strokeBorder(
-                        isAct ? Color.white.opacity(0.22) : palette.accent.opacity(0.28),
+                        isAct ? Color.white.opacity(0.24) : palette.accent.opacity(0.28),
                         lineWidth: 0.8
                     )
             )
+            .shadow(color: isAct ? palette.accent.opacity(palette.isDark ? 0.35 : 0.20) : .clear, radius: 8, x: 0, y: 3)
         }
         .buttonStyle(PPProCommandPressStyle())
         .accessibilityLabel(actionTitle)
@@ -3988,10 +4088,10 @@ private struct PPProAttentionStage: View {
                 // surface so the two tiers are distinguishable at a glance.
                 if isAct {
                     RadialGradient(
-                        colors: [palette.accent.opacity(colorScheme == .dark ? 0.16 : 0.07), .clear],
+                        colors: [palette.accent.opacity(colorScheme == .dark ? 0.18 : 0.08), .clear],
                         center: .topLeading,
                         startRadius: 0,
-                        endRadius: 240
+                        endRadius: 260
                     )
                     .clipShape(RoundedRectangle(cornerRadius: PPProRadius.stage, style: .continuous))
                 }
@@ -4002,20 +4102,13 @@ private struct PPProAttentionStage: View {
     private var stageBorder: some View {
         RoundedRectangle(cornerRadius: PPProRadius.stage, style: .continuous)
             .strokeBorder(
-                isAct ? palette.accent.opacity(0.34) : palette.hairline,
+                isAct ? palette.accent.opacity(0.38) : palette.hairline,
                 lineWidth: isAct ? 1.0 : 0.8
             )
     }
 }
 
-/// Rank plate for the stage.
-///
-/// The former beacon reserved its strong branch (gradient fill, white glyph,
-/// accent shadow) for `.critical` and additionally ran a `repeatForever`
-/// breathing ring. Since no Objective-C builder emits priority 2, that branch
-/// and its perpetual animation were unreachable code guarding an animation that
-/// could never start. Emphasis is now driven by the resolved tier — which does
-/// vary — and there is no perpetual motion to gate.
+/// Rank plate for the stage with radiant beacon aura.
 private struct PPProPriorityBeacon: View {
     let priority: PPProCommandPriority
     let symbol: String
@@ -4024,8 +4117,18 @@ private struct PPProPriorityBeacon: View {
 
     var body: some View {
         ZStack {
+            if emphatic {
+                RoundedRectangle(cornerRadius: PPProRadius.control + 2, style: .continuous)
+                    .fill(palette.accent.opacity(palette.isDark ? 0.28 : 0.16))
+                    .frame(width: PPProGlyph.plateLarge + 6, height: PPProGlyph.plateLarge + 6)
+            }
+
             RoundedRectangle(cornerRadius: PPProRadius.control, style: .continuous)
-                .fill(emphatic ? palette.accent : palette.accentSoft)
+                .fill(
+                    emphatic
+                        ? LinearGradient(colors: [palette.accent, palette.accentStrong], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        : LinearGradient(colors: [palette.accentSoft, palette.accentSoft], startPoint: .topLeading, endPoint: .bottomTrailing)
+                )
                 .overlay(
                     RoundedRectangle(cornerRadius: PPProRadius.control, style: .continuous)
                         .strokeBorder(
@@ -4039,6 +4142,7 @@ private struct PPProPriorityBeacon: View {
                 .foregroundStyle(emphatic ? Color.white : palette.accentText)
         }
         .frame(width: PPProGlyph.plateLarge, height: PPProGlyph.plateLarge)
+        .shadow(color: emphatic ? palette.accent.opacity(palette.isDark ? 0.38 : 0.20) : .clear, radius: 6, x: 0, y: 3)
         .accessibilityHidden(true)
     }
 }
@@ -4701,24 +4805,25 @@ private struct PPProWorkspaceBand: View {
     let isRTL: Bool
     let onOpen: (String) -> Void
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.sizeCategory) private var sizeCategory
 
-    private func localized(_ key: String) -> String { Language.get(key, alter: nil) }
+    private func localized(_ key: String, alter: String? = nil) -> String {
+        Language.get(key, alter: alter)
+    }
     private var isAccessibilitySize: Bool { sizeCategory.isAccessibilityCategory }
+    private var isPad: Bool { horizontalSizeClass == .regular }
 
     private var total: Int { activeCapabilities.count + idleCapabilities.count }
 
     private var columns: [GridItem] {
-        // Idle doors go 3-up. An earlier revision of this band used 2-up with a
-        // one-line subtitle, which was *taller* than the surface it replaced —
-        // the opposite of the intent. For an idle door the title is the whole
-        // information: the old 3-up card did render a subtitle, but at ~118pt of
-        // cell width it truncated ("…وتقدّم التوصي"), so the text cost height
-        // without delivering meaning. The subtitle is still shown in full on
-        // promoted rows, in the Menu Map atlas, and here at accessibility sizes
-        // where a single column has room for it — and it always reaches
-        // VoiceOver through `accessibilityHint`.
-        [GridItem(.adaptive(minimum: isAccessibilitySize ? 260 : 104), spacing: 9)]
+        if isPad {
+            return [GridItem(.adaptive(minimum: 220), spacing: 14)]
+        } else if isAccessibilitySize {
+            return [GridItem(.flexible())]
+        } else {
+            return [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+        }
     }
 
     var body: some View {
@@ -4726,7 +4831,7 @@ private struct PPProWorkspaceBand: View {
             header
 
             if !activeCapabilities.isEmpty {
-                VStack(spacing: 8) {
+                VStack(spacing: 9) {
                     ForEach(activeCapabilities) { capability in
                         activeRow(capability)
                     }
@@ -4734,7 +4839,7 @@ private struct PPProWorkspaceBand: View {
             }
 
             if !idleCapabilities.isEmpty {
-                LazyVGrid(columns: columns, spacing: 9) {
+                LazyVGrid(columns: columns, spacing: isPad ? 14 : 10) {
                     ForEach(idleCapabilities) { capability in
                         idleCell(capability)
                     }
@@ -4744,49 +4849,53 @@ private struct PPProWorkspaceBand: View {
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 7) {
             Text(localized("PulseCommand_EnabledCapabilities"))
                 .font(PPProType.bold(14, relativeTo: .subheadline))
                 .foregroundStyle(palette.text)
                 .lineLimit(2)
+
             Text("\(total)")
-                .font(PPProType.medium(11, relativeTo: .caption))
+                .font(PPProType.bold(11, relativeTo: .caption))
                 .monospacedDigit()
-                .foregroundStyle(palette.secondary)
+                .foregroundStyle(palette.accentText)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 2)
+                .background(Capsule().fill(palette.accentSoft))
+
             Spacer(minLength: 0)
         }
         .accessibilityElement(children: .combine)
     }
 
-    /// How many live signals this capability owns. Signals with empty
-    /// `capabilityIDs` — notifications and support chats — deliberately belong to
-    /// no capability and are never counted here, which preserves the snapshot
-    /// invariant that they are lens-independent.
+    /// How many live signals this capability owns.
     private func ownedSignals(_ capability: PPProCommandCapability) -> [PPProCommandSignal] {
         signals.filter { $0.capabilityIDs.contains(capability.id) }
     }
 
-    // MARK: Promoted row
+    // MARK: Promoted active row
 
     private func activeRow(_ capability: PPProCommandCapability) -> some View {
         let isDisabled = capability.routeTag.isEmpty
         let owned = ownedSignals(capability)
         let isLens = capability.id == lensID
         let pending = max(capability.actionCount, owned.reduce(0) { $0 + $1.badgeCount })
+        let theme = PPProCapabilityTheme.resolve(for: capability, isDark: palette.isDark)
 
         return Button {
             guard !isDisabled else { return }
             onOpen(capability.routeTag)
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 13) {
                 ZStack {
                     RoundedRectangle(cornerRadius: PPProRadius.chip, style: .continuous)
-                        .fill(pending > 0 ? palette.accent : palette.accentSoft)
+                        .fill(LinearGradient(colors: theme.gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
                     Image(systemName: capability.symbolName)
-                        .font(.system(size: PPProGlyph.medium, weight: .semibold))
-                        .foregroundStyle(pending > 0 ? Color.white : palette.accentText)
+                        .font(.system(size: PPProGlyph.medium, weight: .bold))
+                        .foregroundStyle(Color.white)
                 }
                 .frame(width: PPProGlyph.plateMedium, height: PPProGlyph.plateMedium)
+                .shadow(color: theme.accent.opacity(palette.isDark ? 0.38 : 0.22), radius: 5, x: 0, y: 2)
                 .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -4799,7 +4908,7 @@ private struct PPProWorkspaceBand: View {
                         if isLens {
                             Image(systemName: "scope")
                                 .font(.system(size: PPProGlyph.micro, weight: .bold))
-                                .foregroundStyle(palette.accentText)
+                                .foregroundStyle(theme.accent)
                                 .accessibilityHidden(true)
                         }
                     }
@@ -4827,30 +4936,31 @@ private struct PPProWorkspaceBand: View {
                         .foregroundStyle(Color.white)
                         .padding(.horizontal, 8)
                         .frame(minHeight: 24)
-                        .background(Capsule().fill(palette.accent))
+                        .background(Capsule().fill(theme.accent))
                         .accessibilityHidden(true)
                 }
 
                 Image(systemName: isRTL ? "arrow.left" : "arrow.right")
                     .font(.system(size: PPProGlyph.small, weight: .bold))
-                    .foregroundStyle(palette.accentText)
+                    .foregroundStyle(theme.accent)
                     .accessibilityHidden(true)
             }
-            .padding(.horizontal, 13)
+            .padding(.horizontal, 14)
             .padding(.vertical, 12)
-            .frame(minHeight: 44)
+            .frame(minHeight: 48)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: PPProRadius.tile, style: .continuous)
-                    .fill(palette.surface)
+                    .fill(palette.surfaceElevated)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: PPProRadius.tile, style: .continuous)
                     .strokeBorder(
-                        pending > 0 ? palette.accent.opacity(0.30) : palette.hairline,
+                        pending > 0 ? theme.accent.opacity(0.38) : palette.hairline,
                         lineWidth: pending > 0 ? 1.0 : 0.8
                     )
             )
+            .shadow(color: palette.shadow, radius: 4, x: 0, y: 2)
             .opacity(isDisabled ? 0.48 : 1)
         }
         .buttonStyle(PPProCommandPressStyle())
@@ -4861,63 +4971,77 @@ private struct PPProWorkspaceBand: View {
         .accessibilityHint(localized("PulseCommand_OpenExecutionWorkspace"))
     }
 
-    // MARK: Quiet door
+    // MARK: Tactile capability card
 
     private func idleCell(_ capability: PPProCommandCapability) -> some View {
         let isDisabled = capability.routeTag.isEmpty
+        let theme = PPProCapabilityTheme.resolve(for: capability, isDark: palette.isDark)
 
         return Button {
             guard !isDisabled else { return }
             onOpen(capability.routeTag)
         } label: {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: isPad ? 12 : 9) {
+                HStack(spacing: 8) {
                     ZStack {
                         RoundedRectangle(cornerRadius: PPProRadius.chip, style: .continuous)
-                            .fill(palette.accentSoft)
+                            .fill(LinearGradient(colors: theme.gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
                         Image(systemName: capability.symbolName)
-                            .font(.system(size: PPProGlyph.small, weight: .semibold))
-                            .foregroundStyle(palette.accentText)
+                            .font(.system(size: isPad ? 16 : 14, weight: .bold))
+                            .foregroundStyle(Color.white)
                     }
-                    .frame(width: PPProGlyph.plateSmall, height: PPProGlyph.plateSmall)
+                    .frame(width: isPad ? 38 : 32, height: isPad ? 38 : 32)
+                    .shadow(color: theme.accent.opacity(palette.isDark ? 0.35 : 0.20), radius: 4, x: 0, y: 2)
                     .accessibilityHidden(true)
 
                     Spacer(minLength: 0)
 
                     if capability.isReadOnly {
-                        Image(systemName: "eye.fill")
-                            .font(.system(size: PPProGlyph.micro, weight: .bold))
-                            .foregroundStyle(palette.secondary)
-                            .accessibilityHidden(true)
+                        HStack(spacing: 3) {
+                            Image(systemName: "eye.fill")
+                                .font(.system(size: 8, weight: .bold))
+                            if isPad {
+                                Text(localized("DeliveryCompany_DashboardShell_Status_ReadOnly", alter: isRTL ? "قراءة فقط" : "Read-Only"))
+                                    .font(PPProType.medium(9, relativeTo: .caption2))
+                            }
+                        }
+                        .foregroundStyle(palette.secondary)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(palette.hairline.opacity(0.4)))
                     } else {
                         Image(systemName: isRTL ? "arrow.left" : "arrow.right")
                             .font(.system(size: PPProGlyph.micro, weight: .bold))
-                            .foregroundStyle(palette.secondary.opacity(0.65))
+                            .foregroundStyle(theme.accent.opacity(0.85))
                             .accessibilityHidden(true)
                     }
                 }
 
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(capability.title)
-                        .font(PPProType.bold(13, relativeTo: .subheadline))
+                        .font(PPProType.bold(isPad ? 15 : 13, relativeTo: .subheadline))
                         .foregroundStyle(palette.text)
-                        .lineLimit(isAccessibilitySize ? 3 : 2)
+                        .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
 
-                    // Only where a single column gives it room to be read.
-                    if isAccessibilitySize && !capability.subtitle.isEmpty {
+                    if !capability.subtitle.isEmpty {
                         Text(capability.subtitle)
-                            .font(PPProType.regular(10, relativeTo: .caption2))
+                            .font(PPProType.regular(isPad ? 11 : 10, relativeTo: .caption2))
                             .foregroundStyle(palette.secondary)
-                            .lineLimit(4)
+                            .lineLimit(isPad ? 3 : 1)
                             .multilineTextAlignment(.leading)
                             .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text(localized("PulseCommand_CapabilityReady", alter: isRTL ? "جاهز للعمل" : "Operational"))
+                            .font(PPProType.regular(isPad ? 11 : 10, relativeTo: .caption2))
+                            .foregroundStyle(palette.secondary.opacity(0.75))
+                            .lineLimit(1)
                     }
                 }
             }
-            .padding(10)
-            .frame(maxWidth: .infinity, minHeight: 44, alignment: .topLeading)
+            .padding(isPad ? 14 : 11)
+            .frame(maxWidth: .infinity, minHeight: isPad ? 102 : 82, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: PPProRadius.tile, style: .continuous)
                     .fill(palette.surface)
@@ -4926,6 +5050,7 @@ private struct PPProWorkspaceBand: View {
                 RoundedRectangle(cornerRadius: PPProRadius.tile, style: .continuous)
                     .strokeBorder(palette.hairline, lineWidth: 0.8)
             )
+            .shadow(color: palette.shadow, radius: 4, x: 0, y: 2)
             .opacity(isDisabled ? 0.48 : 1)
         }
         .buttonStyle(PPProCommandPressStyle())
@@ -4933,8 +5058,6 @@ private struct PPProWorkspaceBand: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(capability.title)
         .accessibilityValue(accessibilityValue(for: capability, pending: 0))
-        // Carries the subtitle the compact cell does not draw, so nothing is
-        // lost to assistive technology.
         .accessibilityHint(
             capability.subtitle.isEmpty
                 ? localized("PulseCommand_OpenExecutionWorkspace")
@@ -5116,6 +5239,7 @@ struct PPProPulseView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.sizeCategory) private var sizeCategory
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     @State private var appeared = false
     /// Set once the first-paint spinner has been up long enough that leaving it
@@ -5132,7 +5256,9 @@ struct PPProPulseView: View {
     private var isRTL: Bool { snapshot.isRTL }
     private var isAccessibilitySize: Bool { sizeCategory.isAccessibilityCategory }
 
-    private func localized(_ key: String) -> String { Language.get(key, alter: nil) }
+    private func localized(_ key: String, alter: String? = nil) -> String {
+        Language.get(key, alter: alter)
+    }
 
     /// Single derived model for every region, so the counts, the stage, the
     /// ledger and the workspace band cannot contradict each other.
@@ -5142,6 +5268,12 @@ struct PPProPulseView: View {
             lensID: store.selectedCapabilityID,
             scopedSignals: store.visibleSignals
         )
+    }
+
+    private var hasDeliveryCapability: Bool {
+        snapshot.capabilities.contains { $0.id == "delivery" || $0.id == "deliveryCompany" } ||
+        store.selectedCapabilityID == "delivery" ||
+        store.selectedCapabilityID == "deliveryCompany"
     }
 
     // MARK: State ladder
@@ -5202,9 +5334,20 @@ struct PPProPulseView: View {
         .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
     }
 
-    // MARK: Content
+    // MARK: Content — Deliberately composed for iPhone & iPad
 
+    @ViewBuilder
     private var content: some View {
+        if horizontalSizeClass == .regular {
+            padContent
+        } else {
+            phoneContent
+        }
+    }
+
+    // MARK: iPhone (Compact Width) — The Tactile Pilot Cockpit
+
+    private var phoneContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: PPProPulseRhythm.spineGap) {
                 commandBar
@@ -5221,6 +5364,13 @@ struct PPProPulseView: View {
                         reduceMotion: reduceMotion,
                         onSelect: selectLens
                     )
+                }
+
+                if hasDeliveryCapability {
+                    PPDeliveryDriverHomeControlSection {
+                        activate("delivery")
+                    }
+                    .padding(.horizontal, PPProPulseRhythm.screenMargin)
                 }
 
                 attentionBand
@@ -5248,33 +5398,127 @@ struct PPProPulseView: View {
         .accessibilityHidden(store.focusedSignal != nil)
     }
 
+    // MARK: iPad (Regular Width) — The Dual-Surface Command Studio
+
+    private var padContent: some View {
+        ScrollView {
+            HStack(alignment: .top, spacing: 22) {
+                // Leading Flank (380pt): Pilot Cockpit, Telemetry Hub & Focal Attention Desk
+                VStack(alignment: .leading, spacing: PPProPulseRhythm.spineGap) {
+                    commandBar
+
+                    if snapshot.capabilities.count > 1 {
+                        PPProLensRail(
+                            capabilities: snapshot.capabilities,
+                            selectedID: store.selectedCapabilityID,
+                            palette: palette,
+                            isRTL: isRTL,
+                            reduceMotion: reduceMotion,
+                            onSelect: selectLens
+                        )
+                    }
+
+                    if hasDeliveryCapability {
+                        PPDeliveryDriverHomeControlSection {
+                            activate("delivery")
+                        }
+                    }
+
+                    attentionBand
+                }
+                .frame(width: 380)
+
+                // Trailing Flank: Expansive Pro Capability Matrix & Operational Launchpad
+                VStack(alignment: .leading, spacing: PPProPulseRhythm.spineGap) {
+                    if scope.hasCapabilities {
+                        PPProWorkspaceBand(
+                            activeCapabilities: scope.activeCapabilities,
+                            idleCapabilities: scope.idleCapabilities,
+                            signals: snapshot.signals,
+                            lensID: store.selectedCapabilityID,
+                            palette: palette,
+                            isRTL: isRTL,
+                            onOpen: activate
+                        )
+                    } else {
+                        lockedNotice
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 14)
+            .padding(.bottom, 32)
+        }
+        .accessibilityHidden(store.focusedSignal != nil)
+    }
+
     // MARK: Command bar — identity plus the scope's own counts
 
     private var commandBar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 11) {
-                PPProAvatarView(
-                    urlString: snapshot.avatarURLString,
-                    fallback: avatarInitials
-                )
-                .frame(width: PPProGlyph.plateMedium, height: PPProGlyph.plateMedium)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 12) {
+                // Operator avatar with live operational status aura
+                ZStack(alignment: .bottomTrailing) {
+                    PPProAvatarView(
+                        urlString: snapshot.avatarURLString,
+                        fallback: avatarInitials
+                    )
+                    .frame(width: 46, height: 46)
+
+                    // Operational status pulse dot
+                    Circle()
+                        .fill(Color(red: 0.16, green: 0.78, blue: 0.48))
+                        .frame(width: 12, height: 12)
+                        .overlay(
+                            Circle()
+                                .stroke(palette.surfaceElevated, lineWidth: 2)
+                        )
+                        .shadow(color: Color(red: 0.16, green: 0.78, blue: 0.48).opacity(0.45), radius: 3)
+                }
                 .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 3) {
                     Text(snapshot.greeting.isEmpty ? snapshot.workspaceEyebrow : snapshot.greeting)
-                        .font(PPProType.regular(11, relativeTo: .caption))
+                        .font(PPProType.medium(12, relativeTo: .caption))
                         .foregroundStyle(palette.secondary)
                         .lineLimit(1)
-                    Text(snapshot.displayName)
+
+                    Text(snapshot.displayName.isEmpty ? localized("PulseCommand_BrandName", alter: "PurePets Pro") : snapshot.displayName)
                         .font(PPProType.bold(18, relativeTo: .title3))
                         .foregroundStyle(palette.text)
                         .lineLimit(isAccessibilitySize ? 2 : 1)
                         .minimumScaleFactor(0.85)
-                    if !snapshot.roleSummary.isEmpty {
-                        Text(snapshot.roleSummary)
-                            .font(PPProType.regular(10, relativeTo: .caption2))
-                            .foregroundStyle(palette.secondary.opacity(0.85))
-                            .lineLimit(isAccessibilitySize ? 3 : 1)
+
+                    // Certified Operator badge & Capability count
+                    HStack(spacing: 6) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 9, weight: .bold))
+                            Text(localized("PulseCommand_OperatorCertified", alter: isRTL ? "مشغّل معتمد" : "Verified Operator"))
+                                .font(PPProType.bold(10, relativeTo: .caption2))
+                        }
+                        .foregroundStyle(palette.accentText)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(
+                            Capsule().fill(palette.accentSoft)
+                        )
+
+                        if snapshot.capabilities.count > 0 {
+                            Text(String(format: localized("PulseCommand_CapabilitiesCountFormat", alter: isRTL ? "%@ قدرات" : "%@ Capabilities"), "\(snapshot.capabilities.count)"))
+                                .font(PPProType.medium(10, relativeTo: .caption2))
+                                .monospacedDigit()
+                                .foregroundStyle(palette.secondary)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(
+                                    Capsule().fill(palette.surface)
+                                )
+                                .overlay(
+                                    Capsule().stroke(palette.hairline, lineWidth: 0.8)
+                                )
+                        }
                     }
                 }
 
@@ -5284,8 +5528,14 @@ struct PPProPulseView: View {
                     Image(systemName: "gearshape.fill")
                         .font(.system(size: PPProGlyph.medium, weight: .semibold))
                         .foregroundStyle(palette.accentText)
-                        .frame(width: 44, height: 44)
-                        .background(Circle().fill(palette.accentSoft))
+                        .frame(width: 42, height: 42)
+                        .background(
+                            Circle().fill(palette.surface)
+                        )
+                        .overlay(
+                            Circle().stroke(palette.hairline, lineWidth: 0.8)
+                        )
+                        .shadow(color: palette.shadow, radius: 4, x: 0, y: 2)
                 }
                 .buttonStyle(PPProCommandPressStyle())
                 .accessibilityLabel(localized("Settings"))
@@ -5301,6 +5551,16 @@ struct PPProPulseView: View {
                 palette: palette
             )
         }
+        .padding(13)
+        .background(
+            RoundedRectangle(cornerRadius: PPProRadius.card, style: .continuous)
+                .fill(palette.surfaceElevated)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: PPProRadius.card, style: .continuous)
+                .stroke(palette.hairline, lineWidth: 0.8)
+        )
+        .shadow(color: palette.shadow, radius: 8, x: 0, y: 3)
     }
 
     private var avatarInitials: String {
@@ -5666,7 +5926,11 @@ private struct PPProMoreDestinationView: View {
     var body: some View {
         PPProMoreView(
             capabilities: snapshot.capabilities,
+            displayName: snapshot.displayName,
             roleSummary: snapshot.roleSummary,
+            avatarURLString: snapshot.avatarURLString,
+            supportUnreadCount: snapshot.supportUnreadCount,
+            inboxUnreadCount: snapshot.inboxUnreadCount,
             palette: palette,
             isRTL: snapshot.isRTL,
             onRoute: onRoute,
@@ -5703,161 +5967,713 @@ private struct PPProMenuMapDestinationView: View {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// MARK: - More destination
+// MARK: - More Destination · Sovereign Command & Governance Deck (NextGen V6)
 //
-// Replaces the UIAlertController action sheet. Routes remain owned by ObjC:
-// this only emits route tags, and AdminDashboardViewController refuses any route
-// whose XLForm row does not exist — so an unavailable destination stays
-// unreachable regardless of what is listed here.
+// Reinvented from first principles as a dual-console command deck for iPhone & iPad.
+// Routes remain owned by ObjC: emits existing route tags to AdminDashboardViewController.
+// Preserves exact authorization gating while elevating provider identity, live telemetry,
+// and deliberate ergonomic separation between handheld iPhone and widescreen iPadOS.
 // ═══════════════════════════════════════════════════════════════════════════
 
 private struct PPProMoreView: View {
     let capabilities: [PPProCommandCapability]
-    let roleSummary: String
+    var displayName: String = ""
+    var roleSummary: String = ""
+    var avatarURLString: String = ""
+    var supportUnreadCount: Int = 0
+    var inboxUnreadCount: Int = 0
     let palette: PPProPalette
     let isRTL: Bool
     let onRoute: (String) -> Void
     let onProfile: () -> Void
 
     @Environment(\.sizeCategory) private var sizeCategory
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var appeared = false
 
     private func localized(_ key: String) -> String { Language.get(key, alter: nil) }
 
-    private struct Entry: Identifiable {
+    // MARK: Entry & Section Models
+
+    private struct MoreEntry: Identifiable, Equatable {
         let id: String
         let title: String
+        let subtitle: String
         let symbol: String
+        let badgeCount: Int
+        let domainColor: Color
+        let isPrimaryAction: Bool
     }
 
-    /// Preserves the established More route vocabulary and title keys exactly,
-    /// but each entry now appears only when the capability set Objective-C
-    /// granted implies its `buildLoginForm` gate. These are equivalences read off
-    /// that method, not a permission model reconstructed here:
-    ///
-    /// - `isAnyActiveProvider` (`AdminDashboardViewController.m:464`) is the OR of
-    ///   the same seven gates that emit the seven capability descriptors, so it is
-    ///   exactly `!capabilities.isEmpty`. It gates `providerSupportChats`
-    ///   (`.m:487`), `profileSettings` (`.m:630`), `notificationSettings`
-    ///   (`.m:637`) and `branchesManagement` (`.m:644`).
-    /// - `fulfillmentOrders` (`.m:585`) sits inside
-    ///   `canManageServices || canManageMarketplace`.
-    /// - `deliveryCompanyMembers` has **no** XLForm row and no dispatcher
-    ///   fallback, so its owning capability — `deliveryCompany` — is the only
-    ///   authorization signal available for it.
-    ///
-    /// This is strictly narrowing: it can hide an entry, never reveal one. The
-    /// destinations themselves still perform their own authorization, and the
-    /// dispatcher still refuses any route whose row does not exist.
-    private var entries: [Entry] {
+    private struct MoreSection: Identifiable {
+        let id: String
+        let title: String
+        let eyebrow: String
+        let symbol: String
+        let entries: [MoreEntry]
+    }
+
+    // MARK: Role Tag Derivation
+
+    private var roleTags: [String] {
+        guard !roleSummary.isEmpty else { return [] }
+        return roleSummary
+            .components(separatedBy: CharacterSet(charactersIn: "&,•|"))
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+    }
+
+    private var avatarInitials: String {
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "P" }
+        let parts = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+        if parts.count >= 2, let first = parts[0].first, let second = parts[1].first {
+            return "\(first)\(second)"
+        } else if let first = trimmed.first {
+            return String(first)
+        }
+        return "P"
+    }
+
+    private var resolvedDisplayName: String {
+        let trimmed = displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        return isRTL ? "منشأة بيور بيتس المعتمدة" : "Verified PurePets Provider"
+    }
+
+    // MARK: Section Derivations (Protected Gates Preserved)
+
+    private var operationalEntries: [MoreEntry] {
         let ids = Set(capabilities.map(\.id))
         let hasAnyWorkspace = !capabilities.isEmpty
         let hasFulfillment = ids.contains("services") || ids.contains("marketplace")
+        var list: [MoreEntry] = []
 
-        var result: [Entry] = []
         if hasAnyWorkspace {
-            result.append(Entry(id: "providerSupportChats", title: localized("ch_provider_support_chats_title"), symbol: "bubble.left.and.bubble.right.fill"))
+            list.append(MoreEntry(
+                id: "providerSupportChats",
+                title: localized("ch_provider_support_chats_title"),
+                subtitle: Language.get("ProMore_SupportChats_Subtitle", alter: "الرد الفوري على استفسارات ورسائل العملاء"),
+                symbol: "bubble.left.and.bubble.right.fill",
+                badgeCount: supportUnreadCount,
+                domainColor: palette.accent,
+                isPrimaryAction: true
+            ))
         }
+
         if hasFulfillment {
-            result.append(Entry(id: "fulfillmentOrders", title: localized("Fulfillment_Title"), symbol: "shippingbox.fill"))
+            list.append(MoreEntry(
+                id: "fulfillmentOrders",
+                title: localized("Fulfillment_Title"),
+                subtitle: Language.get("ProMore_Fulfillment_Subtitle", alter: "تجهيز وفحص وتسليم طلبات المنتجات والخدمات"),
+                symbol: "shippingbox.fill",
+                badgeCount: 0,
+                domainColor: Color(uiColor: .ppQuickActionShopping),
+                isPrimaryAction: true
+            ))
         }
+
         if hasAnyWorkspace {
-            result.append(Entry(id: "branchesManagement", title: localized("MarketplaceBranches_Manage"), symbol: "building.2.fill"))
+            list.append(MoreEntry(
+                id: "branchesManagement",
+                title: localized("MarketplaceBranches_Manage"),
+                subtitle: Language.get("ProMore_Branches_Subtitle", alter: "فروع الاستلام ومواقع التسليم وساعات العمل المعتمدة"),
+                symbol: "building.2.fill",
+                badgeCount: 0,
+                domainColor: Color(uiColor: .ppInfo),
+                isPrimaryAction: false
+            ))
         }
+
         if ids.contains("deliveryCompany") {
-            result.append(Entry(id: "deliveryCompanyMembers", title: localized("DeliveryCompany_Tab_Members"), symbol: "person.2.fill"))
+            list.append(MoreEntry(
+                id: "deliveryCompanyMembers",
+                title: localized("DeliveryCompany_Tab_Members"),
+                subtitle: Language.get("ProMore_DeliveryMembers_Subtitle", alter: "طاقم التوصيل وتوزيع خطوط السير الميدانية"),
+                symbol: "person.2.fill",
+                badgeCount: 0,
+                domainColor: Color(uiColor: .ppQuickActionAnimals),
+                isPrimaryAction: false
+            ))
         }
-        if hasAnyWorkspace {
-            result.append(Entry(id: "notificationSettings", title: localized("NotificationSettings"), symbol: "bell.badge.fill"))
-            result.append(Entry(id: "profileSettings", title: localized("ProfileSettings"), symbol: "gearshape.fill"))
+
+        return list
+    }
+
+    private var governanceEntries: [MoreEntry] {
+        guard !capabilities.isEmpty else { return [] }
+        return [
+            MoreEntry(
+                id: "notificationSettings",
+                title: localized("NotificationSettings"),
+                subtitle: Language.get("ProMore_Notifications_Subtitle", alter: "قنوات التنبيه الفوري والأصوات وتحديثات الحساب"),
+                symbol: "bell.badge.fill",
+                badgeCount: 0,
+                domainColor: Color(uiColor: .ppCareAccent),
+                isPrimaryAction: false
+            ),
+            MoreEntry(
+                id: "profileSettings",
+                title: localized("ProfileSettings"),
+                subtitle: Language.get("ProMore_Profile_Subtitle", alter: "بيانات المنشأة، السجل التجاري والتراخيص الموثقة"),
+                symbol: "gearshape.fill",
+                badgeCount: 0,
+                domainColor: Color(uiColor: .ppQuickActionCommunity),
+                isPrimaryAction: false
+            )
+        ]
+    }
+
+    private var sections: [MoreSection] {
+        var result: [MoreSection] = []
+        let ops = operationalEntries
+        if !ops.isEmpty {
+            result.append(MoreSection(
+                id: "operations",
+                title: Language.get("ProMore_Section_Operations", alter: "مركز العمليات الميدانية والتجارية"),
+                eyebrow: Language.get("ProMore_Section_Operations_Eyebrow", alter: "العمليات الحية والخدمات"),
+                symbol: "bolt.horizontal.circle.fill",
+                entries: ops
+            ))
+        }
+        let gov = governanceEntries
+        if !gov.isEmpty {
+            result.append(MoreSection(
+                id: "governance",
+                title: Language.get("ProMore_Section_System", alter: "المنظومة والتهيئة المعتمدة"),
+                eyebrow: Language.get("ProMore_Section_System_Eyebrow", alter: "إدارة الحساب والمنشأة"),
+                symbol: "shield.lefthalf.filled",
+                entries: gov
+            ))
         }
         return result
     }
 
-    var body: some View {
-        VStack(spacing: 0) {
-            header
+    // MARK: Body
 
-            ScrollView {
-                VStack(spacing: PPProPulseRhythm.stackGap) {
-                    if entries.isEmpty {
-                        // Reachable when Objective-C granted no capability, since
-                        // every More destination sits behind `isAnyActiveProvider`.
-                        Text(localized("MenuMap_Locked_Subtitle"))
-                            .font(PPProType.regular(13, relativeTo: .subheadline))
-                            .foregroundStyle(palette.secondary)
-                            .multilineTextAlignment(.center)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity)
-                            .padding(.top, 40)
-                            .accessibilityAddTraits(.isStaticText)
-                    } else {
-                        ForEach(entries) { entry in
-                            row(entry)
+    var body: some View {
+        GeometryReader { proxy in
+            let isWideStudio = proxy.size.width >= 640 && horizontalSizeClass == .regular
+
+            ZStack {
+                palette.canvas.ignoresSafeArea()
+
+                if capabilities.isEmpty {
+                    lockedState
+                } else if isWideStudio {
+                    iPadStudioLayout(containerWidth: proxy.size.width)
+                } else {
+                    iPhoneCompactLayout
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+        .onAppear {
+            guard !appeared else { return }
+            if reduceMotion {
+                appeared = true
+            } else {
+                withAnimation(PPProMotion.entrance) {
+                    appeared = true
+                }
+            }
+        }
+    }
+
+    // MARK: - iPhone Compact Composition
+
+    private var iPhoneCompactLayout: some View {
+        ScrollView(.vertical, showsIndicators: false) {
+            VStack(spacing: PPProPulseRhythm.spineGap) {
+                sovereignMastheadCompact
+
+                ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
+                    sectionView(section, isGrid: false)
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared || reduceMotion ? 0 : 16)
+                        .animation(reduceMotion ? .none : PPProMotion.entrance.delay(PPProMotion.entranceDelay(index + 1)), value: appeared)
+                }
+            }
+            .padding(.horizontal, PPProPulseRhythm.screenMargin)
+            .padding(.top, 12)
+            .padding(.bottom, 36)
+        }
+    }
+
+    // MARK: - iPad Studio Composition (Dual-Wing Console)
+
+    private func iPadStudioLayout(containerWidth: CGFloat) -> some View {
+        HStack(alignment: .top, spacing: 20) {
+            // Leading Wing: Sovereign Dossier Card
+            ScrollView(.vertical, showsIndicators: false) {
+                iPadDossierCard
+                    .padding(.top, 14)
+                    .padding(.bottom, 28)
+            }
+            .frame(width: min(max(containerWidth * 0.36, 320), 380))
+
+            // Trailing Wing: Tactical Operations & Governance Grids
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 22) {
+                    ForEach(Array(sections.enumerated()), id: \.element.id) { index, section in
+                        sectionView(section, isGrid: true)
+                            .opacity(appeared ? 1 : 0)
+                            .offset(y: appeared || reduceMotion ? 0 : 18)
+                            .animation(reduceMotion ? .none : PPProMotion.entrance.delay(PPProMotion.entranceDelay(index + 1)), value: appeared)
+                    }
+                }
+                .padding(.top, 14)
+                .padding(.bottom, 36)
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .padding(.horizontal, 24)
+    }
+
+    // MARK: - Sovereign Masthead (iPhone Compact)
+
+    private var sovereignMastheadCompact: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center, spacing: 14) {
+                ZStack(alignment: .bottomTrailing) {
+                    PPProAvatarView(urlString: avatarURLString, fallback: avatarInitials)
+                        .frame(width: 54, height: 54)
+                        .overlay {
+                            Circle().stroke(palette.hairline, lineWidth: 1.2)
+                        }
+
+                    ZStack {
+                        Circle()
+                            .fill(Color(uiColor: .systemBackground))
+                            .frame(width: 19, height: 19)
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(palette.accent)
+                    }
+                    .offset(x: isRTL ? -2 : 2, y: 2)
+                }
+                .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(resolvedDisplayName)
+                            .font(PPProType.bold(18, relativeTo: .headline))
+                            .foregroundStyle(palette.text)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(Color(uiColor: .ppSuccess))
+                                .frame(width: 6, height: 6)
+                            Text(Language.get("ProMore_Verified_Partner", alter: "مزود معتمد"))
+                                .font(PPProType.bold(10, relativeTo: .caption2))
+                                .foregroundStyle(Color(uiColor: .ppSuccess))
+                        }
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color(uiColor: .ppSuccess).opacity(0.12), in: Capsule())
+                    }
+
+                    Text(String(format: Language.get("ProMore_Active_Workspaces_Format", alter: "%d مساحات عمل مفعلة"), capabilities.count))
+                        .font(PPProType.medium(12, relativeTo: .caption))
+                        .foregroundStyle(palette.secondary)
+                }
+
+                Spacer(minLength: 0)
+
+                Button(action: onProfile) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: PPProRadius.control, style: .continuous)
+                            .fill(palette.surfaceElevated)
+                        RoundedRectangle(cornerRadius: PPProRadius.control, style: .continuous)
+                            .stroke(palette.hairline, lineWidth: 0.8)
+                        Image(systemName: "gearshape.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(palette.text)
+                    }
+                    .frame(width: 42, height: 42)
+                    .shadow(color: palette.shadow, radius: 6, y: 2)
+                }
+                .buttonStyle(PPProCommandPressStyle())
+                .accessibilityLabel(localized("ProfileSettings"))
+                .accessibilityHint(localized("ProfileSettings"))
+            }
+
+            if !roleTags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(roleTags, id: \.self) { tag in
+                            Text(tag)
+                                .font(PPProType.medium(11, relativeTo: .caption2))
+                                .foregroundStyle(palette.text.opacity(0.85))
+                                .padding(.horizontal, 9)
+                                .padding(.vertical, 5)
+                                .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                        .stroke(palette.hairline.opacity(0.5), lineWidth: 0.5)
+                                }
                         }
                     }
                 }
-                .padding(.horizontal, PPProPulseRhythm.screenMargin)
-                .padding(.vertical, PPProPulseRhythm.spineGap)
+                .accessibilityElement(children: .contain)
+                .accessibilityLabel(roleSummary)
             }
         }
-        .background(palette.canvas.ignoresSafeArea())
+        .padding(16)
+        .ppProCommandSurface(radius: PPProRadius.card, palette: palette, elevated: true)
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared || reduceMotion ? 0 : 12)
+        .animation(reduceMotion ? .none : PPProMotion.entrance, value: appeared)
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 1) {
-                Text(localized("PulseCommand_Dock_More"))
-                    .font(PPProType.bold(20, relativeTo: .title3))
-                    .foregroundStyle(palette.text)
-                if !roleSummary.isEmpty {
-                    Text(roleSummary)
-                        .font(PPProType.regular(11, relativeTo: .caption))
-                        .foregroundStyle(palette.secondary)
-                        .lineLimit(1)
+    // MARK: - iPad Dossier Card (Leading Wing)
+
+    private var iPadDossierCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            // Identity Masthead
+            VStack(alignment: .center, spacing: 12) {
+                ZStack(alignment: .bottomTrailing) {
+                    Circle()
+                        .fill(palette.accentSoft)
+                        .frame(width: 82, height: 82)
+
+                    PPProAvatarView(urlString: avatarURLString, fallback: avatarInitials)
+                        .frame(width: 74, height: 74)
+                        .overlay {
+                            Circle().stroke(palette.accent, lineWidth: 1.8)
+                        }
+
+                    ZStack {
+                        Circle()
+                            .fill(Color(uiColor: .systemBackground))
+                            .frame(width: 26, height: 26)
+                        Image(systemName: "checkmark.seal.fill")
+                            .font(.system(size: 19, weight: .bold))
+                            .foregroundStyle(palette.accent)
+                    }
+                    .offset(x: isRTL ? -3 : 3, y: 3)
                 }
+
+                VStack(spacing: 4) {
+                    Text(resolvedDisplayName)
+                        .font(PPProType.bold(20, relativeTo: .title3))
+                        .foregroundStyle(palette.text)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(Color(uiColor: .ppSuccess))
+                            .frame(width: 7, height: 7)
+                        Text(Language.get("ProMore_Verified_Partner", alter: "مزود معتمد"))
+                            .font(PPProType.bold(11, relativeTo: .caption))
+                            .foregroundStyle(Color(uiColor: .ppSuccess))
+                    }
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 4)
+                    .background(Color(uiColor: .ppSuccess).opacity(0.12), in: Capsule())
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 6)
+
+            Divider()
+                .background(palette.hairline)
+
+            // Telemetry & Vitals
+            VStack(alignment: .leading, spacing: 10) {
+                Text(Language.get("ProMore_Dossier_Title", alter: "ملف الاعتماد والسيادة"))
+                    .font(PPProType.bold(12, relativeTo: .caption))
+                    .foregroundStyle(palette.accentText)
+                    .textCase(.uppercase)
+
+                HStack(spacing: 12) {
+                    vitalBadge(
+                        title: Language.get("ProMore_Active_Workspaces_Format", alter: "%d مساحات"),
+                        value: "\(capabilities.count)",
+                        symbol: "square.grid.2x2.fill",
+                        tint: palette.accent
+                    )
+
+                    vitalBadge(
+                        title: Language.get("ProMore_Support_Badge_Format", alter: "%d استفسارات"),
+                        value: "\(supportUnreadCount)",
+                        symbol: "bubble.left.and.bubble.right.fill",
+                        tint: supportUnreadCount > 0 ? Color(uiColor: .ppWarning) : palette.secondary
+                    )
+                }
+
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(uiColor: .ppSuccess))
+                        .frame(width: 6, height: 6)
+                    Text(Language.get("ProMore_Operational_Status", alter: "المنظومة السيادية نشطة"))
+                        .font(PPProType.medium(11, relativeTo: .caption2))
+                        .foregroundStyle(palette.secondary)
+                }
+                .padding(.top, 4)
+            }
+
+            // Tag Cloud
+            if !roleTags.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(Language.get("PulseCommand_RoleFamily", alter: "القدرات المعتمدة"))
+                        .font(PPProType.bold(11, relativeTo: .caption2))
+                        .foregroundStyle(palette.secondary)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(roleTags, id: \.self) { tag in
+                            HStack(spacing: 6) {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(palette.accent)
+                                Text(tag)
+                                    .font(PPProType.medium(12, relativeTo: .caption))
+                                    .foregroundStyle(palette.text)
+                                    .lineLimit(1)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(palette.surfaceElevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                    .stroke(palette.hairline.opacity(0.6), lineWidth: 0.8)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(minLength: 12)
+
+            // Direct Support Trigger
+            Button(action: {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                onRoute("providerSupportChats")
+            }) {
+                HStack(spacing: 8) {
+                    Image(systemName: "bubble.left.and.bubble.right.fill")
+                        .font(.system(size: 14, weight: .bold))
+                    Text(Language.get("ProMore_Fast_Support_Action", alter: "فتح محادثات الدعم الفوري"))
+                        .font(PPProType.bold(13, relativeTo: .subheadline))
+                    Spacer(minLength: 0)
+                    if supportUnreadCount > 0 {
+                        Text("\(supportUnreadCount)")
+                            .font(PPProType.bold(11, relativeTo: .caption))
+                            .monospacedDigit()
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Color.white.opacity(0.25), in: Capsule())
+                    }
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 14)
+                .frame(height: 44)
+                .background(palette.accent, in: RoundedRectangle(cornerRadius: PPProRadius.control, style: .continuous))
+                .shadow(color: palette.accent.opacity(0.3), radius: 8, y: 3)
+            }
+            .buttonStyle(PPProCommandPressStyle())
+            .hoverEffect(.lift)
+        }
+        .padding(20)
+        .ppProCommandSurface(radius: PPProRadius.card, palette: palette, elevated: true)
+        .opacity(appeared ? 1 : 0)
+        .offset(x: appeared || reduceMotion ? 0 : (isRTL ? 20 : -20))
+        .animation(reduceMotion ? .none : PPProMotion.entrance, value: appeared)
+    }
+
+    private func vitalBadge(title: String, value: String, symbol: String, tint: Color) -> some View {
+        HStack(spacing: 8) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(tint.opacity(0.12))
+                Image(systemName: symbol)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(tint)
+            }
+            .frame(width: 28, height: 28)
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(value)
+                    .font(PPProType.bold(15, relativeTo: .subheadline))
+                    .foregroundStyle(palette.text)
+                    .monospacedDigit()
+                Text(title)
+                    .font(PPProType.regular(10, relativeTo: .caption2))
+                    .foregroundStyle(palette.secondary)
+                    .lineLimit(1)
             }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, PPProPulseRhythm.screenMargin)
-        .padding(.top, PPProPulseRhythm.spineGap)
-        .padding(.bottom, PPProPulseRhythm.stackGap)
+        .padding(8)
+        .background(palette.surfaceElevated, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(palette.hairline, lineWidth: 0.6)
+        }
+        .frame(maxWidth: .infinity)
     }
 
-    private func row(_ entry: Entry) -> some View {
+    // MARK: - Section View
+
+    private func sectionView(_ section: MoreSection, isGrid: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            // Section Header
+            HStack(spacing: 8) {
+                ZStack {
+                    Circle().fill(palette.accentSoft)
+                    Image(systemName: section.symbol)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(palette.accentText)
+                }
+                .frame(width: 22, height: 22)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(section.eyebrow)
+                        .font(PPProType.bold(10, relativeTo: .caption2))
+                        .tracking(isRTL ? 0 : 0.5)
+                        .foregroundStyle(palette.accentText)
+                        .lineLimit(1)
+
+                    Text(section.title)
+                        .font(PPProType.bold(16, relativeTo: .headline))
+                        .foregroundStyle(palette.text)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 4)
+
+            // Items Layout
+            if isGrid {
+                LazyVGrid(
+                    columns: [
+                        GridItem(.flexible(), spacing: 14),
+                        GridItem(.flexible(), spacing: 14)
+                    ],
+                    spacing: 14
+                ) {
+                    ForEach(section.entries) { entry in
+                        entryCard(entry, isGrid: true)
+                    }
+                }
+            } else {
+                VStack(spacing: PPProPulseRhythm.stackGap) {
+                    ForEach(section.entries) { entry in
+                        entryCard(entry, isGrid: false)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Entry Card
+
+    private func entryCard(_ entry: MoreEntry, isGrid: Bool) -> some View {
         Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
             if entry.id == "profileSettings" {
                 onProfile()
             } else {
                 onRoute(entry.id)
             }
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: 14) {
+                // Domain Accent Icon Plate
                 ZStack {
-                    RoundedRectangle(cornerRadius: PPProRadius.chip, style: .continuous)
-                        .fill(palette.accentSoft)
+                    RoundedRectangle(cornerRadius: PPProRadius.control, style: .continuous)
+                        .fill(entry.domainColor.opacity(palette.isDark ? 0.22 : 0.12))
+
                     Image(systemName: entry.symbol)
-                        .font(.system(size: PPProGlyph.medium, weight: .semibold))
-                        .foregroundStyle(palette.accentText)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(entry.domainColor)
                 }
-                .frame(width: PPProGlyph.plateSmall, height: PPProGlyph.plateSmall)
+                .frame(width: 44, height: 44)
+                .overlay {
+                    RoundedRectangle(cornerRadius: PPProRadius.control, style: .continuous)
+                        .stroke(entry.domainColor.opacity(0.20), lineWidth: 0.8)
+                }
 
-                Text(entry.title)
-                    .font(PPProType.medium(15, relativeTo: .subheadline))
-                    .foregroundStyle(palette.text)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
+                // Title & Subtitle Stack
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(entry.title)
+                            .font(PPProType.bold(15, relativeTo: .subheadline))
+                            .foregroundStyle(palette.text)
+                            .lineLimit(1)
 
-                Spacer(minLength: 0)
+                        if entry.badgeCount > 0 {
+                            Text("\(entry.badgeCount)")
+                                .font(PPProType.bold(11, relativeTo: .caption2))
+                                .monospacedDigit()
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background(palette.accent, in: Capsule())
+                        }
+                    }
 
+                    Text(entry.subtitle)
+                        .font(PPProType.regular(12, relativeTo: .caption))
+                        .foregroundStyle(palette.secondary)
+                        .lineLimit(isGrid ? 2 : 1)
+                        .multilineTextAlignment(.leading)
+                }
+
+                Spacer(minLength: 8)
+
+                // Trailing Navigation Indicator
                 Image(systemName: isRTL ? "chevron.left" : "chevron.right")
-                    .font(.system(size: PPProGlyph.micro, weight: .bold))
-                    .foregroundStyle(palette.secondary.opacity(0.7))
+                    .font(.system(size: PPProGlyph.small, weight: .bold))
+                    .foregroundStyle(palette.secondary.opacity(0.55))
             }
-            .padding(.horizontal, 12)
-            .frame(minHeight: sizeCategory.isAccessibilityCategory ? 64 : 54)
-            .ppProCommandSurface(radius: PPProRadius.tile, palette: palette)
+            .padding(.horizontal, 14)
+            .padding(.vertical, isGrid ? 14 : 12)
+            .frame(minHeight: sizeCategory.isAccessibilityCategory ? 70 : 60)
+            .ppProCommandSurface(radius: PPProRadius.tile, palette: palette, elevated: entry.isPrimaryAction)
+            .contentShape(RoundedRectangle(cornerRadius: PPProRadius.tile, style: .continuous))
         }
         .buttonStyle(PPProCommandPressStyle())
+        .hoverEffect(.lift)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(entry.title)
+        .accessibilityValue(entry.badgeCount > 0 ? "\(entry.badgeCount)" : entry.subtitle)
+        .accessibilityHint(entry.title)
+    }
+
+    // MARK: - Locked / Empty State
+
+    private var lockedState: some View {
+        VStack(spacing: 16) {
+            ZStack {
+                Circle()
+                    .fill(palette.accentSoft)
+                    .frame(width: 72, height: 72)
+                Image(systemName: "lock.shield.fill")
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundStyle(palette.accent)
+            }
+
+            VStack(spacing: 6) {
+                Text(localized("PulseCommand_Dock_More"))
+                    .font(PPProType.bold(20, relativeTo: .title3))
+                    .foregroundStyle(palette.text)
+
+                Text(localized("MenuMap_Locked_Subtitle"))
+                    .font(PPProType.regular(14, relativeTo: .subheadline))
+                    .foregroundStyle(palette.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 32)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 60)
+        .accessibilityAddTraits(.isStaticText)
     }
 }
 
@@ -6359,3 +7175,180 @@ private struct PPProMenuMapView: View {
         .accessibilityElement(children: .combine)
     }
 }
+
+// MARK: - Previews
+
+#if DEBUG
+struct PPProPulseView_Previews: PreviewProvider {
+    static var mockStore: PPProCommandCenterStore {
+        let store = PPProCommandCenterStore()
+        let capabilities = [
+            PPProCommandCapability(
+                id: "products",
+                title: "منتجاتي",
+                subtitle: "إدارة المخزون والتسعير",
+                symbolName: "bag.fill",
+                routeTag: "products",
+                actionCount: 0,
+                isReadOnly: false
+            ),
+            PPProCommandCapability(
+                id: "pharmacy",
+                title: "الصيدلية",
+                subtitle: "الوصفات الطبية والأدوية",
+                symbolName: "cross.case.fill",
+                routeTag: "pharmacy",
+                actionCount: 0,
+                isReadOnly: false
+            ),
+            PPProCommandCapability(
+                id: "services",
+                title: "طلبات الخدمة",
+                subtitle: "حجوزات وخدمات العناية",
+                symbolName: "scissors",
+                routeTag: "services",
+                actionCount: 0,
+                isReadOnly: false
+            ),
+            PPProCommandCapability(
+                id: "veterinarian",
+                title: "طبيب بيطري",
+                subtitle: "الاستشارات والفحوصات",
+                symbolName: "stethoscope",
+                routeTag: "vet",
+                actionCount: 0,
+                isReadOnly: false
+            ),
+            PPProCommandCapability(
+                id: "deliveries",
+                title: "توصيلات الشركة",
+                subtitle: "المهام اللوجستية وتتبع الشحنات",
+                symbolName: "shippingbox.fill",
+                routeTag: "deliveries",
+                actionCount: 0,
+                isReadOnly: false
+            ),
+            PPProCommandCapability(
+                id: "adoption",
+                title: "إدارة التبني",
+                subtitle: "طلبات وعروض التبني",
+                symbolName: "pawprint.fill",
+                routeTag: "adoption",
+                actionCount: 0,
+                isReadOnly: false
+            )
+        ]
+
+        let signal = PPProCommandSignal(
+            id: "notif-1",
+            capabilityIDs: [],
+            title: "الإشعارات",
+            subtitle: "لديك ٧ إشعار غير مقروء في مركز التنبيهات. تفقّد التحديثات وطلبات العمل الجديدة.",
+            symbolName: "bell.fill",
+            routeTag: "notifications",
+            badgeCount: 7,
+            priority: .elevated,
+            isUnseen: true,
+            actionTarget: PPProCommandActionTarget(descriptor: nil, fallbackWorkspaceRouteTag: "notifications")
+        )
+
+        let snapshot = PPProCommandCenterSnapshot(
+            workspaceEyebrow: "مشغّل معتمد",
+            greeting: "مساء الخير",
+            displayName: "mohamed samray",
+            roleSummary: "منتجاتي & الصيدلية & طلبات الخدمة & طبيب بيطري & توصيلات الشركة & إدارة التبني",
+            avatarURLString: "",
+            isRTL: true,
+            workspaceCount: 6,
+            actionCount: 1,
+            inboxUnreadCount: 7,
+            supportUnreadCount: 0,
+            isOperationalLoading: false,
+            isOperationalDegraded: false,
+            canRetryOperationalData: false,
+            capabilities: capabilities,
+            signals: [signal]
+        )
+
+        store.apply(snapshot)
+        return store
+    }
+
+    static var previews: some View {
+        Group {
+            // iPhone Compact — Arabic RTL
+            PPProPulseView(
+                store: mockStore,
+                onRoute: { _ in },
+                onActionTarget: { _ in },
+                onWorkspaceTarget: { _ in },
+                onProfile: {}
+            )
+            .previewDevice("iPhone 15 Pro")
+            .previewDisplayName("iPhone Compact (Arabic RTL)")
+            .environment(\.layoutDirection, .rightToLeft)
+
+            // iPad Dual-Surface — Arabic RTL
+            PPProPulseView(
+                store: mockStore,
+                onRoute: { _ in },
+                onActionTarget: { _ in },
+                onWorkspaceTarget: { _ in },
+                onProfile: {}
+            )
+            .previewDevice("iPad Pro (11-inch) (4th generation)")
+            .previewDisplayName("iPad Dual-Surface (Arabic RTL)")
+            .environment(\.horizontalSizeClass, .regular)
+            .environment(\.layoutDirection, .rightToLeft)
+        }
+    }
+}
+
+struct PPProMoreView_Previews: PreviewProvider {
+    static var previews: some View {
+        Group {
+            // iPhone Compact — Arabic RTL
+            PPProMoreDestinationView(
+                store: PPProPulseView_Previews.mockStore,
+                onRoute: { _ in },
+                onProfile: {}
+            )
+            .previewDevice("iPhone 15 Pro")
+            .previewDisplayName("More — iPhone Compact (Arabic RTL)")
+            .environment(\.layoutDirection, .rightToLeft)
+
+            // iPhone Compact — English LTR
+            PPProMoreDestinationView(
+                store: PPProPulseView_Previews.mockStore,
+                onRoute: { _ in },
+                onProfile: {}
+            )
+            .previewDevice("iPhone 15 Pro")
+            .previewDisplayName("More — iPhone Compact (English LTR)")
+            .environment(\.layoutDirection, .leftToRight)
+
+            // iPad Pro Studio Console — Arabic RTL
+            PPProMoreDestinationView(
+                store: PPProPulseView_Previews.mockStore,
+                onRoute: { _ in },
+                onProfile: {}
+            )
+            .previewDevice("iPad Pro (11-inch) (4th generation)")
+            .previewDisplayName("More — iPad Studio Console (Arabic RTL)")
+            .environment(\.horizontalSizeClass, .regular)
+            .environment(\.layoutDirection, .rightToLeft)
+
+            // iPad Pro Studio Console — English LTR
+            PPProMoreDestinationView(
+                store: PPProPulseView_Previews.mockStore,
+                onRoute: { _ in },
+                onProfile: {}
+            )
+            .previewDevice("iPad Pro (11-inch) (4th generation)")
+            .previewDisplayName("More — iPad Studio Console (English LTR)")
+            .environment(\.horizontalSizeClass, .regular)
+            .environment(\.layoutDirection, .leftToRight)
+        }
+    }
+}
+#endif

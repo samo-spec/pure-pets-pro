@@ -12,9 +12,12 @@
 
 static NSString * const kPPProviderStatusPendingValue = @"pending";
 static NSString * const kPPProviderStatusUnderReviewValue = @"under_review";
+static NSString * const kPPProviderStatusChangesRequestedValue = @"changes_requested";
+static NSString * const kPPProviderStatusResubmittedValue = @"resubmitted";
 static NSString * const kPPProviderStatusRejectedValue = @"rejected";
 static NSString * const kPPProviderStatusArchivedValue = @"archived";
 static NSString * const kPPProviderProfileStatusActiveValue = @"active";
+
 
 static UIColor *PPProviderStatusAccentColor(void) {
     return AppPrimaryClr;
@@ -82,7 +85,9 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     }
     NSString *partnerStatus = [PPSafeString(state.partnerApplicationStatus).lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if ([partnerStatus isEqualToString:kPPProviderStatusPendingValue] ||
-        [partnerStatus isEqualToString:kPPProviderStatusUnderReviewValue]) {
+        [partnerStatus isEqualToString:kPPProviderStatusUnderReviewValue] ||
+        [partnerStatus isEqualToString:kPPProviderStatusChangesRequestedValue] ||
+        [partnerStatus isEqualToString:kPPProviderStatusResubmittedValue]) {
         return YES;
     }
 
@@ -92,7 +97,9 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         }
         NSString *status = [PPSafeString(application.status).lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if ([status isEqualToString:kPPProviderStatusPendingValue] ||
-            [status isEqualToString:kPPProviderStatusUnderReviewValue]) {
+            [status isEqualToString:kPPProviderStatusUnderReviewValue] ||
+            [status isEqualToString:kPPProviderStatusChangesRequestedValue] ||
+            [status isEqualToString:kPPProviderStatusResubmittedValue]) {
             return YES;
         }
     }
@@ -518,8 +525,12 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
             !self.suppressAutoDashboardTransition &&
             (state.canOfferServices || state.canDeliveryCompany || state.canVet || state.canPharmacy || state.canAccessProviderMarketplace) &&
             !hasReviewLifecycle) {
-            [self pp_transitionToDashboardIfNeeded];
-            return;
+            if (state.isSetupRequired) {
+                // Partner requires guided setup checklist completion before activation.
+            } else {
+                [self pp_transitionToDashboardIfNeeded];
+                return;
+            }
         }
 
         [self pp_renderCurrentState];
@@ -592,6 +603,8 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     NSArray<NSString *> *eligibleTypeTitles = [self pp_providerTypeTitlesForEligibleTypes:eligibleTypes];
     BOOL hasPending = [self pp_hasApplicationStatus:kPPProviderStatusPendingValue];
     BOOL hasUnderReview = [self pp_hasApplicationStatus:kPPProviderStatusUnderReviewValue];
+    BOOL hasChangesRequested = [self pp_hasApplicationStatus:kPPProviderStatusChangesRequestedValue];
+    BOOL hasResubmitted = [self pp_hasApplicationStatus:kPPProviderStatusResubmittedValue];
     BOOL hasRejected = [self pp_hasApplicationStatus:kPPProviderStatusRejectedValue];
     BOOL hasArchived = [self pp_hasApplicationStatus:kPPProviderStatusArchivedValue];
 
@@ -616,6 +629,17 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         entryCardButtonTitle = nil;
         entryCardFootnote = kLang(@"ProviderStateBlockedFootnote");
         entryCardSymbolName = @"hand.raised.fill";
+    } else if (hasChangesRequested) {
+        heroAccentColor = [UIColor ppWarning];
+        heroBadgeText = kLang(@"ProviderHeroChangesRequestedBadge");
+        heroSymbolName = @"exclamationmark.triangle.fill";
+        self.headlineLabel.text = kLang(@"ProviderStateChangesRequestedTitle");
+        self.subtitleLabel.text = kLang(@"ProviderStateChangesRequestedSubtitle");
+        entryCardTitle = kLang(@"ProviderStartCardChangesRequestedTitle");
+        entryCardSubtitle = kLang(@"ProviderStartCardChangesRequestedSubtitle");
+        entryCardButtonTitle = kLang(@"ProviderResubmitButton");
+        entryCardFootnote = kLang(@"ProviderStateChangesRequestedFootnote");
+        entryCardSymbolName = @"arrow.clockwise.circle.fill";
     } else if (hasArchived) {
         heroAccentColor = [UIColor ppTextSecondary];
         heroBadgeText = kLang(@"ProviderStatusArchived");
@@ -627,12 +651,12 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         entryCardButtonTitle = eligibleTypes.count > 0 ? [self pp_primaryCTAForEligibleTypes:eligibleTypes] : nil;
         entryCardFootnote = kLang(@"ProviderStateRejectedFootnote");
         entryCardSymbolName = @"archivebox.fill";
-    } else if (hasUnderReview || hasPending) {
+    } else if (hasUnderReview || hasPending || hasResubmitted) {
         heroAccentColor = [UIColor ppWarning];
-        heroBadgeText = kLang(@"ProviderHeroReviewBadge");
+        heroBadgeText = hasResubmitted ? kLang(@"ProviderHeroResubmittedBadge") : kLang(@"ProviderHeroReviewBadge");
         heroSymbolName = @"clock.badge.checkmark.fill";
-        self.headlineLabel.text = kLang(@"ProviderStateReviewTitle");
-        self.subtitleLabel.text = kLang(@"ProviderStateReviewSubtitle");
+        self.headlineLabel.text = hasResubmitted ? kLang(@"ProviderStateResubmittedTitle") : kLang(@"ProviderStateReviewTitle");
+        self.subtitleLabel.text = hasResubmitted ? kLang(@"ProviderStateResubmittedSubtitle") : kLang(@"ProviderStateReviewSubtitle");
         entryCardTitle = kLang(@"ProviderStartCardReviewTitle");
         entryCardSubtitle = eligibleTypes.count > 0 ? kLang(@"ProviderStartCardReviewMultiSubtitle") : kLang(@"ProviderStartCardReviewSubtitle");
         entryCardButtonTitle = eligibleTypes.count > 0 ? [self pp_primaryCTAForEligibleTypes:eligibleTypes] : nil;
@@ -649,6 +673,17 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         entryCardButtonTitle = eligibleTypes.count > 0 ? [self pp_primaryCTAForEligibleTypes:eligibleTypes] : nil;
         entryCardFootnote = kLang(@"ProviderStateRejectedFootnote");
         entryCardSymbolName = @"arrow.triangle.2.circlepath.circle.fill";
+    } else if (state.isSetupRequired) {
+        heroAccentColor = PPProviderStatusAccentColor();
+        heroBadgeText = state.isReadyForActivation ? kLang(@"PartnerSetupBadgeReady") : kLang(@"PartnerSetupBadgeRequired");
+        heroSymbolName = state.isReadyForActivation ? @"checkmark.circle.fill" : @"checklist";
+        self.headlineLabel.text = kLang(@"PartnerSetupChecklistTitle");
+        self.subtitleLabel.text = kLang(@"PartnerSetupChecklistSubtitle");
+        entryCardTitle = kLang(@"PartnerSetupChecklistTitle");
+        entryCardSubtitle = kLang(@"PartnerSetupChecklistSubtitle");
+        entryCardButtonTitle = state.isReadyForActivation ? kLang(@"PartnerActivateAccountButton") : nil;
+        entryCardFootnote = nil;
+        entryCardSymbolName = state.isReadyForActivation ? @"checkmark.seal.fill" : @"checklist";
     } else {
         heroAccentColor = PPProviderStatusAccentColor();
         heroBadgeText = kLang(@"ProviderHeroReadyBadge");
@@ -667,7 +702,7 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     [self pp_applyHeroBadgeText:heroBadgeText
                     accentColor:heroAccentColor
                      symbolName:heroSymbolName
-          showsWaitingAnimation:(hasUnderReview || hasPending)];
+          showsWaitingAnimation:(hasUnderReview || hasPending || hasResubmitted)];
 
     NSMutableArray<NSDictionary<NSString *, NSString *> *> *identityEntries = [NSMutableArray array];
     if (state.displayName.length > 0) {
@@ -698,18 +733,23 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         entryCardButtonTitle = nil;
     }
 
-    [self pp_renderApplicationEntryCardWithAccentColor:heroAccentColor
-                                               eyebrow:kLang(@"ProviderStartCardEyebrow")
-                                                 title:entryCardTitle
-                                              subtitle:entryCardSubtitle
-                                           buttonTitle:entryCardButtonTitle
-                                              footnote:entryCardFootnote
-                                            symbolName:entryCardSymbolName
-                                     providerTypeTitles:(state.isBlocked ? @[] : eligibleTypeTitles)];
+    if (state.isSetupRequired) {
+        [self pp_renderGuidedSetupChecklistCardWithAccentColor:heroAccentColor state:state];
+    } else {
+        [self pp_renderApplicationEntryCardWithAccentColor:heroAccentColor
+                                                   eyebrow:kLang(@"ProviderStartCardEyebrow")
+                                                     title:entryCardTitle
+                                                  subtitle:entryCardSubtitle
+                                               buttonTitle:entryCardButtonTitle
+                                                  footnote:entryCardFootnote
+                                                symbolName:entryCardSymbolName
+                                         providerTypeTitles:(state.isBlocked ? @[] : eligibleTypeTitles)];
+    }
     [self pp_renderProviderCards:providerCards];
     [self pp_configureApplicationsActionButtonWithTitle:((providerCards.count > 0 &&
                                                           eligibleTypes.count > 0 &&
-                                                          !state.isBlocked) ? [self pp_primaryCTAForEligibleTypes:eligibleTypes] : nil)
+                                                          !state.isBlocked &&
+                                                          !state.isSetupRequired) ? [self pp_primaryCTAForEligibleTypes:eligibleTypes] : nil)
                                             accentColor:heroAccentColor];
 
     self.primaryButton.hidden = YES;
@@ -978,6 +1018,272 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     }
 }
 
+- (void)pp_renderGuidedSetupChecklistCardWithAccentColor:(UIColor *)accentColor
+                                                   state:(PPProviderOnboardingState *)state {
+    for (UIView *subview in self.applicationEntryCard.subviews.copy) {
+        [subview removeFromSuperview];
+    }
+
+    self.applicationEntryCard.layer.borderColor = [accentColor colorWithAlphaComponent:0.18].CGColor;
+
+    UIView *iconSurface = [[UIView alloc] init];
+    iconSurface.translatesAutoresizingMaskIntoConstraints = NO;
+    iconSurface.backgroundColor = [accentColor colorWithAlphaComponent:0.10];
+    iconSurface.layer.cornerRadius = 24.0;
+    iconSurface.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.applicationEntryCard addSubview:iconSurface];
+
+    NSString *heroIconName = state.isReadyForActivation ? @"checkmark.seal.fill" : @"checklist";
+    UIImageSymbolConfiguration *symbolConfig = [UIImageSymbolConfiguration configurationWithPointSize:18.0
+                                                                                                weight:UIImageSymbolWeightSemibold];
+    UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:heroIconName
+                                                                         withConfiguration:symbolConfig]];
+    iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    iconView.tintColor = accentColor;
+    [iconSurface addSubview:iconView];
+
+    UILabel *eyebrowLabel = [[UILabel alloc] init];
+    eyebrowLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    eyebrowLabel.font = [Styling fontBold:11.0];
+    eyebrowLabel.textColor = [accentColor colorWithAlphaComponent:0.92];
+    eyebrowLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    eyebrowLabel.text = kLang(@"PartnerSetupChecklistTitle");
+    [self.applicationEntryCard addSubview:eyebrowLabel];
+
+    NSDictionary *checklist = state.activationChecklist ?: @{};
+    NSArray<NSDictionary *> *itemsSpec = @[
+        @{
+            @"key": @"profile_setup",
+            @"title": kLang(@"PartnerSetupItemProfile"),
+            @"desc": kLang(@"PartnerSetupItemProfileDesc"),
+            @"icon": @"person.text.rectangle",
+        },
+        @{
+            @"key": @"first_catalog_item",
+            @"title": kLang(@"PartnerSetupItemCatalog"),
+            @"desc": kLang(@"PartnerSetupItemCatalogDesc"),
+            @"icon": @"bag.fill",
+        },
+        @{
+            @"key": @"operating_hours",
+            @"title": kLang(@"PartnerSetupItemHours"),
+            @"desc": kLang(@"PartnerSetupItemHoursDesc"),
+            @"icon": @"clock.fill",
+        },
+        @{
+            @"key": @"payout_account",
+            @"title": kLang(@"PartnerSetupItemPayout"),
+            @"desc": kLang(@"PartnerSetupItemPayoutDesc"),
+            @"icon": @"building.columns.fill",
+        },
+    ];
+
+    NSInteger completedCount = 0;
+    for (NSDictionary *spec in itemsSpec) {
+        NSString *key = spec[@"key"];
+        id itemVal = checklist[key];
+        BOOL isDone = NO;
+        if ([itemVal isKindOfClass:NSDictionary.class]) {
+            isDone = [itemVal[@"completed"] boolValue];
+        } else if ([itemVal isKindOfClass:NSNumber.class]) {
+            isDone = [itemVal boolValue];
+        }
+        if (isDone) completedCount++;
+    }
+
+    PPPaddingLabel *progressPill = [[PPPaddingLabel alloc] init];
+    progressPill.translatesAutoresizingMaskIntoConstraints = NO;
+    progressPill.font = [Styling fontBold:11.0];
+    progressPill.textInsets = UIEdgeInsetsMake(6, 10, 6, 10);
+    progressPill.textColor = accentColor;
+    progressPill.backgroundColor = [accentColor colorWithAlphaComponent:0.12];
+    progressPill.layer.borderColor = [accentColor colorWithAlphaComponent:0.20].CGColor;
+    progressPill.layer.borderWidth = 1.0;
+    progressPill.layer.cornerRadius = 12.0;
+    progressPill.layer.cornerCurve = kCACornerCurveContinuous;
+    progressPill.clipsToBounds = YES;
+    progressPill.text = [NSString stringWithFormat:kLang(@"PartnerSetupProgressFormat"), (long)completedCount, (long)itemsSpec.count];
+    [self.applicationEntryCard addSubview:progressPill];
+
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLabel.font = [Styling fontBold:22.0];
+    titleLabel.textColor = PPProviderStatusPrimaryTextColor();
+    titleLabel.numberOfLines = 0;
+    titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    titleLabel.text = kLang(@"PartnerSetupChecklistTitle");
+    [self.applicationEntryCard addSubview:titleLabel];
+
+    UILabel *subtitleLabel = [[UILabel alloc] init];
+    subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitleLabel.font = [Styling fontRegular:13.5];
+    subtitleLabel.textColor = [PPProviderStatusSecondaryTextColor() colorWithAlphaComponent:0.92];
+    subtitleLabel.numberOfLines = 0;
+    subtitleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    subtitleLabel.text = kLang(@"PartnerSetupChecklistSubtitle");
+    [self.applicationEntryCard addSubview:subtitleLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [iconSurface.topAnchor constraintEqualToAnchor:self.applicationEntryCard.topAnchor constant:20.0],
+        [iconSurface.trailingAnchor constraintEqualToAnchor:self.applicationEntryCard.trailingAnchor constant:-20.0],
+        [iconSurface.widthAnchor constraintEqualToConstant:48.0],
+        [iconSurface.heightAnchor constraintEqualToConstant:48.0],
+
+        [iconView.centerXAnchor constraintEqualToAnchor:iconSurface.centerXAnchor],
+        [iconView.centerYAnchor constraintEqualToAnchor:iconSurface.centerYAnchor],
+
+        [eyebrowLabel.topAnchor constraintEqualToAnchor:self.applicationEntryCard.topAnchor constant:20.0],
+        [eyebrowLabel.leadingAnchor constraintEqualToAnchor:self.applicationEntryCard.leadingAnchor constant:20.0],
+
+        [progressPill.centerYAnchor constraintEqualToAnchor:eyebrowLabel.centerYAnchor],
+        [progressPill.leadingAnchor constraintEqualToAnchor:eyebrowLabel.trailingAnchor constant:8.0],
+        [progressPill.trailingAnchor constraintLessThanOrEqualToAnchor:iconSurface.leadingAnchor constant:-10.0],
+
+        [titleLabel.topAnchor constraintEqualToAnchor:eyebrowLabel.bottomAnchor constant:10.0],
+        [titleLabel.leadingAnchor constraintEqualToAnchor:self.applicationEntryCard.leadingAnchor constant:20.0],
+        [titleLabel.trailingAnchor constraintEqualToAnchor:self.applicationEntryCard.trailingAnchor constant:-20.0],
+
+        [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:8.0],
+        [subtitleLabel.leadingAnchor constraintEqualToAnchor:self.applicationEntryCard.leadingAnchor constant:20.0],
+        [subtitleLabel.trailingAnchor constraintEqualToAnchor:self.applicationEntryCard.trailingAnchor constant:-20.0],
+    ]];
+
+    UIStackView *itemsStack = [[UIStackView alloc] init];
+    itemsStack.translatesAutoresizingMaskIntoConstraints = NO;
+    itemsStack.axis = UILayoutConstraintAxisVertical;
+    itemsStack.spacing = 10.0;
+    itemsStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [self.applicationEntryCard addSubview:itemsStack];
+
+    for (NSDictionary *spec in itemsSpec) {
+        NSString *key = spec[@"key"];
+        id itemVal = checklist[key];
+        BOOL isDone = NO;
+        if ([itemVal isKindOfClass:NSDictionary.class]) {
+            isDone = [itemVal[@"completed"] boolValue];
+        } else if ([itemVal isKindOfClass:NSNumber.class]) {
+            isDone = [itemVal boolValue];
+        }
+
+        UIButton *rowBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        rowBtn.translatesAutoresizingMaskIntoConstraints = NO;
+        rowBtn.backgroundColor = isDone ? [[UIColor ppSuccess] colorWithAlphaComponent:0.06] : [UIColor colorWithWhite:1.0 alpha:0.04];
+        rowBtn.layer.cornerRadius = 16.0;
+        rowBtn.layer.cornerCurve = kCACornerCurveContinuous;
+        rowBtn.layer.borderWidth = 1.0;
+        rowBtn.layer.borderColor = isDone ? [[UIColor ppSuccess] colorWithAlphaComponent:0.25].CGColor : [UIColor colorWithWhite:1.0 alpha:0.08].CGColor;
+        rowBtn.accessibilityIdentifier = key;
+        [rowBtn addTarget:self action:@selector(pp_checklistRowTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [PPButtonHelper attachTapAnimationToButton:rowBtn style:PPButtonAnimationStyleDefault];
+
+        UIView *rowIconSurface = [[UIView alloc] init];
+        rowIconSurface.userInteractionEnabled = NO;
+        rowIconSurface.translatesAutoresizingMaskIntoConstraints = NO;
+        rowIconSurface.backgroundColor = isDone ? [[UIColor ppSuccess] colorWithAlphaComponent:0.12] : [accentColor colorWithAlphaComponent:0.08];
+        rowIconSurface.layer.cornerRadius = 18.0;
+        rowIconSurface.layer.cornerCurve = kCACornerCurveContinuous;
+        [rowBtn addSubview:rowIconSurface];
+
+        UIImageSymbolConfiguration *rowSymbolConfig = [UIImageSymbolConfiguration configurationWithPointSize:15.0 weight:UIImageSymbolWeightSemibold];
+        UIImageView *rowIconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:spec[@"icon"] withConfiguration:rowSymbolConfig]];
+        rowIconView.userInteractionEnabled = NO;
+        rowIconView.translatesAutoresizingMaskIntoConstraints = NO;
+        rowIconView.tintColor = isDone ? [UIColor ppSuccess] : accentColor;
+        [rowIconSurface addSubview:rowIconView];
+
+        UILabel *rowTitle = [[UILabel alloc] init];
+        rowTitle.userInteractionEnabled = NO;
+        rowTitle.translatesAutoresizingMaskIntoConstraints = NO;
+        rowTitle.font = [Styling fontBold:13.5];
+        rowTitle.textColor = PPProviderStatusPrimaryTextColor();
+        rowTitle.textAlignment = Language.alignmentForCurrentLanguage;
+        rowTitle.text = spec[@"title"];
+        [rowBtn addSubview:rowTitle];
+
+        UILabel *rowDesc = [[UILabel alloc] init];
+        rowDesc.userInteractionEnabled = NO;
+        rowDesc.translatesAutoresizingMaskIntoConstraints = NO;
+        rowDesc.font = [Styling fontRegular:11.5];
+        rowDesc.textColor = [PPProviderStatusSecondaryTextColor() colorWithAlphaComponent:0.85];
+        rowDesc.textAlignment = Language.alignmentForCurrentLanguage;
+        rowDesc.text = spec[@"desc"];
+        [rowBtn addSubview:rowDesc];
+
+        PPPaddingLabel *statusBadge = [[PPPaddingLabel alloc] init];
+        statusBadge.userInteractionEnabled = NO;
+        statusBadge.translatesAutoresizingMaskIntoConstraints = NO;
+        statusBadge.font = [Styling fontBold:11.0];
+        statusBadge.textInsets = UIEdgeInsetsMake(5, 8, 5, 8);
+        statusBadge.textColor = isDone ? [UIColor ppSuccess] : [PPProviderStatusSecondaryTextColor() colorWithAlphaComponent:0.8];
+        statusBadge.backgroundColor = isDone ? [[UIColor ppSuccess] colorWithAlphaComponent:0.12] : [UIColor colorWithWhite:1.0 alpha:0.06];
+        statusBadge.layer.cornerRadius = 10.0;
+        statusBadge.layer.cornerCurve = kCACornerCurveContinuous;
+        statusBadge.clipsToBounds = YES;
+        statusBadge.text = isDone ? kLang(@"PartnerSetupItemDone") : kLang(@"PartnerSetupItemPending");
+        [rowBtn addSubview:statusBadge];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [rowBtn.heightAnchor constraintGreaterThanOrEqualToConstant:62.0],
+
+            [rowIconSurface.leadingAnchor constraintEqualToAnchor:rowBtn.leadingAnchor constant:12.0],
+            [rowIconSurface.centerYAnchor constraintEqualToAnchor:rowBtn.centerYAnchor],
+            [rowIconSurface.widthAnchor constraintEqualToConstant:36.0],
+            [rowIconSurface.heightAnchor constraintEqualToConstant:36.0],
+
+            [rowIconView.centerXAnchor constraintEqualToAnchor:rowIconSurface.centerXAnchor],
+            [rowIconView.centerYAnchor constraintEqualToAnchor:rowIconSurface.centerYAnchor],
+
+            [rowTitle.topAnchor constraintEqualToAnchor:rowBtn.topAnchor constant:12.0],
+            [rowTitle.leadingAnchor constraintEqualToAnchor:rowIconSurface.trailingAnchor constant:10.0],
+            [rowTitle.trailingAnchor constraintLessThanOrEqualToAnchor:statusBadge.leadingAnchor constant:-8.0],
+
+            [rowDesc.topAnchor constraintEqualToAnchor:rowTitle.bottomAnchor constant:3.0],
+            [rowDesc.leadingAnchor constraintEqualToAnchor:rowIconSurface.trailingAnchor constant:10.0],
+            [rowDesc.trailingAnchor constraintLessThanOrEqualToAnchor:statusBadge.leadingAnchor constant:-8.0],
+            [rowDesc.bottomAnchor constraintEqualToAnchor:rowBtn.bottomAnchor constant:-12.0],
+
+            [statusBadge.trailingAnchor constraintEqualToAnchor:rowBtn.trailingAnchor constant:-12.0],
+            [statusBadge.centerYAnchor constraintEqualToAnchor:rowBtn.centerYAnchor],
+        ]];
+
+        [itemsStack addArrangedSubview:rowBtn];
+    }
+
+    [NSLayoutConstraint activateConstraints:@[
+        [itemsStack.topAnchor constraintEqualToAnchor:subtitleLabel.bottomAnchor constant:16.0],
+        [itemsStack.leadingAnchor constraintEqualToAnchor:self.applicationEntryCard.leadingAnchor constant:20.0],
+        [itemsStack.trailingAnchor constraintEqualToAnchor:self.applicationEntryCard.trailingAnchor constant:-20.0],
+    ]];
+
+    UIView *previousView = itemsStack;
+
+    if (state.isReadyForActivation || completedCount == itemsSpec.count) {
+        UIButton *activateButton = [UIButton buttonWithType:UIButtonTypeCustom];
+        activateButton.translatesAutoresizingMaskIntoConstraints = NO;
+        activateButton.backgroundColor = accentColor;
+        activateButton.layer.cornerRadius = 22.0;
+        activateButton.layer.cornerCurve = kCACornerCurveContinuous;
+        activateButton.titleLabel.font = [Styling fontBold:16.0];
+        activateButton.contentEdgeInsets = UIEdgeInsetsMake(16.0, 18.0, 16.0, 18.0);
+        activateButton.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+        [activateButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        [activateButton setTitle:kLang(@"PartnerActivateAccountButton") forState:UIControlStateNormal];
+        [activateButton addTarget:self action:@selector(pp_activatePartnerAccountTapped) forControlEvents:UIControlEventTouchUpInside];
+        [PPButtonHelper attachTapAnimationToButton:activateButton style:PPButtonAnimationStyleDefault];
+        [self.applicationEntryCard addSubview:activateButton];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [activateButton.topAnchor constraintEqualToAnchor:previousView.bottomAnchor constant:18.0],
+            [activateButton.leadingAnchor constraintEqualToAnchor:self.applicationEntryCard.leadingAnchor constant:20.0],
+            [activateButton.trailingAnchor constraintEqualToAnchor:self.applicationEntryCard.trailingAnchor constant:-20.0],
+            [activateButton.heightAnchor constraintEqualToConstant:54.0],
+            [activateButton.bottomAnchor constraintEqualToAnchor:self.applicationEntryCard.bottomAnchor constant:-20.0],
+        ]];
+    } else {
+        [previousView.bottomAnchor constraintEqualToAnchor:self.applicationEntryCard.bottomAnchor constant:-20.0].active = YES;
+    }
+}
+
 #pragma mark - Identity
 
 - (void)pp_renderIdentityCardWithEntries:(NSArray<NSDictionary<NSString *, NSString *> *> *)entries {
@@ -1190,7 +1496,11 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         accentColor = [UIColor ppError];
     } else if ([statusValue isEqualToString:kPPProviderStatusArchivedValue]) {
         accentColor = [UIColor ppTextSecondary];
-    } else if ([statusValue isEqualToString:kPPProviderStatusPendingValue] || [statusValue isEqualToString:kPPProviderStatusUnderReviewValue]) {
+    } else if ([statusValue isEqualToString:kPPProviderStatusChangesRequestedValue]) {
+        accentColor = [UIColor ppWarning];
+    } else if ([statusValue isEqualToString:kPPProviderStatusPendingValue] ||
+               [statusValue isEqualToString:kPPProviderStatusUnderReviewValue] ||
+               [statusValue isEqualToString:kPPProviderStatusResubmittedValue]) {
         accentColor = [UIColor ppWarning];
     } else if ([statusValue isEqualToString:kPPProviderProfileStatusActiveValue]) {
         accentColor = [UIColor ppSuccess];
@@ -1260,13 +1570,80 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     notesLabel.text = application.reviewNotes.length > 0 ? [NSString stringWithFormat:@"%@ · %@", kLang(@"ProviderCardNotesLabel"), application.reviewNotes] : @"";
     [card addSubview:notesLabel];
 
-    NSLayoutConstraint *notesBottomConstraint = [notesLabel.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-18.0];
-    notesBottomConstraint.priority = UILayoutPriorityDefaultHigh;
-    NSLayoutConstraint *notesHeightConstraint = [notesLabel.heightAnchor constraintEqualToConstant:0.0];
-    notesHeightConstraint.active = (application.reviewNotes.length == 0);
+    UILabel *rejectionLabel = [[UILabel alloc] init];
+    rejectionLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    rejectionLabel.font = [Styling fontRegular:13.0];
+    rejectionLabel.textColor = [UIColor ppError];
+    rejectionLabel.numberOfLines = 0;
+    rejectionLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    rejectionLabel.hidden = (application.rejectionReason.length == 0);
+    rejectionLabel.text = application.rejectionReason.length > 0 ? [NSString stringWithFormat:@"%@: %@", kLang(@"ProviderCardRejectionReasonLabel"), application.rejectionReason] : @"";
+    [card addSubview:rejectionLabel];
 
-    NSLayoutConstraint *summaryBottomConstraint = [summaryLabel.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-18.0];
-    summaryBottomConstraint.priority = UILayoutPriorityDefaultLow;
+    UIStackView *findingsStack = [[UIStackView alloc] init];
+    findingsStack.translatesAutoresizingMaskIntoConstraints = NO;
+    findingsStack.axis = UILayoutConstraintAxisVertical;
+    findingsStack.spacing = 8.0;
+    findingsStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    findingsStack.hidden = (application.reviewFindings.count == 0);
+    [card addSubview:findingsStack];
+
+    if (application.reviewFindings.count > 0) {
+        UILabel *findingsTitle = [[UILabel alloc] init];
+        findingsTitle.font = [Styling fontBold:12.0];
+        findingsTitle.textColor = [UIColor ppWarning];
+        findingsTitle.textAlignment = Language.alignmentForCurrentLanguage;
+        findingsTitle.text = kLang(@"ProviderCardFindingsSectionTitle");
+        [findingsStack addArrangedSubview:findingsTitle];
+
+        for (NSDictionary *finding in application.reviewFindings) {
+            UIView *itemBox = [[UIView alloc] init];
+            itemBox.backgroundColor = [[UIColor ppWarning] colorWithAlphaComponent:0.06];
+            itemBox.layer.cornerRadius = 10.0;
+            itemBox.layer.cornerCurve = kCACornerCurveContinuous;
+
+            UILabel *itemTitle = [[UILabel alloc] init];
+            itemTitle.translatesAutoresizingMaskIntoConstraints = NO;
+            itemTitle.font = [Styling fontBold:12.0];
+            itemTitle.textColor = PPProviderStatusPrimaryTextColor();
+            itemTitle.numberOfLines = 0;
+            itemTitle.textAlignment = Language.alignmentForCurrentLanguage;
+            itemTitle.text = PPSafeString(finding[@"title"]);
+            [itemBox addSubview:itemTitle];
+
+            UILabel *itemDesc = [[UILabel alloc] init];
+            itemDesc.translatesAutoresizingMaskIntoConstraints = NO;
+            itemDesc.font = [Styling fontRegular:11.0];
+            itemDesc.textColor = [PPProviderStatusSecondaryTextColor() colorWithAlphaComponent:0.9];
+            itemDesc.numberOfLines = 0;
+            itemDesc.textAlignment = Language.alignmentForCurrentLanguage;
+            itemDesc.text = PPSafeString(finding[@"description"]);
+            [itemBox addSubview:itemDesc];
+
+            [NSLayoutConstraint activateConstraints:@[
+                [itemTitle.topAnchor constraintEqualToAnchor:itemBox.topAnchor constant:8.0],
+                [itemTitle.leadingAnchor constraintEqualToAnchor:itemBox.leadingAnchor constant:12.0],
+                [itemTitle.trailingAnchor constraintEqualToAnchor:itemBox.trailingAnchor constant:-12.0],
+
+                [itemDesc.topAnchor constraintEqualToAnchor:itemTitle.bottomAnchor constant:4.0],
+                [itemDesc.leadingAnchor constraintEqualToAnchor:itemBox.leadingAnchor constant:12.0],
+                [itemDesc.trailingAnchor constraintEqualToAnchor:itemBox.trailingAnchor constant:-12.0],
+                [itemDesc.bottomAnchor constraintEqualToAnchor:itemBox.bottomAnchor constant:-8.0],
+            ]];
+            [findingsStack addArrangedSubview:itemBox];
+        }
+    }
+
+    UIView *bottomAnchorView = summaryLabel;
+    if (application.reviewNotes.length > 0) {
+        bottomAnchorView = notesLabel;
+    }
+    if (application.rejectionReason.length > 0) {
+        bottomAnchorView = rejectionLabel;
+    }
+    if (application.reviewFindings.count > 0) {
+        bottomAnchorView = findingsStack;
+    }
 
     [NSLayoutConstraint activateConstraints:@[
         [iconSurface.topAnchor constraintEqualToAnchor:card.topAnchor constant:18.0],
@@ -1291,8 +1668,16 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         [notesLabel.topAnchor constraintEqualToAnchor:summaryLabel.bottomAnchor constant:(application.reviewNotes.length > 0 ? 8.0 : 0.0)],
         [notesLabel.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
         [notesLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18.0],
-        notesBottomConstraint,
-        summaryBottomConstraint,
+
+        [rejectionLabel.topAnchor constraintEqualToAnchor:(application.reviewNotes.length > 0 ? notesLabel.bottomAnchor : summaryLabel.bottomAnchor) constant:(application.rejectionReason.length > 0 ? 8.0 : 0.0)],
+        [rejectionLabel.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
+        [rejectionLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18.0],
+
+        [findingsStack.topAnchor constraintEqualToAnchor:(application.rejectionReason.length > 0 ? rejectionLabel.bottomAnchor : (application.reviewNotes.length > 0 ? notesLabel.bottomAnchor : summaryLabel.bottomAnchor)) constant:(application.reviewFindings.count > 0 ? 12.0 : 0.0)],
+        [findingsStack.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
+        [findingsStack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-18.0],
+
+        [bottomAnchorView.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-18.0],
     ]];
 
     return card;
@@ -1385,6 +1770,34 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
         return;
     }
 
+    if (self.state.isSetupRequired) {
+        if (self.state.isReadyForActivation) {
+            [self pp_activatePartnerAccountTapped];
+        }
+        return;
+    }
+
+    PPProviderApplication *changesRequestedApp = nil;
+    for (PPProviderApplication *app in self.state.applications) {
+        if ([app isChangesRequested]) {
+            changesRequestedApp = app;
+            break;
+        }
+    }
+
+    if (changesRequestedApp && PPProviderTypeIsEnabledInProApp(changesRequestedApp.providerType)) {
+        PPProviderType preferredType = changesRequestedApp.providerType;
+        PPBecomeProviderBottomSheetViewController *controller = [[PPBecomeProviderBottomSheetViewController alloc] initWithState:self.state
+                                                                                                               eligibleProviderTypes:@[@(preferredType)]
+                                                                                                               preferredProviderType:preferredType];
+        controller.delegate = self;
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:controller];
+        nav.modalPresentationStyle = UIModalPresentationFullScreen;
+        nav.view.backgroundColor = PPProviderStatusBackgroundColor();
+        [self presentViewController:nav animated:YES completion:nil];
+        return;
+    }
+
     NSArray<NSNumber *> *eligibleTypes = self.state.eligibleProviderTypes;
     if (eligibleTypes.count == 0) {
         return;
@@ -1401,6 +1814,47 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     nav.view.backgroundColor = PPProviderStatusBackgroundColor();
 
     [self presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)pp_checklistRowTapped:(UIButton *)sender {
+    NSString *key = sender.accessibilityIdentifier;
+    if (key.length == 0) return;
+    NSDictionary *checklist = self.state.activationChecklist ?: @{};
+    id itemVal = checklist[key];
+    BOOL isDone = NO;
+    if ([itemVal isKindOfClass:NSDictionary.class]) {
+        isDone = [itemVal[@"completed"] boolValue];
+    } else if ([itemVal isKindOfClass:NSNumber.class]) {
+        isDone = [itemVal boolValue];
+    }
+
+    BOOL newStatus = !isDone;
+    [PPToast toast:kLang(@"Saving") style:PPToastStyleInfo haptic:YES duration:1.0];
+    __weak typeof(self) weakSelf = self;
+    [[PPProviderApplicationManager shared] updateChecklistProgressForKey:key completed:newStatus completion:^(BOOL success, NSError * _Nullable error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        if (success) {
+            [PPToast toast:kLang(@"Saved") style:PPToastStyleSuccess haptic:YES duration:1.5];
+        } else {
+            [PPToast toast:(error.localizedDescription ?: kLang(@"StatusSaveFailed")) style:PPToastStyleError haptic:YES duration:2.5];
+        }
+    }];
+}
+
+- (void)pp_activatePartnerAccountTapped {
+    [PPToast toast:kLang(@"PartnerActivatingButton") style:PPToastStyleInfo haptic:YES duration:1.5];
+    __weak typeof(self) weakSelf = self;
+    [[PPProviderApplicationManager shared] activatePartnerAccountWithCompletion:^(BOOL success, NSError * _Nullable error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        if (success) {
+            [PPToast toast:kLang(@"PartnerActivatedSuccessToast") style:PPToastStyleSuccess haptic:YES duration:2.5];
+            [self pp_transitionToDashboardIfNeeded];
+        } else {
+            [PPToast toast:(error.localizedDescription ?: kLang(@"ProviderStateErrorTitle")) style:PPToastStyleError haptic:YES duration:3.0];
+        }
+    }];
 }
 
 - (void)secondaryButtonTapped {

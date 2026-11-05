@@ -21,12 +21,12 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     PPVetListFilterDisabled
 };
 
-#pragma mark - Filter Chip (text-led, underline accent)
+#pragma mark - Filter Chip (tactile pill with count badge)
 
 @interface _PPVetFilterChip : UIControl
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *countLabel;
-@property (nonatomic, strong) UIView  *underline;
+@property (nonatomic, strong) UIView  *countBadge;
 @property (nonatomic, assign) BOOL selectedState;
 - (instancetype)initWithTitle:(NSString *)title;
 - (void)setSelectedState:(BOOL)selected animated:(BOOL)animated;
@@ -38,51 +38,54 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 - (instancetype)initWithTitle:(NSString *)title {
     if (self = [super init]) {
         self.translatesAutoresizingMaskIntoConstraints = NO;
-        self.backgroundColor = UIColor.clearColor;
+        self.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.06];
+        PPApplyContinuousCorners(self, PPCornerPill);
+        self.layer.borderWidth = 1.0;
+        self.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.5].CGColor;
 
         _titleLabel = [UILabel new];
         _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _titleLabel.font = [Styling fontMedium:PPFontSubheadline];
+        _titleLabel.font = [Styling fontMedium:13.0];
         _titleLabel.textColor = SeconderyTextClr;
         _titleLabel.text = title;
         _titleLabel.userInteractionEnabled = NO;
         PPEnableDynamicType(_titleLabel, UIFontTextStyleSubheadline);
         [self addSubview:_titleLabel];
 
+        _countBadge = [UIView new];
+        _countBadge.translatesAutoresizingMaskIntoConstraints = NO;
+        _countBadge.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.10];
+        PPApplyContinuousCorners(_countBadge, PPCornerPill);
+        _countBadge.userInteractionEnabled = NO;
+        [self addSubview:_countBadge];
+
         _countLabel = [UILabel new];
         _countLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _countLabel.font = [Styling fontMedium:PPFontCaption1];
-        _countLabel.textColor = AppTertiaryTextClr;
+        _countLabel.font = [Styling fontBold:11.5];
+        _countLabel.textColor = SeconderyTextClr;
+        _countLabel.textAlignment = NSTextAlignmentCenter;
         _countLabel.userInteractionEnabled = NO;
         PPEnableDynamicType(_countLabel, UIFontTextStyleCaption1);
-        [self addSubview:_countLabel];
-
-        _underline = [UIView new];
-        _underline.translatesAutoresizingMaskIntoConstraints = NO;
-        _underline.backgroundColor = AppPrimaryClr;
-        _underline.alpha = 0.0;
-        _underline.userInteractionEnabled = NO;
-        [self addSubview:_underline];
+        [_countBadge addSubview:_countLabel];
 
         [NSLayoutConstraint activateConstraints:@[
-            [_titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:PPSpaceMDHalf],
-            [_titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-            [_countLabel.firstBaselineAnchor constraintEqualToAnchor:_titleLabel.firstBaselineAnchor],
-            [_countLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor constant:PPSpaceMDHalf],
-            [_countLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor],
-            [_underline.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:PPSpaceMDHalf],
-            [_underline.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
-            [_underline.widthAnchor constraintEqualToAnchor:_titleLabel.widthAnchor],
-            [_underline.heightAnchor constraintEqualToConstant:1.5],
-            // Touch target: the chip keeps its typographic look but is never
-            // shorter than 44pt, so the tappable area below the underline is
-            // real instead of a ~30pt strip.
-            [self.heightAnchor constraintGreaterThanOrEqualToConstant:PPTouchTargetMin],
+            [self.heightAnchor constraintGreaterThanOrEqualToConstant:36.0],
+            [_titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:14.0],
+            [_titleLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+
+            [_countBadge.leadingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor constant:8.0],
+            [_countBadge.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10.0],
+            [_countBadge.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+            [_countBadge.heightAnchor constraintEqualToConstant:22.0],
+
+            [_countLabel.leadingAnchor constraintEqualToAnchor:_countBadge.leadingAnchor constant:7.0],
+            [_countLabel.trailingAnchor constraintEqualToAnchor:_countBadge.trailingAnchor constant:-7.0],
+            [_countLabel.centerYAnchor constraintEqualToAnchor:_countBadge.centerYAnchor],
         ]];
 
-        NSLayoutConstraint *hugUnderline = [_underline.bottomAnchor constraintEqualToAnchor:self.bottomAnchor];
-        hugUnderline.priority = UILayoutPriorityDefaultHigh + 1; // yields to the 44pt minimum
-        hugUnderline.active = YES;
+        if (@available(iOS 13.4, *)) {
+            [self addInteraction:[[UIPointerInteraction alloc] initWithDelegate:nil]];
+        }
 
         self.isAccessibilityElement = YES;
         self.accessibilityTraits = UIAccessibilityTraitButton;
@@ -94,10 +97,23 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 - (void)setSelectedState:(BOOL)selected animated:(BOOL)animated {
     _selectedState = selected;
     void (^apply)(void) = ^{
-        self.titleLabel.textColor = selected ? (PrimaryTextClr) : SeconderyTextClr;
-        self.titleLabel.font = selected ? [Styling fontBold:PPFontSubheadline] : [Styling fontMedium:PPFontSubheadline];
-        PPEnableDynamicType(self.titleLabel, UIFontTextStyleSubheadline);
-        self.underline.alpha = selected ? 1.0 : 0.0;
+        if (selected) {
+            self.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.12];
+            self.layer.borderColor = AppPrimaryClr.CGColor;
+            self.layer.borderWidth = 1.5;
+            self.titleLabel.textColor = AppPrimaryClr;
+            self.titleLabel.font = [Styling fontBold:13.0];
+            self.countBadge.backgroundColor = AppPrimaryClr;
+            self.countLabel.textColor = UIColor.whiteColor;
+        } else {
+            self.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.06];
+            self.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.5].CGColor;
+            self.layer.borderWidth = 1.0;
+            self.titleLabel.textColor = SeconderyTextClr;
+            self.titleLabel.font = [Styling fontMedium:13.0];
+            self.countBadge.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.10];
+            self.countLabel.textColor = SeconderyTextClr;
+        }
     };
     self.accessibilityTraits = selected ? (UIAccessibilityTraitButton | UIAccessibilityTraitSelected)
                                        : UIAccessibilityTraitButton;
@@ -118,6 +134,13 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 #pragma mark - VC
 
 @interface PPVetsListViewController () <UITableViewDataSource, UITableViewDelegate, PPSDelegate>
+
+// Spatial Containers (Adaptive iPhone vs iPad)
+@property (nonatomic, strong) UIView *masterContainer;
+@property (nonatomic, strong) UIView *inspectorContainer;
+@property (nonatomic, strong) NSLayoutConstraint *masterTrailingConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *masterWidthConstraint;
+@property (nonatomic, strong) PPVetModel *selectedVet;
 
 @property (nonatomic, strong) UILabel *eyebrowLabel;
 @property (nonatomic, strong) UILabel *titleLabel;
@@ -147,6 +170,23 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 @property (nonatomic, strong) UIView *emptyRule;
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, assign) BOOL isLoadingVets;
+
+// iPad Live Clinical Inspector subviews
+@property (nonatomic, strong) UIView *inspectorEmptyState;
+@property (nonatomic, strong) UIStackView *inspectorDetailStack;
+@property (nonatomic, strong) UIImageView *inspectorAvatar;
+@property (nonatomic, strong) UILabel *inspectorNameLabel;
+@property (nonatomic, strong) UILabel *inspectorTypeBadge;
+@property (nonatomic, strong) UILabel *inspectorFeeBadge;
+@property (nonatomic, strong) UILabel *inspectorBioLabel;
+@property (nonatomic, strong) UILabel *inspectorDateLabel;
+@property (nonatomic, strong) UILabel *inspectorStatusBadge;
+@property (nonatomic, strong) UIButton *inspectorCallBtn;
+@property (nonatomic, strong) UIButton *inspectorWABtn;
+@property (nonatomic, strong) UIButton *inspectorEditBtn;
+@property (nonatomic, strong) UIButton *inspectorSubBtn;
+@property (nonatomic, strong) UIButton *inspectorToggleBtn;
+@property (nonatomic, strong) UIButton *inspectorDeleteBtn;
 
 @property (nonatomic, strong) NSMutableArray<PPVetModel *> *allVets;
 @property (nonatomic, strong) NSMutableArray<PPVetModel *> *filteredVets;
@@ -208,12 +248,39 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     self.didPlayEntrance = NO;
 
     [self setupAmbientBackground];
+    [self setupSpatialContainers];
     [self setupTitleHeader];
     [self setupFilterRow];
     [self setupSearchField];
     [self setupTableView];
     [self setupEmptyState];
+    [self setupInspectorPane];
     [self startListening];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    [self updateLayoutForCurrentBounds];
+}
+
+- (void)updateLayoutForCurrentBounds {
+    BOOL isPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
+    BOOL isRegularWidth = isPad && (self.view.bounds.size.width >= 720.0);
+
+    if (isRegularWidth) {
+        self.masterTrailingConstraint.active = NO;
+        self.masterWidthConstraint.active = YES;
+        self.inspectorContainer.hidden = NO;
+        if (!self.selectedVet && self.filteredVets.count > 0) {
+            self.selectedVet = self.filteredVets.firstObject;
+            [self updateInspectorWithVet:self.selectedVet];
+            [self.tableView reloadData];
+        }
+    } else {
+        self.masterWidthConstraint.active = NO;
+        self.masterTrailingConstraint.active = YES;
+        self.inspectorContainer.hidden = YES;
+    }
 }
 
 - (UIColor *)pp_canvasColor {
@@ -226,6 +293,34 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
 - (UIColor *)pp_borderColor {
     return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.72];
+}
+
+- (void)setupSpatialContainers {
+    self.masterContainer = [UIView new];
+    self.masterContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.masterContainer];
+
+    self.inspectorContainer = [UIView new];
+    self.inspectorContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inspectorContainer.hidden = YES;
+    [self.view addSubview:self.inspectorContainer];
+
+    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+
+    self.masterTrailingConstraint = [self.masterContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor];
+    self.masterWidthConstraint = [self.masterContainer.widthAnchor constraintEqualToConstant:410.0];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.masterContainer.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.masterContainer.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [self.masterContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        self.masterTrailingConstraint,
+
+        [self.inspectorContainer.topAnchor constraintEqualToAnchor:safe.topAnchor constant:8.0],
+        [self.inspectorContainer.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-20.0],
+        [self.inspectorContainer.leadingAnchor constraintEqualToAnchor:self.masterContainer.trailingAnchor constant:16.0],
+        [self.inspectorContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20.0],
+    ]];
 }
 
 - (void)setupAmbientBackground {
@@ -274,7 +369,10 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         self.view.backgroundColor = [self pp_canvasColor];
         self.heroSurfaceView.backgroundColor = [self pp_surfaceColor];
         self.heroSurfaceView.layer.borderColor = [self pp_borderColor].CGColor;
-        PPApplyElevatedShadow(self.heroSurfaceView); // re-resolve the dynamic shadow color
+        self.inspectorContainer.backgroundColor = [self pp_surfaceColor];
+        self.inspectorContainer.layer.borderColor = [self pp_borderColor].CGColor;
+        PPApplyElevatedShadow(self.heroSurfaceView);
+        PPApplyElevatedShadow(self.inspectorContainer);
         [self updateAmbientBackgroundForStyle];
     }
     if (previousTraitCollection.preferredContentSizeCategory != self.traitCollection.preferredContentSizeCategory) {
@@ -312,7 +410,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     _heroSurfaceView.backgroundColor = [self pp_surfaceColor];
     _heroSurfaceView.layer.borderColor = [self pp_borderColor].CGColor;
     PPApplyElevatedShadow(_heroSurfaceView);
-    [self.view addSubview:_heroSurfaceView];
+    [self.masterContainer addSubview:_heroSurfaceView];
 
     UIView *accentBar = [UIView new];
     accentBar.translatesAutoresizingMaskIntoConstraints = NO;
@@ -333,11 +431,11 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     _titleLabel = [UILabel new];
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _titleLabel.text = kLang(@"Vet_Manage_Title") ?: ([Language isRTL] ? @"إدارة الكوادر والمراكز البيطرية" : @"Veterinarians Management");
-    _titleLabel.font = [Styling fontBold:28];
+    _titleLabel.font = [Styling fontBold:24];
     _titleLabel.textColor = PrimaryTextClr;
     _titleLabel.numberOfLines = 2;
     _titleLabel.textAlignment = align;
-    PPEnableDynamicType(_titleLabel, UIFontTextStyleLargeTitle);
+    PPEnableDynamicType(_titleLabel, UIFontTextStyleTitle1);
     [_heroSurfaceView addSubview:_titleLabel];
 
     _metaLabel = [UILabel new];
@@ -384,24 +482,24 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [_heroSurfaceView addSubview:self.metricStack];
 
     UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
-    CGFloat cardH = isPad ? 62.0 : 54.0;
-    CGFloat hMargin = isPad ? 24.0 : 18.0;
+    CGFloat cardH = isPad ? 60.0 : 54.0;
+    CGFloat hMargin = isPad ? 20.0 : 16.0;
 
     [NSLayoutConstraint activateConstraints:@[
         [_heroSurfaceView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:PPSpaceSM],
-        [_heroSurfaceView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:hMargin],
-        [_heroSurfaceView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-hMargin],
+        [_heroSurfaceView.leadingAnchor constraintEqualToAnchor:self.masterContainer.leadingAnchor constant:hMargin],
+        [_heroSurfaceView.trailingAnchor constraintEqualToAnchor:self.masterContainer.trailingAnchor constant:-hMargin],
 
         [accentBar.topAnchor constraintEqualToAnchor:_heroSurfaceView.topAnchor constant:16],
-        [accentBar.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:20],
-        [accentBar.widthAnchor constraintEqualToConstant:64],
+        [accentBar.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:18],
+        [accentBar.widthAnchor constraintEqualToConstant:54],
         [accentBar.heightAnchor constraintEqualToConstant:5.0],
 
-        [_eyebrowLabel.topAnchor constraintEqualToAnchor:accentBar.bottomAnchor constant:10.0],
-        [_eyebrowLabel.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:20],
-        [_eyebrowLabel.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-20],
+        [_eyebrowLabel.topAnchor constraintEqualToAnchor:accentBar.bottomAnchor constant:8.0],
+        [_eyebrowLabel.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:18],
+        [_eyebrowLabel.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-18],
 
-        [_titleLabel.topAnchor constraintEqualToAnchor:_eyebrowLabel.bottomAnchor constant:4.0],
+        [_titleLabel.topAnchor constraintEqualToAnchor:_eyebrowLabel.bottomAnchor constant:3.0],
         [_titleLabel.leadingAnchor constraintEqualToAnchor:_eyebrowLabel.leadingAnchor],
         [_titleLabel.trailingAnchor constraintEqualToAnchor:_eyebrowLabel.trailingAnchor],
 
@@ -409,11 +507,11 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         [_metaLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
         [_metaLabel.trailingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor],
 
-        [self.metricStack.topAnchor constraintEqualToAnchor:_metaLabel.bottomAnchor constant:12.0],
-        [self.metricStack.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:18],
-        [self.metricStack.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-18],
+        [self.metricStack.topAnchor constraintEqualToAnchor:_metaLabel.bottomAnchor constant:10.0],
+        [self.metricStack.leadingAnchor constraintEqualToAnchor:_heroSurfaceView.leadingAnchor constant:16],
+        [self.metricStack.trailingAnchor constraintEqualToAnchor:_heroSurfaceView.trailingAnchor constant:-16],
         [self.metricStack.heightAnchor constraintEqualToConstant:cardH],
-        [self.metricStack.bottomAnchor constraintEqualToAnchor:_heroSurfaceView.bottomAnchor constant:-16],
+        [self.metricStack.bottomAnchor constraintEqualToAnchor:_heroSurfaceView.bottomAnchor constant:-14],
     ]];
 
     [self pp_applyHeroTitleLineLimitForTextSize];
@@ -465,12 +563,12 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     self.titleLabel.numberOfLines = PPIsAccessibilityTextSize() ? 0 : 2;
 }
 
-#pragma mark - Filter row (text + count, accent underline)
+#pragma mark - Filter row (tactile pills with count badges)
 
 - (void)setupFilterRow {
-    _chipAll      = [[_PPVetFilterChip alloc] initWithTitle:kLang(@"Vet_Filter_All")];
-    _chipActive   = [[_PPVetFilterChip alloc] initWithTitle:kLang(@"Vet_Filter_Active")];
-    _chipDisabled = [[_PPVetFilterChip alloc] initWithTitle:kLang(@"Vet_Filter_Disabled")];
+    _chipAll      = [[_PPVetFilterChip alloc] initWithTitle:kLang(@"Vet_Filter_All") ?: ([Language isRTL] ? @"الكل" : @"All")];
+    _chipActive   = [[_PPVetFilterChip alloc] initWithTitle:kLang(@"Vet_Filter_Active") ?: ([Language isRTL] ? @"نشط" : @"Active")];
+    _chipDisabled = [[_PPVetFilterChip alloc] initWithTitle:kLang(@"Vet_Filter_Disabled") ?: ([Language isRTL] ? @"معطل" : @"Disabled")];
     [_chipAll      addTarget:self action:@selector(chipAllTapped) forControlEvents:UIControlEventTouchUpInside];
     [_chipActive   addTarget:self action:@selector(chipActiveTapped) forControlEvents:UIControlEventTouchUpInside];
     [_chipDisabled addTarget:self action:@selector(chipDisabledTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -479,16 +577,17 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[_chipAll, _chipActive, _chipDisabled]];
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisHorizontal;
-    stack.alignment = UIStackViewAlignmentLastBaseline;
-    stack.spacing = 22;
+    stack.alignment = UIStackViewAlignmentCenter;
+    stack.spacing = 10.0;
     stack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    [self.view addSubview:stack];
+    [self.masterContainer addSubview:stack];
     self.filterStack = stack;
 
+    CGFloat hMargin = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) ? 20.0 : 16.0;
     [NSLayoutConstraint activateConstraints:@[
-        [stack.topAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:14],
-        [stack.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceXL],
-        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceXL],
+        [stack.topAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:12],
+        [stack.leadingAnchor constraintEqualToAnchor:self.masterContainer.leadingAnchor constant:hMargin],
+        [stack.trailingAnchor constraintLessThanOrEqualToAnchor:self.masterContainer.trailingAnchor constant:-hMargin],
     ]];
 
     [self pp_applyFilterRowLayoutForTextSize];
@@ -502,8 +601,8 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         self.filterStack.spacing = PPSpaceXS;
     } else {
         self.filterStack.axis = UILayoutConstraintAxisHorizontal;
-        self.filterStack.alignment = UIStackViewAlignmentLastBaseline;
-        self.filterStack.spacing = 22;
+        self.filterStack.alignment = UIStackViewAlignmentCenter;
+        self.filterStack.spacing = 10.0;
     }
 }
 
@@ -527,41 +626,30 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [self applyFilterAndReload];
 }
 
-#pragma mark - Search (thin, edge-to-edge)
+#pragma mark - Search Capsule
 
 - (void)setupSearchField {
     PPS *sv = [[PPS alloc] initWithFrame:CGRectZero];
     sv.translatesAutoresizingMaskIntoConstraints = NO;
     sv.delegate = self;
-    sv.cornerRadius = 0;
+    sv.cornerRadius = 14.0;
     sv.blurEnabled = NO;
     sv.shadowEnabled = NO;
-    sv.strokeColor = UIColor.clearColor;
-    sv.textField.placeholder = kLang(@"Vet_Search_Placeholder");
-    sv.backgroundColor = UIColor.clearColor;
+    sv.strokeColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.70];
+    sv.textField.placeholder = kLang(@"Vet_Search_Placeholder") ?: ([Language isRTL] ? @"البحث بالاسم أو التخصص..." : @"Search by name or specialty...");
+    sv.backgroundColor = [UIColor ppElevatedSurface];
     sv.showsPrimaryButton = NO;
+    sv.contentInsets = UIEdgeInsetsMake(6, 14, 6, 14);
     PPEnableDynamicTypeForTextField(sv.textField, UIFontTextStyleBody);
-    [self.view addSubview:sv];
+    [self.masterContainer addSubview:sv];
     self.searchView = sv;
 
-    UIView *hairline = [UIView new];
-    hairline.translatesAutoresizingMaskIntoConstraints = NO;
-    hairline.backgroundColor = PPHairlineColor();
-    [self.view addSubview:hairline];
-
+    CGFloat hMargin = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) ? 20.0 : 16.0;
     [NSLayoutConstraint activateConstraints:@[
-        // Anchored to the filter stack (not just the first chip) so the row can
-        // stack vertically at accessibility text sizes without overlapping.
-        [sv.topAnchor constraintEqualToAnchor:self.filterStack.bottomAnchor constant:PPSpaceXS],
-        [sv.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:18],
-        [sv.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-18],
-        // 44pt minimum touch target, and free to grow with the scaled font.
-        [sv.heightAnchor constraintGreaterThanOrEqualToConstant:PPTouchTargetMin],
-
-        [hairline.topAnchor constraintEqualToAnchor:sv.bottomAnchor constant:PPSpaceMDHalf],
-        [hairline.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceXL],
-        [hairline.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceXL],
-        [hairline.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale],
+        [sv.topAnchor constraintEqualToAnchor:self.filterStack.bottomAnchor constant:10.0],
+        [sv.leadingAnchor constraintEqualToAnchor:self.masterContainer.leadingAnchor constant:hMargin],
+        [sv.trailingAnchor constraintEqualToAnchor:self.masterContainer.trailingAnchor constant:-hMargin],
+        [sv.heightAnchor constraintGreaterThanOrEqualToConstant:46.0],
     ]];
 }
 
@@ -577,7 +665,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     self.tableView.rowHeight = [PPVetCell preferredHeight];
     self.tableView.estimatedRowHeight = [PPVetCell preferredHeight];
     self.tableView.showsVerticalScrollIndicator = NO;
-    self.tableView.contentInset = UIEdgeInsetsMake(PPSpaceSM, 0, 96, 0);
+    self.tableView.contentInset = UIEdgeInsetsMake(8.0, 0, 96.0, 0);
     [self.tableView registerClass:[PPVetCell class] forCellReuseIdentifier:[PPVetCell reuseID]];
 
     UIRefreshControl *refresh = [[UIRefreshControl alloc] init];
@@ -585,13 +673,392 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [refresh addTarget:self action:@selector(onRefresh) forControlEvents:UIControlEventValueChanged];
     self.tableView.refreshControl = refresh;
 
-    [self.view addSubview:self.tableView];
+    [self.masterContainer addSubview:self.tableView];
     [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:self.searchView.bottomAnchor constant:14],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [self.tableView.topAnchor constraintEqualToAnchor:self.searchView.bottomAnchor constant:10.0],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.masterContainer.leadingAnchor],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.masterContainer.trailingAnchor],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.masterContainer.bottomAnchor],
     ]];
+}
+
+#pragma mark - iPad Live Clinical Inspector Studio
+
+- (void)setupInspectorPane {
+    self.inspectorContainer.backgroundColor = [self pp_surfaceColor];
+    PPApplyContinuousCorners(self.inspectorContainer, PPCornerHero);
+    PPApplyElevatedShadow(self.inspectorContainer);
+    self.inspectorContainer.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    self.inspectorContainer.layer.borderColor = [self pp_borderColor].CGColor;
+    self.inspectorContainer.clipsToBounds = YES;
+
+    // 1. Standby / Empty Placeholder
+    self.inspectorEmptyState = [UIView new];
+    self.inspectorEmptyState.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.inspectorContainer addSubview:self.inspectorEmptyState];
+
+    UIImageView *emptyIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"stethoscope.circle.fill"]];
+    emptyIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    emptyIcon.tintColor = [AppPrimaryClr colorWithAlphaComponent:0.4];
+    [self.inspectorEmptyState addSubview:emptyIcon];
+
+    UILabel *emptyTitle = [UILabel new];
+    emptyTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    emptyTitle.font = [Styling fontBold:20.0];
+    emptyTitle.textColor = PrimaryTextClr;
+    emptyTitle.textAlignment = NSTextAlignmentCenter;
+    emptyTitle.text = [Language isRTL] ? @"معاينة الملف البيطري" : @"Veterinarian Inspector";
+    [self.inspectorEmptyState addSubview:emptyTitle];
+
+    UILabel *emptySub = [UILabel new];
+    emptySub.translatesAutoresizingMaskIntoConstraints = NO;
+    emptySub.font = [Styling fontRegular:13.5];
+    emptySub.textColor = SeconderyTextClr;
+    emptySub.textAlignment = NSTextAlignmentCenter;
+    emptySub.numberOfLines = 2;
+    emptySub.text = [Language isRTL]
+        ? @"اختر طبيباً بيطرياً من القائمة لمعاينة تفاصيل الاعتماد، والتواصل المباشر، وإدارة الاشتراك."
+        : @"Select a veterinarian from the list to inspect clinical credentials, contacts, and subscriptions.";
+    [self.inspectorEmptyState addSubview:emptySub];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.inspectorEmptyState.centerXAnchor constraintEqualToAnchor:self.inspectorContainer.centerXAnchor],
+        [self.inspectorEmptyState.centerYAnchor constraintEqualToAnchor:self.inspectorContainer.centerYAnchor],
+        [self.inspectorEmptyState.leadingAnchor constraintEqualToAnchor:self.inspectorContainer.leadingAnchor constant:32.0],
+        [self.inspectorEmptyState.trailingAnchor constraintEqualToAnchor:self.inspectorContainer.trailingAnchor constant:-32.0],
+
+        [emptyIcon.centerXAnchor constraintEqualToAnchor:self.inspectorEmptyState.centerXAnchor],
+        [emptyIcon.topAnchor constraintEqualToAnchor:self.inspectorEmptyState.topAnchor],
+        [emptyIcon.widthAnchor constraintEqualToConstant:72.0],
+        [emptyIcon.heightAnchor constraintEqualToConstant:72.0],
+
+        [emptyTitle.topAnchor constraintEqualToAnchor:emptyIcon.bottomAnchor constant:16.0],
+        [emptyTitle.leadingAnchor constraintEqualToAnchor:self.inspectorEmptyState.leadingAnchor],
+        [emptyTitle.trailingAnchor constraintEqualToAnchor:self.inspectorEmptyState.trailingAnchor],
+
+        [emptySub.topAnchor constraintEqualToAnchor:emptyTitle.bottomAnchor constant:6.0],
+        [emptySub.leadingAnchor constraintEqualToAnchor:self.inspectorEmptyState.leadingAnchor],
+        [emptySub.trailingAnchor constraintEqualToAnchor:self.inspectorEmptyState.trailingAnchor],
+        [emptySub.bottomAnchor constraintEqualToAnchor:self.inspectorEmptyState.bottomAnchor],
+    ]];
+
+    // 2. Active Detail Scroll View
+    UIScrollView *inspectorScroll = [UIScrollView new];
+    inspectorScroll.translatesAutoresizingMaskIntoConstraints = NO;
+    inspectorScroll.showsVerticalScrollIndicator = NO;
+    [self.inspectorContainer addSubview:inspectorScroll];
+
+    self.inspectorDetailStack = [UIStackView new];
+    self.inspectorDetailStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inspectorDetailStack.axis = UILayoutConstraintAxisVertical;
+    self.inspectorDetailStack.spacing = 16.0;
+    self.inspectorDetailStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [inspectorScroll addSubview:self.inspectorDetailStack];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [inspectorScroll.topAnchor constraintEqualToAnchor:self.inspectorContainer.topAnchor constant:20.0],
+        [inspectorScroll.leadingAnchor constraintEqualToAnchor:self.inspectorContainer.leadingAnchor constant:22.0],
+        [inspectorScroll.trailingAnchor constraintEqualToAnchor:self.inspectorContainer.trailingAnchor constant:-22.0],
+        [inspectorScroll.bottomAnchor constraintEqualToAnchor:self.inspectorContainer.bottomAnchor constant:-20.0],
+
+        [self.inspectorDetailStack.topAnchor constraintEqualToAnchor:inspectorScroll.contentLayoutGuide.topAnchor],
+        [self.inspectorDetailStack.leadingAnchor constraintEqualToAnchor:inspectorScroll.contentLayoutGuide.leadingAnchor],
+        [self.inspectorDetailStack.trailingAnchor constraintEqualToAnchor:inspectorScroll.contentLayoutGuide.trailingAnchor],
+        [self.inspectorDetailStack.bottomAnchor constraintEqualToAnchor:inspectorScroll.contentLayoutGuide.bottomAnchor],
+        [self.inspectorDetailStack.widthAnchor constraintEqualToAnchor:inspectorScroll.frameLayoutGuide.widthAnchor],
+    ]];
+
+    [self buildInspectorCardViews];
+    inspectorScroll.hidden = YES;
+}
+
+- (void)buildInspectorCardViews {
+    // ── Header Card (Avatar + Title + Type + Fee) ──
+    UIView *topCard = [UIView new];
+    topCard.translatesAutoresizingMaskIntoConstraints = NO;
+    topCard.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.04];
+    PPApplyContinuousCorners(topCard, PPCornerCard);
+    topCard.layer.borderWidth = 1.0;
+    topCard.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.5].CGColor;
+
+    self.inspectorAvatar = [UIImageView new];
+    self.inspectorAvatar.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inspectorAvatar.contentMode = UIViewContentModeScaleAspectFill;
+    self.inspectorAvatar.clipsToBounds = YES;
+    self.inspectorAvatar.layer.cornerRadius = 22.0;
+    self.inspectorAvatar.layer.cornerCurve = kCACornerCurveContinuous;
+    self.inspectorAvatar.layer.borderWidth = 2.5;
+    self.inspectorAvatar.layer.borderColor = AppPrimaryClr.CGColor;
+    self.inspectorAvatar.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
+    [topCard addSubview:self.inspectorAvatar];
+
+    self.inspectorNameLabel = [UILabel new];
+    self.inspectorNameLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inspectorNameLabel.font = [Styling fontBold:20.0];
+    self.inspectorNameLabel.textColor = PrimaryTextClr;
+    self.inspectorNameLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    self.inspectorNameLabel.numberOfLines = 2;
+    [topCard addSubview:self.inspectorNameLabel];
+
+    self.inspectorTypeBadge = [UILabel new];
+    self.inspectorTypeBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inspectorTypeBadge.font = [Styling fontBold:12.0];
+    self.inspectorTypeBadge.textColor = AppPrimaryClr;
+    self.inspectorTypeBadge.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.12];
+    PPApplyContinuousCorners(self.inspectorTypeBadge, PPCornerPill);
+    [topCard addSubview:self.inspectorTypeBadge];
+
+    self.inspectorFeeBadge = [UILabel new];
+    self.inspectorFeeBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inspectorFeeBadge.font = [Styling fontBold:12.5];
+    PPApplyContinuousCorners(self.inspectorFeeBadge, PPCornerPill);
+    [topCard addSubview:self.inspectorFeeBadge];
+
+    self.inspectorStatusBadge = [UILabel new];
+    self.inspectorStatusBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inspectorStatusBadge.font = [Styling fontBold:11.5];
+    self.inspectorStatusBadge.textAlignment = NSTextAlignmentCenter;
+    PPApplyContinuousCorners(self.inspectorStatusBadge, PPCornerPill);
+    [topCard addSubview:self.inspectorStatusBadge];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.inspectorAvatar.topAnchor constraintEqualToAnchor:topCard.topAnchor constant:18.0],
+        [self.inspectorAvatar.leadingAnchor constraintEqualToAnchor:topCard.leadingAnchor constant:18.0],
+        [self.inspectorAvatar.widthAnchor constraintEqualToConstant:72.0],
+        [self.inspectorAvatar.heightAnchor constraintEqualToConstant:72.0],
+
+        [self.inspectorNameLabel.topAnchor constraintEqualToAnchor:topCard.topAnchor constant:18.0],
+        [self.inspectorNameLabel.leadingAnchor constraintEqualToAnchor:self.inspectorAvatar.trailingAnchor constant:14.0],
+        [self.inspectorNameLabel.trailingAnchor constraintEqualToAnchor:topCard.trailingAnchor constant:-18.0],
+
+        [self.inspectorTypeBadge.topAnchor constraintEqualToAnchor:self.inspectorNameLabel.bottomAnchor constant:6.0],
+        [self.inspectorTypeBadge.leadingAnchor constraintEqualToAnchor:self.inspectorNameLabel.leadingAnchor],
+        [self.inspectorTypeBadge.heightAnchor constraintEqualToConstant:24.0],
+
+        [self.inspectorFeeBadge.leadingAnchor constraintEqualToAnchor:self.inspectorTypeBadge.trailingAnchor constant:8.0],
+        [self.inspectorFeeBadge.centerYAnchor constraintEqualToAnchor:self.inspectorTypeBadge.centerYAnchor],
+        [self.inspectorFeeBadge.heightAnchor constraintEqualToConstant:24.0],
+
+        [self.inspectorStatusBadge.topAnchor constraintEqualToAnchor:self.inspectorTypeBadge.bottomAnchor constant:8.0],
+        [self.inspectorStatusBadge.leadingAnchor constraintEqualToAnchor:self.inspectorNameLabel.leadingAnchor],
+        [self.inspectorStatusBadge.heightAnchor constraintEqualToConstant:24.0],
+        [self.inspectorStatusBadge.bottomAnchor constraintEqualToAnchor:topCard.bottomAnchor constant:-18.0],
+    ]];
+    [self.inspectorDetailStack addArrangedSubview:topCard];
+
+    // ── Communications Quick Dock ──
+    UIStackView *commStack = [UIStackView new];
+    commStack.translatesAutoresizingMaskIntoConstraints = NO;
+    commStack.axis = UILayoutConstraintAxisHorizontal;
+    commStack.spacing = 10.0;
+    commStack.distribution = UIStackViewDistributionFillEqually;
+    commStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+
+    UIImageSymbolConfiguration *symCfg = [UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightBold];
+    self.inspectorCallBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.inspectorCallBtn.backgroundColor = [[UIColor ppInfo] colorWithAlphaComponent:0.12];
+    self.inspectorCallBtn.tintColor = [UIColor ppInfo];
+    PPApplyContinuousCorners(self.inspectorCallBtn, PPCornerPill);
+    [self.inspectorCallBtn setImage:[UIImage systemImageNamed:@"phone.fill" withConfiguration:symCfg] forState:UIControlStateNormal];
+    [self.inspectorCallBtn setTitle:[Language isRTL] ? @" اتصال فوري" : @" Direct Call" forState:UIControlStateNormal];
+    self.inspectorCallBtn.titleLabel.font = [Styling fontBold:13.0];
+    [self.inspectorCallBtn addTarget:self action:@selector(inspectorCallTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.inspectorCallBtn.heightAnchor constraintEqualToConstant:42.0].active = YES;
+    [commStack addArrangedSubview:self.inspectorCallBtn];
+
+    UIColor *waGreen = [UIColor colorWithRed:37.0/255.0 green:211.0/255.0 blue:102.0/255.0 alpha:1.0];
+    self.inspectorWABtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.inspectorWABtn.backgroundColor = [waGreen colorWithAlphaComponent:0.14];
+    self.inspectorWABtn.tintColor = waGreen;
+    PPApplyContinuousCorners(self.inspectorWABtn, PPCornerPill);
+    [self.inspectorWABtn setImage:[UIImage systemImageNamed:@"message.circle.fill" withConfiguration:symCfg] forState:UIControlStateNormal];
+    [self.inspectorWABtn setTitle:[Language isRTL] ? @" واتساب الطبيب" : @" WhatsApp Chat" forState:UIControlStateNormal];
+    self.inspectorWABtn.titleLabel.font = [Styling fontBold:13.0];
+    [self.inspectorWABtn addTarget:self action:@selector(inspectorWATapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.inspectorWABtn.heightAnchor constraintEqualToConstant:42.0].active = YES;
+    [commStack addArrangedSubview:self.inspectorWABtn];
+
+    [self.inspectorDetailStack addArrangedSubview:commStack];
+
+    // ── Clinical Bio & Specialty Section ──
+    UIView *bioCard = [UIView new];
+    bioCard.translatesAutoresizingMaskIntoConstraints = NO;
+    bioCard.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.04];
+    PPApplyContinuousCorners(bioCard, PPCornerCard);
+    bioCard.layer.borderWidth = 1.0;
+    bioCard.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.5].CGColor;
+
+    UILabel *bioTitle = [UILabel new];
+    bioTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    bioTitle.font = [Styling fontBold:14.0];
+    bioTitle.textColor = PrimaryTextClr;
+    bioTitle.text = [Language isRTL] ? @"النبذة الطبية والخبرات" : @"Clinical Bio & Specialties";
+    bioTitle.textAlignment = Language.alignmentForCurrentLanguage;
+    [bioCard addSubview:bioTitle];
+
+    self.inspectorBioLabel = [UILabel new];
+    self.inspectorBioLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inspectorBioLabel.font = [Styling fontRegular:13.5];
+    self.inspectorBioLabel.textColor = SeconderyTextClr;
+    self.inspectorBioLabel.numberOfLines = 0;
+    self.inspectorBioLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [bioCard addSubview:self.inspectorBioLabel];
+
+    self.inspectorDateLabel = [UILabel new];
+    self.inspectorDateLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inspectorDateLabel.font = [Styling fontMedium:12.5];
+    self.inspectorDateLabel.textColor = [self pp_borderColor];
+    self.inspectorDateLabel.textColor = SeconderyTextClr;
+    self.inspectorDateLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [bioCard addSubview:self.inspectorDateLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [bioTitle.topAnchor constraintEqualToAnchor:bioCard.topAnchor constant:16.0],
+        [bioTitle.leadingAnchor constraintEqualToAnchor:bioCard.leadingAnchor constant:16.0],
+        [bioTitle.trailingAnchor constraintEqualToAnchor:bioCard.trailingAnchor constant:-16.0],
+
+        [self.inspectorBioLabel.topAnchor constraintEqualToAnchor:bioTitle.bottomAnchor constant:8.0],
+        [self.inspectorBioLabel.leadingAnchor constraintEqualToAnchor:bioTitle.leadingAnchor],
+        [self.inspectorBioLabel.trailingAnchor constraintEqualToAnchor:bioTitle.trailingAnchor],
+
+        [self.inspectorDateLabel.topAnchor constraintEqualToAnchor:self.inspectorBioLabel.bottomAnchor constant:12.0],
+        [self.inspectorDateLabel.leadingAnchor constraintEqualToAnchor:bioTitle.leadingAnchor],
+        [self.inspectorDateLabel.trailingAnchor constraintEqualToAnchor:bioTitle.trailingAnchor],
+        [self.inspectorDateLabel.bottomAnchor constraintEqualToAnchor:bioCard.bottomAnchor constant:-16.0],
+    ]];
+    [self.inspectorDetailStack addArrangedSubview:bioCard];
+
+    // ── Management Actions ──
+    self.inspectorEditBtn = [self actionButtonWithTitle:kLang(@"Vet_Edit_Title") ?: ([Language isRTL] ? @"تعديل الملف الطبي" : @"Edit Doctor Profile")
+                                                 system:@"pencil"
+                                                  color:AppPrimaryClr
+                                                 action:@selector(inspectorEditTapped)];
+    self.inspectorSubBtn  = [self actionButtonWithTitle:kLang(@"Vet_Subscription") ?: ([Language isRTL] ? @"إدارة الاشتراك" : @"Manage Subscription")
+                                                 system:@"creditcard.circle"
+                                                  color:AppPrimaryClr
+                                                 action:@selector(inspectorSubTapped)];
+    self.inspectorToggleBtn = [self actionButtonWithTitle:kLang(@"Vet_Action_Disable") ?: ([Language isRTL] ? @"تعطيل / تفعيل الملف" : @"Toggle Status")
+                                                   system:@"arrow.triangle.2.circlepath"
+                                                    color:SeconderyTextClr
+                                                   action:@selector(inspectorToggleTapped)];
+    self.inspectorDeleteBtn = [self actionButtonWithTitle:kLang(@"Delete") ?: ([Language isRTL] ? @"حذف الطبيب" : @"Delete Profile")
+                                                   system:@"trash"
+                                                    color:[UIColor ppError]
+                                                   action:@selector(inspectorDeleteTapped)];
+
+    [self.inspectorDetailStack addArrangedSubview:self.inspectorEditBtn];
+    [self.inspectorDetailStack addArrangedSubview:self.inspectorSubBtn];
+    [self.inspectorDetailStack addArrangedSubview:self.inspectorToggleBtn];
+    [self.inspectorDetailStack addArrangedSubview:self.inspectorDeleteBtn];
+}
+
+- (UIButton *)actionButtonWithTitle:(NSString *)title system:(NSString *)systemName color:(UIColor *)color action:(SEL)action {
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+    btn.translatesAutoresizingMaskIntoConstraints = NO;
+    btn.backgroundColor = [color colorWithAlphaComponent:0.08];
+    btn.tintColor = color;
+    PPApplyContinuousCorners(btn, PPCornerButton);
+    UIImageSymbolConfiguration *symCfg = [UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightBold];
+    [btn setImage:[UIImage systemImageNamed:systemName withConfiguration:symCfg] forState:UIControlStateNormal];
+    [btn setTitle:[NSString stringWithFormat:@"  %@", title] forState:UIControlStateNormal];
+    btn.titleLabel.font = [Styling fontBold:14.0];
+    [btn addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+    [btn.heightAnchor constraintEqualToConstant:46.0].active = YES;
+    if (@available(iOS 13.4, *)) {
+        [btn addInteraction:[[UIPointerInteraction alloc] initWithDelegate:nil]];
+    }
+    return btn;
+}
+
+- (void)updateInspectorWithVet:(PPVetModel *)vet {
+    if (!vet) {
+        self.inspectorEmptyState.hidden = NO;
+        self.inspectorDetailStack.superview.hidden = YES;
+        return;
+    }
+    self.inspectorEmptyState.hidden = YES;
+    self.inspectorDetailStack.superview.hidden = NO;
+
+    self.inspectorNameLabel.text = vet.title.length ? vet.title : ([Language isRTL] ? @"طبيب بيطري معتمد" : @"Licensed Veterinarian");
+    if (vet.logoURL.length > 0) {
+        [self.inspectorAvatar setImageFromUrl:vet.logoURL placeholderImage:@"veterinary" Blr:YES Shimmering:YES completion:nil];
+    } else {
+        self.inspectorAvatar.image = [UIImage systemImageNamed:@"stethoscope.circle.fill"];
+        self.inspectorAvatar.tintColor = AppPrimaryClr;
+    }
+
+    NSString *typeName = [vet localizedTypeName];
+    self.inspectorTypeBadge.text = typeName.length ? [NSString stringWithFormat:@"  %@  ", typeName] : ([Language isRTL] ? @"  طبيب شخصي معتمد  " : @"  Specialist  ");
+
+    if (vet.vetCost > 0) {
+        self.inspectorFeeBadge.text = [NSString stringWithFormat:@"  %.0f %@  ", vet.vetCost, [Language isRTL] ? @"ر.ق" : @"QAR"];
+        self.inspectorFeeBadge.textColor = AppPrimaryClr;
+        self.inspectorFeeBadge.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
+    } else {
+        self.inspectorFeeBadge.text = [Language isRTL] ? @"  استشارة مجانية  " : @"  Free Consult  ";
+        self.inspectorFeeBadge.textColor = [UIColor ppSuccess];
+        self.inspectorFeeBadge.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.12];
+    }
+
+    self.inspectorBioLabel.text = vet.descriptionText.length ? vet.descriptionText : ([Language isRTL] ? @"متوفر للاستشارات والفحوصات الطبية المعتمدة للحيوانات الأليفة" : @"Available for veterinary consultations & pet care");
+
+    BOOL disabled = vet.isDisabled;
+    if (disabled) {
+        self.inspectorStatusBadge.text = [Language isRTL] ? @"  ● معطل  " : @"  ● Disabled  ";
+        self.inspectorStatusBadge.textColor = [UIColor ppError];
+        self.inspectorStatusBadge.backgroundColor = [[UIColor ppError] colorWithAlphaComponent:0.10];
+        [self.inspectorToggleBtn setTitle:[NSString stringWithFormat:@"  %@", kLang(@"Vet_Action_Enable") ?: ([Language isRTL] ? @"تفعيل الملف الطبي" : @"Enable Doctor Profile")] forState:UIControlStateNormal];
+        [self.inspectorToggleBtn setTitleColor:[UIColor ppSuccess] forState:UIControlStateNormal];
+        self.inspectorToggleBtn.tintColor = [UIColor ppSuccess];
+    } else {
+        self.inspectorStatusBadge.text = [Language isRTL] ? @"  ● نشط ومعتمد  " : @"  ● Active & Verified  ";
+        self.inspectorStatusBadge.textColor = [UIColor ppSuccess];
+        self.inspectorStatusBadge.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.12];
+        [self.inspectorToggleBtn setTitle:[NSString stringWithFormat:@"  %@", kLang(@"Vet_Action_Disable") ?: ([Language isRTL] ? @"تعطيل الملف الطبي" : @"Disable Doctor Profile")] forState:UIControlStateNormal];
+        [self.inspectorToggleBtn setTitleColor:SeconderyTextClr forState:UIControlStateNormal];
+        self.inspectorToggleBtn.tintColor = SeconderyTextClr;
+    }
+
+    self.inspectorCallBtn.hidden = (vet.phone.length == 0);
+    self.inspectorWABtn.hidden = (vet.whatsapp.length == 0);
+
+    NSDateFormatter *df = [[NSDateFormatter alloc] init];
+    df.dateStyle = NSDateFormatterMediumStyle;
+    NSString *dateStr = vet.availableDate ? [df stringFromDate:vet.availableDate] : ([Language isRTL] ? @"متاح الآن" : @"Available Now");
+    self.inspectorDateLabel.text = [NSString stringWithFormat:@"%@: %@", [Language isRTL] ? @"📅 موعد التوفر" : @"📅 Availability", dateStr];
+}
+
+#pragma mark - Inspector Actions
+
+- (void)inspectorCallTapped {
+    if (!self.selectedVet.phone.length) return;
+    [PPFunc pp_playTapEffect];
+    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:[@"tel://" stringByAppendingString:self.selectedVet.phone]] options:@{} completionHandler:nil];
+}
+
+- (void)inspectorWATapped {
+    if (!self.selectedVet.whatsapp.length) return;
+    [PPFunc pp_playTapEffect];
+    NSString *clean = [self.selectedVet.whatsapp stringByReplacingOccurrencesOfString:@"+" withString:@""];
+    clean = [clean stringByReplacingOccurrencesOfString:@" " withString:@""];
+    NSString *urlStr = [NSString stringWithFormat:@"https://wa.me/%@", clean];
+    [[UIApplication sharedApplication] openURL:[NSURL URLWithString:urlStr] options:@{} completionHandler:nil];
+}
+
+- (void)inspectorEditTapped {
+    if (self.selectedVet) [self editVet:self.selectedVet];
+}
+
+- (void)inspectorSubTapped {
+    if (self.selectedVet) [self manageSubscriptionForVet:self.selectedVet];
+}
+
+- (void)inspectorToggleTapped {
+    if (self.selectedVet) [self toggleDisabledForVet:self.selectedVet];
+}
+
+- (void)inspectorDeleteTapped {
+    if (self.selectedVet) [self deleteVetForVet:self.selectedVet];
 }
 
 - (void)onRefresh {
@@ -616,7 +1083,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     _emptyContainer = [UIView new];
     _emptyContainer.translatesAutoresizingMaskIntoConstraints = NO;
     _emptyContainer.hidden = YES;
-    [self.view addSubview:_emptyContainer];
+    [self.masterContainer addSubview:_emptyContainer];
 
     UILabel *headline = [UILabel new];
     headline.translatesAutoresizingMaskIntoConstraints = NO;
@@ -635,8 +1102,6 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [_emptyContainer addSubview:rule];
     _emptyRule = rule;
 
-    // Loading honesty: the first snapshot of the vets listener used to land on
-    // the "empty" copy, so a spinner now owns that state until data arrives.
     _loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     _loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
     _loadingIndicator.color = AppPrimaryClr;
@@ -644,10 +1109,10 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [_emptyContainer addSubview:_loadingIndicator];
 
     [NSLayoutConstraint activateConstraints:@[
-        [_emptyContainer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [_emptyContainer.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
-        [_emptyContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceXXL],
-        [_emptyContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceXXL],
+        [_emptyContainer.centerXAnchor constraintEqualToAnchor:self.masterContainer.centerXAnchor],
+        [_emptyContainer.centerYAnchor constraintEqualToAnchor:self.masterContainer.centerYAnchor],
+        [_emptyContainer.leadingAnchor constraintEqualToAnchor:self.masterContainer.leadingAnchor constant:PPSpaceXXL],
+        [_emptyContainer.trailingAnchor constraintEqualToAnchor:self.masterContainer.trailingAnchor constant:-PPSpaceXXL],
 
         [headline.topAnchor constraintEqualToAnchor:_emptyContainer.topAnchor],
         [headline.leadingAnchor constraintEqualToAnchor:_emptyContainer.leadingAnchor],
@@ -659,7 +1124,6 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         [rule.heightAnchor constraintEqualToConstant:PPSpaceXXS],
         [rule.bottomAnchor constraintEqualToAnchor:_emptyContainer.bottomAnchor],
 
-        // Occupies the same optical slot; the copy is hidden while it spins.
         [_loadingIndicator.centerXAnchor constraintEqualToAnchor:_emptyContainer.centerXAnchor],
         [_loadingIndicator.centerYAnchor constraintEqualToAnchor:_emptyContainer.centerYAnchor],
     ]];
@@ -739,10 +1203,23 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [self.tableView reloadData];
     self.emptyContainer.hidden = (self.filteredVets.count > 0);
     self.tableView.hidden      = (self.filteredVets.count == 0);
-    // While a fetch is in flight the placeholder shows the spinner, not the
-    // "no vets" copy.
     self.emptyHeadline.hidden = self.isLoadingVets;
     self.emptyRule.hidden     = self.isLoadingVets;
+
+    BOOL isPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
+    BOOL isRegularWidth = isPad && (self.view.bounds.size.width >= 720.0);
+    if (isRegularWidth) {
+        if (self.selectedVet) {
+            PPVetModel *match = nil;
+            for (PPVetModel *v in self.filteredVets) {
+                if ([v.vetID isEqualToString:self.selectedVet.vetID]) { match = v; break; }
+            }
+            self.selectedVet = match ?: self.filteredVets.firstObject;
+        } else {
+            self.selectedVet = self.filteredVets.firstObject;
+        }
+        [self updateInspectorWithVet:self.selectedVet];
+    }
 
     if (!self.didPlayEntrance && self.filteredVets.count > 0) {
         self.didPlayEntrance = YES;
@@ -760,7 +1237,6 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 - (void)playCellEntranceAnimation {
     NSArray<UITableViewCell *> *cells = self.tableView.visibleCells;
     if (PPMotionReduced()) {
-        // Reduce Motion: land on the final state, no translate/fade stagger.
         for (UITableViewCell *cell in cells) {
             cell.alpha = 1;
             cell.transform = CGAffineTransformIdentity;
@@ -772,7 +1248,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         cell.alpha = 0;
         cell.transform = CGAffineTransformMakeTranslation(0, 16);
         [UIView animateWithDuration:0.42
-                              delay:MIN(0.035 * idx, 0.28) // capped so long lists never crawl in
+                              delay:MIN(0.035 * idx, 0.28)
              usingSpringWithDamping:0.92
               initialSpringVelocity:0.30
                             options:UIViewAnimationOptionCurveEaseOut
@@ -783,7 +1259,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     }
 }
 
-#pragma mark - Actions (unchanged behavior)
+#pragma mark - Actions
 
 - (void)addVetTapped {
     if (![self pp_canCreateVetProfiles]) {
@@ -797,6 +1273,10 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
 - (void)editVetAtIndexPath:(NSIndexPath *)ip {
     PPVetModel *vet = [self vetAtIndexPath:ip];
+    [self editVet:vet];
+}
+
+- (void)editVet:(PPVetModel *)vet {
     if (!vet || ![self pp_canEditVetProfiles]) return;
     [PPFunc pp_playTapEffect];
     PPAddEditVetViewController *vc = [[PPAddEditVetViewController alloc] initWithVet:vet];
@@ -813,6 +1293,10 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
 - (void)toggleDisabledAtIndexPath:(NSIndexPath *)ip {
     PPVetModel *vet = [self vetAtIndexPath:ip];
+    [self toggleDisabledForVet:vet];
+}
+
+- (void)toggleDisabledForVet:(PPVetModel *)vet {
     if (!vet || ![self pp_canManageVetWorkspace]) return;
 
     BOOL newState = !vet.isDisabled;
@@ -822,12 +1306,12 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
     __weak typeof(self) weakSelf = self;
     [PPAlertHelper showConfirmationIn:self
-                              title:confirmTitle
-                           subtitle:confirmMsg
-                        placeholder:nil
-                      confirmButton:confirmBtn
-                       cancelButton:kLang(@"Cancel")
-                       confirmBlock:^{
+                                title:confirmTitle
+                             subtitle:confirmMsg
+                          placeholder:nil
+                        confirmButton:confirmBtn
+                         cancelButton:kLang(@"Cancel")
+                         confirmBlock:^{
         [PPHUD showIndeterminateIn:weakSelf.view title:kLang(@"Vet_Updating") subtitle:nil];
         [[PPVetManager sharedManager] setDisabled:newState forVetID:vet.vetID completion:^(NSError *error) {
             [PPHUD dismiss];
@@ -835,6 +1319,11 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
                 [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
             } else {
                 [PPHUD showSuccess:kLang(@"Updated") subtitle:newState ? kLang(@"Vet_Disabled_Success") : kLang(@"Vet_Enabled_Success")];
+                vet.isDisabled = newState;
+                if ([weakSelf.selectedVet.vetID isEqualToString:vet.vetID]) {
+                    [weakSelf updateInspectorWithVet:vet];
+                }
+                [weakSelf.tableView reloadData];
             }
         }];
     } cancelBlock:nil];
@@ -842,16 +1331,20 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
 - (void)deleteVetAtIndexPath:(NSIndexPath *)ip {
     PPVetModel *vet = [self vetAtIndexPath:ip];
+    [self deleteVetForVet:vet];
+}
+
+- (void)deleteVetForVet:(PPVetModel *)vet {
     if (!vet || ![self pp_canManageVetWorkspace]) return;
 
     __weak typeof(self) weakSelf = self;
     [PPAlertHelper showConfirmationIn:self
-                              title:kLang(@"Vet_Confirm_Delete_Title")
-                           subtitle:kLang(@"Vet_Confirm_Delete_Msg")
-                        placeholder:nil
-                      confirmButton:kLang(@"Delete")
-                       cancelButton:kLang(@"Cancel")
-                       confirmBlock:^{
+                                title:kLang(@"Vet_Confirm_Delete_Title")
+                             subtitle:kLang(@"Vet_Confirm_Delete_Msg")
+                          placeholder:nil
+                        confirmButton:kLang(@"Delete")
+                         cancelButton:kLang(@"Cancel")
+                         confirmBlock:^{
         [PPHUD showIndeterminateIn:weakSelf.view title:kLang(@"Deleting") subtitle:nil];
         [[PPVetManager sharedManager] deleteVet:vet completion:^(NSError *error) {
             [PPHUD dismiss];
@@ -859,6 +1352,10 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
                 [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
             } else {
                 [PPHUD showSuccess:kLang(@"Deleted") subtitle:kLang(@"Vet_Deleted_Success")];
+                if ([weakSelf.selectedVet.vetID isEqualToString:vet.vetID]) {
+                    weakSelf.selectedVet = nil;
+                    [weakSelf updateInspectorWithVet:nil];
+                }
             }
         }];
     } cancelBlock:nil];
@@ -866,6 +1363,10 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
 - (void)manageSubscriptionAtIndexPath:(NSIndexPath *)ip {
     PPVetModel *vet = [self vetAtIndexPath:ip];
+    [self manageSubscriptionForVet:vet];
+}
+
+- (void)manageSubscriptionForVet:(PPVetModel *)vet {
     if (!vet || ![self pp_canManageVetWorkspace]) return;
     [PPFunc pp_playTapEffect];
     PPVetSubscriptionViewController *vc = [[PPVetSubscriptionViewController alloc] initWithVet:vet];
@@ -892,6 +1393,14 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     cell.backgroundColor = UIColor.clearColor;
     cell.contentView.backgroundColor = UIColor.clearColor;
 
+    BOOL isPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
+    BOOL isRegular = isPad && (self.view.bounds.size.width >= 720.0);
+    if (isRegular && vet && self.selectedVet) {
+        [cell setSplitSelected:[vet.vetID isEqualToString:self.selectedVet.vetID] animated:NO];
+    } else {
+        [cell setSplitSelected:NO animated:NO];
+    }
+
     __weak typeof(self) weakSelf = self;
     cell.onCallTapped = ^(PPVetModel *v) {
         NSString *phone = [v.phone stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
@@ -909,11 +1418,9 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     };
 
     cell.onToggleStatusTapped = ^(PPVetModel *v) {
-        [weakSelf toggleDisabledAtIndexPath:indexPath];
+        [weakSelf toggleDisabledForVet:v];
     };
 
-    // The row reads as one button instead of a pile of separate labels; the
-    // status word reuses the filter copy already localized on this screen.
     cell.isAccessibilityElement = YES;
     cell.accessibilityTraits = UIAccessibilityTraitButton;
     if (vet) {
@@ -931,7 +1438,20 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 #pragma mark - UITableViewDelegate
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [self viewVetAtIndexPath:indexPath];
+    BOOL isPad = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad);
+    BOOL isRegular = isPad && (self.view.bounds.size.width >= 720.0);
+
+    PPVetModel *vet = [self vetAtIndexPath:indexPath];
+    if (!vet) return;
+
+    if (isRegular) {
+        [PPFunc pp_playTapEffect];
+        self.selectedVet = vet;
+        [self updateInspectorWithVet:vet];
+        [self.tableView reloadData];
+    } else {
+        [self viewVetAtIndexPath:indexPath];
+    }
 }
 
 - (UIContextMenuConfiguration *)tableView:(UITableView *)tableView
@@ -1003,7 +1523,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     }];
     editAction.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.85];
     editAction.image = [UIImage systemImageNamed:@"pencil"];
-    editAction.accessibilityLabel = kLang(@"Vet_Edit_Title"); // icon-only swipe action
+    editAction.accessibilityLabel = kLang(@"Vet_Edit_Title");
 
     BOOL isDisabled = vet.isDisabled;
     UIContextualAction *toggleAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal title:nil handler:^(UIContextualAction *action, UIView *sourceView, void (^handler)(BOOL)) {
@@ -1037,7 +1557,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         [weakSelf deleteVetAtIndexPath:indexPath]; handler(YES);
     }];
     deleteAction.image = [UIImage systemImageNamed:@"trash"];
-    deleteAction.accessibilityLabel = kLang(@"Delete"); // icon-only swipe action
+    deleteAction.accessibilityLabel = kLang(@"Delete");
     if (![self pp_canManageVetWorkspace]) return nil;
     UISwipeActionsConfiguration *config = [UISwipeActionsConfiguration configurationWithActions:@[deleteAction]];
     config.performsFirstActionWithFullSwipe = NO;
@@ -1075,11 +1595,47 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
                             modifierFlags:UIKeyModifierCommand
                                    action:@selector(focusSearchField)
                      discoverabilityTitle:[Language isRTL] ? @"بحث في الأطباء" : @"Search Vets"],
+        [UIKeyCommand keyCommandWithInput:UIKeyInputUpArrow
+                            modifierFlags:0
+                                   action:@selector(selectPreviousVet)
+                     discoverabilityTitle:[Language isRTL] ? @"الطبيب السابق" : @"Previous Vet"],
+        [UIKeyCommand keyCommandWithInput:UIKeyInputDownArrow
+                            modifierFlags:0
+                                   action:@selector(selectNextVet)
+                     discoverabilityTitle:[Language isRTL] ? @"الطبيب التالي" : @"Next Vet"],
         [UIKeyCommand keyCommandWithInput:UIKeyInputEscape
                             modifierFlags:0
                                    action:@selector(handleEscapeKey)
                      discoverabilityTitle:[Language isRTL] ? @"رجوع" : @"Back"]
     ];
+}
+
+- (void)selectPreviousVet {
+    if (self.filteredVets.count == 0) return;
+    NSInteger currentIdx = [self.filteredVets indexOfObject:self.selectedVet];
+    if (currentIdx == NSNotFound || currentIdx <= 0) return;
+    self.selectedVet = self.filteredVets[currentIdx - 1];
+    [self updateInspectorWithVet:self.selectedVet];
+    [self.tableView reloadData];
+    NSIndexPath *ip = [NSIndexPath indexPathForRow:currentIdx - 1 inSection:0];
+    [self.tableView scrollToRowAtIndexPath:ip atScrollPosition:UITableViewScrollPositionMiddle animated:YES];
+}
+
+- (void)selectNextVet {
+    if (self.filteredVets.count == 0) return;
+    NSInteger currentIdx = [self.filteredVets indexOfObject:self.selectedVet];
+    if (currentIdx == NSNotFound) {
+        self.selectedVet = self.filteredVets.firstObject;
+    } else if (currentIdx + 1 < (NSInteger)self.filteredVets.count) {
+        self.selectedVet = self.filteredVets[currentIdx + 1];
+    } else {
+        return;
+    }
+    [self updateInspectorWithVet:self.selectedVet];
+    [self.tableView reloadData];
+    NSInteger newIdx = [self.filteredVets indexOfObject:self.selectedVet];
+    NSIndexPath *ip = [NSIndexPath indexPathForRow:newIdx inSection:0];
+    [self.tableView scrollToRowAtIndexPath:ip atScrollPosition:UITableViewScrollPositionMiddle animated:YES];
 }
 
 - (void)focusSearchField {

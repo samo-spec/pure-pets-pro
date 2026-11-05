@@ -37,6 +37,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (class, nonatomic, readonly) UIColor *ppQuickActionAdoption;
 
 @property (class, nonatomic, readonly) UIColor *ppBackground;
+@property (class, nonatomic, readonly) UIColor *ppBackgroundSecondary;
 @property (class, nonatomic, readonly) UIColor *ppSurfaceBase;
 @property (class, nonatomic, readonly) UIColor *ppSurface;
 @property (class, nonatomic, readonly) UIColor *ppSurfaceRaised;
@@ -57,6 +58,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (class, nonatomic, readonly) UIColor *ppTextPrimary;
 @property (class, nonatomic, readonly) UIColor *ppTextSecondary;
 @property (class, nonatomic, readonly) UIColor *ppTextTertiary;
+@property (class, nonatomic, readonly) UIColor *ppTextMuted;
 
 @property (class, nonatomic, readonly) UIColor *ppSuccess;
 @property (class, nonatomic, readonly) UIColor *ppWarning;

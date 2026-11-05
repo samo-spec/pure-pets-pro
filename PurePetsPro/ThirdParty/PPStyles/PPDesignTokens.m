@@ -56,6 +56,7 @@ static UIColor *PPDesignTokenDynamicHex(uint32_t lightHex,
 + (UIColor *)ppQuickActionAdoption { return PPDesignTokenDynamicHex(0xD17F63, 0xDB9278, 1.0, 1.0); }
 
 + (UIColor *)ppBackground { return PPDesignTokenDynamicHex(0xF8F8F9, 0x0E0B0C, 1.0, 1.0); }
++ (UIColor *)ppBackgroundSecondary { return [self ppSecondarySurface]; }
 + (UIColor *)ppSurfaceBase { return [UIColor ppBackground]; }
 + (UIColor *)ppSurface { return PPDesignTokenDynamicHex(0xFFFFFF, 0x171214, 1.0, 1.0); }
 + (UIColor *)ppSurfaceRaised { return [UIColor ppSurface]; }
@@ -76,6 +77,7 @@ static UIColor *PPDesignTokenDynamicHex(uint32_t lightHex,
 + (UIColor *)ppTextPrimary { return PPDesignTokenDynamicHex(0x2A1D21, 0xFFF8FA, 1.0, 1.0); }
 + (UIColor *)ppTextSecondary { return PPDesignTokenDynamicHex(0x75666B, 0xC2B4B9, 1.0, 1.0); }
 + (UIColor *)ppTextTertiary { return PPDesignTokenDynamicHex(0x75666B, 0xC2B4B9, 0.72, 0.72); }
++ (UIColor *)ppTextMuted { return [UIColor ppTextSecondary]; }
 
 + (UIColor *)ppSuccess
 {

@@ -61,12 +61,29 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 @property (nonatomic, strong) NSDictionary *planName;
 @property (nonatomic, strong) NSDictionary *planDescription;
 @property (nonatomic, copy) NSString *reviewNotes;
+@property (nonatomic, copy, nullable) NSArray<NSDictionary *> *reviewFindings;
+@property (nonatomic, copy, nullable) NSString *rejectionReason;
+@property (nonatomic, copy, nullable) NSString *rejectionCode;
+@property (nonatomic, assign) NSInteger resubmissionCount;
 @property (nonatomic, strong, nullable) NSDate *submittedAt;
 @property (nonatomic, strong, nullable) NSDate *reviewedAt;
 @property (nonatomic, strong) NSDictionary *form;
 
 - (NSString *)localizedPlanName;
 - (NSString *)localizedPlanDescription;
+- (BOOL)isUnderReview;
+- (BOOL)isChangesRequested;
+- (BOOL)isRejected;
+- (BOOL)isApproved;
+- (BOOL)isSetupRequired;
+- (BOOL)isReadyForActivation;
+
+@property (nonatomic, copy, nullable) NSString *operationalState;
+@property (nonatomic, copy, nullable) NSString *setupState;
+@property (nonatomic, strong, nullable) NSDictionary *activationChecklist;
+@property (nonatomic, strong, nullable) NSDictionary *documents;
+
+- (NSArray<NSDictionary *> *)expiringDocumentsWithinDays:(NSInteger)days;
 
 @end
 
@@ -82,8 +99,30 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 @property (nonatomic, copy) NSString *billingInterval;
 @property (nonatomic, assign) double priceAmount;
 @property (nonatomic, copy) NSString *currency;
+@property (nonatomic, copy, nullable) NSString *operationalState;
+@property (nonatomic, copy, nullable) NSString *setupState;
+@property (nonatomic, strong, nullable) NSDictionary *activationChecklist;
+@property (nonatomic, strong, nullable) NSDictionary *documents;
+@property (nonatomic, strong, nullable) NSDictionary *profileDomains;
+@property (nonatomic, copy, nullable) NSString *maskedIban;
+
+@property (nonatomic, copy, nullable) NSArray<NSDictionary *> *restrictions;
+@property (nonatomic, copy, nullable) NSArray<NSDictionary *> *activeRestrictions;
 
 - (NSString *)localizedPlanName;
+- (BOOL)isSetupRequired;
+- (BOOL)isReadyForActivation;
+- (BOOL)isRestricted;
+- (BOOL)isSuspended;
+- (nullable NSDictionary *)primaryActiveRestriction;
+- (BOOL)isSellingBlocked;
+- (BOOL)areNewOrdersBlocked;
+- (BOOL)arePayoutsBlocked;
+- (NSArray<NSDictionary *> *)expiringDocumentsWithinDays:(NSInteger)days;
+- (nullable NSDictionary *)publicProfile;
+- (nullable NSDictionary *)operationalProfile;
+- (nullable NSDictionary *)legalProfile;
+- (nullable NSDictionary *)financialProfile;
 
 @end
 
@@ -104,6 +143,15 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 @property (nonatomic, copy) NSString *city;
 @property (nonatomic, copy) NSString *notes;
 @property (nonatomic, copy) NSArray<NSString *> *coverageAreas;
+@property (nonatomic, copy, nullable) NSString *selectedPlanId;
+@property (nonatomic, copy, nullable) NSArray<NSString *> *selectedCapabilities;
+@property (nonatomic, copy, nullable) NSString *logoURL;
+@property (nonatomic, copy, nullable) NSString *coverURL;
+@property (nonatomic, copy, nullable) NSString *descriptionText;
+@property (nonatomic, copy, nullable) NSString *idempotencyKey;
+
+- (NSDictionary *)dictionaryRepresentation;
+- (instancetype)initWithDictionary:(NSDictionary *)dict;
 
 @end
 
@@ -122,6 +170,10 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 @property (nonatomic, assign) BOOL canAccessProviderMarketplace;
 @property (nonatomic, assign) BOOL partnerOnboardingVisible;
 @property (nonatomic, copy) NSString *partnerApplicationStatus;
+@property (nonatomic, copy, nullable) NSString *operationalState;
+@property (nonatomic, copy, nullable) NSString *setupState;
+@property (nonatomic, strong, nullable) NSDictionary *activationChecklist;
+@property (nonatomic, copy, nullable) NSArray<NSDictionary *> *activeRestrictions;
 @property (nonatomic, copy) NSArray<PPProviderApplication *> *applications;
 @property (nonatomic, strong) NSDictionary<NSString *, PPProviderApplication *> *applicationsByType;
 @property (nonatomic, strong) NSDictionary<NSString *, PPProviderProfile *> *profilesByType;
@@ -133,6 +185,10 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 - (BOOL)isActiveForType:(PPProviderType)type;
 - (BOOL)canApplyForType:(PPProviderType)type;
 - (BOOL)canApplyForType:(PPProviderType)type planID:(NSString *)planID;
+- (BOOL)isSetupRequired;
+- (BOOL)isReadyForActivation;
+- (BOOL)isRestricted;
+- (BOOL)isSuspended;
 - (NSArray<NSNumber *> *)eligibleProviderTypes;
 - (BOOL)hasAnyLifecycleRecord;
 
@@ -155,6 +211,58 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 - (void)submitDraft:(PPProviderApplicationDraft *)draft
        selectedPlan:(PPProviderPlan *)selectedPlan
          completion:(void(^)(NSDictionary * _Nullable response, NSError * _Nullable error))completion;
+
+- (void)updateChecklistProgressForKey:(NSString *)key
+                            completed:(BOOL)completed
+                           completion:(void(^)(BOOL success, NSError * _Nullable error))completion;
+
+- (void)activatePartnerAccountWithCompletion:(void(^)(BOOL success, NSError * _Nullable error))completion;
+- (void)updateProfileDomain:(NSString *)domain
+                      patch:(NSDictionary *)patch
+            expectedVersion:(nullable NSNumber *)expectedVersion
+                 completion:(void(^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion;
+- (void)fetchProfileDomain:(NSString *)domain
+                completion:(void(^)(NSDictionary * _Nullable domainData, NSError * _Nullable error))completion;
+
+- (void)fetchSyncSnapshotWithClientVersion:(nullable NSNumber *)clientVersion
+                                completion:(void(^)(BOOL inSync, BOOL catchUpRequired, NSDictionary * _Nullable snapshot, NSError * _Nullable error))completion;
+- (void)reconcileReadModelsWithServer:(void(^)(BOOL reconciled, NSError * _Nullable error))completion;
+
+- (void)fetchRestrictionsSummary:(void(^)(NSDictionary * _Nullable summary, NSError * _Nullable error))completion;
+
+- (void)submitReactivationRequestWithActionTaken:(NSString *)actionTaken
+                                  actionTakenAr:(nullable NSString *)actionTakenAr
+                              evidenceDocuments:(NSArray<NSDictionary *> *)documents
+                                   partnerNotes:(nullable NSString *)notes
+                                  restrictionId:(nullable NSString *)restrictionId
+                                expectedVersion:(nullable NSNumber *)expectedVersion
+                                 idempotencyKey:(nullable NSString *)idempotencyKey
+                                     completion:(void(^)(BOOL success, NSDictionary * _Nullable response, NSError * _Nullable error))completion;
+
+- (void)fetchReactivationDossierWithCompletion:(void(^)(NSDictionary * _Nullable dossier, NSError * _Nullable error))completion;
+
+- (void)initiateVoluntaryOffboardingWithReasonCode:(NSString *)reasonCode
+                                           reason:(NSString *)reason
+                                         reasonAr:(nullable NSString *)reasonAr
+                                  expectedVersion:(nullable NSNumber *)expectedVersion
+                                   idempotencyKey:(nullable NSString *)idempotencyKey
+                                       completion:(void(^)(BOOL success, NSDictionary * _Nullable response, NSError * _Nullable error))completion;
+
+- (void)fetchOffboardingDossierWithCompletion:(void(^)(NSDictionary * _Nullable dossier, NSError * _Nullable error))completion;
+
+- (void)fetchPartnerAuditTrailWithLimit:(nullable NSNumber *)limit
+                         filterCategory:(nullable NSString *)filterCategory
+                             completion:(void(^)(BOOL success, NSArray<NSDictionary *> * _Nullable entries, NSDictionary * _Nullable verification, NSError * _Nullable error))completion;
+
+- (void)exportPrivacyDataWithCompletion:(void(^)(BOOL success, NSDictionary * _Nullable exportData, NSError * _Nullable error))completion;
+
+- (void)fetchCockpitSummaryWithClientEtag:(nullable NSString *)clientEtag
+                             forceRefresh:(BOOL)forceRefresh
+                               completion:(void(^)(BOOL notModified, NSDictionary * _Nullable cockpit, NSString * _Nullable etag, NSNumber * _Nullable generation, NSError * _Nullable error))completion;
+
+- (void)saveDraft:(PPProviderApplicationDraft *)draft forProviderType:(PPProviderType)providerType;
+- (nullable PPProviderApplicationDraft *)savedDraftForProviderType:(PPProviderType)providerType;
+- (void)clearDraftForProviderType:(PPProviderType)providerType;
 
 @end
 

@@ -8,8 +8,31 @@
 #import "PPHUD.h"
 #import "PPAlertHelper.h"
 #import <IQKeyboardManager/IQKeyboardManager.h>
+#import "PurePetsPro-Swift.h"
 
-// MARK: - Filter & Sort Enums
+// MARK: - Multi-Dimensional Filter & Sort Criteria
+
+typedef NS_ENUM(NSInteger, PPProviderMarketStockFilter) {
+    PPProviderMarketStockFilterAll = 0,
+    PPProviderMarketStockFilterInStock,
+    PPProviderMarketStockFilterLowStock
+};
+
+typedef NS_ENUM(NSInteger, PPProviderMarketOfferFilter) {
+    PPProviderMarketOfferFilterAll = 0,
+    PPProviderMarketOfferFilterOffersOnly
+};
+
+typedef NS_ENUM(NSInteger, PPProviderMarketVisibilityFilter) {
+    PPProviderMarketVisibilityFilterAll = 0,
+    PPProviderMarketVisibilityFilterHiddenOnly
+};
+
+typedef NS_ENUM(NSInteger, PPProviderMarketKindFilter) {
+    PPProviderMarketKindFilterAll = 0,
+    PPProviderMarketKindFilterAccessories,
+    PPProviderMarketKindFilterFood
+};
 
 typedef NS_ENUM(NSInteger, PPProviderMarketFilter) {
     PPProviderMarketFilterAll = 0,
@@ -28,6 +51,115 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     PPProviderMarketSortStockHighest,
     PPProviderMarketSortStockLowest
 };
+
+@interface PPProviderMarketFilterCriteria : NSObject <NSCopying>
+@property (nonatomic, assign) PPProviderMarketStockFilter stockFilter;
+@property (nonatomic, assign) PPProviderMarketOfferFilter offerFilter;
+@property (nonatomic, assign) PPProviderMarketVisibilityFilter visibilityFilter;
+@property (nonatomic, assign) PPProviderMarketKindFilter kindFilter;
+@property (nonatomic, assign) PPProviderMarketSort sort;
+
++ (instancetype)criteriaFromLegacyFilter:(PPProviderMarketFilter)filter sort:(PPProviderMarketSort)sort;
+- (PPProviderMarketFilter)primaryLegacyFilter;
+- (BOOL)isDefault;
+- (void)reset;
+- (NSInteger)activeFilterCount;
+- (BOOL)evaluatesItem:(PPProviderMarketItem *)item;
+@end
+
+@implementation PPProviderMarketFilterCriteria
+
++ (instancetype)criteriaFromLegacyFilter:(PPProviderMarketFilter)filter sort:(PPProviderMarketSort)sort {
+    PPProviderMarketFilterCriteria *c = [[self alloc] init];
+    c.sort = sort;
+    switch (filter) {
+        case PPProviderMarketFilterAll: break;
+        case PPProviderMarketFilterInStock: c.stockFilter = PPProviderMarketStockFilterInStock; break;
+        case PPProviderMarketFilterLowStock: c.stockFilter = PPProviderMarketStockFilterLowStock; break;
+        case PPProviderMarketFilterOffers: c.offerFilter = PPProviderMarketOfferFilterOffersOnly; break;
+        case PPProviderMarketFilterHidden: c.visibilityFilter = PPProviderMarketVisibilityFilterHiddenOnly; break;
+        case PPProviderMarketFilterAccessories: c.kindFilter = PPProviderMarketKindFilterAccessories; break;
+        case PPProviderMarketFilterFood: c.kindFilter = PPProviderMarketKindFilterFood; break;
+    }
+    return c;
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        [self reset];
+    }
+    return self;
+}
+
+- (id)copyWithZone:(NSZone *)zone {
+    PPProviderMarketFilterCriteria *copy = [[[self class] allocWithZone:zone] init];
+    copy.stockFilter = self.stockFilter;
+    copy.offerFilter = self.offerFilter;
+    copy.visibilityFilter = self.visibilityFilter;
+    copy.kindFilter = self.kindFilter;
+    copy.sort = self.sort;
+    return copy;
+}
+
+- (void)reset {
+    _stockFilter = PPProviderMarketStockFilterAll;
+    _offerFilter = PPProviderMarketOfferFilterAll;
+    _visibilityFilter = PPProviderMarketVisibilityFilterAll;
+    _kindFilter = PPProviderMarketKindFilterAll;
+    _sort = PPProviderMarketSortNewest;
+}
+
+- (BOOL)isDefault {
+    return (_stockFilter == PPProviderMarketStockFilterAll &&
+            _offerFilter == PPProviderMarketOfferFilterAll &&
+            _visibilityFilter == PPProviderMarketVisibilityFilterAll &&
+            _kindFilter == PPProviderMarketKindFilterAll &&
+            _sort == PPProviderMarketSortNewest);
+}
+
+- (NSInteger)activeFilterCount {
+    NSInteger count = 0;
+    if (_stockFilter != PPProviderMarketStockFilterAll) count++;
+    if (_offerFilter != PPProviderMarketOfferFilterAll) count++;
+    if (_visibilityFilter != PPProviderMarketVisibilityFilterAll) count++;
+    if (_kindFilter != PPProviderMarketKindFilterAll) count++;
+    if (_sort != PPProviderMarketSortNewest) count++;
+    return count;
+}
+
+- (PPProviderMarketFilter)primaryLegacyFilter {
+    if (_stockFilter == PPProviderMarketStockFilterInStock) return PPProviderMarketFilterInStock;
+    if (_stockFilter == PPProviderMarketStockFilterLowStock) return PPProviderMarketFilterLowStock;
+    if (_offerFilter == PPProviderMarketOfferFilterOffersOnly) return PPProviderMarketFilterOffers;
+    if (_visibilityFilter == PPProviderMarketVisibilityFilterHiddenOnly) return PPProviderMarketFilterHidden;
+    if (_kindFilter == PPProviderMarketKindFilterAccessories) return PPProviderMarketFilterAccessories;
+    if (_kindFilter == PPProviderMarketKindFilterFood) return PPProviderMarketFilterFood;
+    return PPProviderMarketFilterAll;
+}
+
+- (BOOL)evaluatesItem:(PPProviderMarketItem *)item {
+    if (!item) return NO;
+    if (_stockFilter == PPProviderMarketStockFilterInStock) {
+        if (item.noStock || item.quantity <= 5) return NO;
+    } else if (_stockFilter == PPProviderMarketStockFilterLowStock) {
+        if (!item.noStock && item.quantity > 5) return NO;
+    }
+    if (_offerFilter == PPProviderMarketOfferFilterOffersOnly) {
+        if (!item.hasOffer) return NO;
+    }
+    if (_visibilityFilter == PPProviderMarketVisibilityFilterHiddenOnly) {
+        if (item.showInAppMarket && !item.isArchived) return NO;
+    }
+    if (_kindFilter == PPProviderMarketKindFilterAccessories) {
+        if (item.accessKindType != 1) return NO;
+    } else if (_kindFilter == PPProviderMarketKindFilterFood) {
+        if (item.accessKindType != 2 && item.accessKindType != 0) return NO;
+    }
+    return YES;
+}
+
+@end
 
 // MARK: - Quick Stock Adjustment Sheet Interface & Implementation
 
@@ -1111,19 +1243,49 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 
 @end
 
-// MARK: - Category-Defining Market Filter & Sort Sheet
+// MARK: - Category-Defining Market Filter & Sort Sheet (NextGen V6 Native Cockpit)
 
 @interface PPProviderMarketFilterSheet : UIViewController
-@property (nonatomic, assign) PPProviderMarketFilter selectedFilter;
-@property (nonatomic, assign) PPProviderMarketSort selectedSort;
+@property (nonatomic, strong) PPProviderMarketFilterCriteria *criteria;
 @property (nonatomic, copy) NSArray<PPProviderMarketItem *> *items;
-@property (nonatomic, copy) void (^onApply)(PPProviderMarketFilter filter, PPProviderMarketSort sort);
+@property (nonatomic, copy) void (^onApplyCriteria)(PPProviderMarketFilterCriteria *criteria);
+@property (nonatomic, copy) void (^onApplyLegacy)(PPProviderMarketFilter filter, PPProviderMarketSort sort);
 
+// UI Controls
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *activeBadgeLabel;
+@property (nonatomic, strong) UIView *activeBadgePill;
 @property (nonatomic, strong) UIButton *resetButton;
 @property (nonatomic, strong) UIButton *applyButton;
-@property (nonatomic, strong) NSMutableArray<UIButton *> *filterPillButtons;
-@property (nonatomic, strong) NSMutableArray<UIButton *> *sortPillButtons;
+@property (nonatomic, strong) UIView *actionDockContainer;
+@property (nonatomic, strong) UIScrollView *mainScrollView;
 
+// Card Containers
+@property (nonatomic, strong) UIView *presetsCard;
+@property (nonatomic, strong) UIView *telemetryCard;
+@property (nonatomic, strong) UIView *stockCard;
+@property (nonatomic, strong) UIView *kindCard;
+@property (nonatomic, strong) UIView *offersCard;
+@property (nonatomic, strong) UIView *visibilityCard;
+@property (nonatomic, strong) UIView *sortCard;
+@property (nonatomic, strong) UIView *activeSummaryCard;
+@property (nonatomic, strong) UILabel *activeSummaryLabel;
+
+// Buttons Cache
+@property (nonatomic, strong) NSMutableArray<UIButton *> *presetButtons;
+@property (nonatomic, strong) NSMutableArray<UIButton *> *stockButtons;
+@property (nonatomic, strong) NSMutableArray<UIButton *> *kindButtons;
+@property (nonatomic, strong) NSMutableArray<UIButton *> *offerButtons;
+@property (nonatomic, strong) NSMutableArray<UIButton *> *visibilityButtons;
+@property (nonatomic, strong) NSMutableArray<UIButton *> *sortButtons;
+
+// iPad Command Controls
+@property (nonatomic, strong) UIButton *ipadApplyButton;
+@property (nonatomic, strong) UIButton *ipadResetButton;
+@property (nonatomic, strong) UIButton *ipadDismissButton;
+
+- (instancetype)initWithCriteria:(PPProviderMarketFilterCriteria *)criteria
+                           items:(NSArray<PPProviderMarketItem *> *)items;
 - (instancetype)initWithFilter:(PPProviderMarketFilter)filter
                           sort:(PPProviderMarketSort)sort
                          items:(NSArray<PPProviderMarketItem *> *)items;
@@ -1131,29 +1293,50 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 
 @implementation PPProviderMarketFilterSheet
 
+- (instancetype)initWithCriteria:(PPProviderMarketFilterCriteria *)criteria
+                           items:(NSArray<PPProviderMarketItem *> *)items {
+    self = [super init];
+    if (self) {
+        _criteria = criteria ? [criteria copy] : [[PPProviderMarketFilterCriteria alloc] init];
+        _items = items ?: @[];
+        _presetButtons = [NSMutableArray array];
+        _stockButtons = [NSMutableArray array];
+        _kindButtons = [NSMutableArray array];
+        _offerButtons = [NSMutableArray array];
+        _visibilityButtons = [NSMutableArray array];
+        _sortButtons = [NSMutableArray array];
+    }
+    return self;
+}
+
 - (instancetype)initWithFilter:(PPProviderMarketFilter)filter
                           sort:(PPProviderMarketSort)sort
                          items:(NSArray<PPProviderMarketItem *> *)items {
-    self = [super init];
-    if (self) {
-        _selectedFilter = filter;
-        _selectedSort = sort;
-        _items = items ?: @[];
-        _filterPillButtons = [NSMutableArray array];
-        _sortPillButtons = [NSMutableArray array];
-    }
-    return self;
+    PPProviderMarketFilterCriteria *criteria = [PPProviderMarketFilterCriteria criteriaFromLegacyFilter:filter sort:sort];
+    return [self initWithCriteria:criteria items:items];
+}
+
+- (BOOL)isPadLayout {
+    return UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad;
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor ppSurfaceElevated];
     self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    [self setupSheetUI];
-    [self updateButtonsState];
+
+    if ([self isPadLayout]) {
+        [self setupPadUI];
+    } else {
+        [self setupPhoneUI];
+    }
+
+    [self updateAllButtonsAndTelemetry];
 }
 
-- (void)setupSheetUI {
+#pragma mark - iPhone Handheld Tactical Cockpit
+
+- (void)setupPhoneUI {
     // 1. Drag Handle
     UIView *handle = [[UIView alloc] init];
     handle.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1162,298 +1345,1450 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     [self.view addSubview:handle];
 
     // 2. Header Bar
-    UILabel *titleLabel = [[UILabel alloc] init];
-    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    titleLabel.text = kLang(@"Market_FilterSheet_Title");
-    titleLabel.font = [Styling fontBold:17.0];
-    titleLabel.textColor = [UIColor ppTextPrimary];
-    titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
-    [self.view addSubview:titleLabel];
+    UIView *headerBar = [self buildHeaderBar];
+    [self.view addSubview:headerBar];
 
+    // 3. Scroll View
+    self.mainScrollView = [[UIScrollView alloc] init];
+    self.mainScrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.mainScrollView.showsVerticalScrollIndicator = NO;
+    self.mainScrollView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [self.view addSubview:self.mainScrollView];
+
+    UIStackView *contentStack = [[UIStackView alloc] init];
+    contentStack.translatesAutoresizingMaskIntoConstraints = NO;
+    contentStack.axis = UILayoutConstraintAxisVertical;
+    contentStack.spacing = 14.0;
+    contentStack.alignment = UIStackViewAlignmentFill;
+    [self.mainScrollView addSubview:contentStack];
+
+    // Presets Ribbon
+    self.presetsCard = [self buildPresetsRibbon];
+    [contentStack addArrangedSubview:self.presetsCard];
+
+    // Telemetry Mini HUD
+    self.telemetryCard = [self buildTelemetryHUDCard];
+    [contentStack addArrangedSubview:self.telemetryCard];
+
+    // Section 1: Stock Status
+    self.stockCard = [self buildStockSectionCard];
+    [contentStack addArrangedSubview:self.stockCard];
+
+    // Section 2: Kind / Classification
+    self.kindCard = [self buildKindSectionCard];
+    [contentStack addArrangedSubview:self.kindCard];
+
+    // Section 3: Promotions & Deals
+    self.offersCard = [self buildOffersSectionCard];
+    [contentStack addArrangedSubview:self.offersCard];
+
+    // Section 4: Marketplace Visibility
+    self.visibilityCard = [self buildVisibilitySectionCard];
+    [contentStack addArrangedSubview:self.visibilityCard];
+
+    // Section 5: Sort Matrix
+    self.sortCard = [self buildSortSectionCard];
+    [contentStack addArrangedSubview:self.sortCard];
+
+    // 4. Pinned Frosted Glass Action Dock
+    [self setupPhonePinnedActionDock];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [handle.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [handle.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:10.0],
+        [handle.widthAnchor constraintEqualToConstant:40.0],
+        [handle.heightAnchor constraintEqualToConstant:5.0],
+
+        [headerBar.topAnchor constraintEqualToAnchor:handle.bottomAnchor constant:10.0],
+        [headerBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [headerBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [headerBar.heightAnchor constraintEqualToConstant:44.0],
+
+        [self.mainScrollView.topAnchor constraintEqualToAnchor:headerBar.bottomAnchor constant:8.0],
+        [self.mainScrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [self.mainScrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [self.mainScrollView.bottomAnchor constraintEqualToAnchor:self.actionDockContainer.topAnchor constant:-8.0],
+
+        [contentStack.leadingAnchor constraintEqualToAnchor:self.mainScrollView.leadingAnchor],
+        [contentStack.trailingAnchor constraintEqualToAnchor:self.mainScrollView.trailingAnchor],
+        [contentStack.topAnchor constraintEqualToAnchor:self.mainScrollView.topAnchor],
+        [contentStack.bottomAnchor constraintEqualToAnchor:self.mainScrollView.bottomAnchor constant:-20.0],
+        [contentStack.widthAnchor constraintEqualToAnchor:self.mainScrollView.widthAnchor]
+    ]];
+}
+
+- (void)setupPhonePinnedActionDock {
+    self.actionDockContainer = [[UIView alloc] init];
+    self.actionDockContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.actionDockContainer.backgroundColor = UIColor.clearColor;
+    [self.view addSubview:self.actionDockContainer];
+
+    BOOL isDark = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
+    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:isDark ? UIBlurEffectStyleSystemThinMaterialDark : UIBlurEffectStyleSystemThinMaterialLight];
+    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+    blurView.translatesAutoresizingMaskIntoConstraints = NO;
+    blurView.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.5].CGColor;
+    blurView.layer.borderWidth = 0.5;
+    [self.actionDockContainer addSubview:blurView];
+
+    self.applyButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.applyButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.applyButton.titleLabel.font = [Styling fontBold:16.0];
+    [self.applyButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    self.applyButton.backgroundColor = [UIColor ppPrimary];
+    PPApplyContinuousCorners(self.applyButton, 20.0);
+    PPApplyButtonShadow(self.applyButton);
+
+    UIImageSymbolConfiguration *symCfg = [UIImageSymbolConfiguration configurationWithPointSize:13.5 weight:UIImageSymbolWeightBold];
+    UIImage *arrowImg = [[UIImage systemImageNamed:Language.isRTL ? @"arrow.left" : @"arrow.right"] imageWithConfiguration:symCfg];
+    [self.applyButton setImage:arrowImg forState:UIControlStateNormal];
+    self.applyButton.tintColor = UIColor.whiteColor;
+    self.applyButton.imageEdgeInsets = Language.isRTL ? UIEdgeInsetsMake(0, 8, 0, -8) : UIEdgeInsetsMake(0, -8, 0, 8);
+    [self.applyButton addTarget:self action:@selector(applyTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.actionDockContainer addSubview:self.applyButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.actionDockContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.actionDockContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.actionDockContainer.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+
+        [blurView.topAnchor constraintEqualToAnchor:self.actionDockContainer.topAnchor],
+        [blurView.leadingAnchor constraintEqualToAnchor:self.actionDockContainer.leadingAnchor],
+        [blurView.trailingAnchor constraintEqualToAnchor:self.actionDockContainer.trailingAnchor],
+        [blurView.bottomAnchor constraintEqualToAnchor:self.actionDockContainer.bottomAnchor],
+
+        [self.applyButton.topAnchor constraintEqualToAnchor:self.actionDockContainer.topAnchor constant:10.0],
+        [self.applyButton.leadingAnchor constraintEqualToAnchor:self.actionDockContainer.leadingAnchor constant:PPSpaceBase],
+        [self.applyButton.trailingAnchor constraintEqualToAnchor:self.actionDockContainer.trailingAnchor constant:-PPSpaceBase],
+        [self.applyButton.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-8.0],
+        [self.applyButton.heightAnchor constraintEqualToConstant:50.0]
+    ]];
+}
+
+#pragma mark - iPad Countertop Flight Deck
+
+- (void)setupPadUI {
+    // 1. Header Bar
+    UIView *headerBar = [self buildHeaderBar];
+    [self.view addSubview:headerBar];
+
+    // 2. Dual-Wing Flight Deck Grid
+    UIView *leadingWing = [[UIView alloc] init];
+    leadingWing.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:leadingWing];
+
+    UIView *trailingWing = [[UIView alloc] init];
+    trailingWing.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:trailingWing];
+
+    // Center Divider
+    UIView *verticalDivider = [[UIView alloc] init];
+    verticalDivider.translatesAutoresizingMaskIntoConstraints = NO;
+    verticalDivider.backgroundColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6];
+    [self.view addSubview:verticalDivider];
+
+    // --- Leading Wing Elements (Filter Facets) ---
+    UIScrollView *leadScroll = [[UIScrollView alloc] init];
+    leadScroll.translatesAutoresizingMaskIntoConstraints = NO;
+    leadScroll.showsVerticalScrollIndicator = NO;
+    [leadingWing addSubview:leadScroll];
+
+    UIStackView *leadStack = [[UIStackView alloc] init];
+    leadStack.translatesAutoresizingMaskIntoConstraints = NO;
+    leadStack.axis = UILayoutConstraintAxisVertical;
+    leadStack.spacing = 14.0;
+    leadStack.alignment = UIStackViewAlignmentFill;
+    [leadScroll addSubview:leadStack];
+
+    self.presetsCard = [self buildPresetsRibbon];
+    [leadStack addArrangedSubview:self.presetsCard];
+
+    self.stockCard = [self buildStockSectionCard];
+    [leadStack addArrangedSubview:self.stockCard];
+
+    self.kindCard = [self buildKindSectionCard];
+    [leadStack addArrangedSubview:self.kindCard];
+
+    self.offersCard = [self buildOffersSectionCard];
+    [leadStack addArrangedSubview:self.offersCard];
+
+    self.visibilityCard = [self buildVisibilitySectionCard];
+    [leadStack addArrangedSubview:self.visibilityCard];
+
+    // --- Trailing Wing Elements (Sort, Telemetry & Command Center) ---
+    UIScrollView *trailScroll = [[UIScrollView alloc] init];
+    trailScroll.translatesAutoresizingMaskIntoConstraints = NO;
+    trailScroll.showsVerticalScrollIndicator = NO;
+    [trailingWing addSubview:trailScroll];
+
+    UIStackView *trailStack = [[UIStackView alloc] init];
+    trailStack.translatesAutoresizingMaskIntoConstraints = NO;
+    trailStack.axis = UILayoutConstraintAxisVertical;
+    trailStack.spacing = 14.0;
+    trailStack.alignment = UIStackViewAlignmentFill;
+    [trailScroll addSubview:trailStack];
+
+    self.telemetryCard = [self buildTelemetryHUDCard];
+    [trailStack addArrangedSubview:self.telemetryCard];
+
+    self.sortCard = [self buildSortSectionCard];
+    [trailStack addArrangedSubview:self.sortCard];
+
+    self.activeSummaryCard = [self buildActiveSummaryCard];
+    [trailStack addArrangedSubview:self.activeSummaryCard];
+
+    UIView *commandDeck = [self buildIpadCommandDeck];
+    [trailStack addArrangedSubview:commandDeck];
+
+    // iPad Auto Layout
+    [NSLayoutConstraint activateConstraints:@[
+        [headerBar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:14.0],
+        [headerBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:24.0],
+        [headerBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-24.0],
+        [headerBar.heightAnchor constraintEqualToConstant:44.0],
+
+        [leadingWing.topAnchor constraintEqualToAnchor:headerBar.bottomAnchor constant:14.0],
+        [leadingWing.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:24.0],
+        [leadingWing.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-14.0],
+
+        [verticalDivider.topAnchor constraintEqualToAnchor:leadingWing.topAnchor],
+        [verticalDivider.bottomAnchor constraintEqualToAnchor:leadingWing.bottomAnchor],
+        [verticalDivider.leadingAnchor constraintEqualToAnchor:leadingWing.trailingAnchor constant:16.0],
+        [verticalDivider.widthAnchor constraintEqualToConstant:1.0],
+
+        [trailingWing.topAnchor constraintEqualToAnchor:leadingWing.topAnchor],
+        [trailingWing.leadingAnchor constraintEqualToAnchor:verticalDivider.trailingAnchor constant:16.0],
+        [trailingWing.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-24.0],
+        [trailingWing.bottomAnchor constraintEqualToAnchor:leadingWing.bottomAnchor],
+        [trailingWing.widthAnchor constraintEqualToAnchor:leadingWing.widthAnchor multiplier:0.85],
+
+        // Leading Wing Scroll
+        [leadScroll.topAnchor constraintEqualToAnchor:leadingWing.topAnchor],
+        [leadScroll.bottomAnchor constraintEqualToAnchor:leadingWing.bottomAnchor],
+        [leadScroll.leadingAnchor constraintEqualToAnchor:leadingWing.leadingAnchor],
+        [leadScroll.trailingAnchor constraintEqualToAnchor:leadingWing.trailingAnchor],
+        [leadStack.topAnchor constraintEqualToAnchor:leadScroll.topAnchor],
+        [leadStack.bottomAnchor constraintEqualToAnchor:leadScroll.bottomAnchor constant:-16.0],
+        [leadStack.leadingAnchor constraintEqualToAnchor:leadScroll.leadingAnchor],
+        [leadStack.trailingAnchor constraintEqualToAnchor:leadScroll.trailingAnchor],
+        [leadStack.widthAnchor constraintEqualToAnchor:leadScroll.widthAnchor],
+
+        // Trailing Wing Scroll
+        [trailScroll.topAnchor constraintEqualToAnchor:trailingWing.topAnchor],
+        [trailScroll.bottomAnchor constraintEqualToAnchor:trailingWing.bottomAnchor],
+        [trailScroll.leadingAnchor constraintEqualToAnchor:trailingWing.leadingAnchor],
+        [trailScroll.trailingAnchor constraintEqualToAnchor:trailingWing.trailingAnchor],
+        [trailStack.topAnchor constraintEqualToAnchor:trailScroll.topAnchor],
+        [trailStack.bottomAnchor constraintEqualToAnchor:trailScroll.bottomAnchor constant:-16.0],
+        [trailStack.leadingAnchor constraintEqualToAnchor:trailScroll.leadingAnchor],
+        [trailStack.trailingAnchor constraintEqualToAnchor:trailScroll.trailingAnchor],
+        [trailStack.widthAnchor constraintEqualToAnchor:trailScroll.widthAnchor]
+    ]];
+}
+
+#pragma mark - Shared Building Blocks
+
+- (UIView *)buildHeaderBar {
+    UIView *bar = [[UIView alloc] init];
+    bar.translatesAutoresizingMaskIntoConstraints = NO;
+    bar.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.text = kLang(@"Market_FilterSheet_Title");
+    self.titleLabel.font = [Styling fontBold:17.5];
+    self.titleLabel.textColor = [UIColor ppTextPrimary];
+    self.titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [bar addSubview:self.titleLabel];
+
+    // Active Badge Pill
+    self.activeBadgePill = [[UIView alloc] init];
+    self.activeBadgePill.translatesAutoresizingMaskIntoConstraints = NO;
+    self.activeBadgePill.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.12];
+    PPApplyContinuousCorners(self.activeBadgePill, 8.0);
+    self.activeBadgePill.hidden = YES;
+    [bar addSubview:self.activeBadgePill];
+
+    self.activeBadgeLabel = [[UILabel alloc] init];
+    self.activeBadgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.activeBadgeLabel.font = [Styling fontBold:11.0];
+    self.activeBadgeLabel.textColor = [UIColor ppPrimary];
+    self.activeBadgeLabel.textAlignment = NSTextAlignmentCenter;
+    [self.activeBadgePill addSubview:self.activeBadgeLabel];
+
+    // Reset Button
     self.resetButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.resetButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.resetButton setTitle:kLang(@"Market_FilterSheet_Reset") forState:UIControlStateNormal];
     self.resetButton.titleLabel.font = [Styling fontBold:13.5];
     self.resetButton.tintColor = [UIColor ppPrimary];
+    UIImageSymbolConfiguration *rCfg = [UIImageSymbolConfiguration configurationWithPointSize:12.0 weight:UIImageSymbolWeightSemibold];
+    UIImage *rImg = [[UIImage systemImageNamed:@"arrow.counterclockwise"] imageWithConfiguration:rCfg];
+    [self.resetButton setImage:rImg forState:UIControlStateNormal];
+    self.resetButton.imageEdgeInsets = Language.isRTL ? UIEdgeInsetsMake(0, 4, 0, -4) : UIEdgeInsetsMake(0, -4, 0, 4);
     [self.resetButton addTarget:self action:@selector(resetTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.resetButton];
+    if (@available(iOS 13.4, *)) {
+        self.resetButton.pointerInteractionEnabled = YES;
+    }
+    [bar addSubview:self.resetButton];
 
-    UIView *headerDivider = [[UIView alloc] init];
-    headerDivider.translatesAutoresizingMaskIntoConstraints = NO;
-    headerDivider.backgroundColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6];
-    [self.view addSubview:headerDivider];
-
-    // 3. Scroll Content
-    UIScrollView *scrollView = [[UIScrollView alloc] init];
-    scrollView.translatesAutoresizingMaskIntoConstraints = NO;
-    scrollView.showsVerticalScrollIndicator = NO;
-    scrollView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    [self.view addSubview:scrollView];
-
-    UIStackView *contentStack = [[UIStackView alloc] init];
-    contentStack.translatesAutoresizingMaskIntoConstraints = NO;
-    contentStack.axis = UILayoutConstraintAxisVertical;
-    contentStack.spacing = 18.0;
-    contentStack.alignment = UIStackViewAlignmentFill;
-    [scrollView addSubview:contentStack];
-
-    // Section 1: Stock Status
-    [contentStack addArrangedSubview:[self buildSectionHeader:kLang(@"Market_FilterSheet_SectionStock")]];
-    [contentStack addArrangedSubview:[self buildFilterRowWithDefs:@[
-        @{@"filter": @(PPProviderMarketFilterAll), @"title": kLang(@"Market_FilterSheet_All")},
-        @{@"filter": @(PPProviderMarketFilterInStock), @"title": kLang(@"Market_FilterSheet_InStockOnly")},
-        @{@"filter": @(PPProviderMarketFilterLowStock), @"title": kLang(@"Market_FilterSheet_LowStockOnly")}
-    ]]];
-
-    // Section 2: Special Offers
-    [contentStack addArrangedSubview:[self buildSectionHeader:kLang(@"Market_FilterSheet_SectionOffers")]];
-    [contentStack addArrangedSubview:[self buildFilterRowWithDefs:@[
-        @{@"filter": @(PPProviderMarketFilterAll), @"title": kLang(@"Market_FilterSheet_All")},
-        @{@"filter": @(PPProviderMarketFilterOffers), @"title": kLang(@"Market_FilterSheet_OffersOnly")}
-    ]]];
-
-    // Section 3: Visibility
-    [contentStack addArrangedSubview:[self buildSectionHeader:kLang(@"Market_FilterSheet_SectionVisibility")]];
-    [contentStack addArrangedSubview:[self buildFilterRowWithDefs:@[
-        @{@"filter": @(PPProviderMarketFilterAll), @"title": kLang(@"Market_FilterSheet_All")},
-        @{@"filter": @(PPProviderMarketFilterHidden), @"title": kLang(@"Market_FilterSheet_HiddenOnly")}
-    ]]];
-
-    // Section 4: Kind
-    [contentStack addArrangedSubview:[self buildSectionHeader:kLang(@"Market_FilterSheet_SectionKind")]];
-    [contentStack addArrangedSubview:[self buildFilterRowWithDefs:@[
-        @{@"filter": @(PPProviderMarketFilterAll), @"title": kLang(@"Market_FilterSheet_All")},
-        @{@"filter": @(PPProviderMarketFilterAccessories), @"title": kLang(@"Market_Accessory")},
-        @{@"filter": @(PPProviderMarketFilterFood), @"title": kLang(@"Market_Food")}
-    ]]];
-
-    // Section 5: Sort
-    [contentStack addArrangedSubview:[self buildSectionHeader:kLang(@"Market_FilterSheet_SectionSort")]];
-    [contentStack addArrangedSubview:[self buildSortRowWithDefs:@[
-        @{@"sort": @(PPProviderMarketSortNewest), @"title": kLang(@"Market_FilterSheet_SortNewest")},
-        @{@"sort": @(PPProviderMarketSortPriceLowToHigh), @"title": kLang(@"Market_FilterSheet_SortPriceLow")},
-        @{@"sort": @(PPProviderMarketSortPriceHighToLow), @"title": kLang(@"Market_FilterSheet_SortPriceHigh")},
-        @{@"sort": @(PPProviderMarketSortStockHighest), @"title": kLang(@"Market_FilterSheet_SortStockHigh")},
-        @{@"sort": @(PPProviderMarketSortStockLowest), @"title": kLang(@"Market_FilterSheet_SortStockLow")}
-    ]]];
-
-    // 4. Floating Apply CTA
-    self.applyButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.applyButton.translatesAutoresizingMaskIntoConstraints = NO;
-    self.applyButton.titleLabel.font = [Styling fontBold:16.0];
-    self.applyButton.tintColor = UIColor.whiteColor;
-    self.applyButton.backgroundColor = [UIColor ppPrimary];
-    PPApplyContinuousCorners(self.applyButton, 22);
-    PPApplyButtonShadow(self.applyButton);
-    [self.applyButton addTarget:self action:@selector(applyTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.applyButton];
-
-    // Layout
     [NSLayoutConstraint activateConstraints:@[
-        [handle.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [handle.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:10],
-        [handle.widthAnchor constraintEqualToConstant:40],
-        [handle.heightAnchor constraintEqualToConstant:5],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor],
+        [self.titleLabel.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
 
-        [titleLabel.topAnchor constraintEqualToAnchor:handle.bottomAnchor constant:14],
-        [titleLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
+        [self.activeBadgePill.leadingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor constant:8.0],
+        [self.activeBadgePill.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
+        [self.activeBadgePill.heightAnchor constraintEqualToConstant:22.0],
 
-        [self.resetButton.centerYAnchor constraintEqualToAnchor:titleLabel.centerYAnchor],
-        [self.resetButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
+        [self.activeBadgeLabel.leadingAnchor constraintEqualToAnchor:self.activeBadgePill.leadingAnchor constant:8.0],
+        [self.activeBadgeLabel.trailingAnchor constraintEqualToAnchor:self.activeBadgePill.trailingAnchor constant:-8.0],
+        [self.activeBadgeLabel.centerYAnchor constraintEqualToAnchor:self.activeBadgePill.centerYAnchor],
 
-        [headerDivider.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:12],
-        [headerDivider.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
-        [headerDivider.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
-        [headerDivider.heightAnchor constraintEqualToConstant:0.8],
-
-        [scrollView.topAnchor constraintEqualToAnchor:headerDivider.bottomAnchor constant:12],
-        [scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
-        [scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
-        [scrollView.bottomAnchor constraintEqualToAnchor:self.applyButton.topAnchor constant:-12],
-
-        [contentStack.leadingAnchor constraintEqualToAnchor:scrollView.leadingAnchor],
-        [contentStack.trailingAnchor constraintEqualToAnchor:scrollView.trailingAnchor],
-        [contentStack.topAnchor constraintEqualToAnchor:scrollView.topAnchor],
-        [contentStack.bottomAnchor constraintEqualToAnchor:scrollView.bottomAnchor constant:-16],
-        [contentStack.widthAnchor constraintEqualToAnchor:scrollView.widthAnchor],
-
-        [self.applyButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceBase],
-        [self.applyButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceBase],
-        [self.applyButton.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
-        [self.applyButton.heightAnchor constraintEqualToConstant:50],
+        [self.resetButton.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor],
+        [self.resetButton.centerYAnchor constraintEqualToAnchor:bar.centerYAnchor],
+        [self.resetButton.heightAnchor constraintEqualToConstant:32.0]
     ]];
+
+    return bar;
 }
 
-- (UIView *)buildSectionHeader:(NSString *)title {
+- (UIView *)buildPresetsRibbon {
+    UIView *container = [self makeCardContainerWithTitle:kLang(@"Market_FilterSheet_QuickPresets") icon:@"sparkles"];
+
+    UIScrollView *scroll = [[UIScrollView alloc] init];
+    scroll.translatesAutoresizingMaskIntoConstraints = NO;
+    scroll.showsHorizontalScrollIndicator = NO;
+    scroll.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [container addSubview:scroll];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.spacing = 8.0;
+    stack.alignment = UIStackViewAlignmentCenter;
+    [scroll addSubview:stack];
+
+    NSArray<NSDictionary *> *presets = @[
+        @{@"tag": @(0), @"title": kLang(@"Market_FilterSheet_Preset_All"), @"icon": @"asterisk.circle.fill"},
+        @{@"tag": @(1), @"title": kLang(@"Market_FilterSheet_Preset_LowStock"), @"icon": @"exclamationmark.triangle.fill"},
+        @{@"tag": @(2), @"title": kLang(@"Market_FilterSheet_Preset_Deals"), @"icon": @"percent"},
+        @{@"tag": @(3), @"title": kLang(@"Market_FilterSheet_Preset_Food"), @"icon": @"takeoutbag.and.cup.and.straw.fill"},
+        @{@"tag": @(4), @"title": kLang(@"Market_FilterSheet_Preset_Accessories"), @"icon": @"pawprint.fill"},
+        @{@"tag": @(5), @"title": kLang(@"Market_FilterSheet_Preset_Hidden"), @"icon": @"eye.slash.fill"}
+    ];
+
+    for (NSDictionary *p in presets) {
+        UIButton *btn = [self createPillButtonWithTitle:p[@"title"] icon:p[@"icon"] tag:[p[@"tag"] integerValue] selector:@selector(presetTapped:)];
+        [self.presetButtons addObject:btn];
+        [stack addArrangedSubview:btn];
+    }
+
+    [NSLayoutConstraint activateConstraints:@[
+        [scroll.topAnchor constraintEqualToAnchor:container.subviews.firstObject.bottomAnchor constant:10.0],
+        [scroll.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:12.0],
+        [scroll.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-12.0],
+        [scroll.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-12.0],
+        [scroll.heightAnchor constraintEqualToConstant:36.0],
+
+        [stack.topAnchor constraintEqualToAnchor:scroll.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
+        [stack.heightAnchor constraintEqualToAnchor:scroll.heightAnchor]
+    ]];
+
+    return container;
+}
+
+- (UIView *)buildTelemetryHUDCard {
+    UIView *card = [self makeCardContainerWithTitle:kLang(@"Market_FilterSheet_CatalogDistribution") icon:@"chart.bar.xaxis"];
+
+    UIStackView *statsGrid = [[UIStackView alloc] init];
+    statsGrid.translatesAutoresizingMaskIntoConstraints = NO;
+    statsGrid.axis = UILayoutConstraintAxisHorizontal;
+    statsGrid.distribution = UIStackViewDistributionFillEqually;
+    statsGrid.spacing = 8.0;
+    [card addSubview:statsGrid];
+
+    // Compute metrics
+    NSInteger total = self.items.count;
+    NSInteger inStock = 0;
+    NSInteger lowStock = 0;
+    NSInteger offers = 0;
+
+    for (PPProviderMarketItem *item in self.items) {
+        if (!item.noStock && item.quantity > 5) inStock++;
+        if (item.quantity <= 5 || item.noStock) lowStock++;
+        if (item.hasOffer) offers++;
+    }
+
+    [statsGrid addArrangedSubview:[self buildTelemetryChipWithTitle:kLang(@"Market_FilterSheet_TotalSKUsFormat") count:total color:[UIColor ppTextPrimary]]];
+    [statsGrid addArrangedSubview:[self buildTelemetryChipWithTitle:kLang(@"Market_FilterSheet_InStockSummaryFormat") count:inStock color:[UIColor ppSuccess]]];
+    [statsGrid addArrangedSubview:[self buildTelemetryChipWithTitle:kLang(@"Market_FilterSheet_LowStockSummaryFormat") count:lowStock color:[UIColor ppWarning]]];
+    [statsGrid addArrangedSubview:[self buildTelemetryChipWithTitle:kLang(@"Market_FilterSheet_OffersSummaryFormat") count:offers color:[UIColor ppPrimary]]];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [statsGrid.topAnchor constraintEqualToAnchor:card.subviews.firstObject.bottomAnchor constant:10.0],
+        [statsGrid.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
+        [statsGrid.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+        [statsGrid.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-12.0],
+        [statsGrid.heightAnchor constraintEqualToConstant:48.0]
+    ]];
+
+    return card;
+}
+
+- (UIView *)buildTelemetryChipWithTitle:(NSString *)fmt count:(NSInteger)count color:(UIColor *)color {
+    UIView *chip = [[UIView alloc] init];
+    chip.backgroundColor = [[UIColor ppSurface] colorWithAlphaComponent:0.7];
+    chip.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.5].CGColor;
+    chip.layer.borderWidth = 0.5;
+    PPApplyContinuousCorners(chip, 10.0);
+
+    UILabel *numLabel = [[UILabel alloc] init];
+    numLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    numLabel.font = [UIFont monospacedDigitSystemFontOfSize:14.0 weight:UIFontWeightBold];
+    numLabel.textColor = color;
+    numLabel.textAlignment = NSTextAlignmentCenter;
+    numLabel.text = [NSString stringWithFormat:@"%ld", (long)count];
+    [chip addSubview:numLabel];
+
+    UILabel *subLabel = [[UILabel alloc] init];
+    subLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    subLabel.font = [Styling fontMedium:10.0];
+    subLabel.textColor = [UIColor ppTextSecondary];
+    subLabel.textAlignment = NSTextAlignmentCenter;
+    subLabel.text = [NSString stringWithFormat:fmt, (long)count];
+    [chip addSubview:subLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [numLabel.topAnchor constraintEqualToAnchor:chip.topAnchor constant:6.0],
+        [numLabel.centerXAnchor constraintEqualToAnchor:chip.centerXAnchor],
+        [subLabel.topAnchor constraintEqualToAnchor:numLabel.bottomAnchor constant:2.0],
+        [subLabel.centerXAnchor constraintEqualToAnchor:chip.centerXAnchor],
+        [subLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:chip.leadingAnchor constant:4.0],
+        [subLabel.trailingAnchor constraintLessThanOrEqualToAnchor:chip.trailingAnchor constant:-4.0]
+    ]];
+
+    return chip;
+}
+
+- (UIView *)buildStockSectionCard {
+    UIView *card = [self makeCardContainerWithTitle:kLang(@"Market_FilterSheet_SectionStock") icon:@"cube.box.fill"];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.spacing = 8.0;
+    stack.distribution = UIStackViewDistributionFillProportionally;
+    stack.alignment = UIStackViewAlignmentCenter;
+    [card addSubview:stack];
+
+    NSInteger total = self.items.count;
+    NSInteger inStock = [self countForStock:PPProviderMarketStockFilterInStock];
+    NSInteger lowStock = [self countForStock:PPProviderMarketStockFilterLowStock];
+
+    UIButton *bAll = [self createPillButtonWithTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Market_FilterSheet_All"), (long)total] icon:nil tag:PPProviderMarketStockFilterAll selector:@selector(stockPillTapped:)];
+    UIButton *bIn = [self createPillButtonWithTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Market_FilterSheet_InStockOnly"), (long)inStock] icon:@"checkmark.circle.fill" tag:PPProviderMarketStockFilterInStock selector:@selector(stockPillTapped:)];
+    UIButton *bLow = [self createPillButtonWithTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Market_FilterSheet_LowStockOnly"), (long)lowStock] icon:@"exclamationmark.triangle.fill" tag:PPProviderMarketStockFilterLowStock selector:@selector(stockPillTapped:)];
+
+    [self.stockButtons addObjectsFromArray:@[bAll, bIn, bLow]];
+    [stack addArrangedSubview:bAll];
+    [stack addArrangedSubview:bIn];
+    [stack addArrangedSubview:bLow];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.topAnchor constraintEqualToAnchor:card.subviews.firstObject.bottomAnchor constant:10.0],
+        [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
+        [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+        [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-12.0],
+        [stack.heightAnchor constraintEqualToConstant:36.0]
+    ]];
+
+    return card;
+}
+
+- (UIView *)buildKindSectionCard {
+    UIView *card = [self makeCardContainerWithTitle:kLang(@"Market_FilterSheet_SectionKind") icon:@"square.grid.2x2.fill"];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.spacing = 8.0;
+    stack.distribution = UIStackViewDistributionFillProportionally;
+    stack.alignment = UIStackViewAlignmentCenter;
+    [card addSubview:stack];
+
+    NSInteger total = self.items.count;
+    NSInteger acc = [self countForKind:PPProviderMarketKindFilterAccessories];
+    NSInteger food = [self countForKind:PPProviderMarketKindFilterFood];
+
+    UIButton *bAll = [self createPillButtonWithTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Market_FilterSheet_All"), (long)total] icon:nil tag:PPProviderMarketKindFilterAll selector:@selector(kindPillTapped:)];
+    UIButton *bAcc = [self createPillButtonWithTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Market_Accessory"), (long)acc] icon:@"pawprint.fill" tag:PPProviderMarketKindFilterAccessories selector:@selector(kindPillTapped:)];
+    UIButton *bFood = [self createPillButtonWithTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Market_Food"), (long)food] icon:@"takeoutbag.and.cup.and.straw.fill" tag:PPProviderMarketKindFilterFood selector:@selector(kindPillTapped:)];
+
+    [self.kindButtons addObjectsFromArray:@[bAll, bAcc, bFood]];
+    [stack addArrangedSubview:bAll];
+    [stack addArrangedSubview:bAcc];
+    [stack addArrangedSubview:bFood];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.topAnchor constraintEqualToAnchor:card.subviews.firstObject.bottomAnchor constant:10.0],
+        [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
+        [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+        [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-12.0],
+        [stack.heightAnchor constraintEqualToConstant:36.0]
+    ]];
+
+    return card;
+}
+
+- (UIView *)buildOffersSectionCard {
+    UIView *card = [self makeCardContainerWithTitle:kLang(@"Market_FilterSheet_SectionOffers") icon:@"tag.fill"];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.spacing = 8.0;
+    stack.distribution = UIStackViewDistributionFillProportionally;
+    stack.alignment = UIStackViewAlignmentCenter;
+    [card addSubview:stack];
+
+    NSInteger total = self.items.count;
+    NSInteger offers = [self countForOffers:PPProviderMarketOfferFilterOffersOnly];
+
+    UIButton *bAll = [self createPillButtonWithTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Market_FilterSheet_All"), (long)total] icon:nil tag:PPProviderMarketOfferFilterAll selector:@selector(offerPillTapped:)];
+    UIButton *bOffers = [self createPillButtonWithTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Market_FilterSheet_OffersOnly"), (long)offers] icon:@"percent" tag:PPProviderMarketOfferFilterOffersOnly selector:@selector(offerPillTapped:)];
+
+    [self.offerButtons addObjectsFromArray:@[bAll, bOffers]];
+    [stack addArrangedSubview:bAll];
+    [stack addArrangedSubview:bOffers];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.topAnchor constraintEqualToAnchor:card.subviews.firstObject.bottomAnchor constant:10.0],
+        [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
+        [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+        [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-12.0],
+        [stack.heightAnchor constraintEqualToConstant:36.0]
+    ]];
+
+    return card;
+}
+
+- (UIView *)buildVisibilitySectionCard {
+    UIView *card = [self makeCardContainerWithTitle:kLang(@"Market_FilterSheet_SectionVisibility") icon:@"eye.fill"];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.spacing = 8.0;
+    stack.distribution = UIStackViewDistributionFillProportionally;
+    stack.alignment = UIStackViewAlignmentCenter;
+    [card addSubview:stack];
+
+    NSInteger total = self.items.count;
+    NSInteger hidden = [self countForVisibility:PPProviderMarketVisibilityFilterHiddenOnly];
+
+    UIButton *bAll = [self createPillButtonWithTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Market_FilterSheet_All"), (long)total] icon:nil tag:PPProviderMarketVisibilityFilterAll selector:@selector(visibilityPillTapped:)];
+    UIButton *bHidden = [self createPillButtonWithTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Market_FilterSheet_HiddenOnly"), (long)hidden] icon:@"eye.slash.fill" tag:PPProviderMarketVisibilityFilterHiddenOnly selector:@selector(visibilityPillTapped:)];
+
+    [self.visibilityButtons addObjectsFromArray:@[bAll, bHidden]];
+    [stack addArrangedSubview:bAll];
+    [stack addArrangedSubview:bHidden];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.topAnchor constraintEqualToAnchor:card.subviews.firstObject.bottomAnchor constant:10.0],
+        [stack.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
+        [stack.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+        [stack.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-12.0],
+        [stack.heightAnchor constraintEqualToConstant:36.0]
+    ]];
+
+    return card;
+}
+
+- (UIView *)buildSortSectionCard {
+    UIView *card = [self makeCardContainerWithTitle:kLang(@"Market_FilterSheet_SectionSort") icon:@"arrow.up.arrow.down"];
+
+    UIScrollView *scroll = [[UIScrollView alloc] init];
+    scroll.translatesAutoresizingMaskIntoConstraints = NO;
+    scroll.showsHorizontalScrollIndicator = NO;
+    scroll.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [card addSubview:scroll];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisHorizontal;
+    stack.spacing = 8.0;
+    stack.alignment = UIStackViewAlignmentCenter;
+    [scroll addSubview:stack];
+
+    NSArray<NSDictionary *> *sortDefs = @[
+        @{@"sort": @(PPProviderMarketSortNewest), @"title": kLang(@"Market_FilterSheet_SortNewest"), @"icon": @"clock.fill"},
+        @{@"sort": @(PPProviderMarketSortPriceLowToHigh), @"title": kLang(@"Market_FilterSheet_SortPriceLow"), @"icon": @"arrow.down.circle.fill"},
+        @{@"sort": @(PPProviderMarketSortPriceHighToLow), @"title": kLang(@"Market_FilterSheet_SortPriceHigh"), @"icon": @"arrow.up.circle.fill"},
+        @{@"sort": @(PPProviderMarketSortStockHighest), @"title": kLang(@"Market_FilterSheet_SortStockHigh"), @"icon": @"chart.bar.fill"},
+        @{@"sort": @(PPProviderMarketSortStockLowest), @"title": kLang(@"Market_FilterSheet_SortStockLow"), @"icon": @"chart.bar"}
+    ];
+
+    for (NSDictionary *def in sortDefs) {
+        UIButton *btn = [self createPillButtonWithTitle:def[@"title"] icon:def[@"icon"] tag:[def[@"sort"] integerValue] selector:@selector(sortPillTapped:)];
+        [self.sortButtons addObject:btn];
+        [stack addArrangedSubview:btn];
+    }
+
+    [NSLayoutConstraint activateConstraints:@[
+        [scroll.topAnchor constraintEqualToAnchor:card.subviews.firstObject.bottomAnchor constant:10.0],
+        [scroll.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
+        [scroll.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+        [scroll.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-12.0],
+        [scroll.heightAnchor constraintEqualToConstant:36.0],
+
+        [stack.topAnchor constraintEqualToAnchor:scroll.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor],
+        [stack.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
+        [stack.heightAnchor constraintEqualToAnchor:scroll.heightAnchor]
+    ]];
+
+    return card;
+}
+
+- (UIView *)buildActiveSummaryCard {
+    UIView *card = [self makeCardContainerWithTitle:kLang(@"Market_Filter_ActiveIndicator") icon:@"slider.horizontal.3"];
+
+    self.activeSummaryLabel = [[UILabel alloc] init];
+    self.activeSummaryLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.activeSummaryLabel.font = [Styling fontMedium:12.5];
+    self.activeSummaryLabel.textColor = [UIColor ppTextSecondary];
+    self.activeSummaryLabel.numberOfLines = 0;
+    self.activeSummaryLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [card addSubview:self.activeSummaryLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.activeSummaryLabel.topAnchor constraintEqualToAnchor:card.subviews.firstObject.bottomAnchor constant:10.0],
+        [self.activeSummaryLabel.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:14.0],
+        [self.activeSummaryLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-14.0],
+        [self.activeSummaryLabel.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-12.0]
+    ]];
+
+    return card;
+}
+
+- (UIView *)buildIpadCommandDeck {
+    UIView *container = [[UIView alloc] init];
+    container.translatesAutoresizingMaskIntoConstraints = NO;
+
+    self.ipadApplyButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.ipadApplyButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.ipadApplyButton.titleLabel.font = [Styling fontBold:16.0];
+    [self.ipadApplyButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    self.ipadApplyButton.backgroundColor = [UIColor ppPrimary];
+    PPApplyContinuousCorners(self.ipadApplyButton, 18.0);
+    PPApplyButtonShadow(self.ipadApplyButton);
+    [self.ipadApplyButton addTarget:self action:@selector(applyTapped) forControlEvents:UIControlEventTouchUpInside];
+    if (@available(iOS 13.4, *)) {
+        self.ipadApplyButton.pointerInteractionEnabled = YES;
+    }
+    [container addSubview:self.ipadApplyButton];
+
+    self.ipadResetButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.ipadResetButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.ipadResetButton.titleLabel.font = [Styling fontBold:14.0];
+    [self.ipadResetButton setTitle:kLang(@"Market_FilterSheet_ResetShortcut") forState:UIControlStateNormal];
+    self.ipadResetButton.tintColor = [UIColor ppTextPrimary];
+    self.ipadResetButton.backgroundColor = [[UIColor ppSurface] colorWithAlphaComponent:0.8];
+    self.ipadResetButton.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
+    self.ipadResetButton.layer.borderWidth = 1.0;
+    PPApplyContinuousCorners(self.ipadResetButton, 16.0);
+    [self.ipadResetButton addTarget:self action:@selector(resetTapped) forControlEvents:UIControlEventTouchUpInside];
+    if (@available(iOS 13.4, *)) {
+        self.ipadResetButton.pointerInteractionEnabled = YES;
+    }
+    [container addSubview:self.ipadResetButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.ipadApplyButton.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [self.ipadApplyButton.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [self.ipadApplyButton.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [self.ipadApplyButton.heightAnchor constraintEqualToConstant:50.0],
+
+        [self.ipadResetButton.topAnchor constraintEqualToAnchor:self.ipadApplyButton.bottomAnchor constant:10.0],
+        [self.ipadResetButton.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [self.ipadResetButton.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+        [self.ipadResetButton.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
+        [self.ipadResetButton.heightAnchor constraintEqualToConstant:44.0]
+    ]];
+
+    return container;
+}
+
+#pragma mark - Component Factories
+
+- (UIView *)makeCardContainerWithTitle:(NSString *)title icon:(NSString *)iconName {
+    UIView *card = [[UIView alloc] init];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor = [UIColor ppSurfaceElevated];
+    card.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.65].CGColor;
+    card.layer.borderWidth = 1.0;
+    PPApplyContinuousCorners(card, 16.0);
+    PPApplyCardShadow(card);
+
+    UIView *header = [[UIView alloc] init];
+    header.translatesAutoresizingMaskIntoConstraints = NO;
+    [card addSubview:header];
+
+    UIImageView *iconView = [[UIImageView alloc] init];
+    iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    iconView.tintColor = [UIColor ppPrimary];
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+    UIImageSymbolConfiguration *iCfg = [UIImageSymbolConfiguration configurationWithPointSize:12.5 weight:UIImageSymbolWeightBold];
+    iconView.image = [[UIImage systemImageNamed:iconName] imageWithConfiguration:iCfg];
+    [header addSubview:iconView];
+
     UILabel *lbl = [[UILabel alloc] init];
+    lbl.translatesAutoresizingMaskIntoConstraints = NO;
     lbl.text = title;
     lbl.font = [Styling fontBold:13.5];
     lbl.textColor = [UIColor ppTextSecondary];
     lbl.textAlignment = Language.alignmentForCurrentLanguage;
-    return lbl;
-}
-
-- (UIView *)buildFilterRowWithDefs:(NSArray<NSDictionary *> *)defs {
-    UIScrollView *scroll = [[UIScrollView alloc] init];
-    scroll.showsHorizontalScrollIndicator = NO;
-    scroll.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-
-    UIStackView *stack = [[UIStackView alloc] init];
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    stack.axis = UILayoutConstraintAxisHorizontal;
-    stack.spacing = 8.0;
-    stack.alignment = UIStackViewAlignmentCenter;
-    [scroll addSubview:stack];
+    [header addSubview:lbl];
 
     [NSLayoutConstraint activateConstraints:@[
-        [scroll.heightAnchor constraintEqualToConstant:36],
-        [stack.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],
-        [stack.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
-        [stack.topAnchor constraintEqualToAnchor:scroll.topAnchor],
-        [stack.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor],
-        [stack.heightAnchor constraintEqualToAnchor:scroll.heightAnchor],
+        [header.topAnchor constraintEqualToAnchor:card.topAnchor constant:10.0],
+        [header.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
+        [header.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+        [header.heightAnchor constraintEqualToConstant:20.0],
+
+        [iconView.leadingAnchor constraintEqualToAnchor:header.leadingAnchor],
+        [iconView.centerYAnchor constraintEqualToAnchor:header.centerYAnchor],
+        [iconView.widthAnchor constraintEqualToConstant:16.0],
+        [iconView.heightAnchor constraintEqualToConstant:16.0],
+
+        [lbl.leadingAnchor constraintEqualToAnchor:iconView.trailingAnchor constant:6.0],
+        [lbl.trailingAnchor constraintEqualToAnchor:header.trailingAnchor],
+        [lbl.centerYAnchor constraintEqualToAnchor:header.centerYAnchor]
     ]];
 
-    for (NSDictionary *def in defs) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-        [btn setTitle:def[@"title"] forState:UIControlStateNormal];
-        btn.tag = [def[@"filter"] integerValue];
-        btn.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
-        PPApplyContinuousCorners(btn, 16);
-        [btn addTarget:self action:@selector(filterPillTapped:) forControlEvents:UIControlEventTouchUpInside];
-        [btn.heightAnchor constraintEqualToConstant:34].active = YES;
-        [self.filterPillButtons addObject:btn];
-        [stack addArrangedSubview:btn];
+    return card;
+}
+
+- (UIButton *)createPillButtonWithTitle:(NSString *)title icon:(nullable NSString *)iconName tag:(NSInteger)tag selector:(SEL)sel {
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+    btn.translatesAutoresizingMaskIntoConstraints = NO;
+    [btn setTitle:title forState:UIControlStateNormal];
+    btn.tag = tag;
+    btn.contentEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 12);
+    PPApplyContinuousCorners(btn, 16.0);
+    [btn addTarget:self action:sel forControlEvents:UIControlEventTouchUpInside];
+    [btn.heightAnchor constraintEqualToConstant:34.0].active = YES;
+
+    if (iconName.length > 0) {
+        UIImageSymbolConfiguration *sCfg = [UIImageSymbolConfiguration configurationWithPointSize:11.5 weight:UIImageSymbolWeightSemibold];
+        UIImage *img = [[UIImage systemImageNamed:iconName] imageWithConfiguration:sCfg];
+        [btn setImage:img forState:UIControlStateNormal];
+        btn.imageEdgeInsets = Language.isRTL ? UIEdgeInsetsMake(0, 4, 0, -4) : UIEdgeInsetsMake(0, -4, 0, 4);
     }
-    return scroll;
-}
 
-- (UIView *)buildSortRowWithDefs:(NSArray<NSDictionary *> *)defs {
-    UIScrollView *scroll = [[UIScrollView alloc] init];
-    scroll.showsHorizontalScrollIndicator = NO;
-    scroll.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-
-    UIStackView *stack = [[UIStackView alloc] init];
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    stack.axis = UILayoutConstraintAxisHorizontal;
-    stack.spacing = 8.0;
-    stack.alignment = UIStackViewAlignmentCenter;
-    [scroll addSubview:stack];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [scroll.heightAnchor constraintEqualToConstant:36],
-        [stack.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],
-        [stack.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
-        [stack.topAnchor constraintEqualToAnchor:scroll.topAnchor],
-        [stack.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor],
-        [stack.heightAnchor constraintEqualToAnchor:scroll.heightAnchor],
-    ]];
-
-    for (NSDictionary *def in defs) {
-        UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-        [btn setTitle:def[@"title"] forState:UIControlStateNormal];
-        btn.tag = [def[@"sort"] integerValue];
-        btn.contentEdgeInsets = UIEdgeInsetsMake(0, 14, 0, 14);
-        PPApplyContinuousCorners(btn, 16);
-        [btn addTarget:self action:@selector(sortPillTapped:) forControlEvents:UIControlEventTouchUpInside];
-        [btn.heightAnchor constraintEqualToConstant:34].active = YES;
-        [self.sortPillButtons addObject:btn];
-        [stack addArrangedSubview:btn];
+    if (@available(iOS 13.4, *)) {
+        btn.pointerInteractionEnabled = YES;
     }
-    return scroll;
+
+    return btn;
 }
 
-- (void)filterPillTapped:(UIButton *)sender {
-    self.selectedFilter = sender.tag;
-    UIImpactFeedbackGenerator *gen = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-    [gen impactOccurred];
-    [self updateButtonsState];
+#pragma mark - State Evaluation & Refresh
+
+- (NSInteger)countForStock:(PPProviderMarketStockFilter)stock {
+    NSInteger c = 0;
+    for (PPProviderMarketItem *it in self.items) {
+        if (stock == PPProviderMarketStockFilterAll) c++;
+        else if (stock == PPProviderMarketStockFilterInStock && (!it.noStock && it.quantity > 5)) c++;
+        else if (stock == PPProviderMarketStockFilterLowStock && (it.quantity <= 5 || it.noStock)) c++;
+    }
+    return c;
 }
 
-- (void)sortPillTapped:(UIButton *)sender {
-    self.selectedSort = sender.tag;
-    UIImpactFeedbackGenerator *gen = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
-    [gen impactOccurred];
-    [self updateButtonsState];
+- (NSInteger)countForOffers:(PPProviderMarketOfferFilter)offer {
+    NSInteger c = 0;
+    for (PPProviderMarketItem *it in self.items) {
+        if (offer == PPProviderMarketOfferFilterAll) c++;
+        else if (offer == PPProviderMarketOfferFilterOffersOnly && it.hasOffer) c++;
+    }
+    return c;
 }
 
-- (void)resetTapped {
-    self.selectedFilter = PPProviderMarketFilterAll;
-    self.selectedSort = PPProviderMarketSortNewest;
-    UINotificationFeedbackGenerator *gen = [[UINotificationFeedbackGenerator alloc] init];
-    [gen notificationOccurred:UINotificationFeedbackTypeWarning];
-    [self updateButtonsState];
+- (NSInteger)countForVisibility:(PPProviderMarketVisibilityFilter)vis {
+    NSInteger c = 0;
+    for (PPProviderMarketItem *it in self.items) {
+        if (vis == PPProviderMarketVisibilityFilterAll) c++;
+        else if (vis == PPProviderMarketVisibilityFilterHiddenOnly && (!it.showInAppMarket || it.isArchived)) c++;
+    }
+    return c;
+}
+
+- (NSInteger)countForKind:(PPProviderMarketKindFilter)kind {
+    NSInteger c = 0;
+    for (PPProviderMarketItem *it in self.items) {
+        if (kind == PPProviderMarketKindFilterAll) c++;
+        else if (kind == PPProviderMarketKindFilterAccessories && it.accessKindType == 1) c++;
+        else if (kind == PPProviderMarketKindFilterFood && it.accessKindType == 0) c++;
+    }
+    return c;
 }
 
 - (NSInteger)calculatedMatchCount {
     NSInteger count = 0;
     for (PPProviderMarketItem *item in self.items) {
-        BOOL match = YES;
-        switch (self.selectedFilter) {
-            case PPProviderMarketFilterAll: match = YES; break;
-            case PPProviderMarketFilterInStock: match = (!item.noStock && item.quantity > 5); break;
-            case PPProviderMarketFilterLowStock: match = (item.quantity <= 5 || item.noStock); break;
-            case PPProviderMarketFilterOffers: match = item.hasOffer; break;
-            case PPProviderMarketFilterHidden: match = (!item.showInAppMarket || item.isArchived); break;
-            case PPProviderMarketFilterAccessories: match = (item.accessKindType == 1); break;
-            case PPProviderMarketFilterFood: match = (item.accessKindType == 0); break;
+        if ([self.criteria evaluatesItem:item]) {
+            count++;
         }
-        if (match) count++;
     }
     return count;
 }
 
-- (void)updateButtonsState {
-    for (UIButton *btn in self.filterPillButtons) {
-        BOOL isSel = (btn.tag == self.selectedFilter);
-        btn.titleLabel.font = isSel ? [Styling fontBold:13.0] : [Styling fontMedium:12.5];
-        if (isSel) {
-            btn.tintColor = UIColor.whiteColor;
-            btn.backgroundColor = [UIColor ppPrimary];
-            btn.layer.borderWidth = 0.0;
-            PPApplyButtonShadow(btn);
-        } else {
-            btn.tintColor = [UIColor ppTextPrimary];
-            btn.backgroundColor = [[UIColor ppSurface] colorWithAlphaComponent:0.7];
-            btn.layer.borderWidth = 0.7;
-            btn.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
-            btn.layer.shadowOpacity = 0.0;
-        }
+- (void)updateAllButtonsAndTelemetry {
+    // 1. Stock Buttons
+    for (UIButton *btn in self.stockButtons) {
+        [self stylePill:btn isSelected:(btn.tag == self.criteria.stockFilter)];
     }
 
-    for (UIButton *btn in self.sortPillButtons) {
-        BOOL isSel = (btn.tag == self.selectedSort);
-        btn.titleLabel.font = isSel ? [Styling fontBold:13.0] : [Styling fontMedium:12.5];
-        if (isSel) {
-            btn.tintColor = UIColor.whiteColor;
-            btn.backgroundColor = [UIColor ppPrimary];
-            btn.layer.borderWidth = 0.0;
-            PPApplyButtonShadow(btn);
-        } else {
-            btn.tintColor = [UIColor ppTextPrimary];
-            btn.backgroundColor = [[UIColor ppSurface] colorWithAlphaComponent:0.7];
-            btn.layer.borderWidth = 0.7;
-            btn.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
-            btn.layer.shadowOpacity = 0.0;
-        }
+    // 2. Kind Buttons
+    for (UIButton *btn in self.kindButtons) {
+        [self stylePill:btn isSelected:(btn.tag == self.criteria.kindFilter)];
     }
 
-    NSInteger matchCount = [self calculatedMatchCount];
-    NSString *btnTitle = [NSString stringWithFormat:kLang(@"Market_FilterSheet_ApplyFormat"), (long)matchCount];
-    [self.applyButton setTitle:btnTitle forState:UIControlStateNormal];
+    // 3. Offer Buttons
+    for (UIButton *btn in self.offerButtons) {
+        [self stylePill:btn isSelected:(btn.tag == self.criteria.offerFilter)];
+    }
 
-    BOOL isDefault = (self.selectedFilter == PPProviderMarketFilterAll && self.selectedSort == PPProviderMarketSortNewest);
-    self.resetButton.alpha = isDefault ? 0.4 : 1.0;
+    // 4. Visibility Buttons
+    for (UIButton *btn in self.visibilityButtons) {
+        [self stylePill:btn isSelected:(btn.tag == self.criteria.visibilityFilter)];
+    }
+
+    // 5. Sort Buttons
+    for (UIButton *btn in self.sortButtons) {
+        [self stylePill:btn isSelected:(btn.tag == self.criteria.sort)];
+    }
+
+    // 6. Header Reset & Active Badge
+    NSInteger activeCount = [self.criteria activeFilterCount];
+    BOOL isDefault = [self.criteria isDefault];
+
+    self.resetButton.alpha = isDefault ? 0.35 : 1.0;
     self.resetButton.userInteractionEnabled = !isDefault;
+
+    if (activeCount > 0) {
+        self.activeBadgePill.hidden = NO;
+        self.activeBadgeLabel.text = [NSString stringWithFormat:kLang(@"Market_FilterSheet_ActiveFiltersFormat"), (long)activeCount];
+    } else {
+        self.activeBadgePill.hidden = YES;
+    }
+
+    // 7. Dynamic Match Count & Button State
+    NSInteger matchCount = [self calculatedMatchCount];
+    NSString *btnTitle = (matchCount > 0)
+        ? [NSString stringWithFormat:kLang(@"Market_FilterSheet_ApplyFormat"), (long)matchCount]
+        : kLang(@"Market_FilterSheet_ZeroMatches");
+
+    if (self.applyButton) {
+        [self.applyButton setTitle:btnTitle forState:UIControlStateNormal];
+        self.applyButton.alpha = (matchCount > 0) ? 1.0 : 0.6;
+        self.applyButton.userInteractionEnabled = (matchCount > 0);
+    }
+
+    if (self.ipadApplyButton) {
+        NSString *ipadTitle = [NSString stringWithFormat:@"%@  ⌘ ↩", btnTitle];
+        [self.ipadApplyButton setTitle:ipadTitle forState:UIControlStateNormal];
+        self.ipadApplyButton.alpha = (matchCount > 0) ? 1.0 : 0.6;
+        self.ipadApplyButton.userInteractionEnabled = (matchCount > 0);
+    }
+
+    // 8. Active Summary Dossier (iPad)
+    if (self.activeSummaryLabel) {
+        if (isDefault) {
+            self.activeSummaryLabel.text = [Language isRTL]
+                ? @"كافة فلاتر التصفية غير مفعلة. سيتم عرض جميع المنتجات بترتيب الأحدث."
+                : @"All filters inactive. Displaying entire catalog sorted by newest.";
+        } else {
+            NSMutableArray<NSString *> *summaryParts = [NSMutableArray array];
+            if (self.criteria.stockFilter == PPProviderMarketStockFilterInStock) [summaryParts addObject:kLang(@"Market_FilterSheet_InStockOnly")];
+            if (self.criteria.stockFilter == PPProviderMarketStockFilterLowStock) [summaryParts addObject:kLang(@"Market_FilterSheet_LowStockOnly")];
+            if (self.criteria.kindFilter == PPProviderMarketKindFilterAccessories) [summaryParts addObject:kLang(@"Market_Accessory")];
+            if (self.criteria.kindFilter == PPProviderMarketKindFilterFood) [summaryParts addObject:kLang(@"Market_Food")];
+            if (self.criteria.offerFilter == PPProviderMarketOfferFilterOffersOnly) [summaryParts addObject:kLang(@"Market_FilterSheet_OffersOnly")];
+            if (self.criteria.visibilityFilter == PPProviderMarketVisibilityFilterHiddenOnly) [summaryParts addObject:kLang(@"Market_FilterSheet_HiddenOnly")];
+            self.activeSummaryLabel.text = [summaryParts componentsJoinedByString:@" • "];
+        }
+    }
+}
+
+- (void)stylePill:(UIButton *)btn isSelected:(BOOL)isSelected {
+    btn.titleLabel.font = isSelected ? [Styling fontBold:13.0] : [Styling fontMedium:12.5];
+    if (isSelected) {
+        btn.tintColor = UIColor.whiteColor;
+        [btn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+        btn.backgroundColor = [UIColor ppPrimary];
+        btn.layer.borderWidth = 0.0;
+        PPApplyButtonShadow(btn);
+    } else {
+        btn.tintColor = [UIColor ppTextPrimary];
+        [btn setTitleColor:[UIColor ppTextPrimary] forState:UIControlStateNormal];
+        btn.backgroundColor = [[UIColor ppSurface] colorWithAlphaComponent:0.75];
+        btn.layer.borderWidth = 0.8;
+        btn.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.65].CGColor;
+        btn.layer.shadowOpacity = 0.0;
+    }
+}
+
+#pragma mark - Actions & Interactions
+
+- (void)stockPillTapped:(UIButton *)sender {
+    [self playLightHaptic];
+    self.criteria.stockFilter = sender.tag;
+    [self updateAllButtonsAndTelemetry];
+}
+
+- (void)kindPillTapped:(UIButton *)sender {
+    [self playLightHaptic];
+    self.criteria.kindFilter = sender.tag;
+    [self updateAllButtonsAndTelemetry];
+}
+
+- (void)offerPillTapped:(UIButton *)sender {
+    [self playLightHaptic];
+    self.criteria.offerFilter = sender.tag;
+    [self updateAllButtonsAndTelemetry];
+}
+
+- (void)visibilityPillTapped:(UIButton *)sender {
+    [self playLightHaptic];
+    self.criteria.visibilityFilter = sender.tag;
+    [self updateAllButtonsAndTelemetry];
+}
+
+- (void)sortPillTapped:(UIButton *)sender {
+    [self playLightHaptic];
+    self.criteria.sort = sender.tag;
+    [self updateAllButtonsAndTelemetry];
+}
+
+- (void)presetTapped:(UIButton *)sender {
+    [self playLightHaptic];
+    switch (sender.tag) {
+        case 0: // All
+            [self.criteria reset];
+            break;
+        case 1: // Low stock
+            self.criteria.stockFilter = PPProviderMarketStockFilterLowStock;
+            break;
+        case 2: // Deals
+            self.criteria.offerFilter = PPProviderMarketOfferFilterOffersOnly;
+            break;
+        case 3: // Food
+            self.criteria.kindFilter = PPProviderMarketKindFilterFood;
+            break;
+        case 4: // Accessories
+            self.criteria.kindFilter = PPProviderMarketKindFilterAccessories;
+            break;
+        case 5: // Hidden
+            self.criteria.visibilityFilter = PPProviderMarketVisibilityFilterHiddenOnly;
+            break;
+    }
+    [self updateAllButtonsAndTelemetry];
+}
+
+- (void)resetTapped {
+    UINotificationFeedbackGenerator *gen = [[UINotificationFeedbackGenerator alloc] init];
+    [gen notificationOccurred:UINotificationFeedbackTypeWarning];
+    [self.criteria reset];
+    [self updateAllButtonsAndTelemetry];
 }
 
 - (void)applyTapped {
     UINotificationFeedbackGenerator *gen = [[UINotificationFeedbackGenerator alloc] init];
     [gen notificationOccurred:UINotificationFeedbackTypeSuccess];
-    if (self.onApply) {
-        self.onApply(self.selectedFilter, self.selectedSort);
+
+    if (self.onApplyCriteria) {
+        self.onApplyCriteria(self.criteria);
+    }
+    if (self.onApplyLegacy) {
+        self.onApplyLegacy(self.criteria.primaryLegacyFilter, self.criteria.sort);
     }
     [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)dismissTapped {
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)playLightHaptic {
+    if (@available(iOS 10.0, *)) {
+        UIImpactFeedbackGenerator *gen = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+        [gen impactOccurred];
+    }
+}
+
+#pragma mark - iPad Hardware Key Commands
+
+- (NSArray<UIKeyCommand *> *)keyCommands {
+    return @[
+        [UIKeyCommand keyCommandWithInput:@"\r" modifierFlags:UIKeyModifierCommand action:@selector(applyTapped)],
+        [UIKeyCommand keyCommandWithInput:@"r" modifierFlags:UIKeyModifierCommand action:@selector(resetTapped)],
+        [UIKeyCommand keyCommandWithInput:UIKeyInputEscape modifierFlags:0 action:@selector(dismissTapped)]
+    ];
+}
+
+@end
+
+// MARK: - Category-Defining Product Family Sub-Variant Row
+
+@interface PPProviderVariantSubRowView : UIView
+@property (nonatomic, strong) PPProviderMarketItem *member;
+@property (nonatomic, copy) void (^onStockTapped)(PPProviderMarketItem *item);
+@property (nonatomic, copy) void (^onOfferTapped)(PPProviderMarketItem *item);
+@property (nonatomic, copy) void (^onRowSelected)(PPProviderMarketItem *item);
+@end
+
+@implementation PPProviderVariantSubRowView
+
+- (instancetype)initWithMember:(PPProviderMarketItem *)member {
+    self = [super initWithFrame:CGRectZero];
+    if (self) {
+        _member = member;
+        self.translatesAutoresizingMaskIntoConstraints = NO;
+        self.backgroundColor = [UIColor ppSurfaceElevated];
+        self.layer.cornerRadius = PPCornerSmall;
+        self.layer.borderWidth = 0.6;
+        self.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6].CGColor;
+        [self setupUI];
+    }
+    return self;
+}
+
+- (void)setupUI {
+    UIStackView *hStack = [[UIStackView alloc] init];
+    hStack.translatesAutoresizingMaskIntoConstraints = NO;
+    hStack.axis = UILayoutConstraintAxisHorizontal;
+    hStack.spacing = 8.0;
+    hStack.alignment = UIStackViewAlignmentCenter;
+    hStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [self addSubview:hStack];
+
+    if (self.member.pos_hasRealColor) {
+        UIView *cDot = [[UIView alloc] init];
+        cDot.translatesAutoresizingMaskIntoConstraints = NO;
+        cDot.backgroundColor = [UIColor colorWithHexString:self.member.pos_variantColorHex];
+        cDot.layer.cornerRadius = 6;
+        cDot.layer.borderWidth = 1.0;
+        cDot.layer.borderColor = [UIColor.blackColor colorWithAlphaComponent:0.15].CGColor;
+        [hStack addArrangedSubview:cDot];
+        [cDot.widthAnchor constraintEqualToConstant:12].active = YES;
+        [cDot.heightAnchor constraintEqualToConstant:12].active = YES;
+    }
+
+    UILabel *optLbl = [[UILabel alloc] init];
+    optLbl.font = [Styling fontBold:13.0];
+    optLbl.textColor = [UIColor ppTextPrimary];
+    optLbl.text = self.member.pos_variantOptionLabel.length ? self.member.pos_variantOptionLabel : self.member.pos_smartVariantDescription;
+    [hStack addArrangedSubview:optLbl];
+
+    UILabel *qtyBadge = [[UILabel alloc] init];
+    qtyBadge.font = [Styling fontBold:11.0];
+    qtyBadge.textColor = self.member.quantity > 5 ? [UIColor ppSuccess] : [UIColor ppWarning];
+    qtyBadge.text = [NSString stringWithFormat:@"%ld %@", (long)self.member.quantity, Language.isRTL ? @"حبة" : @"pcs"];
+    [hStack addArrangedSubview:qtyBadge];
+
+    UIView *spacer = [[UIView alloc] init];
+    [spacer setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    [hStack addArrangedSubview:spacer];
+
+    UILabel *pLbl = [[UILabel alloc] init];
+    pLbl.font = [Styling fontBold:13.5];
+    pLbl.textColor = [UIColor ppPrimary];
+    double finalP = self.member.finalPrice > 0 ? self.member.finalPrice : self.member.price;
+    pLbl.text = [NSString stringWithFormat:@"%.0f QAR", finalP];
+    [hStack addArrangedSubview:pLbl];
+
+    UIButton *stkBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [stkBtn setImage:[UIImage systemImageNamed:@"shippingbox.fill" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:11 weight:UIImageSymbolWeightSemibold]] forState:UIControlStateNormal];
+    stkBtn.tintColor = [UIColor ppPrimary];
+    stkBtn.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.08];
+    PPApplyContinuousCorners(stkBtn, 10);
+    [stkBtn addTarget:self action:@selector(stockTapped) forControlEvents:UIControlEventTouchUpInside];
+    [hStack addArrangedSubview:stkBtn];
+    [stkBtn.widthAnchor constraintEqualToConstant:28].active = YES;
+    [stkBtn.heightAnchor constraintEqualToConstant:28].active = YES;
+
+    UIButton *ofrBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    [ofrBtn setImage:[UIImage systemImageNamed:@"tag.fill" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:11 weight:UIImageSymbolWeightSemibold]] forState:UIControlStateNormal];
+    ofrBtn.tintColor = [UIColor ppDiscount];
+    ofrBtn.backgroundColor = [[UIColor ppDiscount] colorWithAlphaComponent:0.08];
+    PPApplyContinuousCorners(ofrBtn, 10);
+    [ofrBtn addTarget:self action:@selector(offerTapped) forControlEvents:UIControlEventTouchUpInside];
+    [hStack addArrangedSubview:ofrBtn];
+    [ofrBtn.widthAnchor constraintEqualToConstant:28].active = YES;
+    [ofrBtn.heightAnchor constraintEqualToConstant:28].active = YES;
+
+    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(rowTapped)];
+    [self addGestureRecognizer:tap];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [hStack.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:10],
+        [hStack.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10],
+        [hStack.topAnchor constraintEqualToAnchor:self.topAnchor constant:6],
+        [hStack.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-6],
+        [self.heightAnchor constraintGreaterThanOrEqualToConstant:40]
+    ]];
+}
+
+- (void)stockTapped { if (self.onStockTapped) self.onStockTapped(self.member); }
+- (void)offerTapped { if (self.onOfferTapped) self.onOfferTapped(self.member); }
+- (void)rowTapped { if (self.onRowSelected) self.onRowSelected(self.member); }
+
+@end
+
+// MARK: - Category-Defining Product Family Card Cell
+
+@interface PPProviderMarketFamilyCardCell : UITableViewCell
+
+@property (nonatomic, strong) UIView *cardView;
+@property (nonatomic, strong) UIImageView *thumbnailView;
+@property (nonatomic, strong) UIView *stockBadgeContainer;
+@property (nonatomic, strong) UILabel *stockBadgeLabel;
+@property (nonatomic, strong) UILabel *kindPill;
+@property (nonatomic, strong) UILabel *optionsBadge;
+@property (nonatomic, strong) UILabel *nameLabel;
+@property (nonatomic, strong) UILabel *priceRangeLabel;
+@property (nonatomic, strong) UIStackView *swatchesStack;
+@property (nonatomic, strong) UIButton *expandButton;
+@property (nonatomic, strong) UIButton *studioButton;
+@property (nonatomic, strong) UIStackView *subVariantsStack;
+@property (nonatomic, strong) PPProviderMarketDisplayGroup *group;
+
+@property (nonatomic, copy) void (^onExpandTapped)(void);
+@property (nonatomic, copy) void (^onStudioTapped)(void);
+@property (nonatomic, copy) void (^onMemberSelected)(PPProviderMarketItem *item);
+@property (nonatomic, copy) void (^onMemberStockTapped)(PPProviderMarketItem *item);
+@property (nonatomic, copy) void (^onMemberOfferTapped)(PPProviderMarketItem *item);
+
+- (void)configureWithGroup:(PPProviderMarketDisplayGroup *)group;
+- (void)updateExpandedState;
+
+@end
+
+@implementation PPProviderMarketFamilyCardCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        self.backgroundColor = UIColor.clearColor;
+        self.contentView.backgroundColor = UIColor.clearColor;
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+        [self setupCellUI];
+    }
+    return self;
+}
+
+- (void)setupCellUI {
+    self.cardView = [[UIView alloc] init];
+    self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
+    PPStyleCardSurface(self.cardView, PPCornerCard);
+    [self.contentView addSubview:self.cardView];
+
+    // 1. Thumbnail (84x84)
+    self.thumbnailView = [[UIImageView alloc] init];
+    self.thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.thumbnailView.contentMode = UIViewContentModeScaleAspectFill;
+    self.thumbnailView.clipsToBounds = YES;
+    PPApplyContinuousCorners(self.thumbnailView, PPCorner16);
+    self.thumbnailView.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.06];
+    [self.cardView addSubview:self.thumbnailView];
+
+    // Stock Badge on image
+    self.stockBadgeContainer = [[UIView alloc] init];
+    self.stockBadgeContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    PPApplyContinuousCorners(self.stockBadgeContainer, 10);
+    [self.cardView addSubview:self.stockBadgeContainer];
+
+    self.stockBadgeLabel = [[UILabel alloc] init];
+    self.stockBadgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.stockBadgeLabel.font = [Styling fontBold:10.5];
+    self.stockBadgeLabel.textAlignment = NSTextAlignmentCenter;
+    [self.stockBadgeContainer addSubview:self.stockBadgeLabel];
+
+    // 2. Kind Pill & Options Badge Header
+    self.kindPill = [[UILabel alloc] init];
+    self.kindPill.translatesAutoresizingMaskIntoConstraints = NO;
+    self.kindPill.font = [Styling fontBold:11.0];
+    self.kindPill.textColor = [UIColor ppPrimary];
+    self.kindPill.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.09];
+    self.kindPill.textAlignment = NSTextAlignmentCenter;
+    PPApplyContinuousCorners(self.kindPill, 9);
+    self.kindPill.clipsToBounds = YES;
+    [self.cardView addSubview:self.kindPill];
+
+    self.optionsBadge = [[UILabel alloc] init];
+    self.optionsBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    self.optionsBadge.font = [Styling fontBold:11.0];
+    self.optionsBadge.textColor = [UIColor colorWithRed:0.42 green:0.23 blue:0.71 alpha:1.0];
+    self.optionsBadge.backgroundColor = [[UIColor colorWithRed:0.42 green:0.23 blue:0.71 alpha:1.0] colorWithAlphaComponent:0.10];
+    self.optionsBadge.textAlignment = NSTextAlignmentCenter;
+    PPApplyContinuousCorners(self.optionsBadge, 9);
+    self.optionsBadge.clipsToBounds = YES;
+    [self.cardView addSubview:self.optionsBadge];
+
+    // 3. Name
+    self.nameLabel = [[UILabel alloc] init];
+    self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.nameLabel.font = [Styling fontBold:16.5];
+    self.nameLabel.textColor = [UIColor ppTextPrimary];
+    self.nameLabel.numberOfLines = 2;
+    self.nameLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [self.cardView addSubview:self.nameLabel];
+
+    // 4. Price Range Label
+    self.priceRangeLabel = [[UILabel alloc] init];
+    self.priceRangeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.priceRangeLabel.font = [Styling fontBold:17.0];
+    self.priceRangeLabel.textColor = [UIColor ppPrimary];
+    [self.cardView addSubview:self.priceRangeLabel];
+
+    // 5. Swatches & Pills Stack
+    self.swatchesStack = [[UIStackView alloc] init];
+    self.swatchesStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.swatchesStack.axis = UILayoutConstraintAxisHorizontal;
+    self.swatchesStack.spacing = 6.0;
+    self.swatchesStack.alignment = UIStackViewAlignmentCenter;
+    self.swatchesStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [self.cardView addSubview:self.swatchesStack];
+
+    // 6. Action Strip
+    UIView *stripDivider = [[UIView alloc] init];
+    stripDivider.translatesAutoresizingMaskIntoConstraints = NO;
+    stripDivider.backgroundColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.5];
+    [self.cardView addSubview:stripDivider];
+
+    UIStackView *actionsStack = [[UIStackView alloc] init];
+    actionsStack.translatesAutoresizingMaskIntoConstraints = NO;
+    actionsStack.axis = UILayoutConstraintAxisHorizontal;
+    actionsStack.spacing = 8.0;
+    actionsStack.distribution = UIStackViewDistributionFillProportionally;
+    actionsStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [self.cardView addSubview:actionsStack];
+
+    self.expandButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.expandButton.translatesAutoresizingMaskIntoConstraints = NO;
+    UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightSemibold];
+    [self.expandButton setImage:[UIImage systemImageNamed:@"chevron.down" withConfiguration:cfg] forState:UIControlStateNormal];
+    self.expandButton.titleLabel.font = [Styling fontMedium:12.0];
+    self.expandButton.tintColor = [UIColor ppTextPrimary];
+    self.expandButton.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.06];
+    PPApplyContinuousCorners(self.expandButton, 12);
+    [self.expandButton addTarget:self action:@selector(expandBtnTapped) forControlEvents:UIControlEventTouchUpInside];
+    [actionsStack addArrangedSubview:self.expandButton];
+
+    self.studioButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.studioButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.studioButton setImage:[UIImage systemImageNamed:@"sparkles" withConfiguration:cfg] forState:UIControlStateNormal];
+    [self.studioButton setTitle:[NSString stringWithFormat:@" %@", Language.isRTL ? @"الاستوديو" : @"Studio"] forState:UIControlStateNormal];
+    self.studioButton.titleLabel.font = [Styling fontBold:12.0];
+    self.studioButton.tintColor = [UIColor ppPrimary];
+    self.studioButton.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.12];
+    PPApplyContinuousCorners(self.studioButton, 12);
+    [self.studioButton addTarget:self action:@selector(studioBtnTapped) forControlEvents:UIControlEventTouchUpInside];
+    [actionsStack addArrangedSubview:self.studioButton];
+
+    // 7. Sub-Variants Drawer
+    self.subVariantsStack = [[UIStackView alloc] init];
+    self.subVariantsStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.subVariantsStack.axis = UILayoutConstraintAxisVertical;
+    self.subVariantsStack.spacing = 6.0;
+    self.subVariantsStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    self.subVariantsStack.hidden = YES;
+    [self.cardView addSubview:self.subVariantsStack];
+
+    // Constraints
+    [NSLayoutConstraint activateConstraints:@[
+        [self.cardView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:PPSpaceBase],
+        [self.cardView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-PPSpaceBase],
+        [self.cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
+        [self.cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6],
+
+        // Thumbnail (84x84)
+        [self.thumbnailView.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:12],
+        [self.thumbnailView.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:12],
+        [self.thumbnailView.widthAnchor constraintEqualToConstant:84],
+        [self.thumbnailView.heightAnchor constraintEqualToConstant:84],
+
+        // Stock Badge on image
+        [self.stockBadgeContainer.leadingAnchor constraintEqualToAnchor:self.thumbnailView.leadingAnchor constant:4],
+        [self.stockBadgeContainer.bottomAnchor constraintEqualToAnchor:self.thumbnailView.bottomAnchor constant:-4],
+        [self.stockBadgeContainer.heightAnchor constraintEqualToConstant:20],
+
+        [self.stockBadgeLabel.leadingAnchor constraintEqualToAnchor:self.stockBadgeContainer.leadingAnchor constant:6],
+        [self.stockBadgeLabel.trailingAnchor constraintEqualToAnchor:self.stockBadgeContainer.trailingAnchor constant:-6],
+        [self.stockBadgeLabel.centerYAnchor constraintEqualToAnchor:self.stockBadgeContainer.centerYAnchor],
+
+        // Header Row: Kind Pill & Options Badge
+        [self.kindPill.leadingAnchor constraintEqualToAnchor:self.thumbnailView.trailingAnchor constant:12],
+        [self.kindPill.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:12],
+        [self.kindPill.heightAnchor constraintEqualToConstant:20],
+        [self.kindPill.widthAnchor constraintGreaterThanOrEqualToConstant:50],
+
+        [self.optionsBadge.leadingAnchor constraintEqualToAnchor:self.kindPill.trailingAnchor constant:8],
+        [self.optionsBadge.centerYAnchor constraintEqualToAnchor:self.kindPill.centerYAnchor],
+        [self.optionsBadge.heightAnchor constraintEqualToConstant:20],
+        [self.optionsBadge.trailingAnchor constraintLessThanOrEqualToAnchor:self.cardView.trailingAnchor constant:-12],
+
+        // Name
+        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.thumbnailView.trailingAnchor constant:12],
+        [self.nameLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-12],
+        [self.nameLabel.topAnchor constraintEqualToAnchor:self.kindPill.bottomAnchor constant:6],
+
+        // Price Range
+        [self.priceRangeLabel.leadingAnchor constraintEqualToAnchor:self.thumbnailView.trailingAnchor constant:12],
+        [self.priceRangeLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:6],
+
+        // Swatches
+        [self.swatchesStack.leadingAnchor constraintEqualToAnchor:self.priceRangeLabel.trailingAnchor constant:8],
+        [self.swatchesStack.centerYAnchor constraintEqualToAnchor:self.priceRangeLabel.centerYAnchor],
+        [self.swatchesStack.trailingAnchor constraintLessThanOrEqualToAnchor:self.cardView.trailingAnchor constant:-12],
+        [self.swatchesStack.heightAnchor constraintEqualToConstant:20],
+
+        // Action Strip
+        [stripDivider.topAnchor constraintEqualToAnchor:self.thumbnailView.bottomAnchor constant:12],
+        [stripDivider.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:12],
+        [stripDivider.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-12],
+        [stripDivider.heightAnchor constraintEqualToConstant:0.8],
+
+        [actionsStack.topAnchor constraintEqualToAnchor:stripDivider.bottomAnchor constant:8],
+        [actionsStack.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:10],
+        [actionsStack.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-10],
+        [actionsStack.heightAnchor constraintEqualToConstant:34],
+
+        // Sub-variants Stack
+        [self.subVariantsStack.topAnchor constraintEqualToAnchor:actionsStack.bottomAnchor constant:8],
+        [self.subVariantsStack.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:10],
+        [self.subVariantsStack.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-10],
+        [self.subVariantsStack.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor constant:-10]
+    ]];
+}
+
+- (void)expandBtnTapped {
+    if (self.onExpandTapped) self.onExpandTapped();
+}
+
+- (void)studioBtnTapped {
+    if (self.onStudioTapped) self.onStudioTapped();
+}
+
+- (void)configureWithGroup:(PPProviderMarketDisplayGroup *)group {
+    if (!group) return;
+    self.group = group;
+
+    PPProviderMarketItem *def = group.defaultMember;
+
+    if (def.imageURLsArray.firstObject.length > 0) {
+        [self.thumbnailView setImageURL:[NSURL URLWithString:def.imageURLsArray.firstObject]];
+    } else {
+        self.thumbnailView.image = [UIImage systemImageNamed:@"shippingbox.fill"];
+        self.thumbnailView.tintColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.3];
+    }
+
+    UIColor *stockColor;
+    NSString *stockText;
+    if (group.totalStock == 0 || group.hasOutOfStock) {
+        stockColor = (group.totalStock == 0) ? [UIColor ppError] : [UIColor ppWarning];
+        stockText = (group.totalStock == 0) ? kLang(@"Market_OutOfStock") : [NSString stringWithFormat:kLang(@"Market_Card_InStockBadge"), (long)group.totalStock];
+    } else if (group.hasLowStock) {
+        stockColor = [UIColor ppWarning];
+        stockText = [NSString stringWithFormat:kLang(@"Market_Card_LowStockBadge"), (long)group.totalStock];
+    } else {
+        stockColor = [UIColor ppSuccess];
+        stockText = [NSString stringWithFormat:kLang(@"Market_Card_InStockBadge"), (long)group.totalStock];
+    }
+    self.stockBadgeLabel.text = stockText;
+    self.stockBadgeLabel.textColor = stockColor;
+    self.stockBadgeContainer.backgroundColor = [[UIColor ppSurfaceElevated] colorWithAlphaComponent:0.95];
+    self.stockBadgeContainer.layer.borderWidth = 0.6;
+    self.stockBadgeContainer.layer.borderColor = [stockColor colorWithAlphaComponent:0.5].CGColor;
+
+    self.kindPill.text = [NSString stringWithFormat:@"  %@  ", [def kindLabel]];
+    self.optionsBadge.text = [NSString stringWithFormat:@"  %@  ", group.optionsBadgeString];
+
+    BOOL isRTL = self.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
+    NSString *disp = isRTL ? (def.name.length ? def.name : def.nameEn) : (def.nameEn.length ? def.nameEn : def.name);
+    self.nameLabel.text = disp;
+
+    self.priceRangeLabel.text = group.priceRangeString;
+
+    for (UIView *v in self.swatchesStack.arrangedSubviews) {
+        [self.swatchesStack removeArrangedSubview:v];
+        [v removeFromSuperview];
+    }
+    NSArray<NSString *> *swatches = group.swatchesHexes;
+    for (NSInteger i = 0; i < MIN((NSInteger)swatches.count, 4); i++) {
+        UIView *dot = [[UIView alloc] init];
+        dot.translatesAutoresizingMaskIntoConstraints = NO;
+        dot.backgroundColor = [UIColor colorWithHexString:swatches[i]];
+        dot.layer.cornerRadius = 6;
+        dot.layer.borderWidth = 1.0;
+        dot.layer.borderColor = [UIColor.blackColor colorWithAlphaComponent:0.15].CGColor;
+        [self.swatchesStack addArrangedSubview:dot];
+        [dot.widthAnchor constraintEqualToConstant:12].active = YES;
+        [dot.heightAnchor constraintEqualToConstant:12].active = YES;
+    }
+    if (swatches.count > 4) {
+        UILabel *moreLbl = [[UILabel alloc] init];
+        moreLbl.font = [Styling fontBold:10];
+        moreLbl.textColor = [UIColor ppTextSecondary];
+        moreLbl.text = [NSString stringWithFormat:@"+%ld", (long)(swatches.count - 4)];
+        [self.swatchesStack addArrangedSubview:moreLbl];
+    }
+
+    [self updateExpandedState];
+}
+
+- (void)updateExpandedState {
+    BOOL exp = self.group.isExpanded;
+    self.subVariantsStack.hidden = !exp;
+
+    UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightSemibold];
+    NSString *chevronName = exp ? @"chevron.up" : @"chevron.down";
+    [self.expandButton setImage:[UIImage systemImageNamed:chevronName withConfiguration:cfg] forState:UIControlStateNormal];
+    NSString *expTitle = [NSString stringWithFormat:Language.isRTL ? @" %@ خيارات (%ld)" : @" %@ Variants (%ld)",
+                          exp ? (Language.isRTL ? @"إخفاء" : @"عرض") : (Language.isRTL ? @"عرض" : @"View"),
+                          (long)self.group.activeMembers.count];
+    [self.expandButton setTitle:expTitle forState:UIControlStateNormal];
+
+    if (exp) {
+        [self rebuildSubVariantsDrawer];
+    }
+}
+
+- (void)rebuildSubVariantsDrawer {
+    for (UIView *v in self.subVariantsStack.arrangedSubviews) {
+        [self.subVariantsStack removeArrangedSubview:v];
+        [v removeFromSuperview];
+    }
+
+    for (PPProviderMarketItem *member in self.group.activeMembers) {
+        PPProviderVariantSubRowView *row = [[PPProviderVariantSubRowView alloc] initWithMember:member];
+        __weak typeof(self) ws = self;
+        row.onStockTapped = ^(PPProviderMarketItem *it) {
+            if (ws.onMemberStockTapped) ws.onMemberStockTapped(it);
+        };
+        row.onOfferTapped = ^(PPProviderMarketItem *it) {
+            if (ws.onMemberOfferTapped) ws.onMemberOfferTapped(it);
+        };
+        row.onRowSelected = ^(PPProviderMarketItem *it) {
+            if (ws.onMemberSelected) ws.onMemberSelected(it);
+        };
+        [self.subVariantsStack addArrangedSubview:row];
+    }
 }
 
 @end
@@ -1746,6 +3081,9 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     // Name
     BOOL isRTL = self.effectiveUserInterfaceLayoutDirection == UIUserInterfaceLayoutDirectionRightToLeft;
     NSString *disp = isRTL ? (item.name.length ? item.name : item.nameEn) : (item.nameEn.length ? item.nameEn : item.name);
+    if (item.isVariant && item.pos_smartVariantDescription.length > 0) {
+        disp = [NSString stringWithFormat:@"%@ • %@", disp, item.pos_smartVariantDescription];
+    }
     self.nameLabel.text = disp;
 
     // Pricing
@@ -1812,7 +3150,9 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 @property (nonatomic, strong) id<FIRListenerRegistration> listener;
 @property (nonatomic, copy) NSArray<PPProviderMarketItem *> *items;
 @property (nonatomic, copy) NSArray<PPProviderMarketItem *> *filteredItems;
+@property (nonatomic, copy) NSArray<PPProviderMarketDisplayGroup *> *displayGroups;
 @property (nonatomic, copy) NSString *searchQuery;
+@property (nonatomic, strong) PPProviderMarketFilterCriteria *activeCriteria;
 @property (nonatomic, assign) PPProviderMarketFilter activeFilter;
 @property (nonatomic, assign) PPProviderMarketSort activeSort;
 @property (nonatomic, assign) BOOL hasLoaded;
@@ -1841,7 +3181,9 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     self.hasLoaded = NO;
     self.items = @[];
     self.filteredItems = @[];
+    self.displayGroups = @[];
     self.searchQuery = @"";
+    self.activeCriteria = [[PPProviderMarketFilterCriteria alloc] init];
     self.activeFilter = PPProviderMarketFilterAll;
     self.activeSort = PPProviderMarketSortNewest;
 
@@ -1929,8 +3271,8 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 168;
     self.tableView.delegate = self;
-    self.tableView.dataSource = self;
     [self.tableView registerClass:[PPProviderMarketItemCardCell class] forCellReuseIdentifier:@"PPProviderMarketItemCardCell"];
+    [self.tableView registerClass:[PPProviderMarketFamilyCardCell class] forCellReuseIdentifier:@"PPProviderMarketFamilyCardCell"];
 
     // Pull to Refresh
     self.refreshControl = [[UIRefreshControl alloc] init];
@@ -2202,39 +3544,60 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 }
 
 - (void)openFilterSheet {
-    PPProviderMarketFilterSheet *sheet = [[PPProviderMarketFilterSheet alloc] initWithFilter:self.activeFilter sort:self.activeSort items:self.items];
+    if (!self.activeCriteria) {
+        self.activeCriteria = [PPProviderMarketFilterCriteria criteriaFromLegacyFilter:self.activeFilter sort:self.activeSort];
+    }
+    PPProviderMarketFilterSheet *sheet = [[PPProviderMarketFilterSheet alloc] initWithCriteria:self.activeCriteria items:self.items];
     __weak typeof(self) ws = self;
-    sheet.onApply = ^(PPProviderMarketFilter filter, PPProviderMarketSort sort) {
+    sheet.onApplyCriteria = ^(PPProviderMarketFilterCriteria *criteria) {
+        ws.activeCriteria = criteria;
+        ws.activeFilter = criteria.primaryLegacyFilter;
+        ws.activeSort = criteria.sort;
+        [ws updateUI];
+    };
+    sheet.onApplyLegacy = ^(PPProviderMarketFilter filter, PPProviderMarketSort sort) {
         ws.activeFilter = filter;
         ws.activeSort = sort;
         [ws updateUI];
     };
-    if (@available(iOS 15.0, *)) {
-        sheet.modalPresentationStyle = UIModalPresentationPageSheet;
-        UISheetPresentationController *pres = sheet.sheetPresentationController;
-        pres.detents = @[
-            [UISheetPresentationControllerDetent mediumDetent],
-            [UISheetPresentationControllerDetent largeDetent]
-        ];
-        pres.prefersGrabberVisible = YES;
-        pres.preferredCornerRadius = 24.0;
-    } else {
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         sheet.modalPresentationStyle = UIModalPresentationFormSheet;
+        sheet.preferredContentSize = CGSizeMake(680.0, 720.0);
+    } else {
+        if (@available(iOS 15.0, *)) {
+            sheet.modalPresentationStyle = UIModalPresentationPageSheet;
+            UISheetPresentationController *pres = sheet.sheetPresentationController;
+            pres.detents = @[
+                [UISheetPresentationControllerDetent mediumDetent],
+                [UISheetPresentationControllerDetent largeDetent]
+            ];
+            pres.prefersGrabberVisible = YES;
+            pres.preferredCornerRadius = 24.0;
+        } else {
+            sheet.modalPresentationStyle = UIModalPresentationFormSheet;
+        }
     }
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (void)filterAllTapped {
+    [self.activeCriteria reset];
     self.activeFilter = PPProviderMarketFilterAll;
+    self.activeSort = PPProviderMarketSortNewest;
     [self updateUI];
 }
 
 - (void)filterOffersTapped {
+    [self.activeCriteria reset];
+    self.activeCriteria.offerFilter = PPProviderMarketOfferFilterOffersOnly;
     self.activeFilter = PPProviderMarketFilterOffers;
     [self updateUI];
 }
 
 - (void)filterLowStockTapped {
+    [self.activeCriteria reset];
+    self.activeCriteria.stockFilter = PPProviderMarketStockFilterLowStock;
     self.activeFilter = PPProviderMarketFilterLowStock;
     [self updateUI];
 }
@@ -2348,11 +3711,11 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     self.emptyView.hidden = hasItems || !self.hasLoaded;
     self.tableView.hidden = !hasItems && self.hasLoaded && self.items.count == 0;
 
-    self.searchResultsCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.filteredItems.count];
+    self.searchResultsCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.displayGroups.count];
     self.clearSearchButton.hidden = (self.searchQuery.length == 0);
 
     // Update Filter Button Visual Active Indicator
-    BOOL hasActiveFilter = (self.activeFilter != PPProviderMarketFilterAll || self.activeSort != PPProviderMarketSortNewest);
+    BOOL hasActiveFilter = (self.activeCriteria ? ![self.activeCriteria isDefault] : (self.activeFilter != PPProviderMarketFilterAll || self.activeSort != PPProviderMarketSortNewest));
     if (hasActiveFilter) {
         self.filterButton.tintColor = [UIColor ppPrimary];
         self.filterButton.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.14];
@@ -2395,28 +3758,32 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     for (PPProviderMarketItem *item in self.items) {
         // 1. Filter Pass
         BOOL passesFilter = YES;
-        switch (self.activeFilter) {
-            case PPProviderMarketFilterAll:
-                passesFilter = YES;
-                break;
-            case PPProviderMarketFilterInStock:
-                passesFilter = (!item.noStock && item.quantity > 5);
-                break;
-            case PPProviderMarketFilterLowStock:
-                passesFilter = (item.quantity <= 5 || item.noStock);
-                break;
-            case PPProviderMarketFilterOffers:
-                passesFilter = item.hasOffer;
-                break;
-            case PPProviderMarketFilterHidden:
-                passesFilter = (!item.showInAppMarket || item.isArchived);
-                break;
-            case PPProviderMarketFilterAccessories:
-                passesFilter = (item.accessKindType == 1);
-                break;
-            case PPProviderMarketFilterFood:
-                passesFilter = (item.accessKindType == 0);
-                break;
+        if (self.activeCriteria) {
+            passesFilter = [self.activeCriteria evaluatesItem:item];
+        } else {
+            switch (self.activeFilter) {
+                case PPProviderMarketFilterAll:
+                    passesFilter = YES;
+                    break;
+                case PPProviderMarketFilterInStock:
+                    passesFilter = (!item.noStock && item.quantity > 5);
+                    break;
+                case PPProviderMarketFilterLowStock:
+                    passesFilter = (item.quantity <= 5 || item.noStock);
+                    break;
+                case PPProviderMarketFilterOffers:
+                    passesFilter = item.hasOffer;
+                    break;
+                case PPProviderMarketFilterHidden:
+                    passesFilter = (!item.showInAppMarket || item.isArchived);
+                    break;
+                case PPProviderMarketFilterAccessories:
+                    passesFilter = (item.accessKindType == 1);
+                    break;
+                case PPProviderMarketFilterFood:
+                    passesFilter = (item.accessKindType == 2 || item.accessKindType == 0);
+                    break;
+            }
         }
         if (!passesFilter) continue;
 
@@ -2429,6 +3796,10 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
             if (item.descEn) [corpus appendFormat:@"%@ ", item.descEn.lowercaseString];
             if (item.itemID) [corpus appendFormat:@"%@ ", item.itemID.lowercaseString];
             if (item.petMainCategoryName) [corpus appendFormat:@"%@ ", item.petMainCategoryName.lowercaseString];
+            if (item.sku) [corpus appendFormat:@"%@ ", item.sku.lowercaseString];
+            if (item.barcode) [corpus appendFormat:@"%@ ", item.barcode.lowercaseString];
+            if (item.pos_smartVariantDescription) [corpus appendFormat:@"%@ ", item.pos_smartVariantDescription.lowercaseString];
+            if (item.variantOptionLabel) [corpus appendFormat:@"%@ ", item.variantOptionLabel.lowercaseString];
 
             if ([corpus rangeOfString:query].location == NSNotFound) {
                 continue;
@@ -2439,8 +3810,9 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     }
 
     // 3. Sort Pass
+    PPProviderMarketSort currentSort = self.activeCriteria ? self.activeCriteria.sort : self.activeSort;
     [result sortUsingComparator:^NSComparisonResult(PPProviderMarketItem *a, PPProviderMarketItem *b) {
-        switch (self.activeSort) {
+        switch (currentSort) {
             case PPProviderMarketSortNewest:
                 return [b.createdAt compare:a.createdAt ?: [NSDate distantPast]];
             case PPProviderMarketSortPriceLowToHigh: {
@@ -2461,6 +3833,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     }];
 
     self.filteredItems = result.copy;
+    self.displayGroups = [PPProviderMarketDisplayGroup groupedItems:result];
 }
 
 // MARK: - Search Actions
@@ -2610,38 +3983,96 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 // MARK: - UITableViewDataSource & Delegate
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.filteredItems.count;
+    return self.displayGroups.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    PPProviderMarketItemCardCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PPProviderMarketItemCardCell" forIndexPath:indexPath];
-    PPProviderMarketItem *item = self.filteredItems[indexPath.row];
-    [cell configureWithItem:item];
-
+    if (indexPath.row >= self.displayGroups.count) {
+        return [[UITableViewCell alloc] init];
+    }
+    PPProviderMarketDisplayGroup *group = self.displayGroups[indexPath.row];
     __weak typeof(self) ws = self;
-    cell.onCardTapped = ^{
-        [ws presentDetailInspectorForItem:item];
-    };
-    cell.onStockTapped = ^{
-        [ws presentQuickStockSheetForItem:item];
-    };
-    cell.onOfferTapped = ^{
-        [ws presentQuickOfferSheetForItem:item];
-    };
-    cell.onVisibilityTapped = ^{
-        [ws toggleVisibilityForItem:item];
-    };
-    cell.onMoreTapped = ^{
-        [ws presentDetailInspectorForItem:item];
-    };
 
-    return cell;
+    if (group.isFamily) {
+        PPProviderMarketFamilyCardCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PPProviderMarketFamilyCardCell" forIndexPath:indexPath];
+        [cell configureWithGroup:group];
+        cell.onExpandTapped = ^{
+            group.isExpanded = !group.isExpanded;
+            [tableView beginUpdates];
+            [cell updateExpandedState];
+            [tableView endUpdates];
+        };
+        cell.onStudioTapped = ^{
+            [ws openVariantStudioForItem:group.defaultMember];
+        };
+        cell.onMemberSelected = ^(PPProviderMarketItem *item) {
+            [ws presentDetailInspectorForItem:item];
+        };
+        cell.onMemberStockTapped = ^(PPProviderMarketItem *item) {
+            [ws presentQuickStockSheetForItem:item];
+        };
+        cell.onMemberOfferTapped = ^(PPProviderMarketItem *item) {
+            [ws presentQuickOfferSheetForItem:item];
+        };
+        return cell;
+    } else {
+        PPProviderMarketItemCardCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PPProviderMarketItemCardCell" forIndexPath:indexPath];
+        PPProviderMarketItem *item = group.singleItem ?: group.defaultMember;
+        [cell configureWithItem:item];
+
+        cell.onCardTapped = ^{
+            [ws presentDetailInspectorForItem:item];
+        };
+        cell.onStockTapped = ^{
+            [ws presentQuickStockSheetForItem:item];
+        };
+        cell.onOfferTapped = ^{
+            [ws presentQuickOfferSheetForItem:item];
+        };
+        cell.onVisibilityTapped = ^{
+            [ws toggleVisibilityForItem:item];
+        };
+        cell.onMoreTapped = ^{
+            [ws presentDetailInspectorForItem:item];
+        };
+
+        return cell;
+    }
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    PPProviderMarketItem *item = self.filteredItems[indexPath.row];
-    [self presentDetailInspectorForItem:item];
+    if (indexPath.row >= self.displayGroups.count) return;
+    PPProviderMarketDisplayGroup *group = self.displayGroups[indexPath.row];
+    if (group.isFamily) {
+        group.isExpanded = !group.isExpanded;
+        PPProviderMarketFamilyCardCell *cell = [tableView cellForRowAtIndexPath:indexPath];
+        if (cell && [cell isKindOfClass:[PPProviderMarketFamilyCardCell class]]) {
+            [tableView beginUpdates];
+            [cell updateExpandedState];
+            [tableView endUpdates];
+        }
+    } else {
+        PPProviderMarketItem *item = group.singleItem ?: group.defaultMember;
+        [self presentDetailInspectorForItem:item];
+    }
+}
+
+- (void)openVariantStudioForItem:(PPProviderMarketItem *)item {
+    if (!item) return;
+    PPAccessoryVariantStudioHostController *host = [[PPAccessoryVariantStudioHostController alloc] initWithMarketItem:item];
+    __weak typeof(self) ws = self;
+    host.onSaved = ^(PetAccessory *acc) {
+        [ws updateUI];
+    };
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:host];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    if (@available(iOS 15.0, *)) {
+        UISheetPresentationController *sheet = nav.sheetPresentationController;
+        sheet.detents = @[[UISheetPresentationControllerDetent largeDetent]];
+        sheet.prefersGrabberVisible = YES;
+    }
+    [self presentViewController:nav animated:YES completion:nil];
 }
 
 - (void)dealloc {

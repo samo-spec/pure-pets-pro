@@ -9,6 +9,7 @@
 #import "PPPaymentManagementModels.h"
 #import "PPRolePermission.h"
 #import "PPStaffAuth.h"
+#import "PPProviderMarketplaceManager.h"
 
 @interface PurePetsProTests : XCTestCase
 
@@ -148,6 +149,74 @@
     XCTAssertNotEqual(paymentsLegacyRole, UserRoleAdmin);
     XCTAssertNotEqual(paymentsLegacyRole, UserRoleSuperAdmin);
     XCTAssertEqual(PPParseRoleFromUserDoc(@{ @"roleName": @"payments_manager" }), UserRoleUser);
+}
+
+- (void)testMarketplaceBranchFromDictionaryParsesAllFields {
+    NSDictionary *dict = @{
+        @"id": @"branch_77",
+        @"code": @"HUB-01",
+        @"name": @{
+            @"ar": @"فرع لوسيل",
+            @"en": @"Lusail Branch"
+        },
+        @"address": @"Marina Promenade, Lusail",
+        @"phone": @"+974 4411 2233",
+        @"isActive": @YES,
+        @"isDefault": @YES
+    };
+
+    PPMarketplaceBranch *branch = [PPMarketplaceBranch branchFromDictionary:dict];
+    XCTAssertNotNil(branch);
+    XCTAssertEqualObjects(branch.branchID, @"branch_77");
+    XCTAssertEqualObjects(branch.code, @"HUB-01");
+    XCTAssertEqualObjects(branch.nameAr, @"فرع لوسيل");
+    XCTAssertEqualObjects(branch.nameEn, @"Lusail Branch");
+    XCTAssertEqualObjects(branch.address, @"Marina Promenade, Lusail");
+    XCTAssertEqualObjects(branch.phone, @"+974 4411 2233");
+    XCTAssertTrue(branch.active);
+    XCTAssertTrue(branch.defaultBranch);
+
+    NSDictionary *payload = [branch pickupAddressPayload];
+    XCTAssertEqualObjects(payload[@"branchId"], @"branch_77");
+    XCTAssertEqualObjects(payload[@"branchCode"], @"HUB-01");
+    XCTAssertEqualObjects(payload[@"address"], @"Marina Promenade, Lusail");
+    XCTAssertEqualObjects(payload[@"phone"], @"+974 4411 2233");
+}
+
+- (void)testMarketplaceBranchDisplayNameFallback {
+    NSDictionary *dict = @{
+        @"id": @"branch_88",
+        @"code": @"HUB-88",
+        @"name": @{},
+        @"address": @"Al Sadd"
+    };
+    PPMarketplaceBranch *branch = [PPMarketplaceBranch branchFromDictionary:dict];
+    XCTAssertEqualObjects([branch displayName], @"HUB-88");
+}
+
+- (void)testMarketplaceBranchWithDistrictAddressAndPhoneValidation {
+    NSDictionary *dict = @{
+        @"id": @"hub_qatar_99",
+        @"code": @"HUB-LUS-99",
+        @"name": @{
+            @"ar": @"فرع لوسيل مارينا",
+            @"en": @"Lusail Marina Hub"
+        },
+        @"address": @"Marina Promenade, Tower 14 - Lusail",
+        @"phone": @"+974 5512 3456",
+        @"isActive": @YES,
+        @"isDefault": @YES
+    };
+    PPMarketplaceBranch *branch = [PPMarketplaceBranch branchFromDictionary:dict];
+    XCTAssertNotNil(branch);
+    XCTAssertEqualObjects(branch.nameAr, @"فرع لوسيل مارينا");
+    XCTAssertEqualObjects(branch.nameEn, @"Lusail Marina Hub");
+    XCTAssertTrue([branch.address containsString:@"Lusail"]);
+    XCTAssertTrue([branch.phone containsString:@"5512 3456"]);
+
+    NSDictionary *payload = [branch pickupAddressPayload];
+    XCTAssertEqualObjects(payload[@"branchId"], @"hub_qatar_99");
+    XCTAssertEqualObjects(payload[@"address"], @"Marina Promenade, Tower 14 - Lusail");
 }
 
 @end

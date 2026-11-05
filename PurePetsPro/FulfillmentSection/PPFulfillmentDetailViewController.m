@@ -831,10 +831,69 @@
     [ordinal.heightAnchor constraintEqualToConstant:30].active = YES;
     [row addArrangedSubview:ordinal];
 
+    UIStackView *infoStack = [[UIStackView alloc] init];
+    infoStack.axis = UILayoutConstraintAxisVertical;
+    infoStack.spacing = 3;
+    infoStack.alignment = UIStackViewAlignmentLeading;
+    infoStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+
     UILabel *name = [self labelWithFont:[Styling fontMedium:13] color:PrimaryTextClr lines:2];
     NSString *fallback = [NSString stringWithFormat:@"%@ %ld", kLang(@"Fulfillment_Item"), (long)(index + 1)];
     name.text = PPSafeString(item[@"name"]).length > 0 ? PPSafeString(item[@"name"]) : fallback;
-    [row addArrangedSubview:name];
+    [infoStack addArrangedSubview:name];
+
+    NSString *variantDesc = PPSafeString(item[@"variantDescription"]);
+    if (variantDesc.length == 0) {
+        variantDesc = PPSafeString(item[@"variantTitle"]);
+    }
+    if (variantDesc.length == 0) {
+        variantDesc = PPSafeString(item[@"variantOptionLabel"]);
+    }
+    if (variantDesc.length == 0 && [item[@"selectedOptionsSnapshot"] isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *snap = item[@"selectedOptionsSnapshot"];
+        NSMutableArray *parts = [NSMutableArray array];
+        for (id key in snap) {
+            id val = snap[key];
+            if ([val isKindOfClass:[NSString class]] && [val length] > 0) {
+                [parts addObject:val];
+            } else if ([val isKindOfClass:[NSDictionary class]]) {
+                NSString *nameAr = val[@"nameAr"];
+                NSString *nameEn = val[@"nameEn"];
+                NSString *str = Language.isRTL ? (nameAr.length ? nameAr : nameEn) : (nameEn.length ? nameEn : nameAr);
+                if (str.length > 0) [parts addObject:str];
+            }
+        }
+        if (parts.count > 0) {
+            variantDesc = [parts componentsJoinedByString:@" • "];
+        }
+    }
+    if (variantDesc.length == 0 && [item[@"variantColor"] isKindOfClass:[NSDictionary class]]) {
+        NSDictionary *vc = item[@"variantColor"];
+        NSString *cName = Language.isRTL ? vc[@"nameAr"] : vc[@"nameEn"];
+        if (cName.length > 0) variantDesc = cName;
+    }
+
+    if (variantDesc.length > 0) {
+        UIView *chip = [[UIView alloc] init];
+        chip.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.08];
+        chip.layer.cornerRadius = 6;
+        chip.layer.cornerCurve = kCACornerCurveContinuous;
+
+        UILabel *chipLbl = [self labelWithFont:[Styling fontBold:11] color:AppPrimaryClr lines:1];
+        chipLbl.text = variantDesc;
+        chipLbl.translatesAutoresizingMaskIntoConstraints = NO;
+        [chip addSubview:chipLbl];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [chipLbl.leadingAnchor constraintEqualToAnchor:chip.leadingAnchor constant:6],
+            [chipLbl.trailingAnchor constraintEqualToAnchor:chip.trailingAnchor constant:-6],
+            [chipLbl.topAnchor constraintEqualToAnchor:chip.topAnchor constant:2],
+            [chipLbl.bottomAnchor constraintEqualToAnchor:chip.bottomAnchor constant:-2],
+        ]];
+        [infoStack addArrangedSubview:chip];
+    }
+    [row addArrangedSubview:infoStack];
+
 
     UILabel *price = [self labelWithFont:[Styling fontBold:12] color:SeconderyTextClr lines:1];
     NSInteger qty = PPSafeNumber(item[@"quantity"]).integerValue;
@@ -1099,28 +1158,9 @@
 }
 
 - (void)executeAction:(NSString *)action note:(NSString *)note {
-    if ([action isEqualToString:@"request_delivery"]) {
-        [PPHUD showIndeterminateIn:self.view title:kLang(@"Fulfillment_Updating") subtitle:nil];
-        __weak typeof(self) weakSelf = self;
-        [self fetchParentOrderDataWithCompletion:^(NSDictionary * _Nullable orderData, NSError * _Nullable error) {
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) return;
-            if (error || orderData.count == 0) {
-                [PPHUD dismiss];
-                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription ?: kLang(@"DeliveryCompany_Error_Generic")];
-                return;
-            }
-
-            if ([self isFulfillmentV1ParentOrderData:orderData]) {
-                [self executeStandardFulfillmentAction:action note:note];
-                return;
-            }
-
-            [PPHUD dismiss];
-            [self presentMarketplaceBranchPickerForAction:action note:note];
-        }];
-        return;
-    }
+    // A live FulfillmentOrders child is the command authority. The callable
+    // resolves and validates its parent; providers cannot read the full Orders
+    // document and must not branch lifecycle behavior using a forbidden read.
     [PPHUD showIndeterminateIn:self.view title:kLang(@"Fulfillment_Updating") subtitle:nil];
     [self executeStandardFulfillmentAction:action note:note];
 }

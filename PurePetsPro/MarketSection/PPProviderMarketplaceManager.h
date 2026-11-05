@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 
 @class PPProviderMarketItem;
-@class FIRListenerRegistration;
+@protocol FIRListenerRegistration;
 @class UIImage;
 
 @interface PPMarketplaceBranch : NSObject

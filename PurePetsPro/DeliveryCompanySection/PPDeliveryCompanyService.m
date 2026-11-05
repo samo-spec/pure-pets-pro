@@ -1,5 +1,10 @@
 #import "PPDeliveryCompanyService.h"
 #import "PPFirebaseCompat.h"
+#if __has_include(<FirebaseAppCheck/FirebaseAppCheck.h>)
+#import <FirebaseAppCheck/FirebaseAppCheck.h>
+#elif __has_feature(modules)
+@import FirebaseAppCheck;
+#endif
 
 NSString * const PPDeliveryCompanyMembershipDidChangeNotification = @"PPDeliveryCompanyMembershipDidChangeNotification";
 
@@ -57,6 +62,19 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
     } else if ([details isKindOfClass:NSString.class] && [details length]) {
         message = details;
     }
+
+    NSString *lower = message.lowercaseString;
+    if (error.code == FIRFunctionsErrorCodeUnauthenticated ||
+        [lower containsString:@"unauthenticated"] ||
+        [lower containsString:@"authentication is required"] ||
+        [lower containsString:@"authentication required"]) {
+        message = kLang(@"DeliveryCompany_Error_Unauthenticated");
+    } else if (error.code == FIRFunctionsErrorCodePermissionDenied ||
+               [lower containsString:@"not a member"] ||
+               [lower containsString:@"permission denied"]) {
+        message = kLang(@"DeliveryCompany_Error_NotMember");
+    }
+
     return [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany"
                                code:error.code
                            userInfo:@{
@@ -68,9 +86,44 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 - (void)callFunction:(NSString *)name
              payload:(NSDictionary *)payload
           completion:(PPDeliveryCompanyActionCompletion)completion {
+    [self callFunction:name payload:payload allowRetry:YES completion:completion];
+}
+
+- (void)callFunction:(NSString *)name
+             payload:(NSDictionary *)payload
+          allowRetry:(BOOL)allowRetry
+          completion:(PPDeliveryCompanyActionCompletion)completion {
+    FIRUser *currentUser = [FIRAuth auth].currentUser;
+    if (!currentUser) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSError *authError = [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany"
+                                                     code:FIRFunctionsErrorCodeUnauthenticated
+                                                 userInfo:@{
+                NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_NotLoggedIn")
+            }];
+            if (completion) completion(nil, authError);
+        });
+        return;
+    }
+
     FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:name];
     callable.timeoutInterval = 30.0;
+    __weak typeof(self) weakSelf = self;
     [callable callWithObject:payload ?: @{} completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        if (error && allowRetry && (error.code == FIRFunctionsErrorCodeUnauthenticated ||
+                                    [error.localizedDescription.lowercaseString containsString:@"unauthenticated"])) {
+            [currentUser getIDTokenForcingRefresh:YES completion:^(__unused NSString * _Nullable token, __unused NSError * _Nullable tokenError) {
+                #if __has_include(<FirebaseAppCheck/FirebaseAppCheck.h>) || defined(PP_FIREBASE_APP_CHECK_IMPORTED)
+                [[FIRAppCheck appCheck] tokenForcingRefresh:YES completion:^(__unused FIRAppCheckToken * _Nullable appCheckToken, __unused NSError * _Nullable appCheckError) {
+                    [weakSelf callFunction:name payload:payload allowRetry:NO completion:completion];
+                }];
+                #else
+                [weakSelf callFunction:name payload:payload allowRetry:NO completion:completion];
+                #endif
+            }];
+            return;
+        }
+
         dispatch_async(dispatch_get_main_queue(), ^{
             if (error) {
                 if (completion) completion(nil, [self normalizedError:error]);

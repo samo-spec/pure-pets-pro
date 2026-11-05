@@ -47,10 +47,10 @@ import FirebaseFunctions
     // MARK: - Authorization surface
 
     @objc public var canManageVariants: Bool {
-        guard let user = UserManager.shared.currentUser else { return false }
+        guard let user = UserManager.shared().currentUser else { return false }
         if user.isBlocked { return false }
-        let status = (user.status ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if status == "blocked" || status == "deleted" || status == "suspended" || status == "disabled" {
+        let partnerStatus = user.partnerApplicationStatus.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if partnerStatus == "blocked" || partnerStatus == "deleted" || partnerStatus == "suspended" || partnerStatus == "disabled" || partnerStatus == "rejected" {
             return false
         }
         return user.canAccessProviderMarketplaceFeature || user.canPharmacyFeature

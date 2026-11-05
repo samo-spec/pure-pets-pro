@@ -2326,6 +2326,9 @@
 "DeliveryCompany_Error_InvalidProfile" = "The company profile response was incomplete.";
 "DeliveryCompany_Error_Title" = "Unable to load company deliveries";
 "DeliveryCompany_Error_Generic" = "Something went wrong. Check your connection and try again.";
+"DeliveryCompany_Error_NotLoggedIn" = "You must be signed in with a provider account to access delivery companies.";
+"DeliveryCompany_Error_Unauthenticated" = "Unable to verify sign-in or app security. Please verify your session and try again.";
+"DeliveryCompany_Error_NotMember" = "You are not an active member of this delivery company.";
 "DeliveryCompany_NotAvailable" = "Not available";
 
 "DeliveryCompany_Dashboard_Eyebrow" = "Live fleet operations";

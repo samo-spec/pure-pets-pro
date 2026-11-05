@@ -56,6 +56,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 // Variant option & display helpers
 @property (nonatomic, readonly, copy) NSString *pos_variantOptionLabel;
+@property (nonatomic, readonly, copy) NSString *variantOptionLabel;
 @property (nonatomic, readonly) BOOL pos_hasRealColor;
 @property (nonatomic, readonly, copy) NSString *pos_variantColorHex;
 @property (nonatomic, readonly, copy) NSString *pos_variantColorName;

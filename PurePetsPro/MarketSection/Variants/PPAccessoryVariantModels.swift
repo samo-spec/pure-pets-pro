@@ -301,6 +301,26 @@ import UIKit
         super.init()
     }
 
+    @objc public convenience init(
+        id: String,
+        canonicalValue: String,
+        displayNameAr: String,
+        displayNameEn: String,
+        sortOrder: Int = 0,
+        hex: String? = nil,
+        unit: String? = nil
+    ) {
+        self.init(
+            id: id,
+            canonicalValue: canonicalValue,
+            nameAr: displayNameAr,
+            nameEn: displayNameEn,
+            sortOrder: sortOrder,
+            hex: hex,
+            unit: unit
+        )
+    }
+
     @objc public convenience init?(dictionary: [String: Any]?) {
         guard let dictionary else { return nil }
         let id = PPAccessoryVariantColor.string(dictionary["id"])
@@ -800,11 +820,11 @@ import UIKit
 
     @objc public static func presetDosageForm(values: [PPAccessoryOptionValue] = []) -> PPAccessoryOptionDefinition {
         let defaultValues: [PPAccessoryOptionValue] = values.isEmpty ? [
-            PPAccessoryOptionValue(id: "tablets", canonicalValue: "Tablets", displayNameAr: "أقراص", displayNameEn: "Tablets", sortOrder: 0),
-            PPAccessoryOptionValue(id: "syrup", canonicalValue: "Syrup", displayNameAr: "شراب", displayNameEn: "Syrup", sortOrder: 1),
-            PPAccessoryOptionValue(id: "injection", canonicalValue: "Injection", displayNameAr: "حقن", displayNameEn: "Injection", sortOrder: 2),
-            PPAccessoryOptionValue(id: "drops", canonicalValue: "Drops", displayNameAr: "قطرة", displayNameEn: "Drops", sortOrder: 3),
-            PPAccessoryOptionValue(id: "ointment", canonicalValue: "Ointment", displayNameAr: "مرهم", displayNameEn: "Ointment", sortOrder: 4)
+            PPAccessoryOptionValue(id: "tablets", canonicalValue: "Tablets", nameAr: "أقراص", nameEn: "Tablets", sortOrder: 0),
+            PPAccessoryOptionValue(id: "syrup", canonicalValue: "Syrup", nameAr: "شراب", nameEn: "Syrup", sortOrder: 1),
+            PPAccessoryOptionValue(id: "injection", canonicalValue: "Injection", nameAr: "حقن", nameEn: "Injection", sortOrder: 2),
+            PPAccessoryOptionValue(id: "drops", canonicalValue: "Drops", nameAr: "قطرة", nameEn: "Drops", sortOrder: 3),
+            PPAccessoryOptionValue(id: "ointment", canonicalValue: "Ointment", nameAr: "مرهم", nameEn: "Ointment", sortOrder: 4)
         ] : values
         return PPAccessoryOptionDefinition(
             id: "dosage_form",
@@ -818,10 +838,10 @@ import UIKit
 
     @objc public static func presetStrength(values: [PPAccessoryOptionValue] = []) -> PPAccessoryOptionDefinition {
         let defaultValues: [PPAccessoryOptionValue] = values.isEmpty ? [
-            PPAccessoryOptionValue(id: "50mg", canonicalValue: "50mg", displayNameAr: "٥٠ ملغ", displayNameEn: "50mg", sortOrder: 0),
-            PPAccessoryOptionValue(id: "100mg", canonicalValue: "100mg", displayNameAr: "١٠٠ ملغ", displayNameEn: "100mg", sortOrder: 1),
-            PPAccessoryOptionValue(id: "250mg", canonicalValue: "250mg", displayNameAr: "٢٥٠ ملغ", displayNameEn: "250mg", sortOrder: 2),
-            PPAccessoryOptionValue(id: "500mg", canonicalValue: "500mg", displayNameAr: "٥٠٠ ملغ", displayNameEn: "500mg", sortOrder: 3)
+            PPAccessoryOptionValue(id: "50mg", canonicalValue: "50mg", nameAr: "٥٠ ملغ", nameEn: "50mg", sortOrder: 0),
+            PPAccessoryOptionValue(id: "100mg", canonicalValue: "100mg", nameAr: "١٠٠ ملغ", nameEn: "100mg", sortOrder: 1),
+            PPAccessoryOptionValue(id: "250mg", canonicalValue: "250mg", nameAr: "٢٥٠ ملغ", nameEn: "250mg", sortOrder: 2),
+            PPAccessoryOptionValue(id: "500mg", canonicalValue: "500mg", nameAr: "٥٠٠ ملغ", nameEn: "500mg", sortOrder: 3)
         ] : values
         return PPAccessoryOptionDefinition(
             id: "strength",
@@ -835,10 +855,10 @@ import UIKit
 
     @objc public static func presetPackSize(values: [PPAccessoryOptionValue] = []) -> PPAccessoryOptionDefinition {
         let defaultValues: [PPAccessoryOptionValue] = values.isEmpty ? [
-            PPAccessoryOptionValue(id: "10_units", canonicalValue: "10 Units", displayNameAr: "١٠ وحدات", displayNameEn: "10 Units", sortOrder: 0),
-            PPAccessoryOptionValue(id: "20_units", canonicalValue: "20 Units", displayNameAr: "٢٠ وحدة", displayNameEn: "20 Units", sortOrder: 1),
-            PPAccessoryOptionValue(id: "30_units", canonicalValue: "30 Units", displayNameAr: "٣٠ وحدة", displayNameEn: "30 Units", sortOrder: 2),
-            PPAccessoryOptionValue(id: "60_units", canonicalValue: "60 Units", displayNameAr: "٦٠ وحدة", displayNameEn: "60 Units", sortOrder: 3)
+            PPAccessoryOptionValue(id: "10_units", canonicalValue: "10 Units", nameAr: "١٠ وحدات", nameEn: "10 Units", sortOrder: 0),
+            PPAccessoryOptionValue(id: "20_units", canonicalValue: "20 Units", nameAr: "٢٠ وحدة", nameEn: "20 Units", sortOrder: 1),
+            PPAccessoryOptionValue(id: "30_units", canonicalValue: "30 Units", nameAr: "٣٠ وحدة", nameEn: "30 Units", sortOrder: 2),
+            PPAccessoryOptionValue(id: "60_units", canonicalValue: "60 Units", nameAr: "٦٠ وحدة", nameEn: "60 Units", sortOrder: 3)
         ] : values
         return PPAccessoryOptionDefinition(
             id: "pack_size",
@@ -852,10 +872,10 @@ import UIKit
 
     @objc public static func presetVolume(values: [PPAccessoryOptionValue] = []) -> PPAccessoryOptionDefinition {
         let defaultValues: [PPAccessoryOptionValue] = values.isEmpty ? [
-            PPAccessoryOptionValue(id: "10ml", canonicalValue: "10ml", displayNameAr: "١٠ مل", displayNameEn: "10ml", sortOrder: 0),
-            PPAccessoryOptionValue(id: "50ml", canonicalValue: "50ml", displayNameAr: "٥٠ مل", displayNameEn: "50ml", sortOrder: 1),
-            PPAccessoryOptionValue(id: "100ml", canonicalValue: "100ml", displayNameAr: "١٠٠ مل", displayNameEn: "100ml", sortOrder: 2),
-            PPAccessoryOptionValue(id: "250ml", canonicalValue: "250ml", displayNameAr: "٢٥٠ مل", displayNameEn: "250ml", sortOrder: 3)
+            PPAccessoryOptionValue(id: "10ml", canonicalValue: "10ml", nameAr: "١٠ مل", nameEn: "10ml", sortOrder: 0),
+            PPAccessoryOptionValue(id: "50ml", canonicalValue: "50ml", nameAr: "٥٠ مل", nameEn: "50ml", sortOrder: 1),
+            PPAccessoryOptionValue(id: "100ml", canonicalValue: "100ml", nameAr: "١٠٠ مل", nameEn: "100ml", sortOrder: 2),
+            PPAccessoryOptionValue(id: "250ml", canonicalValue: "250ml", nameAr: "٢٥٠ مل", nameEn: "250ml", sortOrder: 3)
         ] : values
         return PPAccessoryOptionDefinition(
             id: "volume",

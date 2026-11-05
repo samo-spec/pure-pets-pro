@@ -306,12 +306,25 @@ static void PPFetchUsersColRootForAuthIdentity(FIRFirestore *db,
 }
 
 static BOOL PPShouldUseDebugAppCheckProvider(void) {
-#if DEBUG
+#if TARGET_OS_SIMULATOR
     return YES;
 #else
-    // Release builds must never be switchable into Firebase's debug provider
-    // through environment variables, defaults, or files shipped on-device.
-    return NO;
+    NSProcessInfo *processInfo = [NSProcessInfo processInfo];
+    NSDictionary<NSString *, NSString *> *env = processInfo.environment ?: @{};
+    NSString *forceEnv = env[@"PP_FORCE_APPCHECK_DEBUG_PROVIDER"];
+    NSString *debugTokenEnv = env[@"FIRAAppCheckDebugToken"];
+    BOOL forceFromEnv = PPAppCheckTruthyString(forceEnv);
+    BOOL hasDebugTokenEnv = [debugTokenEnv isKindOfClass:NSString.class] && debugTokenEnv.length > 0;
+
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    id forceDefaultsValue = [defaults objectForKey:@"PPForceAppCheckDebugProvider"];
+    BOOL forceDefaultsEnabled = NO;
+    if ([forceDefaultsValue isKindOfClass:NSNumber.class]) {
+        forceDefaultsEnabled = [(NSNumber *)forceDefaultsValue boolValue];
+    } else if ([forceDefaultsValue isKindOfClass:NSString.class]) {
+        forceDefaultsEnabled = PPAppCheckTruthyString((NSString *)forceDefaultsValue);
+    }
+    return forceFromEnv || hasDebugTokenEnv || forceDefaultsEnabled;
 #endif
 }
 

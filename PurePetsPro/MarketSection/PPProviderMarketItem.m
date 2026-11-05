@@ -226,6 +226,10 @@
     return @"";
 }
 
+- (NSString *)variantOptionLabel {
+    return [self pos_variantOptionLabel];
+}
+
 - (PetAccessory *)asPetAccessory {
     PetAccessory *acc = [[PetAccessory alloc] init];
     acc.accessoryID = self.itemID ?: @"";

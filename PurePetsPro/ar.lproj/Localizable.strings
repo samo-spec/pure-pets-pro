@@ -2356,6 +2356,9 @@
 "DeliveryCompany_Error_InvalidProfile" = "استجابة ملف الشركة غير مكتملة.";
 "DeliveryCompany_Error_Title" = "تعذر تحميل توصيلات الشركة";
 "DeliveryCompany_Error_Generic" = "حدث خطأ. تحقق من الاتصال وحاول مرة أخرى.";
+"DeliveryCompany_Error_NotLoggedIn" = "يجب تسجيل الدخول أولاً بحساب مزود الخدمة للوصول إلى شركات التوصيل.";
+"DeliveryCompany_Error_Unauthenticated" = "تعذر التحقق من تسجيل الدخول أو أمان التطبيق. يرجى التأكد من تسجيل الدخول والمحاولة مرة أخرى.";
+"DeliveryCompany_Error_NotMember" = "لست عضواً مسجلاً في شركة التوصيل هذه، أو أن عضويتك غير نشطة.";
 "DeliveryCompany_NotAvailable" = "غير متاح";
 
 "DeliveryCompany_Dashboard_Eyebrow" = "عمليات الأسطول المباشرة";

@@ -3271,6 +3271,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 168;
     self.tableView.delegate = self;
+    self.tableView.dataSource = self;
     [self.tableView registerClass:[PPProviderMarketItemCardCell class] forCellReuseIdentifier:@"PPProviderMarketItemCardCell"];
     [self.tableView registerClass:[PPProviderMarketFamilyCardCell class] forCellReuseIdentifier:@"PPProviderMarketFamilyCardCell"];
 
@@ -3799,7 +3800,8 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
             if (item.sku) [corpus appendFormat:@"%@ ", item.sku.lowercaseString];
             if (item.barcode) [corpus appendFormat:@"%@ ", item.barcode.lowercaseString];
             if (item.pos_smartVariantDescription) [corpus appendFormat:@"%@ ", item.pos_smartVariantDescription.lowercaseString];
-            if (item.variantOptionLabel) [corpus appendFormat:@"%@ ", item.variantOptionLabel.lowercaseString];
+            if (item.pos_variantOptionLabel) [corpus appendFormat:@"%@ ",
+                                              item.pos_variantOptionLabel.lowercaseString];
 
             if ([corpus rangeOfString:query].location == NSNotFound) {
                 continue;

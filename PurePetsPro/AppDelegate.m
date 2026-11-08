@@ -207,11 +207,14 @@ static BOOL PPProIsDriverTaskPayload(NSDictionary *payload)
 @property (nonatomic, assign) BOOL notificationV2LogoutBarrierActive;
 @property (nonatomic, assign) NSUInteger notificationV2LifecycleEpoch;
 @property (nonatomic, strong) NSMutableArray *notificationV2LogoutBarrierWaiters;
+@property (nonatomic, copy) NSString *notificationV2DriverCatchUpUID;
+@property (nonatomic, strong) NSDate *notificationV2DriverCatchUpAt;
 
 - (void)pp_finishNotificationV2RegistrationCycle;
 - (void)pp_releaseNotificationV2LogoutBarrierWaiters;
 - (BOOL)pp_hasCurrentNotificationV2BindingForUID:(NSString *)uid;
 - (void)pp_handleApplicationDidBecomeActive:(NSNotification *)notification;
+- (void)pp_handleDriverWorkspaceConfirmed:(NSNotification *)notification;
 - (BOOL)pp_notificationV2RegistrationIsCurrentForUID:(NSString *)uid epoch:(NSUInteger)epoch;
 - (void)pp_compensateStaleNotificationV2Registration:(NSDictionary *)response
                                                   uid:(NSString *)uid
@@ -319,6 +322,12 @@ extern BOOL PP_TouchDotsEnabled;
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(pp_handleApplicationDidBecomeActive:)
                                                  name:UIApplicationDidBecomeActiveNotification
+                                               object:nil];
+    // Fleet access can arrive after the first registration attempt while the
+    // app stays open; a confirmed driver workspace gets push registration too.
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleDriverWorkspaceConfirmed:)
+                                                 name:PPDeliveryDriverWorkspaceConfirmedNotification
                                                object:nil];
     
     // Request permissions and register for remote notifications
@@ -504,6 +513,41 @@ extern BOOL PP_TouchDotsEnabled;
     }
 
     [self pp_attemptNotificationV2RegistrationForReason:@"foreground_retry"];
+}
+
+/// A driver whose first registration was denied or skipped (for example,
+/// before the fleet grant was active) would otherwise get no assignment
+/// pushes until the app is relaunched or backgrounded. When the server
+/// confirms driver work and this account has no current binding, register
+/// again, at most once every two minutes per account.
+- (void)pp_handleDriverWorkspaceConfirmed:(NSNotification *)notification
+{
+    (void)notification;
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self pp_handleDriverWorkspaceConfirmed:nil];
+        });
+        return;
+    }
+    if (self.notificationV2LogoutBarrierActive || self.notificationV2RegistrationInFlight) {
+        return;
+    }
+    NSString *uid = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    if (uid.length == 0) {
+        return;
+    }
+    if (!self.notificationV2RegistrationNeedsForegroundRetry &&
+        [self pp_hasCurrentNotificationV2BindingForUID:uid]) {
+        return;
+    }
+    NSDate *now = [NSDate date];
+    if ([self.notificationV2DriverCatchUpUID isEqualToString:uid] && self.notificationV2DriverCatchUpAt &&
+        [now timeIntervalSinceDate:self.notificationV2DriverCatchUpAt] < 120.0) {
+        return;
+    }
+    self.notificationV2DriverCatchUpUID = uid;
+    self.notificationV2DriverCatchUpAt = now;
+    [self pp_attemptNotificationV2RegistrationForReason:@"driver_workspace"];
 }
 
 - (void)sendTokenToServer:(NSString *)token {

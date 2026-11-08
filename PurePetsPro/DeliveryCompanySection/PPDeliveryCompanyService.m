@@ -8,6 +8,7 @@
 #endif
 
 NSString * const PPDeliveryCompanyMembershipDidChangeNotification = @"PPDeliveryCompanyMembershipDidChangeNotification";
+NSString * const PPDeliveryDriverWorkspaceConfirmedNotification = @"PPDeliveryDriverWorkspaceConfirmedNotification";
 
 static NSString * const PPDCFunctionCreate = @"createCompanyDeliveryRequest";
 static NSString * const PPDCFunctionGetProfile = @"getDeliveryCompanyProfile";
@@ -253,6 +254,9 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         }
         self.discoveredProfiles = profiles.copy;
         self.driverWorkspaceUID = anyDriverWorkspace ? currentUID : @"";
+        if (anyDriverWorkspace) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:PPDeliveryDriverWorkspaceConfirmedNotification object:self];
+        }
         if (completion) completion(self.discoveredProfiles, nil);
     }];
 }
@@ -569,6 +573,16 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         return;
     }
     [self callFunction:name payload:payload ?: @{} completion:^(NSDictionary * _Nullable result, NSError * _Nullable error) {
+        // These calls succeed only for an authorized driver, official or partner.
+        static NSSet<NSString *> *driverConfirmingFunctions;
+        static dispatch_once_t confirmOnce;
+        dispatch_once(&confirmOnce, ^{
+            driverConfirmingFunctions = [NSSet setWithArray:@[@"getDriverDeliveryWorkspace", @"setDriverDeliveryAvailability",
+                                                              PPDCFunctionListAssigned, @"setCompanyDriverAvailability"]];
+        });
+        if (!error && [driverConfirmingFunctions containsObject:name]) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:PPDeliveryDriverWorkspaceConfirmedNotification object:self];
+        }
         if (completion) completion(result, error);
     }];
 }

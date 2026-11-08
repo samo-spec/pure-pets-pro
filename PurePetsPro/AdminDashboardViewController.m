@@ -332,6 +332,7 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 - (void)pp_recomputeSupportChatsUnreadCount;
 - (void)pp_updateSupportChatsRowBadge;
 - (PPProCommandDataSource)pp_requiredCommandDataSourcesForUser:(nullable UserModel *)user;
+- (BOOL)pp_shouldObserveProviderFulfillmentForUser:(nullable UserModel *)user;
 - (void)pp_beginCommandDataSources:(PPProCommandDataSource)sources;
 - (void)pp_finishCommandDataSource:(PPProCommandDataSource)source error:(nullable NSError *)error;
 - (void)pp_clearCommandDataSources:(PPProCommandDataSource)sources;
@@ -1641,6 +1642,13 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.providerSubscriptionStateListener = nil;
 }
 
+- (BOOL)pp_shouldObserveProviderFulfillmentForUser:(UserModel *)user {
+    // Inventory/service capabilities may also belong to staff. The owner feed
+    // is provider-only; official driver work retains its canonical workspace.
+    return [user.accountType isEqualToString:@"user"] &&
+           ([self pp_canManageServices] || [self pp_canManageMarketplace]);
+}
+
 - (PPProCommandDataSource)pp_requiredCommandDataSourcesForUser:(UserModel *)user {
     if (!user) {
         return PPProCommandDataSourceNone;
@@ -1651,7 +1659,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     if (uid.length > 0) {
         sources |= PPProCommandDataSourceInbox;
     }
-    if ([self pp_canManageServices] || [self pp_canManageMarketplace]) {
+    if ([self pp_shouldObserveProviderFulfillmentForUser:user]) {
         sources |= PPProCommandDataSourceFulfillment;
     }
     if ([self pp_canManageDelivery]) {
@@ -3187,7 +3195,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         return;
     }
     BOOL observesDelivery = uid.length > 0 && [self pp_canManageDelivery];
-    BOOL observesFulfillment = uid.length > 0 && ([self pp_canManageServices] || [self pp_canManageMarketplace]);
+    BOOL observesFulfillment = uid.length > 0 && [self pp_shouldObserveProviderFulfillmentForUser:user];
     NSString *signature = [NSString stringWithFormat:@"%@|delivery:%d|fulfillment:%d", uid ?: @"", observesDelivery, observesFulfillment];
 
     if ([self.quickActionSignalSignature isEqualToString:signature]) {

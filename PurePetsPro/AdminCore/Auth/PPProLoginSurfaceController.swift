@@ -3694,10 +3694,9 @@ enum PPProCapabilityTheme {
     }
 }
 
-// MARK: - Vitals strip
+// MARK: - Home readout
 
-/// High-density telemetry strip presenting the operator's operational state
-/// as three tactile instrument capsules with live status cues.
+/// Snapshot totals remain global; the update count follows the current Home scope.
 private struct PPProVitalsStrip: View {
     let workspaceCount: Int
     let signalCount: Int
@@ -3707,106 +3706,69 @@ private struct PPProVitalsStrip: View {
 
     @Environment(\.sizeCategory) private var sizeCategory
 
-    private func localized(_ key: String, alter: String? = nil) -> String {
-        Language.get(key, alter: alter)
-    }
-
     var body: some View {
         Group {
             if sizeCategory.isAccessibilityCategory {
-                VStack(spacing: 8) {
-                    capsuleItem(
-                        icon: "square.grid.2x2.fill",
-                        value: workspaceCount,
-                        label: localized("DashboardHero_Metric_Workspaces"),
-                        isAlert: false,
-                        isHighlight: false
-                    )
-                    capsuleItem(
-                        icon: "waveform.path.ecg",
-                        value: signalCount,
-                        label: localized("PulseCommand_LiveSignal"),
-                        isAlert: false,
-                        isHighlight: isScoped || signalCount > 0
-                    )
-                    capsuleItem(
-                        icon: unreadCount > 0 ? "bell.badge.fill" : "bell.fill",
-                        value: unreadCount,
-                        label: localized("Unread"),
-                        isAlert: unreadCount > 0,
-                        isHighlight: false
-                    )
+                VStack(spacing: 12) {
+                    reading(workspaceCount, label: Language.get("DashboardHero_Metric_Workspaces", alter: nil))
+                    reading(signalCount, label: updateLabel)
+                    reading(unreadCount, label: Language.get("Unread", alter: nil))
                 }
             } else {
-                HStack(spacing: 8) {
-                    capsuleItem(
-                        icon: "square.grid.2x2.fill",
-                        value: workspaceCount,
-                        label: localized("DashboardHero_Metric_Workspaces"),
-                        isAlert: false,
-                        isHighlight: false
-                    )
-                    capsuleItem(
-                        icon: "waveform.path.ecg",
-                        value: signalCount,
-                        label: localized("PulseCommand_LiveSignal"),
-                        isAlert: false,
-                        isHighlight: isScoped || signalCount > 0
-                    )
-                    capsuleItem(
-                        icon: unreadCount > 0 ? "bell.badge.fill" : "bell.fill",
-                        value: unreadCount,
-                        label: localized("Unread"),
-                        isAlert: unreadCount > 0,
-                        isHighlight: false
-                    )
+                HStack(spacing: 12) {
+                    reading(workspaceCount, label: Language.get("DashboardHero_Metric_Workspaces", alter: nil))
+                    separator
+                    reading(signalCount, label: updateLabel)
+                    separator
+                    reading(unreadCount, label: Language.get("Unread", alter: nil))
                 }
             }
         }
-        .accessibilityElement(children: .combine)
     }
 
-    private func capsuleItem(
-        icon: String,
-        value: Int,
-        label: String,
-        isAlert: Bool,
-        isHighlight: Bool
-    ) -> some View {
-        let alertColor = Color(red: 0.95, green: 0.35, blue: 0.25)
-        return HStack(spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(isAlert ? alertColor : (isHighlight ? palette.accentText : palette.secondary))
+    private var updateLabel: String {
+        Language.get(isScoped ? "ProHome_UpdatesInView" : "ProHome_Updates", alter: nil)
+    }
 
+    private var separator: some View {
+        Rectangle().fill(palette.hairline).frame(width: 1, height: 20)
+            .accessibilityHidden(true)
+    }
+
+    private func reading(_ value: Int, label: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 5) {
+            if sizeCategory.isAccessibilityCategory {
+                Text(label).font(PPProType.regular(14, relativeTo: .subheadline))
+                    .foregroundStyle(palette.secondary)
+                Spacer(minLength: 12)
+            }
             Text(value, format: .number)
-                .font(PPProType.bold(12, relativeTo: .caption))
+                .font(PPProType.bold(20, relativeTo: .title3))
                 .monospacedDigit()
-                .foregroundStyle(isAlert ? alertColor : (isHighlight ? palette.accentText : palette.text))
-
-            Text(label)
-                .font(PPProType.medium(10, relativeTo: .caption2))
-                .foregroundStyle(palette.secondary)
-                .lineLimit(1)
+                .foregroundStyle(palette.text)
+            if !sizeCategory.isAccessibilityCategory {
+                Text(label).font(PPProType.regular(12, relativeTo: .caption))
+                    .foregroundStyle(palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 7)
-        .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: PPProRadius.chip, style: .continuous)
-                .fill(isAlert ? alertColor.opacity(palette.isDark ? 0.20 : 0.10) : (isHighlight ? palette.accentSoft : palette.surface))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: PPProRadius.chip, style: .continuous)
-                .stroke(isAlert ? alertColor.opacity(0.35) : (isHighlight ? palette.accent.opacity(0.35) : palette.hairline), lineWidth: 0.8)
-        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue(Text(value, format: .number))
     }
 }
 
-// MARK: - Lens rail
+/// Quiet press feedback without a separate animation or lifecycle owner.
+private struct PPProHomeControlStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.opacity(configuration.isPressed ? 0.62 : 1)
+    }
+}
 
-/// Replaces the legacy prism dropdown with a fluid horizontal filter rail
-/// featuring domain-themed category colors and matched geometry springs.
+// MARK: - Workspace index
+
+/// All stays reachable while the permitted workspace titles scroll independently.
 private struct PPProLensRail: View {
     let capabilities: [PPProCommandCapability]
     let selectedID: String
@@ -3815,91 +3777,117 @@ private struct PPProLensRail: View {
     let reduceMotion: Bool
     let onSelect: (String) -> Void
 
-    @Namespace private var lensNamespace
-
-    private func localized(_ key: String, alter: String? = nil) -> String {
-        Language.get(key, alter: alter)
-    }
+    @Environment(\.sizeCategory) private var sizeCategory
 
     var body: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                lensChip(
-                    id: "all",
-                    title: localized("PulseCommand_AllCapabilities"),
-                    symbol: "square.grid.2x2",
-                    count: 0,
-                    isReadOnly: false,
-                    accentColor: palette.accent
-                )
-                ForEach(capabilities) { capability in
-                    let theme = PPProCapabilityTheme.resolve(for: capability, isDark: palette.isDark)
-                    lensChip(
-                        id: capability.id,
-                        title: capability.title,
-                        symbol: capability.symbolName,
-                        count: capability.actionCount,
-                        isReadOnly: capability.isReadOnly,
-                        accentColor: theme.accent
-                    )
+        VStack(alignment: .leading, spacing: 8) {
+            Text(Language.get("ProHome_Workspaces", alter: nil))
+                .font(PPProType.medium(12, relativeTo: .caption))
+                .foregroundStyle(palette.secondary)
+                .accessibilityAddTraits(.isHeader)
+
+            if sizeCategory.isAccessibilityCategory {
+                VStack(alignment: .leading, spacing: 4) {
+                    allButton(expanded: true)
+                    ForEach(capabilities) { capability in
+                        workspaceButton(capability, expanded: true)
+                    }
+                }
+            } else {
+                HStack(alignment: .center, spacing: 8) {
+                    allButton(expanded: false)
+                    Rectangle().fill(palette.hairline)
+                        .frame(width: 1, height: 24)
+                        .accessibilityHidden(true)
+                    ScrollViewReader { proxy in
+                        ScrollView(.horizontal, showsIndicators: true) {
+                            HStack(spacing: 4) {
+                                ForEach(capabilities) { capability in
+                                    workspaceButton(capability, expanded: false)
+                                        .id(capability.id)
+                                }
+                            }
+                            .padding(.bottom, 4)
+                        }
+                        .onAppear { revealSelection(using: proxy) }
+                        .onChange(of: selectedID) { _, _ in revealSelection(using: proxy) }
+                        .onChange(of: isRTL) { _, _ in revealSelection(using: proxy) }
+                    }
                 }
             }
-            .padding(.horizontal, PPProPulseRhythm.screenMargin)
-            .padding(.vertical, 3)
         }
-        .accessibilityLabel(localized("PulseCommand_CapabilityPrism"))
+        .padding(.horizontal, PPProPulseRhythm.screenMargin)
+        .environment(\.locale, Locale(identifier: Language.currentLanguageCode()))
+        .transaction { transaction in
+            if reduceMotion { transaction.animation = nil }
+        }
     }
 
-    private func lensChip(id: String, title: String, symbol: String, count: Int, isReadOnly: Bool, accentColor: Color) -> some View {
-        let isSelected = selectedID == id
-        return Button {
-            onSelect(id)
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: symbol)
-                    .font(.system(size: PPProGlyph.small, weight: .semibold))
-                    .foregroundStyle(isSelected ? Color.white : accentColor)
+    private func allButton(expanded: Bool) -> some View {
+        scopeButton(id: "all", title: Language.get("ProHome_AllWorkspaces", alter: nil),
+                    symbol: "square.grid.2x2", count: 0, isReadOnly: false, expanded: expanded)
+    }
 
-                Text(title)
-                    .font(PPProType.medium(13, relativeTo: .subheadline))
-                    .lineLimit(1)
+    private func workspaceButton(_ capability: PPProCommandCapability, expanded: Bool) -> some View {
+        scopeButton(id: capability.id, title: capability.title, symbol: capability.symbolName,
+                    count: capability.actionCount, isReadOnly: capability.isReadOnly, expanded: expanded)
+    }
 
-                if isReadOnly {
-                    Image(systemName: "eye.fill")
-                        .font(.system(size: PPProGlyph.micro, weight: .bold))
-                        .opacity(0.75)
-                } else if count > 0 {
-                    Text(count > 99 ? "99+" : "\(count)")
-                        .font(PPProType.bold(10, relativeTo: .caption2))
-                        .monospacedDigit()
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 1)
-                        .background(
-                            Capsule().fill(isSelected ? Color.white.opacity(0.25) : palette.accentSoft)
-                        )
+    private func scopeButton(id: String, title: String, symbol: String, count: Int,
+                             isReadOnly: Bool, expanded: Bool) -> some View {
+        let selected = selectedID == id
+        let countText = count.formatted(.number.locale(Locale(identifier: Language.currentLanguageCode())))
+        let accessibilityValue = isReadOnly ? Language.get("MenuMap_ReadOnly", alter: nil)
+            : (count > 0 ? String(format: Language.get("ProHome_PendingCount", alter: nil), countText) : "")
+        return Button { onSelect(id) } label: {
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 15, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text(title)
+                        .font(PPProType.medium(15, relativeTo: .subheadline))
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: !expanded, vertical: true)
+                    if expanded { Spacer(minLength: 8) }
+                    if isReadOnly {
+                        Image(systemName: "eye")
+                            .font(.system(size: 12, weight: .semibold))
+                            .accessibilityHidden(true)
+                    } else if count > 0 {
+                        Text(count, format: .number)
+                            .font(PPProType.bold(12, relativeTo: .caption))
+                            .monospacedDigit()
+                    }
                 }
+                .foregroundStyle(selected ? palette.accentText : palette.text)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 9)
+                .frame(minHeight: 44)
+                .frame(maxWidth: expanded ? .infinity : nil, alignment: .leading)
+                Rectangle()
+                    .fill(selected ? palette.accent : .clear)
+                    .frame(height: 2)
+                    .padding(.horizontal, 10)
+                    .accessibilityHidden(true)
             }
-            .foregroundStyle(isSelected ? Color.white : palette.text)
-            .padding(.horizontal, 14)
-            .frame(minHeight: 38)
-            .background {
-                if isSelected {
-                    Capsule()
-                        .fill(accentColor)
-                        .matchedGeometryEffect(
-                            id: reduceMotion ? "lens-static-\(id)" : "lens-active",
-                            in: lensNamespace
-                        )
-                        .shadow(color: accentColor.opacity(palette.isDark ? 0.35 : 0.22), radius: 6, x: 0, y: 2)
-                } else {
-                    Capsule()
-                        .fill(palette.surface)
-                        .overlay(Capsule().stroke(palette.hairline, lineWidth: 0.8))
-                }
-            }
+            .background(selected ? palette.accentSoft : .clear,
+                        in: RoundedRectangle(cornerRadius: PPProRadius.chip, style: .continuous))
+            .contentShape(Rectangle())
         }
-        .buttonStyle(PPProCommandPressStyle())
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
+        .buttonStyle(PPProHomeControlStyle())
+        .fixedSize(horizontal: !expanded, vertical: false)
+        .accessibilityLabel(title)
+        .accessibilityValue(accessibilityValue)
+        .accessibilityHint(Language.get("ProHome_ScopeHint", alter: nil))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
+    private func revealSelection(using proxy: ScrollViewProxy) {
+        guard selectedID != "all", capabilities.contains(where: { $0.id == selectedID }) else { return }
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { proxy.scrollTo(selectedID, anchor: .center) }
     }
 }
 
@@ -5551,129 +5539,100 @@ struct PPProPulseView: View {
         } label: {
             avatarContainer
         }
+        .accessibilityLabel(localized("ProHome_AccountOptions"))
+        .accessibilityValue(snapshot.displayName)
     }
 
     private var avatarContainer: some View {
-        ZStack(alignment: .bottomTrailing) {
-            PPProAvatarView(
-                urlString: snapshot.avatarURLString,
-                fallback: avatarInitials
-            )
-            .frame(width: 48, height: 48)
-
-            // Operational status pulse dot with subtle animated halo
-            Circle()
-                .fill(Color(red: 0.16, green: 0.78, blue: 0.48))
-                .frame(width: 13, height: 13)
-                .overlay(
-                    Circle()
-                        .stroke(palette.surfaceElevated, lineWidth: 2)
-                )
-                .shadow(color: Color(red: 0.16, green: 0.78, blue: 0.48).opacity(0.45), radius: 3)
-        }
-        .contentShape(Circle())
+        PPProAvatarView(urlString: snapshot.avatarURLString, fallback: avatarInitials)
+            .frame(width: 56, height: 56)
+            .overlay(alignment: .bottomTrailing) {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(palette.text)
+                    .frame(width: 20, height: 20)
+                    .background(palette.surface, in: Circle())
+                    .overlay(Circle().stroke(palette.canvas, lineWidth: 2))
+                    .accessibilityHidden(true)
+            }
+            .contentShape(Circle())
     }
 
     private var headerActionCluster: some View {
-        HStack(spacing: 8) {
-            // Language Switcher Button
-            if let onLanguage = onLanguage {
+        HStack(spacing: 2) {
+            if let onLanguage {
                 Button(action: onLanguage) {
                     Image(systemName: "globe")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(palette.accentText)
-                        .frame(width: 40, height: 40)
-                        .background(
-                            Circle().fill(palette.surface)
-                        )
-                        .overlay(
-                            Circle().stroke(palette.hairline, lineWidth: 0.8)
-                        )
-                        .shadow(color: palette.shadow, radius: 4, x: 0, y: 2)
+                        .font(.system(size: 18, weight: .medium))
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
-                .buttonStyle(PPProCommandPressStyle())
-                .accessibilityLabel(localized("PulseCommand_Action_Language", alter: isRTL ? "تغيير لغة التطبيق" : "Change Language"))
+                .accessibilityLabel(localized("PulseCommand_Action_Language"))
             }
-
-            // Settings Button
             Button(action: onProfile) {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: PPProGlyph.medium, weight: .semibold))
-                    .foregroundStyle(palette.accentText)
-                    .frame(width: 40, height: 40)
-                    .background(
-                        Circle().fill(palette.surface)
-                    )
-                    .overlay(
-                        Circle().stroke(palette.hairline, lineWidth: 0.8)
-                    )
-                    .shadow(color: palette.shadow, radius: 4, x: 0, y: 2)
+                Image(systemName: "gearshape")
+                    .font(.system(size: 18, weight: .medium))
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(PPProCommandPressStyle())
-            .accessibilityLabel(localized("Settings", alter: isRTL ? "الإعدادات" : "Settings"))
+            .accessibilityLabel(localized("Settings"))
         }
+        .foregroundStyle(palette.secondary)
+        .buttonStyle(PPProHomeControlStyle())
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var headerGreeting: String {
+        snapshot.greeting.isEmpty ? snapshot.workspaceEyebrow : snapshot.greeting
+    }
+
+    private var accountIdentity: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if !headerGreeting.isEmpty {
+                Text(headerGreeting)
+                    .font(PPProType.regular(12, relativeTo: .caption))
+                    .foregroundStyle(palette.secondary)
+            }
+            Text(snapshot.displayName.isEmpty ? localized("PulseCommand_BrandName") : snapshot.displayName)
+                .font(PPProType.bold(26, relativeTo: .title2))
+                .foregroundStyle(palette.text)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            if !snapshot.workspaceEyebrow.isEmpty && snapshot.workspaceEyebrow != headerGreeting {
+                Text(snapshot.workspaceEyebrow)
+                    .font(PPProType.regular(12, relativeTo: .caption))
+                    .foregroundStyle(palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if !snapshot.roleSummary.isEmpty {
+                Text(snapshot.roleSummary)
+                    .font(PPProType.medium(12, relativeTo: .caption))
+                    .foregroundStyle(palette.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .multilineTextAlignment(.leading)
     }
 
     private var commandBar: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 12) {
-                avatarMenu
-
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 4) {
-                        Image(systemName: greetingGlyphName)
-                            .font(.system(size: 10, weight: .medium))
-                            .foregroundStyle(palette.accent.opacity(0.85))
-
-                        Text(snapshot.greeting.isEmpty ? snapshot.workspaceEyebrow : snapshot.greeting)
-                            .font(PPProType.medium(12, relativeTo: .caption))
-                            .foregroundStyle(palette.secondary)
-                            .lineLimit(1)
+        VStack(alignment: .leading, spacing: 16) {
+            if isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack {
+                        avatarMenu
+                        Spacer(minLength: 12)
+                        headerActionCluster
                     }
-
-                    Text(snapshot.displayName.isEmpty ? localized("PulseCommand_BrandName", alter: "PurePets Pro") : snapshot.displayName)
-                        .font(PPProType.bold(18, relativeTo: .title3))
-                        .foregroundStyle(palette.text)
-                        .lineLimit(isAccessibilitySize ? 2 : 1)
-                        .minimumScaleFactor(0.85)
-
-                    // Certified Operator badge & Capability count
-                    HStack(spacing: 6) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 9, weight: .bold))
-                            Text(localized("PulseCommand_OperatorCertified", alter: isRTL ? "مشغّل معتمد" : "Verified Operator"))
-                                .font(PPProType.bold(10, relativeTo: .caption2))
-                        }
-                        .foregroundStyle(palette.accentText)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2.5)
-                        .background(
-                            Capsule().fill(palette.accentSoft)
-                        )
-
-                        if snapshot.capabilities.count > 0 {
-                            Text(String(format: localized("PulseCommand_CapabilitiesCountFormat", alter: isRTL ? "%@ قدرات" : "%@ Capabilities"), "\(snapshot.capabilities.count)"))
-                                .font(PPProType.medium(10, relativeTo: .caption2))
-                                .monospacedDigit()
-                                .foregroundStyle(palette.secondary)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2.5)
-                                .background(
-                                    Capsule().fill(palette.surface)
-                                )
-                                .overlay(
-                                    Capsule().stroke(palette.hairline, lineWidth: 0.8)
-                                )
-                        }
-                    }
+                    accountIdentity
                 }
-
-                Spacer(minLength: 0)
-
-                headerActionCluster
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    avatarMenu
+                    accountIdentity
+                    headerActionCluster
+                }
             }
-
             PPProVitalsStrip(
                 workspaceCount: scope.workspaceCount,
                 signalCount: scope.signals.count,
@@ -5681,17 +5640,14 @@ struct PPProPulseView: View {
                 isScoped: scope.isScoped,
                 palette: palette
             )
+            .padding(.top, 12)
+            .overlay(alignment: .top) {
+                Rectangle().fill(palette.hairline).frame(height: 1)
+                    .accessibilityHidden(true)
+            }
         }
-        .padding(13)
-        .background(
-            RoundedRectangle(cornerRadius: PPProRadius.card, style: .continuous)
-                .fill(palette.surfaceElevated)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: PPProRadius.card, style: .continuous)
-                .stroke(palette.hairline, lineWidth: 0.8)
-        )
-        .shadow(color: palette.shadow, radius: 8, x: 0, y: 3)
+        .padding(.vertical, 6)
+        .environment(\.locale, Locale(identifier: Language.currentLanguageCode()))
     }
 
     private var avatarInitials: String {

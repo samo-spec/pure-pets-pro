@@ -459,4 +459,47 @@ check('dossier commands require a fresh matching server action and recover befor
   assert(dock.includes('.disabled(!viewModel.canExecuteDossierCommands)'));
 });
 
+check('store handover waiting state is restricted to an assigned official task with no server action', () => {
+  const task = slice(models, 'var awaitsStoreHandover:', 'static func key(authority:');
+  for (const token of ['mine', 'authority == .fulfillmentV1', 'status == "delivery_assigned"', 'actions.isEmpty']) {
+    assert(task.includes(token), token);
+  }
+  const state = slice(view, 'private var dockState:', 'private var dock:');
+  assert(state.includes('if task.awaitsStoreHandover { return .awaitingStoreHandover }'));
+  assert(state.includes('guard let action = task.primaryAction'));
+});
+
+check('the waiting dock offers a read-only readiness check and preserves server pickup authority', () => {
+  const pending = slice(view, 'case .awaitingStoreHandover:', 'case .blocked(_, let reason)');
+  assert(pending.includes('Button { store.refresh() }'));
+  assert(pending.includes('.disabled(store.isRefreshing)'));
+  assert(pending.includes('ProgressView()'));
+  for (const key of ['DriverCockpit_Handover_Check', 'DriverCockpit_Handover_Checking', 'DriverCockpit_Handover_Check_Hint']) assert(pending.includes(key));
+  assert(!/store\.perform|PPDriverTaskAction\(/.test(pending));
+  assert(!pending.includes('DriverCockpit_Handover_Instructions'), 'long guidance belongs in scrollable mission content, outside the pinned dock');
+  const card = slice(view, 'private struct PPDriverMissionCard:', 'private func cashBadge(');
+  assert(card.includes('if task.awaitsStoreHandover'));
+  assert(card.includes('DriverCockpit_Handover_Next'));
+  assert(card.includes('DriverCockpit_Handover_Instructions'));
+  assert(card.includes('.fixedSize(horizontal: false, vertical: true)'));
+});
+
+check('pickup readiness is announced only after a fresh server-projected action arrives', () => {
+  const body = slice(models, 'private func reconcile(active:', 'private func explainVanishedTask(');
+  assert(body.includes('previousTasks.first(where: { $0.id == focused.id })?.awaitsStoreHandover == true'));
+  assert(body.includes('focused.actions.contains(where: { $0.code == "PICK_UP" })'));
+  assert(body.includes('DriverCockpit_Handover_Ready'));
+  assert(body.includes('UIAccessibility.post(notification: .announcement'));
+});
+
+check('handover guidance and readiness controls have one Arabic and English translation each', () => {
+  for (const language of ['ar', 'en']) {
+    for (const key of ['DriverCockpit_Handover_Next', 'DriverCockpit_Handover_Instructions',
+      'DriverCockpit_Handover_Check', 'DriverCockpit_Handover_Checking',
+      'DriverCockpit_Handover_Check_Hint', 'DriverCockpit_Handover_Ready']) {
+      assert.equal((strings[language].match(new RegExp(`^"${key}"\\s*=`, 'gm')) || []).length, 1, `${language}: ${key}`);
+    }
+  }
+});
+
 console.log(`PASS ${passed} driver cockpit source contracts. Native runtime is UNVERIFIED.`);

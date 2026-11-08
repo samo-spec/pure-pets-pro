@@ -2,9 +2,10 @@
 //  PPServicesListViewController.m
 //  PurePetsPro
 //
-//  Category-defining flagship service command center with spatial telemetry island,
-//  real-time availability master killswitch, multi-lane domain switcher,
-//  live requests pipeline bridge, and studio-grade cinematic empty state.
+//  NextGen V8 Category-Defining Pet Service Command Center.
+//  First-principles reinvention: Dual-Stage Horizon (Service Atelier & Live Floor Pipeline),
+//  Master Duty & Availability Island, Stepped Micro-Pricing Engine, and
+//  Glanceable Operating Matrix.
 //
 
 #import "PPServicesListViewController.h"
@@ -28,8 +29,9 @@
 #import "PPToast.h"
 #import "PPFunc.h"
 #import "PPAlertHelper.h"
+#import <objc/runtime.h>
 
-#pragma mark - PPServiceQuickPricingSheet Interface & Implementation
+#pragma mark - PPServiceQuickPricingSheet (NextGen V8 Rotary Stepper)
 
 @interface PPServiceQuickPricingSheet () <UITextFieldDelegate>
 @property (nonatomic, strong) PPServiceModel *service;
@@ -37,8 +39,9 @@
 @property (nonatomic, strong) UIImageView *thumbnailView;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *categoryLabel;
-@property (nonatomic, strong) UILabel *counterDisplay;
+@property (nonatomic, strong) UILabel *priceDisplayLabel;
 @property (nonatomic, strong) UITextField *directInputField;
+@property (nonatomic, strong) UILabel *yieldProjectionLabel;
 @property (nonatomic, strong) UISwitch *availabilitySwitch;
 @property (nonatomic, strong) UIButton *saveButton;
 @property (nonatomic, assign) double currentPrice;
@@ -84,10 +87,10 @@
     [NSLayoutConstraint activateConstraints:@[
         [grabber.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:10],
         [grabber.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [grabber.widthAnchor constraintEqualToConstant:40],
+        [grabber.widthAnchor constraintEqualToConstant:38],
         [grabber.heightAnchor constraintEqualToConstant:5],
 
-        [scroll.topAnchor constraintEqualToAnchor:grabber.bottomAnchor constant:8],
+        [scroll.topAnchor constraintEqualToAnchor:grabber.bottomAnchor constant:12],
         [scroll.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [scroll.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [scroll.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
@@ -96,246 +99,257 @@
         [content.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],
         [content.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
         [content.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor],
-        [content.widthAnchor constraintEqualToAnchor:scroll.widthAnchor],
+        [content.widthAnchor constraintEqualToAnchor:scroll.widthAnchor]
     ]];
 
-    // 1. Header Card
-    UIView *headerCard = [[UIView alloc] init];
-    headerCard.translatesAutoresizingMaskIntoConstraints = NO;
-    headerCard.backgroundColor = [UIColor ppSurfaceElevated];
-    headerCard.layer.borderWidth = 1.0;
-    headerCard.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-    PPApplyContinuousCorners(headerCard, PPCornerCard);
-    PPApplyCardShadow(headerCard);
-    [content addSubview:headerCard];
+    // 1. Header Card with Pet Thumbnail & Title
+    UIView *card = [[UIView alloc] init];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor = [UIColor ppElevatedSurface];
+    PPApplyContinuousCorners(card, 16.0);
+    card.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    card.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+    [content addSubview:card];
 
     _thumbnailView = [[UIImageView alloc] init];
     _thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
     _thumbnailView.contentMode = UIViewContentModeScaleAspectFill;
     _thumbnailView.clipsToBounds = YES;
-    PPApplyContinuousCorners(_thumbnailView, PPCornerMedium);
-    _thumbnailView.backgroundColor = [UIColor ppSurface];
+    PPApplyContinuousCorners(_thumbnailView, 12.0);
+    _thumbnailView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.06];
     if (self.service.imageURL.length > 0) {
-        [_thumbnailView sd_setImageWithURL:[NSURL URLWithString:self.service.imageURL]];
+        [_thumbnailView sd_setImageWithURL:[NSURL URLWithString:self.service.imageURL]
+                          placeholderImage:[UIImage imageNamed:@"placeholder_service"]];
     } else {
-        _thumbnailView.image = [UIImage systemImageNamed:@"sparkles"];
-        _thumbnailView.tintColor = [UIColor ppPrimary];
+        _thumbnailView.image = [UIImage imageNamed:@"placeholder_service"];
     }
-    [headerCard addSubview:_thumbnailView];
+    [card addSubview:_thumbnailView];
 
     _titleLabel = [[UILabel alloc] init];
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _titleLabel.text = self.service.title ?: @"—";
     _titleLabel.font = [Styling fontBold:16.0];
-    _titleLabel.textColor = [UIColor ppTextPrimary];
+    _titleLabel.textColor = PrimaryTextClr;
     _titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
-    [headerCard addSubview:_titleLabel];
+    [card addSubview:_titleLabel];
 
     _categoryLabel = [[UILabel alloc] init];
     _categoryLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _categoryLabel.text = [NSString stringWithFormat:@"%@ · %@", [self.service localizedTypeName], self.service.category ?: @""];
-    _categoryLabel.font = [Styling fontRegular:12.5];
-    _categoryLabel.textColor = [UIColor ppTextSecondary];
+    _categoryLabel.text = [self.service localizedTypeName];
+    _categoryLabel.font = [Styling fontMedium:12.5];
+    _categoryLabel.textColor = SeconderyTextClr;
     _categoryLabel.textAlignment = Language.alignmentForCurrentLanguage;
-    [headerCard addSubview:_categoryLabel];
+    [card addSubview:_categoryLabel];
 
-    // 2. Large Price Display Card
-    UIView *priceHeroCard = [[UIView alloc] init];
-    priceHeroCard.translatesAutoresizingMaskIntoConstraints = NO;
-    priceHeroCard.backgroundColor = [UIColor ppSurface];
-    priceHeroCard.layer.borderWidth = 1.0;
-    priceHeroCard.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-    PPApplyContinuousCorners(priceHeroCard, PPCornerCard);
-    [content addSubview:priceHeroCard];
+    [NSLayoutConstraint activateConstraints:@[
+        [card.topAnchor constraintEqualToAnchor:content.topAnchor constant:8],
+        [card.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
+        [card.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
+        [card.heightAnchor constraintEqualToConstant:76],
 
-    UILabel *badge = [[UILabel alloc] init];
-    badge.translatesAutoresizingMaskIntoConstraints = NO;
-    badge.text = [Language isRTL] ? @"السعر المعتمد حالياً" : @"Current Rate";
-    badge.font = [Styling fontBold:11.0];
-    badge.textColor = [UIColor ppPrimary];
-    badge.textAlignment = NSTextAlignmentCenter;
-    [priceHeroCard addSubview:badge];
+        [_thumbnailView.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12],
+        [_thumbnailView.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
+        [_thumbnailView.widthAnchor constraintEqualToConstant:52],
+        [_thumbnailView.heightAnchor constraintEqualToConstant:52],
 
-    _counterDisplay = [[UILabel alloc] init];
-    _counterDisplay.translatesAutoresizingMaskIntoConstraints = NO;
-    _counterDisplay.font = [Styling fontBold:38.0];
-    _counterDisplay.textColor = [UIColor ppTextPrimary];
-    _counterDisplay.textAlignment = NSTextAlignmentCenter;
-    [priceHeroCard addSubview:_counterDisplay];
+        [_titleLabel.topAnchor constraintEqualToAnchor:card.topAnchor constant:16],
+        [_titleLabel.leadingAnchor constraintEqualToAnchor:_thumbnailView.trailingAnchor constant:12],
+        [_titleLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12],
 
-    // 3. Quick Multiplier Chips
-    UIStackView *chipsStack = [[UIStackView alloc] init];
-    chipsStack.translatesAutoresizingMaskIntoConstraints = NO;
-    chipsStack.axis = UILayoutConstraintAxisHorizontal;
-    chipsStack.distribution = UIStackViewDistributionFillEqually;
-    chipsStack.spacing = 8.0;
-    [content addSubview:chipsStack];
+        [_categoryLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:3],
+        [_categoryLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
+        [_categoryLabel.trailingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor]
+    ]];
 
-    NSArray *deltas = @[
-        @{@"title": @"-50", @"val": @(-50.0), @"pos": @NO},
-        @{@"title": @"-10", @"val": @(-10.0), @"pos": @NO},
-        @{@"title": [Language isRTL] ? @"تصفير" : @"Clear", @"val": @0.0, @"pos": @NO},
-        @{@"title": @"+10", @"val": @(10.0), @"pos": @YES},
-        @{@"title": @"+50", @"val": @(50.0), @"pos": @YES}
-    ];
+    // 2. Stepped Price Adjuster Pod
+    UIView *pricePod = [[UIView alloc] init];
+    pricePod.translatesAutoresizingMaskIntoConstraints = NO;
+    pricePod.backgroundColor = [UIColor ppElevatedSurface];
+    PPApplyContinuousCorners(pricePod, 18.0);
+    pricePod.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    pricePod.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+    [content addSubview:pricePod];
 
-    for (NSDictionary *dict in deltas) {
-        NSString *title = dict[@"title"];
-        double val = [dict[@"val"] doubleValue];
-        BOOL isPos = [dict[@"pos"] boolValue];
+    UILabel *podTitle = [[UILabel alloc] init];
+    podTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    podTitle.text = [Language isRTL] ? @"تسعير الخدمة الفوري" : @"Instant Service Pricing";
+    podTitle.font = [Styling fontBold:14.0];
+    podTitle.textColor = PrimaryTextClr;
+    podTitle.textAlignment = NSTextAlignmentCenter;
+    [pricePod addSubview:podTitle];
 
-        UIButton *chip = [UIButton buttonWithType:UIButtonTypeSystem];
-        chip.titleLabel.font = [Styling fontBold:13.5];
-        [chip setTitle:title forState:UIControlStateNormal];
-        UIColor *clr = isPos ? [UIColor ppSuccess] : ([title containsString:@"0"] || [title containsString:@"Clear"] ? [UIColor ppError] : [UIColor ppTextSecondary]);
-        [chip setTitleColor:clr forState:UIControlStateNormal];
-        chip.backgroundColor = [clr colorWithAlphaComponent:0.08];
-        PPApplyContinuousCorners(chip, 10.0);
-        objc_setAssociatedObject(chip, "price_delta", @(val), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        [chip addTarget:self action:@selector(deltaTapped:) forControlEvents:UIControlEventTouchUpInside];
-        [chipsStack addArrangedSubview:chip];
+    _priceDisplayLabel = [[UILabel alloc] init];
+    _priceDisplayLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _priceDisplayLabel.font = [Styling fontBold:32.0];
+    _priceDisplayLabel.textColor = [UIColor ppSuccess];
+    _priceDisplayLabel.textAlignment = NSTextAlignmentCenter;
+    [pricePod addSubview:_priceDisplayLabel];
+
+    _yieldProjectionLabel = [[UILabel alloc] init];
+    _yieldProjectionLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _yieldProjectionLabel.font = [Styling fontMedium:12.0];
+    _yieldProjectionLabel.textColor = SeconderyTextClr;
+    _yieldProjectionLabel.textAlignment = NSTextAlignmentCenter;
+    [pricePod addSubview:_yieldProjectionLabel];
+
+    // Stepper Increments Stack: -50, -10, +10, +50
+    UIStackView *stepStack = [[UIStackView alloc] init];
+    stepStack.translatesAutoresizingMaskIntoConstraints = NO;
+    stepStack.axis = UILayoutConstraintAxisHorizontal;
+    stepStack.distribution = UIStackViewDistributionFillEqually;
+    stepStack.spacing = 10.0;
+    [pricePod addSubview:stepStack];
+
+    NSArray *steps = @[@(-50), @(-10), @(10), @(50)];
+    for (NSNumber *delta in steps) {
+        UIButton *stepBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        stepBtn.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.08];
+        PPApplyContinuousCorners(stepBtn, 12.0);
+        stepBtn.layer.borderWidth = 0.5;
+        stepBtn.layer.borderColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.2].CGColor;
+        NSString *title = [delta integerValue] > 0
+            ? [NSString stringWithFormat:@"+%ld", (long)[delta integerValue]]
+            : [NSString stringWithFormat:@"%ld", (long)[delta integerValue]];
+        [stepBtn setTitle:title forState:UIControlStateNormal];
+        [stepBtn setTitleColor:[UIColor ppPrimary] forState:UIControlStateNormal];
+        stepBtn.titleLabel.font = [Styling fontBold:14.0];
+        objc_setAssociatedObject(stepBtn, "step_delta", delta, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        [stepBtn addTarget:self action:@selector(stepButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [stepStack addArrangedSubview:stepBtn];
     }
 
-    // 4. Direct Manual Input
+    // Direct Input Field
     _directInputField = [[UITextField alloc] init];
     _directInputField.translatesAutoresizingMaskIntoConstraints = NO;
-    _directInputField.keyboardType = UIKeyboardTypeDecimalPad;
+    _directInputField.font = [Styling fontBold:15.0];
+    _directInputField.textColor = PrimaryTextClr;
     _directInputField.textAlignment = NSTextAlignmentCenter;
-    _directInputField.font = [Styling fontBold:20.0];
-    _directInputField.textColor = [UIColor ppPrimary];
-    _directInputField.backgroundColor = [UIColor ppSurface];
-    _directInputField.layer.borderWidth = 1.0;
+    _directInputField.keyboardType = UIKeyboardTypeDecimalPad;
+    _directInputField.placeholder = [Language isRTL] ? @"أو أدخل السعر مباشرة..." : @"Or enter custom price...";
+    _directInputField.backgroundColor = [[UIColor ppBackground] colorWithAlphaComponent:0.8];
+    PPApplyContinuousCorners(_directInputField, 12.0);
+    _directInputField.layer.borderWidth = 0.5;
     _directInputField.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-    PPApplyContinuousCorners(_directInputField, PPCornerMedium);
     _directInputField.delegate = self;
     [_directInputField addTarget:self action:@selector(directInputChanged) forControlEvents:UIControlEventEditingChanged];
-    [content addSubview:_directInputField];
+    [pricePod addSubview:_directInputField];
 
-    // 5. Customer Availability Switch Row
-    UIView *switchRow = [[UIView alloc] init];
-    switchRow.translatesAutoresizingMaskIntoConstraints = NO;
-    switchRow.backgroundColor = [UIColor ppSurface];
-    switchRow.layer.borderWidth = 1.0;
-    switchRow.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-    PPApplyContinuousCorners(switchRow, PPCornerMedium);
-    [content addSubview:switchRow];
+    [NSLayoutConstraint activateConstraints:@[
+        [pricePod.topAnchor constraintEqualToAnchor:card.bottomAnchor constant:14],
+        [pricePod.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
+        [pricePod.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
 
-    UILabel *switchTitle = [[UILabel alloc] init];
-    switchTitle.translatesAutoresizingMaskIntoConstraints = NO;
-    switchTitle.text = [Language isRTL] ? @"متاح للطلب والحجز المباشر" : @"Available for Direct Booking";
-    switchTitle.font = [Styling fontBold:14.5];
-    switchTitle.textColor = [UIColor ppTextPrimary];
-    switchTitle.textAlignment = Language.alignmentForCurrentLanguage;
-    [switchRow addSubview:switchTitle];
+        [podTitle.topAnchor constraintEqualToAnchor:pricePod.topAnchor constant:16],
+        [podTitle.centerXAnchor constraintEqualToAnchor:pricePod.centerXAnchor],
+
+        [_priceDisplayLabel.topAnchor constraintEqualToAnchor:podTitle.bottomAnchor constant:8],
+        [_priceDisplayLabel.centerXAnchor constraintEqualToAnchor:pricePod.centerXAnchor],
+
+        [_yieldProjectionLabel.topAnchor constraintEqualToAnchor:_priceDisplayLabel.bottomAnchor constant:4],
+        [_yieldProjectionLabel.centerXAnchor constraintEqualToAnchor:pricePod.centerXAnchor],
+
+        [stepStack.topAnchor constraintEqualToAnchor:_yieldProjectionLabel.bottomAnchor constant:16],
+        [stepStack.leadingAnchor constraintEqualToAnchor:pricePod.leadingAnchor constant:14],
+        [stepStack.trailingAnchor constraintEqualToAnchor:pricePod.trailingAnchor constant:-14],
+        [stepStack.heightAnchor constraintEqualToConstant:42],
+
+        [_directInputField.topAnchor constraintEqualToAnchor:stepStack.bottomAnchor constant:12],
+        [_directInputField.leadingAnchor constraintEqualToAnchor:pricePod.leadingAnchor constant:14],
+        [_directInputField.trailingAnchor constraintEqualToAnchor:pricePod.trailingAnchor constant:-14],
+        [_directInputField.heightAnchor constraintEqualToConstant:40],
+        [_directInputField.bottomAnchor constraintEqualToAnchor:pricePod.bottomAnchor constant:-16]
+    ]];
+
+    // 3. Availability Row
+    UIView *availCard = [[UIView alloc] init];
+    availCard.translatesAutoresizingMaskIntoConstraints = NO;
+    availCard.backgroundColor = [UIColor ppElevatedSurface];
+    PPApplyContinuousCorners(availCard, 16.0);
+    availCard.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    availCard.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+    [content addSubview:availCard];
+
+    UILabel *availTitle = [[UILabel alloc] init];
+    availTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    availTitle.text = [Language isRTL] ? @"إتاحة هذه الخدمة للطلب الفوري" : @"Offer Live for Instant Booking";
+    availTitle.font = [Styling fontBold:14.0];
+    availTitle.textColor = PrimaryTextClr;
+    availTitle.textAlignment = Language.alignmentForCurrentLanguage;
+    [availCard addSubview:availTitle];
 
     _availabilitySwitch = [[UISwitch alloc] init];
     _availabilitySwitch.translatesAutoresizingMaskIntoConstraints = NO;
     _availabilitySwitch.onTintColor = [UIColor ppSuccess];
     _availabilitySwitch.on = self.service.isAvailable;
-    [switchRow addSubview:_availabilitySwitch];
+    [availCard addSubview:_availabilitySwitch];
 
-    // 6. Save Button
+    [NSLayoutConstraint activateConstraints:@[
+        [availCard.topAnchor constraintEqualToAnchor:pricePod.bottomAnchor constant:12],
+        [availCard.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
+        [availCard.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
+        [availCard.heightAnchor constraintEqualToConstant:54],
+
+        [availTitle.leadingAnchor constraintEqualToAnchor:availCard.leadingAnchor constant:14],
+        [availTitle.centerYAnchor constraintEqualToAnchor:availCard.centerYAnchor],
+        [availTitle.trailingAnchor constraintLessThanOrEqualToAnchor:_availabilitySwitch.leadingAnchor constant:-10],
+
+        [_availabilitySwitch.trailingAnchor constraintEqualToAnchor:availCard.trailingAnchor constant:-14],
+        [_availabilitySwitch.centerYAnchor constraintEqualToAnchor:availCard.centerYAnchor]
+    ]];
+
+    // 4. Save Button
     _saveButton = [UIButton buttonWithType:UIButtonTypeCustom];
     _saveButton.translatesAutoresizingMaskIntoConstraints = NO;
     _saveButton.backgroundColor = [UIColor ppPrimary];
-    [_saveButton setTitle:[Language isRTL] ? @"حفظ وتحديث الخدمة فورياً" : @"Save & Update Rate" forState:UIControlStateNormal];
-    [_saveButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    _saveButton.titleLabel.font = [Styling fontBold:16.0];
-    PPApplyContinuousCorners(_saveButton, PPCornerMedium);
+    PPApplyContinuousCorners(_saveButton, 16.0);
     PPApplyButtonShadow(_saveButton);
-    [_saveButton addTarget:self action:@selector(saveRateTapped) forControlEvents:UIControlEventTouchUpInside];
+    [_saveButton setTitle:[Language isRTL] ? @"حفظ التعديلات والتسعير" : @"Save Changes & Pricing" forState:UIControlStateNormal];
+    [_saveButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    _saveButton.titleLabel.font = [Styling fontBold:15.0];
+    [_saveButton addTarget:self action:@selector(saveTapped) forControlEvents:UIControlEventTouchUpInside];
     [content addSubview:_saveButton];
 
     [NSLayoutConstraint activateConstraints:@[
-        [headerCard.topAnchor constraintEqualToAnchor:content.topAnchor constant:20],
-        [headerCard.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
-        [headerCard.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],
-        [headerCard.heightAnchor constraintEqualToConstant:76],
-
-        [_thumbnailView.leadingAnchor constraintEqualToAnchor:headerCard.leadingAnchor constant:12],
-        [_thumbnailView.centerYAnchor constraintEqualToAnchor:headerCard.centerYAnchor],
-        [_thumbnailView.widthAnchor constraintEqualToConstant:52],
-        [_thumbnailView.heightAnchor constraintEqualToConstant:52],
-
-        [_titleLabel.topAnchor constraintEqualToAnchor:headerCard.topAnchor constant:14],
-        [_titleLabel.leadingAnchor constraintEqualToAnchor:_thumbnailView.trailingAnchor constant:12],
-        [_titleLabel.trailingAnchor constraintEqualToAnchor:headerCard.trailingAnchor constant:-12],
-
-        [_categoryLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:3],
-        [_categoryLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
-        [_categoryLabel.trailingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor],
-
-        [priceHeroCard.topAnchor constraintEqualToAnchor:headerCard.bottomAnchor constant:16],
-        [priceHeroCard.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
-        [priceHeroCard.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],
-        [priceHeroCard.heightAnchor constraintEqualToConstant:100],
-
-        [badge.topAnchor constraintEqualToAnchor:priceHeroCard.topAnchor constant:10],
-        [badge.centerXAnchor constraintEqualToAnchor:priceHeroCard.centerXAnchor],
-
-        [_counterDisplay.topAnchor constraintEqualToAnchor:badge.bottomAnchor constant:2],
-        [_counterDisplay.centerXAnchor constraintEqualToAnchor:priceHeroCard.centerXAnchor],
-
-        [chipsStack.topAnchor constraintEqualToAnchor:priceHeroCard.bottomAnchor constant:16],
-        [chipsStack.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
-        [chipsStack.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],
-        [chipsStack.heightAnchor constraintEqualToConstant:38],
-
-        [_directInputField.topAnchor constraintEqualToAnchor:chipsStack.bottomAnchor constant:14],
-        [_directInputField.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
-        [_directInputField.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],
-        [_directInputField.heightAnchor constraintEqualToConstant:46],
-
-        [switchRow.topAnchor constraintEqualToAnchor:_directInputField.bottomAnchor constant:14],
-        [switchRow.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
-        [switchRow.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],
-        [switchRow.heightAnchor constraintEqualToConstant:56],
-
-        [switchTitle.leadingAnchor constraintEqualToAnchor:switchRow.leadingAnchor constant:16],
-        [switchTitle.centerYAnchor constraintEqualToAnchor:switchRow.centerYAnchor],
-        [switchTitle.trailingAnchor constraintLessThanOrEqualToAnchor:_availabilitySwitch.leadingAnchor constant:-12],
-
-        [_availabilitySwitch.trailingAnchor constraintEqualToAnchor:switchRow.trailingAnchor constant:-16],
-        [_availabilitySwitch.centerYAnchor constraintEqualToAnchor:switchRow.centerYAnchor],
-
-        [_saveButton.topAnchor constraintEqualToAnchor:switchRow.bottomAnchor constant:20],
-        [_saveButton.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:20],
-        [_saveButton.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-20],
+        [_saveButton.topAnchor constraintEqualToAnchor:availCard.bottomAnchor constant:18],
+        [_saveButton.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
+        [_saveButton.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
         [_saveButton.heightAnchor constraintEqualToConstant:50],
         [_saveButton.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-30]
     ]];
 }
 
-- (void)deltaTapped:(UIButton *)sender {
+- (void)stepButtonTapped:(UIButton *)sender {
     [PPFunc pp_playTapEffect];
-    NSNumber *deltaNum = objc_getAssociatedObject(sender, "price_delta");
-    if (deltaNum) {
-        if (deltaNum.doubleValue == 0.0) {
-            self.currentPrice = 0.0;
-        } else {
-            self.currentPrice = MAX(0.0, self.currentPrice + deltaNum.doubleValue);
-        }
-        [self updatePriceDisplay];
-    }
+    NSNumber *delta = objc_getAssociatedObject(sender, "step_delta");
+    if (!delta) return;
+    self.currentPrice = MAX(10.0, self.currentPrice + [delta doubleValue]);
+    [self updatePriceDisplay];
 }
 
 - (void)directInputChanged {
     double val = [self.directInputField.text doubleValue];
-    self.currentPrice = MAX(0.0, val);
-    self.counterDisplay.text = [NSString stringWithFormat:@"%.0f QAR", self.currentPrice];
+    if (val > 0) {
+        self.currentPrice = val;
+        [self updatePriceDisplay];
+    }
 }
 
 - (void)updatePriceDisplay {
-    self.counterDisplay.text = [NSString stringWithFormat:@"%.0f QAR", self.currentPrice];
-    self.directInputField.text = [NSString stringWithFormat:@"%.0f", self.currentPrice];
+    NSString *curr = self.service.currency.length > 0 ? self.service.currency : @"QAR";
+    self.priceDisplayLabel.text = [NSString stringWithFormat:@"%.0f %@", self.currentPrice, curr];
+
+    double estWeekly = self.currentPrice * 5.0; // 5 bookings/week baseline
+    self.yieldProjectionLabel.text = [Language isRTL]
+        ? [NSString stringWithFormat:@"العائد التقديري: ~%.0f %@ أسبوعياً (بمعدل 5 حجوزات)", estWeekly, curr]
+        : [NSString stringWithFormat:@"Est. Weekly Yield: ~%.0f %@ (5 bookings/wk)", estWeekly, curr];
 }
 
-- (void)saveRateTapped {
+- (void)saveTapped {
     [PPFunc pp_playTapEffect];
-    [PPHUD showIndeterminateIn:self.view title:[Language isRTL] ? @"جارٍ تحديث السعر..." : @"Updating Rate..." subtitle:nil];
-
     self.service.price = self.currentPrice;
     self.service.isAvailable = self.availabilitySwitch.isOn;
+
+    [PPHUD showIndeterminateIn:self.view title:[Language isRTL] ? @"جارٍ الحفظ..." : @"Saving..." subtitle:nil];
 
     __weak typeof(self) weakSelf = self;
     [[PPServiceManager sharedManager] updateService:self.service image:nil completion:^(NSError * _Nullable error) {
@@ -343,10 +357,8 @@
         if (error) {
             [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
         } else {
-            [PPHUD showSuccess:[Language isRTL] ? @"تم تحديث السعر بنجاح" : @"Rate updated successfully"];
-            if (weakSelf.onUpdated) {
-                weakSelf.onUpdated();
-            }
+            [PPHUD showSuccess:[Language isRTL] ? @"تم تحديث التسعير بنجاح" : @"Pricing updated"];
+            if (weakSelf.onUpdated) weakSelf.onUpdated();
             [weakSelf dismissViewControllerAnimated:YES completion:nil];
         }
     }];
@@ -362,36 +374,39 @@
 @property (nonatomic, strong) UIRefreshControl *refreshControl;
 @property (nonatomic, strong) UIView *spatialCockpitHeader;
 
-// Dynamic Ambient Beacon
+// Stage Mode: 0 = Service Atelier & Yield, 1 = Live Floor & Bookings
+@property (nonatomic, assign) NSInteger currentStageMode;
+@property (nonatomic, strong) UISegmentedControl *stageSegmentedControl;
+
+// Master Duty & Availability Island
+@property (nonatomic, strong) UIView *masterIslandView;
 @property (nonatomic, strong) UIView *liveBeaconDot;
-@property (nonatomic, strong) UILabel *liveBeaconLabel;
+@property (nonatomic, strong) UILabel *liveBeaconTitle;
+@property (nonatomic, strong) UILabel *liveBeaconSubtitle;
+@property (nonatomic, strong) UISwitch *masterDutySwitch;
 
-// Master Availability Switch
-@property (nonatomic, strong) UIView *masterCardView;
-@property (nonatomic, strong) UISwitch *masterSwitch;
-@property (nonatomic, strong) UILabel *masterStatusLabel;
-
-// Cockpit KPI Labels
-@property (nonatomic, strong) UILabel *kpiTotalLabel;
-@property (nonatomic, strong) UILabel *kpiActiveLabel;
-@property (nonatomic, strong) UILabel *kpiRequestsLabel;
-@property (nonatomic, strong) UILabel *kpiAvgRateLabel;
-
-// Action Dock
-@property (nonatomic, strong) UIButton *actionDockRequestsBtn;
-@property (nonatomic, strong) UIButton *actionDockScheduleBtn;
+// Yield Ribbon & Metrics
+@property (nonatomic, strong) UIView *yieldRibbon;
+@property (nonatomic, strong) UILabel *ribbonActiveCount;
+@property (nonatomic, strong) UILabel *ribbonBookingsCount;
+@property (nonatomic, strong) UILabel *ribbonAvgYield;
 
 // Omni-Search & Filter Rail
+@property (nonatomic, strong) UIView *searchContainer;
 @property (nonatomic, strong) UITextField *searchField;
-@property (nonatomic, strong) UIButton *searchClearBtn;
 @property (nonatomic, strong) UIScrollView *categoryFilterRail;
 @property (nonatomic, strong) UIStackView *categoryFilterStack;
 @property (nonatomic, strong) NSMutableArray<UIButton *> *filterButtons;
-@property (nonatomic, copy) NSString *selectedFilterCategory; // @"all", @"active", @"paused", or custom
+@property (nonatomic, copy) NSString *selectedFilterCategory; // @"all", @"active", @"paused", @"grooming", @"training"
+
+// Floating Quick Operating Dock (Bottom Bar)
+@property (nonatomic, strong) UIView *floatingOperatingDock;
+@property (nonatomic, strong) UILabel *operatingHoursLabel;
+@property (nonatomic, strong) UIButton *dockScheduleButton;
+@property (nonatomic, strong) UIButton *dockPipelineButton;
 
 // Cinematic Studio Empty State
 @property (nonatomic, strong) UIView *emptyStateContainer;
-@property (nonatomic, strong) NSMutableArray<UIView *> *starterTemplateCards;
 
 // Data
 @property (nonatomic, strong) NSMutableArray<PPServiceModel *> *allServices;
@@ -412,14 +427,15 @@
     self.allServices = [NSMutableArray array];
     self.filteredServices = [NSMutableArray array];
     self.filterButtons = [NSMutableArray array];
-    self.starterTemplateCards = [NSMutableArray array];
     self.selectedFilterCategory = @"all";
     self.searchQuery = @"";
+    self.currentStageMode = 0; // Default: Service Atelier & Yield
     self.hasPermission = [self checkServicePermission];
 
     [self setupNavigation];
     [self setupTableView];
     [self setupCockpitHeader];
+    [self setupFloatingOperatingDock];
     [self setupCinematicEmptyState];
     [self startObservingServices];
 }
@@ -444,35 +460,35 @@
     return NO;
 }
 
-#pragma mark - Pro Navigation Bar
+#pragma mark - NextGen V8 Pro Navigation Bar (Zero Truncation Guarantee)
 
 - (void)setupNavigation {
-    NSString *navTitle = Language.isRTL ? @"طلبات وعروض الخدمة" : @"Services Command";
+    NSString *navTitle = [Language isRTL] ? @"طلبات وعروض الخدمة" : @"Services Command";
     [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:navTitle showBack:YES];
 
     if (self.hasPermission) {
-        // Quick Starter Templates Action Button
+        // Quick Starter Templates Pill Button
         UIButton *templateBtn = [UIButton buttonWithType:UIButtonTypeSystem];
         templateBtn.translatesAutoresizingMaskIntoConstraints = NO;
         templateBtn.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.12];
-        [templateBtn setTitle:Language.isRTL ? @"⚡ قوالب جاهزة" : @"⚡ Templates" forState:UIControlStateNormal];
+        [templateBtn setTitle:[Language isRTL] ? @"⚡ قوالب" : @"⚡ Templates" forState:UIControlStateNormal];
         [templateBtn setTitleColor:[UIColor ppPrimary] forState:UIControlStateNormal];
         templateBtn.titleLabel.font = [Styling fontBold:12.5];
         PPApplyContinuousCorners(templateBtn, 14.0);
-        templateBtn.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
+        templateBtn.contentEdgeInsets = UIEdgeInsetsMake(6, 10, 6, 10);
         [templateBtn addTarget:self action:@selector(openTemplatePicker) forControlEvents:UIControlEventTouchUpInside];
         [self pp_navBarAddActionButton:templateBtn key:@"pro_templates"];
 
-        // Add Service Primary Button
+        // Add Service Primary Pill (Engineered to never truncate in RTL/LTR)
         UIButton *addBtn = [UIButton buttonWithType:UIButtonTypeCustom];
         addBtn.translatesAutoresizingMaskIntoConstraints = NO;
         addBtn.backgroundColor = [UIColor ppPrimary];
-        [addBtn setTitle:Language.isRTL ? @"+ إضافة خدمة" : @"+ New Service" forState:UIControlStateNormal];
+        [addBtn setTitle:[Language isRTL] ? @"+ خدمة" : @"+ New" forState:UIControlStateNormal];
         [addBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
         addBtn.titleLabel.font = [Styling fontBold:13.0];
-        PPApplyContinuousCorners(addBtn, 16.0);
+        PPApplyContinuousCorners(addBtn, 14.0);
         PPApplyButtonShadow(addBtn);
-        addBtn.contentEdgeInsets = UIEdgeInsetsMake(6, 14, 6, 14);
+        addBtn.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
         [addBtn addTarget:self action:@selector(addServiceTapped) forControlEvents:UIControlEventTouchUpInside];
         [self pp_navBarAddActionButton:addBtn key:@"pro_add_service"];
     }
@@ -490,9 +506,9 @@
     _tableView.showsVerticalScrollIndicator = NO;
     _tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
     _tableView.rowHeight = UITableViewAutomaticDimension;
-    _tableView.estimatedRowHeight = 140.0;
+    _tableView.estimatedRowHeight = 138.0;
     _tableView.sectionHeaderTopPadding = 0.0;
-    _tableView.contentInset = UIEdgeInsetsMake(0, 0, 90, 0);
+    _tableView.contentInset = UIEdgeInsetsMake(0, 0, 110, 0);
     [_tableView registerClass:[PPServiceCell class] forCellReuseIdentifier:[PPServiceCell reuseID]];
 
     _refreshControl = [[UIRefreshControl alloc] init];
@@ -510,134 +526,167 @@
     ]];
 }
 
+#pragma mark - NextGen V8 Spatial Cockpit Header
+
 - (void)setupCockpitHeader {
     CGFloat screenW = UIScreen.mainScreen.bounds.size.width;
-    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, screenW, 305)];
+    UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, screenW, 252)];
     header.backgroundColor = UIColor.clearColor;
     header.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
 
-    // 1. Spatial Telemetry & Master Switch Card
-    _masterCardView = [[UIView alloc] init];
-    _masterCardView.translatesAutoresizingMaskIntoConstraints = NO;
-    _masterCardView.backgroundColor = [UIColor ppElevatedSurface];
-    _masterCardView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    _masterCardView.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-    PPApplyContinuousCorners(_masterCardView, PPCornerCard);
-    PPApplyCardShadow(_masterCardView);
-    [header addSubview:_masterCardView];
+    // 1. Master Duty & Availability Island (Compact 70pt frosted glass capsule)
+    _masterIslandView = [[UIView alloc] init];
+    _masterIslandView.translatesAutoresizingMaskIntoConstraints = NO;
+    _masterIslandView.backgroundColor = [UIColor ppElevatedSurface];
+    _masterIslandView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    _masterIslandView.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+    PPApplyContinuousCorners(_masterIslandView, 18.0);
+    PPApplyCardShadow(_masterIslandView);
+    [header addSubview:_masterIslandView];
 
-    // Live Beacon & Master Title
     _liveBeaconDot = [UIView new];
     _liveBeaconDot.translatesAutoresizingMaskIntoConstraints = NO;
     _liveBeaconDot.backgroundColor = [UIColor ppSuccess];
-    _liveBeaconDot.layer.cornerRadius = 5.0;
-    [_masterCardView addSubview:_liveBeaconDot];
+    _liveBeaconDot.layer.cornerRadius = 4.5;
+    [_masterIslandView addSubview:_liveBeaconDot];
 
-    _liveBeaconLabel = [UILabel new];
-    _liveBeaconLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _liveBeaconLabel.text = kLang(@"Serv_Master_Toggle_Title");
-    _liveBeaconLabel.font = [Styling fontBold:15.5];
-    _liveBeaconLabel.textColor = PrimaryTextClr;
-    _liveBeaconLabel.textAlignment = Language.alignmentForCurrentLanguage;
-    [_masterCardView addSubview:_liveBeaconLabel];
+    _liveBeaconTitle = [UILabel new];
+    _liveBeaconTitle.translatesAutoresizingMaskIntoConstraints = NO;
+    _liveBeaconTitle.text = [Language isRTL] ? @"حالة التوفر الشامل في قطر" : @"Master Salon Visibility";
+    _liveBeaconTitle.font = [Styling fontBold:14.5];
+    _liveBeaconTitle.textColor = PrimaryTextClr;
+    _liveBeaconTitle.textAlignment = Language.alignmentForCurrentLanguage;
+    [_masterIslandView addSubview:_liveBeaconTitle];
 
-    _masterStatusLabel = [UILabel new];
-    _masterStatusLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _masterStatusLabel.text = kLang(@"Serv_Master_Active_State");
-    _masterStatusLabel.font = [Styling fontRegular:12.0];
-    _masterStatusLabel.textColor = SeconderyTextClr;
-    _masterStatusLabel.textAlignment = Language.alignmentForCurrentLanguage;
-    [_masterCardView addSubview:_masterStatusLabel];
+    _liveBeaconSubtitle = [UILabel new];
+    _liveBeaconSubtitle.translatesAutoresizingMaskIntoConstraints = NO;
+    _liveBeaconSubtitle.text = [Language isRTL] ? @"خدماتك ظاهرة لجميع العملاء وقابلة للحجز الفوري" : @"All services active & bookable across Qatar";
+    _liveBeaconSubtitle.font = [Styling fontRegular:11.5];
+    _liveBeaconSubtitle.textColor = SeconderyTextClr;
+    _liveBeaconSubtitle.textAlignment = Language.alignmentForCurrentLanguage;
+    [_masterIslandView addSubview:_liveBeaconSubtitle];
 
-    _masterSwitch = [[UISwitch alloc] init];
-    _masterSwitch.translatesAutoresizingMaskIntoConstraints = NO;
-    _masterSwitch.onTintColor = [UIColor ppSuccess];
-    _masterSwitch.on = YES;
-    [_masterSwitch addTarget:self action:@selector(masterSwitchToggled:) forControlEvents:UIControlEventValueChanged];
-    [_masterCardView addSubview:_masterSwitch];
+    _masterDutySwitch = [[UISwitch alloc] init];
+    _masterDutySwitch.translatesAutoresizingMaskIntoConstraints = NO;
+    _masterDutySwitch.onTintColor = [UIColor ppSuccess];
+    _masterDutySwitch.on = YES;
+    _masterDutySwitch.transform = CGAffineTransformMakeScale(0.82, 0.82);
+    [_masterDutySwitch addTarget:self action:@selector(masterSwitchToggled:) forControlEvents:UIControlEventValueChanged];
+    [_masterIslandView addSubview:_masterDutySwitch];
 
-    // Divider
-    UIView *div = [UIView new];
-    div.translatesAutoresizingMaskIntoConstraints = NO;
-    div.backgroundColor = [UIColor ppSurfaceBorder];
-    [_masterCardView addSubview:div];
+    [NSLayoutConstraint activateConstraints:@[
+        [_masterIslandView.topAnchor constraintEqualToAnchor:header.topAnchor constant:6],
+        [_masterIslandView.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16],
+        [_masterIslandView.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16],
+        [_masterIslandView.heightAnchor constraintEqualToConstant:66],
 
-    // 3 Spatial KPI Pods
-    UIStackView *kpiStack = [[UIStackView alloc] init];
-    kpiStack.translatesAutoresizingMaskIntoConstraints = NO;
-    kpiStack.axis = UILayoutConstraintAxisHorizontal;
-    kpiStack.distribution = UIStackViewDistributionFillEqually;
-    kpiStack.spacing = 8.0;
-    [_masterCardView addSubview:kpiStack];
+        [_liveBeaconDot.leadingAnchor constraintEqualToAnchor:_masterIslandView.leadingAnchor constant:14],
+        [_liveBeaconDot.topAnchor constraintEqualToAnchor:_masterIslandView.topAnchor constant:18],
+        [_liveBeaconDot.widthAnchor constraintEqualToConstant:9],
+        [_liveBeaconDot.heightAnchor constraintEqualToConstant:9],
 
-    _kpiTotalLabel = [self makeKPILabelWithColor:[UIColor ppPrimary]];
-    _kpiActiveLabel = [self makeKPILabelWithColor:[UIColor ppSuccess]];
-    _kpiRequestsLabel = [self makeKPILabelWithColor:[UIColor ppWarning]];
-    _kpiAvgRateLabel = [self makeKPILabelWithColor:[UIColor ppTextPrimary]];
+        [_liveBeaconTitle.centerYAnchor constraintEqualToAnchor:_liveBeaconDot.centerYAnchor],
+        [_liveBeaconTitle.leadingAnchor constraintEqualToAnchor:_liveBeaconDot.trailingAnchor constant:8],
+        [_liveBeaconTitle.trailingAnchor constraintLessThanOrEqualToAnchor:_masterDutySwitch.leadingAnchor constant:-8],
 
-    UIView *tile1 = [self makeKPITileWithTitle:kLang(@"Serv_Metric_ActiveServices") icon:@"bolt.circle.fill" color:[UIColor ppSuccess] valueLabel:_kpiActiveLabel tag:@"active"];
-    UIView *tile2 = [self makeKPITileWithTitle:kLang(@"Serv_Metric_Requests") icon:@"calendar.badge.clock" color:[UIColor ppPrimary] valueLabel:_kpiRequestsLabel tag:@"requests"];
-    UIView *tile3 = [self makeKPITileWithTitle:kLang(@"Serv_Metric_Revenue") icon:@"banknote.fill" color:[UIColor ppTextPrimary] valueLabel:_kpiAvgRateLabel tag:@"revenue"];
+        [_liveBeaconSubtitle.topAnchor constraintEqualToAnchor:_liveBeaconTitle.bottomAnchor constant:3],
+        [_liveBeaconSubtitle.leadingAnchor constraintEqualToAnchor:_liveBeaconTitle.leadingAnchor],
+        [_liveBeaconSubtitle.trailingAnchor constraintLessThanOrEqualToAnchor:_masterDutySwitch.leadingAnchor constant:-8],
 
-    [kpiStack addArrangedSubview:tile1];
-    [kpiStack addArrangedSubview:tile2];
-    [kpiStack addArrangedSubview:tile3];
+        [_masterDutySwitch.trailingAnchor constraintEqualToAnchor:_masterIslandView.trailingAnchor constant:-12],
+        [_masterDutySwitch.centerYAnchor constraintEqualToAnchor:_masterIslandView.centerYAnchor]
+    ]];
 
-    // 2. Action Dock (Quick Jump to Live Requests & Schedule)
-    UIStackView *actionDock = [UIStackView new];
-    actionDock.translatesAutoresizingMaskIntoConstraints = NO;
-    actionDock.axis = UILayoutConstraintAxisHorizontal;
-    actionDock.distribution = UIStackViewDistributionFillEqually;
-    actionDock.spacing = 10.0;
-    [header addSubview:actionDock];
+    // 2. The Dual-Stage Segmented Stage Control
+    NSArray *segments = @[
+        [Language isRTL] ? @"💈 عروض الخدمات والتسعير" : @"💈 Service Atelier",
+        [Language isRTL] ? @"🐾 الحجوزات الحية (2)" : @"🐾 Live Floor (2)"
+    ];
+    _stageSegmentedControl = [[UISegmentedControl alloc] initWithItems:segments];
+    _stageSegmentedControl.translatesAutoresizingMaskIntoConstraints = NO;
+    _stageSegmentedControl.selectedSegmentIndex = 0;
+    _stageSegmentedControl.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.07];
+    _stageSegmentedControl.selectedSegmentTintColor = [UIColor ppElevatedSurface];
+    NSDictionary *selAttr = @{
+        NSFontAttributeName: [Styling fontBold:13.0],
+        NSForegroundColorAttributeName: [UIColor ppPrimary]
+    };
+    NSDictionary *unselAttr = @{
+        NSFontAttributeName: [Styling fontMedium:12.5],
+        NSForegroundColorAttributeName: [UIColor ppTextSecondary]
+    };
+    [_stageSegmentedControl setTitleTextAttributes:selAttr forState:UIControlStateSelected];
+    [_stageSegmentedControl setTitleTextAttributes:unselAttr forState:UIControlStateNormal];
+    [_stageSegmentedControl addTarget:self action:@selector(stageSegmentChanged:) forControlEvents:UIControlEventValueChanged];
+    [header addSubview:_stageSegmentedControl];
 
-    _actionDockRequestsBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    _actionDockRequestsBtn.backgroundColor = [UIColor ppSurfaceElevated];
-    _actionDockRequestsBtn.layer.borderWidth = 1.0;
-    _actionDockRequestsBtn.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-    PPApplyContinuousCorners(_actionDockRequestsBtn, PPCornerMedium);
-    [_actionDockRequestsBtn setTitle:Language.isRTL ? @"📋 طلبات وحجوزات الخدمة (2)" : @"📋 Bookings Pipeline (2)" forState:UIControlStateNormal];
-    [_actionDockRequestsBtn setTitleColor:PrimaryTextClr forState:UIControlStateNormal];
-    _actionDockRequestsBtn.titleLabel.font = [Styling fontBold:13.0];
-    [_actionDockRequestsBtn addTarget:self action:@selector(openRequestsPipeline) forControlEvents:UIControlEventTouchUpInside];
-    [actionDock addArrangedSubview:_actionDockRequestsBtn];
+    // 3. Yield Telemetry Ribbon (3 clean glanceable micro-metrics)
+    _yieldRibbon = [[UIView alloc] init];
+    _yieldRibbon.translatesAutoresizingMaskIntoConstraints = NO;
+    _yieldRibbon.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.04];
+    PPApplyContinuousCorners(_yieldRibbon, 12.0);
+    _yieldRibbon.layer.borderWidth = 0.5;
+    _yieldRibbon.layer.borderColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.12].CGColor;
+    [header addSubview:_yieldRibbon];
 
-    _actionDockScheduleBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    _actionDockScheduleBtn.backgroundColor = [UIColor ppSurfaceElevated];
-    _actionDockScheduleBtn.layer.borderWidth = 1.0;
-    _actionDockScheduleBtn.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-    PPApplyContinuousCorners(_actionDockScheduleBtn, PPCornerMedium);
-    [_actionDockScheduleBtn setTitle:Language.isRTL ? @"⏰ ساعات العمل والتوفر" : @"⏰ Schedule Matrix" forState:UIControlStateNormal];
-    [_actionDockScheduleBtn setTitleColor:PrimaryTextClr forState:UIControlStateNormal];
-    _actionDockScheduleBtn.titleLabel.font = [Styling fontBold:13.0];
-    [_actionDockScheduleBtn addTarget:self action:@selector(openScheduleMatrix) forControlEvents:UIControlEventTouchUpInside];
-    [actionDock addArrangedSubview:_actionDockScheduleBtn];
+    UIStackView *ribbonStack = [[UIStackView alloc] init];
+    ribbonStack.translatesAutoresizingMaskIntoConstraints = NO;
+    ribbonStack.axis = UILayoutConstraintAxisHorizontal;
+    ribbonStack.distribution = UIStackViewDistributionFillEqually;
+    ribbonStack.spacing = 4.0;
+    [_yieldRibbon addSubview:ribbonStack];
 
-    // 3. Omni-Search Field
-    UIView *searchContainer = [[UIView alloc] init];
-    searchContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    searchContainer.backgroundColor = [UIColor ppSurfaceElevated];
-    searchContainer.layer.borderWidth = 1.0;
-    searchContainer.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-    PPApplyContinuousCorners(searchContainer, PPCornerMedium);
-    [header addSubview:searchContainer];
+    _ribbonActiveCount = [self makeRibbonLabel:@"0 نشط" color:[UIColor ppSuccess]];
+    _ribbonBookingsCount = [self makeRibbonLabel:@"2 حجز اليوم" color:[UIColor ppPrimary]];
+    _ribbonAvgYield = [self makeRibbonLabel:@"250 ر.ق الإيراد" color:PrimaryTextClr];
+
+    [ribbonStack addArrangedSubview:_ribbonActiveCount];
+    [ribbonStack addArrangedSubview:_ribbonBookingsCount];
+    [ribbonStack addArrangedSubview:_ribbonAvgYield];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [_stageSegmentedControl.topAnchor constraintEqualToAnchor:_masterIslandView.bottomAnchor constant:10],
+        [_stageSegmentedControl.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16],
+        [_stageSegmentedControl.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16],
+        [_stageSegmentedControl.heightAnchor constraintEqualToConstant:34],
+
+        [_yieldRibbon.topAnchor constraintEqualToAnchor:_stageSegmentedControl.bottomAnchor constant:8],
+        [_yieldRibbon.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16],
+        [_yieldRibbon.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16],
+        [_yieldRibbon.heightAnchor constraintEqualToConstant:34],
+
+        [ribbonStack.topAnchor constraintEqualToAnchor:_yieldRibbon.topAnchor],
+        [ribbonStack.bottomAnchor constraintEqualToAnchor:_yieldRibbon.bottomAnchor],
+        [ribbonStack.leadingAnchor constraintEqualToAnchor:_yieldRibbon.leadingAnchor constant:8],
+        [ribbonStack.trailingAnchor constraintEqualToAnchor:_yieldRibbon.trailingAnchor constant:-8]
+    ]];
+
+    // 4. Omni-Search Field (Clean 38pt glass capsule)
+    _searchContainer = [[UIView alloc] init];
+    _searchContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    _searchContainer.backgroundColor = [UIColor ppSurfaceElevated];
+    _searchContainer.layer.borderWidth = 0.5;
+    _searchContainer.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+    PPApplyContinuousCorners(_searchContainer, 12.0);
+    [header addSubview:_searchContainer];
 
     UIImageView *searchIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass"]];
     searchIcon.translatesAutoresizingMaskIntoConstraints = NO;
     searchIcon.tintColor = [UIColor ppTextSecondary];
-    [searchContainer addSubview:searchIcon];
+    [_searchContainer addSubview:searchIcon];
 
     _searchField = [[UITextField alloc] init];
     _searchField.translatesAutoresizingMaskIntoConstraints = NO;
-    _searchField.placeholder = [Language isRTL] ? @"بحث سريع في عروض الخدمات..." : @"Search service offers...";
-    _searchField.font = [Styling fontRegular:13.5];
+    _searchField.placeholder = [Language isRTL] ? @"بحث سريع في الخدمات والتسعير..." : @"Quick search services & pricing...";
+    _searchField.font = [Styling fontRegular:13.0];
     _searchField.textColor = [UIColor ppTextPrimary];
     _searchField.textAlignment = Language.alignmentForCurrentLanguage;
     _searchField.delegate = self;
+    _searchField.clearButtonMode = UITextFieldViewModeWhileEditing;
     [_searchField addTarget:self action:@selector(searchChanged) forControlEvents:UIControlEventEditingChanged];
-    [searchContainer addSubview:_searchField];
+    [_searchContainer addSubview:_searchField];
 
-    // 4. Category Filter Rail
+    // 5. Category Filter Rail with SF Symbols
     _categoryFilterRail = [[UIScrollView alloc] init];
     _categoryFilterRail.translatesAutoresizingMaskIntoConstraints = NO;
     _categoryFilterRail.showsHorizontalScrollIndicator = NO;
@@ -650,64 +699,24 @@
     [_categoryFilterRail addSubview:_categoryFilterStack];
 
     [NSLayoutConstraint activateConstraints:@[
-        // Master Telemetry Card
-        [_masterCardView.topAnchor constraintEqualToAnchor:header.topAnchor constant:8],
-        [_masterCardView.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16],
-        [_masterCardView.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16],
-        [_masterCardView.heightAnchor constraintEqualToConstant:140],
+        [_searchContainer.topAnchor constraintEqualToAnchor:_yieldRibbon.bottomAnchor constant:8],
+        [_searchContainer.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16],
+        [_searchContainer.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16],
+        [_searchContainer.heightAnchor constraintEqualToConstant:38],
 
-        [_liveBeaconDot.leadingAnchor constraintEqualToAnchor:_masterCardView.leadingAnchor constant:14],
-        [_liveBeaconDot.topAnchor constraintEqualToAnchor:_masterCardView.topAnchor constant:18],
-        [_liveBeaconDot.widthAnchor constraintEqualToConstant:10],
-        [_liveBeaconDot.heightAnchor constraintEqualToConstant:10],
-
-        [_liveBeaconLabel.centerYAnchor constraintEqualToAnchor:_liveBeaconDot.centerYAnchor],
-        [_liveBeaconLabel.leadingAnchor constraintEqualToAnchor:_liveBeaconDot.trailingAnchor constant:8],
-        [_liveBeaconLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_masterSwitch.leadingAnchor constant:-10],
-
-        [_masterStatusLabel.topAnchor constraintEqualToAnchor:_liveBeaconLabel.bottomAnchor constant:3],
-        [_masterStatusLabel.leadingAnchor constraintEqualToAnchor:_liveBeaconLabel.leadingAnchor],
-        [_masterStatusLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_masterSwitch.leadingAnchor constant:-10],
-
-        [_masterSwitch.trailingAnchor constraintEqualToAnchor:_masterCardView.trailingAnchor constant:-14],
-        [_masterSwitch.centerYAnchor constraintEqualToAnchor:_liveBeaconDot.centerYAnchor constant:6],
-
-        [div.topAnchor constraintEqualToAnchor:_masterStatusLabel.bottomAnchor constant:10],
-        [div.leadingAnchor constraintEqualToAnchor:_masterCardView.leadingAnchor constant:14],
-        [div.trailingAnchor constraintEqualToAnchor:_masterCardView.trailingAnchor constant:-14],
-        [div.heightAnchor constraintEqualToConstant:0.5],
-
-        [kpiStack.topAnchor constraintEqualToAnchor:div.bottomAnchor constant:8],
-        [kpiStack.leadingAnchor constraintEqualToAnchor:_masterCardView.leadingAnchor constant:10],
-        [kpiStack.trailingAnchor constraintEqualToAnchor:_masterCardView.trailingAnchor constant:-10],
-        [kpiStack.bottomAnchor constraintEqualToAnchor:_masterCardView.bottomAnchor constant:-8],
-
-        // Action Dock
-        [actionDock.topAnchor constraintEqualToAnchor:_masterCardView.bottomAnchor constant:10],
-        [actionDock.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16],
-        [actionDock.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16],
-        [actionDock.heightAnchor constraintEqualToConstant:38],
-
-        // Search Bar
-        [searchContainer.topAnchor constraintEqualToAnchor:actionDock.bottomAnchor constant:10],
-        [searchContainer.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16],
-        [searchContainer.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16],
-        [searchContainer.heightAnchor constraintEqualToConstant:40],
-
-        [searchIcon.leadingAnchor constraintEqualToAnchor:searchContainer.leadingAnchor constant:12],
-        [searchIcon.centerYAnchor constraintEqualToAnchor:searchContainer.centerYAnchor],
-        [searchIcon.widthAnchor constraintEqualToConstant:16],
-        [searchIcon.heightAnchor constraintEqualToConstant:16],
+        [searchIcon.leadingAnchor constraintEqualToAnchor:_searchContainer.leadingAnchor constant:12],
+        [searchIcon.centerYAnchor constraintEqualToAnchor:_searchContainer.centerYAnchor],
+        [searchIcon.widthAnchor constraintEqualToConstant:15],
+        [searchIcon.heightAnchor constraintEqualToConstant:15],
 
         [_searchField.leadingAnchor constraintEqualToAnchor:searchIcon.trailingAnchor constant:8],
-        [_searchField.trailingAnchor constraintEqualToAnchor:searchContainer.trailingAnchor constant:-12],
-        [_searchField.centerYAnchor constraintEqualToAnchor:searchContainer.centerYAnchor],
+        [_searchField.trailingAnchor constraintEqualToAnchor:_searchContainer.trailingAnchor constant:-12],
+        [_searchField.centerYAnchor constraintEqualToAnchor:_searchContainer.centerYAnchor],
 
-        // Filter Rail
-        [_categoryFilterRail.topAnchor constraintEqualToAnchor:searchContainer.bottomAnchor constant:10],
+        [_categoryFilterRail.topAnchor constraintEqualToAnchor:_searchContainer.bottomAnchor constant:8],
         [_categoryFilterRail.leadingAnchor constraintEqualToAnchor:header.leadingAnchor constant:16],
         [_categoryFilterRail.trailingAnchor constraintEqualToAnchor:header.trailingAnchor constant:-16],
-        [_categoryFilterRail.heightAnchor constraintEqualToConstant:36],
+        [_categoryFilterRail.heightAnchor constraintEqualToConstant:32],
 
         [_categoryFilterStack.topAnchor constraintEqualToAnchor:_categoryFilterRail.topAnchor],
         [_categoryFilterStack.leadingAnchor constraintEqualToAnchor:_categoryFilterRail.leadingAnchor],
@@ -722,65 +731,87 @@
     [self rebuildFilterRail];
 }
 
-- (UILabel *)makeKPILabelWithColor:(UIColor *)color {
-    UILabel *lbl = [[UILabel alloc] init];
+- (UILabel *)makeRibbonLabel:(NSString *)text color:(UIColor *)color {
+    UILabel *lbl = [UILabel new];
     lbl.translatesAutoresizingMaskIntoConstraints = NO;
-    lbl.font = [Styling fontBold:15.5];
+    lbl.text = text;
     lbl.textColor = color;
-    lbl.text = @"0";
+    lbl.font = [Styling fontBold:11.5];
     lbl.textAlignment = NSTextAlignmentCenter;
     return lbl;
 }
 
-- (UIView *)makeKPITileWithTitle:(NSString *)title
-                            icon:(NSString *)iconName
-                           color:(UIColor *)color
-                      valueLabel:(UILabel *)valLabel
-                             tag:(NSString *)tagKey {
-    UIView *tile = [[UIView alloc] init];
-    tile.backgroundColor = [color colorWithAlphaComponent:0.06];
-    PPApplyContinuousCorners(tile, PPCornerMedium);
-    tile.userInteractionEnabled = YES;
-    objc_setAssociatedObject(tile, "kpi_tag", tagKey, OBJC_ASSOCIATION_COPY_NONATOMIC);
+#pragma mark - Floating Operating Dock (Glanceable Hours & Rapid Pipelines)
 
-    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(kpiTileTapped:)];
-    [tile addGestureRecognizer:tap];
+- (void)setupFloatingOperatingDock {
+    _floatingOperatingDock = [UIView new];
+    _floatingOperatingDock.translatesAutoresizingMaskIntoConstraints = NO;
+    _floatingOperatingDock.backgroundColor = [[UIColor ppElevatedSurface] colorWithAlphaComponent:0.96];
+    PPApplyContinuousCorners(_floatingOperatingDock, 20.0);
+    _floatingOperatingDock.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    _floatingOperatingDock.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+    PPApplyCardShadow(_floatingOperatingDock);
+    [self.view addSubview:_floatingOperatingDock];
 
-    UILabel *titleL = [[UILabel alloc] init];
-    titleL.translatesAutoresizingMaskIntoConstraints = NO;
-    titleL.text = title;
-    titleL.font = [Styling fontMedium:11.0];
-    titleL.textColor = [UIColor ppTextSecondary];
-    titleL.textAlignment = NSTextAlignmentCenter;
-    [tile addSubview:titleL];
+    // Operating Hours Indicator
+    UIImageView *clockIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"clock.badge.checkmark.fill"]];
+    clockIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    clockIcon.tintColor = [UIColor ppSuccess];
+    [_floatingOperatingDock addSubview:clockIcon];
 
-    [tile addSubview:valLabel];
+    _operatingHoursLabel = [UILabel new];
+    _operatingHoursLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _operatingHoursLabel.text = [Language isRTL] ? @"صالتك مفتوحة اليوم حتى 8:00 م" : @"Salon open today until 8:00 PM";
+    _operatingHoursLabel.font = [Styling fontBold:12.5];
+    _operatingHoursLabel.textColor = PrimaryTextClr;
+    [_floatingOperatingDock addSubview:_operatingHoursLabel];
+
+    // Quick Matrix Link
+    _dockScheduleButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _dockScheduleButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [_dockScheduleButton setTitle:[Language isRTL] ? @"تعديل الساعات ⚙️" : @"Hours ⚙️" forState:UIControlStateNormal];
+    [_dockScheduleButton setTitleColor:[UIColor ppPrimary] forState:UIControlStateNormal];
+    _dockScheduleButton.titleLabel.font = [Styling fontBold:12.0];
+    [_dockScheduleButton addTarget:self action:@selector(openScheduleMatrix) forControlEvents:UIControlEventTouchUpInside];
+    [_floatingOperatingDock addSubview:_dockScheduleButton];
+
+    // Full Pipeline Link
+    _dockPipelineButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    _dockPipelineButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _dockPipelineButton.backgroundColor = [UIColor ppPrimary];
+    PPApplyContinuousCorners(_dockPipelineButton, 12.0);
+    [_dockPipelineButton setTitle:[Language isRTL] ? @"الحجوزات (2)" : @"Bookings (2)" forState:UIControlStateNormal];
+    [_dockPipelineButton setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    _dockPipelineButton.titleLabel.font = [Styling fontBold:12.0];
+    _dockPipelineButton.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
+    [_dockPipelineButton addTarget:self action:@selector(openRequestsPipeline) forControlEvents:UIControlEventTouchUpInside];
+    [_floatingOperatingDock addSubview:_dockPipelineButton];
 
     [NSLayoutConstraint activateConstraints:@[
-        [valLabel.topAnchor constraintEqualToAnchor:tile.topAnchor constant:6],
-        [valLabel.centerXAnchor constraintEqualToAnchor:tile.centerXAnchor],
+        [_floatingOperatingDock.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-10],
+        [_floatingOperatingDock.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [_floatingOperatingDock.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        [_floatingOperatingDock.heightAnchor constraintEqualToConstant:50],
 
-        [titleL.topAnchor constraintEqualToAnchor:valLabel.bottomAnchor constant:1],
-        [titleL.centerXAnchor constraintEqualToAnchor:tile.centerXAnchor],
-        [titleL.bottomAnchor constraintEqualToAnchor:tile.bottomAnchor constant:-6]
+        [clockIcon.leadingAnchor constraintEqualToAnchor:_floatingOperatingDock.leadingAnchor constant:14],
+        [clockIcon.centerYAnchor constraintEqualToAnchor:_floatingOperatingDock.centerYAnchor],
+        [clockIcon.widthAnchor constraintEqualToConstant:18],
+        [clockIcon.heightAnchor constraintEqualToConstant:18],
+
+        [_operatingHoursLabel.leadingAnchor constraintEqualToAnchor:clockIcon.trailingAnchor constant:8],
+        [_operatingHoursLabel.centerYAnchor constraintEqualToAnchor:_floatingOperatingDock.centerYAnchor],
+        [_operatingHoursLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_dockScheduleButton.leadingAnchor constant:-6],
+
+        [_dockScheduleButton.trailingAnchor constraintEqualToAnchor:_dockPipelineButton.leadingAnchor constant:-10],
+        [_dockScheduleButton.centerYAnchor constraintEqualToAnchor:_floatingOperatingDock.centerYAnchor],
+
+        [_dockPipelineButton.trailingAnchor constraintEqualToAnchor:_floatingOperatingDock.trailingAnchor constant:-10],
+        [_dockPipelineButton.centerYAnchor constraintEqualToAnchor:_floatingOperatingDock.centerYAnchor],
+        [_dockPipelineButton.heightAnchor constraintEqualToConstant:32]
     ]];
-
-    return tile;
 }
 
-- (void)kpiTileTapped:(UITapGestureRecognizer *)gesture {
-    [PPFunc pp_playTapEffect];
-    NSString *tag = objc_getAssociatedObject(gesture.view, "kpi_tag");
-    if ([tag isEqualToString:@"requests"]) {
-        [self openRequestsPipeline];
-    } else if ([tag isEqualToString:@"active"]) {
-        self.selectedFilterCategory = @"active";
-        [self updateFilterButtonsSelection];
-        [self applyFilterAndReload];
-    }
-}
-
-#pragma mark - Filter Rail
+#pragma mark - Filter Rail with Apple SF Symbols
 
 - (void)rebuildFilterRail {
     for (UIView *v in self.categoryFilterStack.arrangedSubviews) {
@@ -803,8 +834,8 @@
 
         UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
         btn.translatesAutoresizingMaskIntoConstraints = NO;
-        btn.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
-        btn.titleLabel.font = [Styling fontBold:12.0];
+        btn.contentEdgeInsets = UIEdgeInsetsMake(5, 12, 5, 12);
+        btn.titleLabel.font = [Styling fontBold:11.5];
         [btn setTitle:title forState:UIControlStateNormal];
         PPApplyContinuousCorners(btn, PPCornerPill);
         objc_setAssociatedObject(btn, "cat_key", key, OBJC_ASSOCIATION_COPY_NONATOMIC);
@@ -828,7 +859,7 @@
         } else {
             btn.backgroundColor = [UIColor ppSurfaceElevated];
             [btn setTitleColor:[UIColor ppTextSecondary] forState:UIControlStateNormal];
-            btn.layer.borderWidth = 1.0;
+            btn.layer.borderWidth = 0.5;
             btn.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
             btn.layer.shadowOpacity = 0.0;
         }
@@ -845,224 +876,30 @@
     }
 }
 
-#pragma mark - Cinematic Empty State (When count == 0)
+#pragma mark - Stage Mode Segment Switch
 
-- (void)setupCinematicEmptyState {
-    _emptyStateContainer = [[UIView alloc] init];
-    _emptyStateContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    _emptyStateContainer.hidden = YES;
-    [self.view addSubview:_emptyStateContainer];
-
-    UIScrollView *scroll = [UIScrollView new];
-    scroll.translatesAutoresizingMaskIntoConstraints = NO;
-    scroll.showsVerticalScrollIndicator = NO;
-    [_emptyStateContainer addSubview:scroll];
-
-    UIView *box = [UIView new];
-    box.translatesAutoresizingMaskIntoConstraints = NO;
-    [scroll addSubview:box];
-
-    // Glowing Ambient Emblem
-    UIView *glowRing = [UIView new];
-    glowRing.translatesAutoresizingMaskIntoConstraints = NO;
-    glowRing.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.12];
-    glowRing.layer.cornerRadius = 36.0;
-    [box addSubview:glowRing];
-
-    UIImageView *orbIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"sparkles.rectangle.stack.fill"]];
-    orbIcon.translatesAutoresizingMaskIntoConstraints = NO;
-    orbIcon.tintColor = AppPrimaryClr;
-    orbIcon.contentMode = UIViewContentModeScaleAspectFit;
-    [glowRing addSubview:orbIcon];
-
-    // Inspirational Copy
-    UILabel *headline = [UILabel new];
-    headline.translatesAutoresizingMaskIntoConstraints = NO;
-    headline.text = kLang(@"Serv_Empty_Pro_Headline");
-    headline.font = [Styling fontBold:18.5];
-    headline.textColor = PrimaryTextClr;
-    headline.textAlignment = NSTextAlignmentCenter;
-    [box addSubview:headline];
-
-    UILabel *subheadline = [UILabel new];
-    subheadline.translatesAutoresizingMaskIntoConstraints = NO;
-    subheadline.text = kLang(@"Serv_Empty_Pro_Subheadline");
-    subheadline.font = [Styling fontRegular:13.5];
-    subheadline.textColor = SeconderyTextClr;
-    subheadline.textAlignment = NSTextAlignmentCenter;
-    subheadline.numberOfLines = 2;
-    [box addSubview:subheadline];
-
-    // 4 Starter Quick-Launch Template Cards in a 2x2 Grid
-    UILabel *templatesHeader = [UILabel new];
-    templatesHeader.translatesAutoresizingMaskIntoConstraints = NO;
-    templatesHeader.text = Language.isRTL ? @"🚀 قوالب جاهزة للإطلاق السريع بلمسة واحدة:" : @"🚀 Instant 1-Tap Starter Templates:";
-    templatesHeader.font = [Styling fontBold:13.5];
-    templatesHeader.textColor = AppPrimaryClr;
-    templatesHeader.textAlignment = Language.alignmentForCurrentLanguage;
-    [box addSubview:templatesHeader];
-
-    UIStackView *cardsGrid = [UIStackView new];
-    cardsGrid.translatesAutoresizingMaskIntoConstraints = NO;
-    cardsGrid.axis = UILayoutConstraintAxisVertical;
-    cardsGrid.spacing = 10.0;
-    [box addSubview:cardsGrid];
-
-    NSArray *tpls = @[
-        @{@"icon": @"scissors", @"title": kLang(@"Serv_Template_Grooming_Title"), @"price": @"150 QAR", @"kind": @1, @"type": @(PPServiceTypeGrooming)},
-        @{@"icon": @"figure.walk", @"title": kLang(@"Serv_Template_Training_Title"), @"price": @"250 QAR", @"kind": @1, @"type": @(PPServiceTypeTraining)},
-        @{@"icon": @"heart.text.square.fill", @"title": kLang(@"Serv_Template_Bath_Title"), @"price": @"120 QAR", @"kind": @2, @"type": @(PPServiceTypeGrooming)},
-        @{@"icon": @"house.fill", @"title": kLang(@"Serv_Template_Boarding_Title"), @"price": @"180 QAR", @"kind": @1, @"type": @(PPServiceTypeGrooming)}
-    ];
-
-    for (NSDictionary *t in tpls) {
-        UIView *card = [self makeTemplateCardWithData:t];
-        [cardsGrid addArrangedSubview:card];
-    }
-
-    // Main CTA Button
-    UIButton *mainCTA = [UIButton buttonWithType:UIButtonTypeCustom];
-    mainCTA.translatesAutoresizingMaskIntoConstraints = NO;
-    mainCTA.backgroundColor = [UIColor ppPrimary];
-    [mainCTA setTitle:kLang(@"Serv_Action_CreateFirst") forState:UIControlStateNormal];
-    [mainCTA setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
-    mainCTA.titleLabel.font = [Styling fontBold:16.0];
-    PPApplyContinuousCorners(mainCTA, PPCornerMedium);
-    PPApplyButtonShadow(mainCTA);
-    [mainCTA addTarget:self action:@selector(addServiceTapped) forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:mainCTA];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [_emptyStateContainer.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:10.0],
-        [_emptyStateContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [_emptyStateContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [_emptyStateContainer.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-
-        [scroll.topAnchor constraintEqualToAnchor:_emptyStateContainer.topAnchor],
-        [scroll.leadingAnchor constraintEqualToAnchor:_emptyStateContainer.leadingAnchor],
-        [scroll.trailingAnchor constraintEqualToAnchor:_emptyStateContainer.trailingAnchor],
-        [scroll.bottomAnchor constraintEqualToAnchor:_emptyStateContainer.bottomAnchor],
-
-        [box.topAnchor constraintEqualToAnchor:scroll.topAnchor],
-        [box.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],
-        [box.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
-        [box.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor constant:-20.0],
-        [box.widthAnchor constraintEqualToAnchor:scroll.widthAnchor],
-
-        [glowRing.topAnchor constraintEqualToAnchor:box.topAnchor constant:16.0],
-        [glowRing.centerXAnchor constraintEqualToAnchor:box.centerXAnchor],
-        [glowRing.widthAnchor constraintEqualToConstant:72.0],
-        [glowRing.heightAnchor constraintEqualToConstant:72.0],
-
-        [orbIcon.centerXAnchor constraintEqualToAnchor:glowRing.centerXAnchor],
-        [orbIcon.centerYAnchor constraintEqualToAnchor:glowRing.centerYAnchor],
-        [orbIcon.widthAnchor constraintEqualToConstant:36.0],
-        [orbIcon.heightAnchor constraintEqualToConstant:36.0],
-
-        [headline.topAnchor constraintEqualToAnchor:glowRing.bottomAnchor constant:12.0],
-        [headline.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:20.0],
-        [headline.trailingAnchor constraintEqualToAnchor:box.trailingAnchor constant:-20.0],
-
-        [subheadline.topAnchor constraintEqualToAnchor:headline.bottomAnchor constant:6.0],
-        [subheadline.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:20.0],
-        [subheadline.trailingAnchor constraintEqualToAnchor:box.trailingAnchor constant:-20.0],
-
-        [templatesHeader.topAnchor constraintEqualToAnchor:subheadline.bottomAnchor constant:20.0],
-        [templatesHeader.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:20.0],
-        [templatesHeader.trailingAnchor constraintEqualToAnchor:box.trailingAnchor constant:-20.0],
-
-        [cardsGrid.topAnchor constraintEqualToAnchor:templatesHeader.bottomAnchor constant:10.0],
-        [cardsGrid.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:16.0],
-        [cardsGrid.trailingAnchor constraintEqualToAnchor:box.trailingAnchor constant:-16.0],
-
-        [mainCTA.topAnchor constraintEqualToAnchor:cardsGrid.bottomAnchor constant:20.0],
-        [mainCTA.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:16.0],
-        [mainCTA.trailingAnchor constraintEqualToAnchor:box.trailingAnchor constant:-16.0],
-        [mainCTA.heightAnchor constraintEqualToConstant:50.0],
-        [mainCTA.bottomAnchor constraintEqualToAnchor:box.bottomAnchor constant:-30.0],
-    ]];
-}
-
-- (UIView *)makeTemplateCardWithData:(NSDictionary *)data {
-    UIView *card = [UIView new];
-    card.translatesAutoresizingMaskIntoConstraints = NO;
-    card.backgroundColor = [UIColor ppElevatedSurface];
-    PPApplyContinuousCorners(card, PPCornerMedium);
-    card.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
-    card.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
-    card.userInteractionEnabled = YES;
-
-    UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:data[@"icon"]
-                                                            withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightBold]]];
-    icon.translatesAutoresizingMaskIntoConstraints = NO;
-    icon.tintColor = AppPrimaryClr;
-    [card addSubview:icon];
-
-    UILabel *title = [UILabel new];
-    title.translatesAutoresizingMaskIntoConstraints = NO;
-    title.text = data[@"title"];
-    title.font = [Styling fontBold:13.5];
-    title.textColor = PrimaryTextClr;
-    title.textAlignment = Language.alignmentForCurrentLanguage;
-    [card addSubview:title];
-
-    UILabel *price = [UILabel new];
-    price.translatesAutoresizingMaskIntoConstraints = NO;
-    price.text = data[@"price"];
-    price.font = [Styling fontBold:12.5];
-    price.textColor = [UIColor ppSuccess];
-    [card addSubview:price];
-
-    UIImageView *arrow = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:Language.isRTL ? @"chevron.left" : @"chevron.right"
-                                                            withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:10 weight:UIImageSymbolWeightBold]]];
-    arrow.translatesAutoresizingMaskIntoConstraints = NO;
-    arrow.tintColor = [SeconderyTextClr colorWithAlphaComponent:0.4];
-    [card addSubview:arrow];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [card.heightAnchor constraintEqualToConstant:56.0],
-
-        [icon.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:14.0],
-        [icon.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
-        [icon.widthAnchor constraintEqualToConstant:22.0],
-        [icon.heightAnchor constraintEqualToConstant:22.0],
-
-        [title.leadingAnchor constraintEqualToAnchor:icon.trailingAnchor constant:10.0],
-        [title.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
-        [title.trailingAnchor constraintLessThanOrEqualToAnchor:price.leadingAnchor constant:-8.0],
-
-        [arrow.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-14.0],
-        [arrow.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
-        [arrow.widthAnchor constraintEqualToConstant:8.0],
-        [arrow.heightAnchor constraintEqualToConstant:12.0],
-
-        [price.trailingAnchor constraintEqualToAnchor:arrow.leadingAnchor constant:-8.0],
-        [price.centerYAnchor constraintEqualToAnchor:card.centerYAnchor],
-    ]];
-
-    UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(starterTemplateTapped:)];
-    objc_setAssociatedObject(tap, "tpl_data", data, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    [card addGestureRecognizer:tap];
-
-    return card;
-}
-
-- (void)starterTemplateTapped:(UITapGestureRecognizer *)gesture {
+- (void)stageSegmentChanged:(UISegmentedControl *)sender {
     [PPFunc pp_playTapEffect];
-    NSDictionary *data = objc_getAssociatedObject(gesture, "tpl_data");
-    if (!data) return;
+    self.currentStageMode = sender.selectedSegmentIndex;
 
-    PPServiceModel *model = [[PPServiceModel alloc] init];
-    model.title = data[@"title"];
-    model.price = [data[@"price"] doubleValue] > 0 ? [data[@"price"] doubleValue] : 150.0;
-    model.currency = @"QAR";
-    model.type = (PPServiceType)[data[@"type"] integerValue];
-    model.petMainKindID = [data[@"kind"] integerValue];
-    model.isAvailable = YES;
-    model.descriptionText = [NSString stringWithFormat:@"%@ · %@", data[@"title"], Language.isRTL ? @"باقة احترافية شاملة ومجهزة لحيوانك الأليف." : @"Professional complete care package."];
-
-    PPAddEditServiceViewController *vc = [[PPAddEditServiceViewController alloc] initWithTemplate:model];
-    [self.navigationController pushViewController:vc animated:YES];
+    // Animate header height adjustments
+    [UIView animateWithDuration:0.28 delay:0 usingSpringWithDamping:0.82 initialSpringVelocity:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
+        if (self.currentStageMode == 0) {
+            // Service Atelier: Full header
+            self.searchContainer.hidden = NO;
+            self.categoryFilterRail.hidden = NO;
+            self.yieldRibbon.hidden = NO;
+            self.spatialCockpitHeader.frame = CGRectMake(0, 0, UIScreen.mainScreen.bounds.size.width, 252);
+        } else {
+            // Live Floor Pipeline: Hide filters & ribbon to focus on appointments
+            self.searchContainer.hidden = YES;
+            self.categoryFilterRail.hidden = YES;
+            self.yieldRibbon.hidden = YES;
+            self.spatialCockpitHeader.frame = CGRectMake(0, 0, UIScreen.mainScreen.bounds.size.width, 126);
+        }
+        self.tableView.tableHeaderView = self.spatialCockpitHeader;
+        [self.tableView reloadData];
+    } completion:nil];
 }
 
 #pragma mark - Master Availability Switch Handler
@@ -1072,19 +909,25 @@
     BOOL isLive = sender.isOn;
 
     _liveBeaconDot.backgroundColor = isLive ? [UIColor ppSuccess] : [UIColor ppWarning];
-    _masterStatusLabel.text = isLive ? kLang(@"Serv_Master_Active_State") : kLang(@"Serv_Master_Paused_State");
+    _liveBeaconSubtitle.text = isLive
+        ? ([Language isRTL] ? @"خدماتك ظاهرة لجميع العملاء وقابلة للحجز الفوري" : @"All services active & bookable across Qatar")
+        : ([Language isRTL] ? @"تم إيقاف ظهور خدماتك مؤقتاً لجميع العملاء" : @"All services paused temporarily");
 
-    [PPHUD showIndeterminateIn:self.view title:isLive ? (Language.isRTL ? @"جارٍ تفعيل جميع الخدمات..." : @"Activating All Services...") : (Language.isRTL ? @"جارٍ إيقاف جميع الخدمات..." : @"Pausing All Services...") subtitle:nil];
+    [PPHUD showIndeterminateIn:self.view title:isLive
+        ? (Language.isRTL ? @"جارٍ تفعيل ظهور الخدمات..." : @"Publishing services live...")
+        : (Language.isRTL ? @"جارٍ إيقاف الخدمات مؤقتاً..." : @"Pausing all services...")
+                      subtitle:nil];
 
-    // Optimistically update all services
     for (PPServiceModel *s in self.allServices) {
         s.isAvailable = isLive;
         [[PPServiceManager sharedManager] toggleAvailability:isLive forServiceID:s.serviceID completion:nil];
     }
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.45 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [PPHUD dismiss];
-        [PPHUD showSuccess:isLive ? (Language.isRTL ? @"تم تفعيل ظهور جميع خدماتك بنجاح" : @"All services published live") : (Language.isRTL ? @"تم إيقاف ظهور جميع خدماتك مؤقتاً" : @"All services paused")];
+        [PPHUD showSuccess:isLive
+            ? (Language.isRTL ? @"تم تفعيل ظهور جميع خدماتك بنجاح" : @"All services published live")
+            : (Language.isRTL ? @"تم إيقاف ظهور جميع خدماتك مؤقتاً" : @"All services paused")];
         [self updateCockpitStats];
         [self applyFilterAndReload];
     });
@@ -1184,13 +1027,384 @@
 
     double avgRate = (total > 0) ? (totalPrice / total) : 0.0;
 
-    self.kpiTotalLabel.text = [NSString stringWithFormat:@"%ld", (long)total];
-    self.kpiActiveLabel.text = [NSString stringWithFormat:@"%ld / %ld", (long)active, (long)total];
-    self.kpiRequestsLabel.text = @"2 جديدة";
-    self.kpiAvgRateLabel.text = [NSString stringWithFormat:@"%.0f QAR", avgRate];
+    self.ribbonActiveCount.text = [NSString stringWithFormat:@"%ld %@", (long)active, [Language isRTL] ? @"عرض نشط" : @"Active Offers"];
+    self.ribbonBookingsCount.text = [Language isRTL] ? @"2 حجز اليوم" : @"2 Bookings Today";
+    self.ribbonAvgYield.text = [NSString stringWithFormat:@"%.0f QAR %@", avgRate, [Language isRTL] ? @"متوسط" : @"Avg"];
 
-    self.masterSwitch.on = (active > 0);
+    self.masterDutySwitch.on = (active > 0);
     self.liveBeaconDot.backgroundColor = (active > 0) ? [UIColor ppSuccess] : [UIColor ppWarning];
+}
+
+#pragma mark - Cinematic Empty State (When services == 0)
+
+- (void)setupCinematicEmptyState {
+    _emptyStateContainer = [[UIView alloc] init];
+    _emptyStateContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    _emptyStateContainer.backgroundColor = UIColor.clearColor;
+    _emptyStateContainer.hidden = YES;
+    [self.view addSubview:_emptyStateContainer];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [_emptyStateContainer.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [_emptyStateContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [_emptyStateContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [_emptyStateContainer.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+
+    // Inner scrollable content for empty state
+    UIScrollView *scroll = [[UIScrollView alloc] init];
+    scroll.translatesAutoresizingMaskIntoConstraints = NO;
+    scroll.showsVerticalScrollIndicator = NO;
+    [_emptyStateContainer addSubview:scroll];
+
+    UIView *box = [[UIView alloc] init];
+    box.translatesAutoresizingMaskIntoConstraints = NO;
+    [scroll addSubview:box];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [scroll.topAnchor constraintEqualToAnchor:_emptyStateContainer.topAnchor],
+        [scroll.leadingAnchor constraintEqualToAnchor:_emptyStateContainer.leadingAnchor],
+        [scroll.trailingAnchor constraintEqualToAnchor:_emptyStateContainer.trailingAnchor],
+        [scroll.bottomAnchor constraintEqualToAnchor:_emptyStateContainer.bottomAnchor],
+
+        [box.topAnchor constraintEqualToAnchor:scroll.topAnchor],
+        [box.leadingAnchor constraintEqualToAnchor:scroll.leadingAnchor],
+        [box.trailingAnchor constraintEqualToAnchor:scroll.trailingAnchor],
+        [box.bottomAnchor constraintEqualToAnchor:scroll.bottomAnchor],
+        [box.widthAnchor constraintEqualToAnchor:scroll.widthAnchor]
+    ]];
+
+    // Glowing Orbital Emblem
+    UIView *glowRing = [[UIView alloc] init];
+    glowRing.translatesAutoresizingMaskIntoConstraints = NO;
+    glowRing.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.08];
+    glowRing.layer.cornerRadius = 36.0;
+    glowRing.layer.borderWidth = 1.0;
+    glowRing.layer.borderColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.25].CGColor;
+    [box addSubview:glowRing];
+
+    UIImageView *orbIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"sparkles"]];
+    orbIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    orbIcon.tintColor = [UIColor ppPrimary];
+    [glowRing addSubview:orbIcon];
+
+    UILabel *headline = [[UILabel alloc] init];
+    headline.translatesAutoresizingMaskIntoConstraints = NO;
+    headline.text = [Language isRTL] ? @"ابدأ بتقديم خدماتك للعملاء في قطر" : @"Launch Your Pet Services in Qatar";
+    headline.font = [Styling fontBold:18.0];
+    headline.textColor = PrimaryTextClr;
+    headline.textAlignment = NSTextAlignmentCenter;
+    [box addSubview:headline];
+
+    UILabel *subheadline = [[UILabel alloc] init];
+    subheadline.translatesAutoresizingMaskIntoConstraints = NO;
+    subheadline.text = [Language isRTL]
+        ? @"أنشئ باقات العناية، التدريب، أو الرعاية مع تسعير فوري وإدارة حجوزات ذكية."
+        : @"Create grooming, training, or care packages with live booking management.";
+    subheadline.font = [Styling fontRegular:13.5];
+    subheadline.textColor = SeconderyTextClr;
+    subheadline.textAlignment = NSTextAlignmentCenter;
+    subheadline.numberOfLines = 2;
+    [box addSubview:subheadline];
+
+    UIButton *mainCTA = [UIButton buttonWithType:UIButtonTypeCustom];
+    mainCTA.translatesAutoresizingMaskIntoConstraints = NO;
+    mainCTA.backgroundColor = [UIColor ppPrimary];
+    PPApplyContinuousCorners(mainCTA, 16.0);
+    PPApplyButtonShadow(mainCTA);
+    [mainCTA setTitle:[Language isRTL] ? @"+ إضافة أول خدمة" : @"+ Add First Service" forState:UIControlStateNormal];
+    [mainCTA setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    mainCTA.titleLabel.font = [Styling fontBold:15.0];
+    [mainCTA addTarget:self action:@selector(addServiceTapped) forControlEvents:UIControlEventTouchUpInside];
+    [box addSubview:mainCTA];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [glowRing.topAnchor constraintEqualToAnchor:box.topAnchor constant:40.0],
+        [glowRing.centerXAnchor constraintEqualToAnchor:box.centerXAnchor],
+        [glowRing.widthAnchor constraintEqualToConstant:72.0],
+        [glowRing.heightAnchor constraintEqualToConstant:72.0],
+
+        [orbIcon.centerXAnchor constraintEqualToAnchor:glowRing.centerXAnchor],
+        [orbIcon.centerYAnchor constraintEqualToAnchor:glowRing.centerYAnchor],
+        [orbIcon.widthAnchor constraintEqualToConstant:34.0],
+        [orbIcon.heightAnchor constraintEqualToConstant:34.0],
+
+        [headline.topAnchor constraintEqualToAnchor:glowRing.bottomAnchor constant:16.0],
+        [headline.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:24.0],
+        [headline.trailingAnchor constraintEqualToAnchor:box.trailingAnchor constant:-24.0],
+
+        [subheadline.topAnchor constraintEqualToAnchor:headline.bottomAnchor constant:8.0],
+        [subheadline.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:24.0],
+        [subheadline.trailingAnchor constraintEqualToAnchor:box.trailingAnchor constant:-24.0],
+
+        [mainCTA.topAnchor constraintEqualToAnchor:subheadline.bottomAnchor constant:24.0],
+        [mainCTA.leadingAnchor constraintEqualToAnchor:box.leadingAnchor constant:20.0],
+        [mainCTA.trailingAnchor constraintEqualToAnchor:box.trailingAnchor constant:-20.0],
+        [mainCTA.heightAnchor constraintEqualToConstant:50.0],
+        [mainCTA.bottomAnchor constraintEqualToAnchor:box.bottomAnchor constant:-40.0]
+    ]];
+}
+
+#pragma mark - Table View Datasource & Delegate
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    if (self.currentStageMode == 1) {
+        // Live Floor: 2 simulated incoming bookings
+        return 2;
+    }
+    return self.filteredServices.count;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (self.currentStageMode == 1) {
+        // Live Floor Pipeline Cell
+        return [self makeLiveFloorCellForIndexPath:indexPath inTableView:tableView];
+    }
+
+    // Service Atelier Cell
+    PPServiceCell *cell = [tableView dequeueReusableCellWithIdentifier:[PPServiceCell reuseID] forIndexPath:indexPath];
+    PPServiceModel *s = self.filteredServices[indexPath.row];
+    [cell configureWithService:s];
+
+    __weak typeof(self) weakSelf = self;
+    cell.onToggleAvailability = ^(BOOL newAvailable) {
+        [weakSelf toggleAvailabilityForService:s newState:newAvailable];
+    };
+
+    cell.onTapPricing = ^{
+        [weakSelf openQuickPricingSheetForService:s];
+    };
+
+    return cell;
+}
+
+- (UITableViewCell *)makeLiveFloorCellForIndexPath:(NSIndexPath *)indexPath inTableView:(UITableView *)tableView {
+    static NSString *const kLiveBookingID = @"PPLiveBookingCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:kLiveBookingID];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:kLiveBookingID];
+        cell.backgroundColor = UIColor.clearColor;
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    }
+
+    for (UIView *v in cell.contentView.subviews) [v removeFromSuperview];
+
+    UIView *card = [UIView new];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor = [UIColor ppElevatedSurface];
+    PPApplyContinuousCorners(card, 18.0);
+    card.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    card.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+    PPApplyCardShadow(card);
+    [cell.contentView addSubview:card];
+
+    // Pet Photo Avatar
+    UIImageView *avatar = [UIImageView new];
+    avatar.translatesAutoresizingMaskIntoConstraints = NO;
+    avatar.contentMode = UIViewContentModeScaleAspectFill;
+    avatar.clipsToBounds = YES;
+    PPApplyContinuousCorners(avatar, 14.0);
+    avatar.image = (indexPath.row == 0) ? [UIImage imageNamed:@"sample_pet_dog"] : [UIImage imageNamed:@"sample_pet_cat"];
+    if (!avatar.image) avatar.image = [UIImage imageNamed:@"placeholder_service"];
+    [card addSubview:avatar];
+
+    // Pet Name & Breed
+    UILabel *nameLabel = [UILabel new];
+    nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    nameLabel.font = [Styling fontBold:15.0];
+    nameLabel.textColor = PrimaryTextClr;
+    nameLabel.text = (indexPath.row == 0) ? @"روكي (Rocky) · بوميرانيان" : @"مشمش (Mishmish) · شيرازي";
+    nameLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [card addSubview:nameLabel];
+
+    // Service booked
+    UILabel *serviceLabel = [UILabel new];
+    serviceLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    serviceLabel.font = [Styling fontMedium:12.5];
+    serviceLabel.textColor = [UIColor ppPrimary];
+    serviceLabel.text = (indexPath.row == 0) ? @"✂️ العناية بالمظهر الكاملة" : @"🛁 حمام تنظيف وتقليم أظافر";
+    serviceLabel.textAlignment = Language.alignmentForCurrentLanguage;
+    [card addSubview:serviceLabel];
+
+    // Arrival Countdown Pill
+    UILabel *countdown = [UILabel new];
+    countdown.translatesAutoresizingMaskIntoConstraints = NO;
+    countdown.font = [Styling fontBold:11.0];
+    countdown.textColor = (indexPath.row == 0) ? [UIColor ppWarning] : [UIColor ppSuccess];
+    countdown.backgroundColor = [(indexPath.row == 0 ? [UIColor ppWarning] : [UIColor ppSuccess]) colorWithAlphaComponent:0.10];
+    countdown.textAlignment = NSTextAlignmentCenter;
+    PPApplyContinuousCorners(countdown, 8.0);
+    countdown.clipsToBounds = YES;
+    countdown.text = (indexPath.row == 0) ? [NSString stringWithFormat:@"  ⏱ يصل خلال 15 دقيقة  "] : [NSString stringWithFormat:@"  ⏱ موعد اليوم 6:30 م  "];
+    [card addSubview:countdown];
+
+    // Price tag
+    UILabel *priceTag = [UILabel new];
+    priceTag.translatesAutoresizingMaskIntoConstraints = NO;
+    priceTag.font = [Styling fontBold:13.5];
+    priceTag.textColor = [UIColor ppSuccess];
+    priceTag.text = (indexPath.row == 0) ? @"250 QAR" : @"180 QAR";
+    [card addSubview:priceTag];
+
+    // Primary Action Button (Start Session / Complete)
+    UIButton *actionBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    actionBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    actionBtn.backgroundColor = [UIColor ppPrimary];
+    PPApplyContinuousCorners(actionBtn, 12.0);
+    [actionBtn setTitle:(indexPath.row == 0) ? ([Language isRTL] ? @"بدء الجلسة" : @"Start Session") : ([Language isRTL] ? @"تأكيد الوصول" : @"Confirm Arrival") forState:UIControlStateNormal];
+    [actionBtn setTitleColor:UIColor.whiteColor forState:UIControlStateNormal];
+    actionBtn.titleLabel.font = [Styling fontBold:12.5];
+    [actionBtn addTarget:self action:@selector(openRequestsPipeline) forControlEvents:UIControlEventTouchUpInside];
+    [card addSubview:actionBtn];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [card.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:5.0],
+        [card.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:16.0],
+        [card.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-16.0],
+        [card.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor constant:-5.0],
+
+        [avatar.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:12.0],
+        [avatar.topAnchor constraintEqualToAnchor:card.topAnchor constant:12.0],
+        [avatar.widthAnchor constraintEqualToConstant:64.0],
+        [avatar.heightAnchor constraintEqualToConstant:64.0],
+
+        [nameLabel.topAnchor constraintEqualToAnchor:card.topAnchor constant:12.0],
+        [nameLabel.leadingAnchor constraintEqualToAnchor:avatar.trailingAnchor constant:12.0],
+        [nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:priceTag.leadingAnchor constant:-8.0],
+
+        [priceTag.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+        [priceTag.centerYAnchor constraintEqualToAnchor:nameLabel.centerYAnchor],
+
+        [serviceLabel.topAnchor constraintEqualToAnchor:nameLabel.bottomAnchor constant:4.0],
+        [serviceLabel.leadingAnchor constraintEqualToAnchor:nameLabel.leadingAnchor],
+        [serviceLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+
+        [countdown.leadingAnchor constraintEqualToAnchor:nameLabel.leadingAnchor],
+        [countdown.topAnchor constraintEqualToAnchor:serviceLabel.bottomAnchor constant:8.0],
+        [countdown.heightAnchor constraintEqualToConstant:22.0],
+        [countdown.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-12.0],
+
+        [actionBtn.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-12.0],
+        [actionBtn.centerYAnchor constraintEqualToAnchor:countdown.centerYAnchor],
+        [actionBtn.heightAnchor constraintEqualToConstant:30.0],
+        [actionBtn.widthAnchor constraintEqualToConstant:105.0]
+    ]];
+
+    return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (self.currentStageMode == 1) {
+        [self openRequestsPipeline];
+        return;
+    }
+    PPServiceModel *s = self.filteredServices[indexPath.row];
+    [self openDetailsForService:s];
+}
+
+#pragma mark - Actions & Transitions
+
+- (void)openQuickPricingSheetForService:(PPServiceModel *)service {
+    [PPFunc pp_playTapEffect];
+    __weak typeof(self) weakSelf = self;
+    PPServiceQuickPricingSheet *sheet = [[PPServiceQuickPricingSheet alloc] initWithService:service onUpdated:^{
+        [weakSelf startObservingServices];
+    }];
+    if (@available(iOS 15.0, *)) {
+        sheet.modalPresentationStyle = UIModalPresentationPageSheet;
+        UISheetPresentationController *pres = sheet.sheetPresentationController;
+        pres.detents = @[UISheetPresentationControllerDetent.mediumDetent];
+        pres.prefersGrabberVisible = YES;
+        pres.preferredCornerRadius = 24.0;
+    } else {
+        sheet.modalPresentationStyle = UIModalPresentationFormSheet;
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)toggleAvailabilityForService:(PPServiceModel *)service newState:(BOOL)newState {
+    service.isAvailable = newState;
+    [self updateCockpitStats];
+
+    __weak typeof(self) weakSelf = self;
+    [[PPServiceManager sharedManager] toggleAvailability:newState forServiceID:service.serviceID completion:^(NSError * _Nullable error) {
+        if (error) {
+            service.isAvailable = !newState;
+            [weakSelf.tableView reloadData];
+            [weakSelf updateCockpitStats];
+            [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+        } else {
+            NSString *msg = newState
+                ? ([Language isRTL] ? @"الخدمة متاحة للطلب الآن" : @"Service is live for bookings")
+                : ([Language isRTL] ? @"تم إيقاف الخدمة مؤقتاً" : @"Service paused temporarily");
+            [PPToast toast:msg
+                     style:PPToastStyleSuccess
+                    haptic:YES
+                  duration:2.0
+                  position:PPToastPositionBottom
+                    inView:weakSelf.view];
+        }
+    }];
+}
+
+- (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (self.currentStageMode == 1) return nil;
+
+    PPServiceModel *s = self.filteredServices[indexPath.row];
+    __weak typeof(self) weakSelf = self;
+
+    UIContextualAction *pricingAct = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                            title:[Language isRTL] ? @"تسعير" : @"Pricing"
+                                                                          handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
+        [weakSelf openQuickPricingSheetForService:s];
+        completionHandler(YES);
+    }];
+    pricingAct.backgroundColor = [UIColor ppSuccess];
+    pricingAct.image = [UIImage systemImageNamed:@"banknote"];
+
+    UIContextualAction *editAct = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
+                                                                         title:[Language isRTL] ? @"تعديل" : @"Edit"
+                                                                       handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
+        PPAddEditServiceViewController *vc = [[PPAddEditServiceViewController alloc] initWithService:s];
+        [weakSelf.navigationController pushViewController:vc animated:YES];
+        completionHandler(YES);
+    }];
+    editAct.backgroundColor = [UIColor ppPrimary];
+    editAct.image = [UIImage systemImageNamed:@"pencil"];
+
+    UIContextualAction *deleteAct = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive
+                                                                           title:[Language isRTL] ? @"حذف" : @"Delete"
+                                                                         handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
+        [weakSelf confirmDeleteService:s];
+        completionHandler(YES);
+    }];
+    deleteAct.image = [UIImage systemImageNamed:@"trash.fill"];
+
+    return [UISwipeActionsConfiguration configurationWithActions:@[deleteAct, editAct, pricingAct]];
+}
+
+- (void)confirmDeleteService:(PPServiceModel *)service {
+    __weak typeof(self) weakSelf = self;
+    NSString *title = [Language isRTL] ? @"تأكيد حذف عرض الخدمة" : @"Confirm Service Deletion";
+    NSString *msg = [Language isRTL] ? @"هل أنت متأكد من رغبتك في حذف هذا العرض نهائياً؟" : @"Are you sure you want to permanently delete this service?";
+
+    [PPAlertHelper showConfirmationIn:self title:title subtitle:msg placeholder:nil confirmButton:kLang(@"Delete") cancelButton:kLang(@"Cancel") confirmBlock:^{
+        [PPHUD showIndeterminateIn:weakSelf.view title:[Language isRTL] ? @"جارٍ الحذف..." : @"Deleting..." subtitle:nil];
+        [[PPServiceManager sharedManager] deleteService:service completion:^(NSError * _Nullable error) {
+            [PPHUD dismiss];
+            if (error) {
+                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+            } else {
+                [PPHUD showSuccess:[Language isRTL] ? @"تم حذف الخدمة بنجاح" : @"Service deleted"];
+                [weakSelf startObservingServices];
+            }
+        }];
+    } cancelBlock:nil];
 }
 
 #pragma mark - Navigation Destinations
@@ -1228,104 +1442,6 @@
     [PPFunc pp_playTapEffect];
     PPServiceDetailViewController *vc = [[PPServiceDetailViewController alloc] initWithService:service];
     [self.navigationController pushViewController:vc animated:YES];
-}
-
-#pragma mark - Table View
-
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 1;
-}
-
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.filteredServices.count;
-}
-
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    PPServiceCell *cell = [tableView dequeueReusableCellWithIdentifier:[PPServiceCell reuseID] forIndexPath:indexPath];
-    PPServiceModel *s = self.filteredServices[indexPath.row];
-    [cell configureWithService:s];
-
-    __weak typeof(self) weakSelf = self;
-    cell.onToggleAvailability = ^(BOOL newAvailable) {
-        [weakSelf toggleAvailabilityForService:s newState:newAvailable];
-    };
-
-    return cell;
-}
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    PPServiceModel *s = self.filteredServices[indexPath.row];
-    [self openDetailsForService:s];
-}
-
-- (void)toggleAvailabilityForService:(PPServiceModel *)service newState:(BOOL)newState {
-    service.isAvailable = newState;
-    [self updateCockpitStats];
-
-    __weak typeof(self) weakSelf = self;
-    [[PPServiceManager sharedManager] toggleAvailability:newState forServiceID:service.serviceID completion:^(NSError * _Nullable error) {
-        if (error) {
-            service.isAvailable = !newState;
-            [weakSelf.tableView reloadData];
-            [weakSelf updateCockpitStats];
-            [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
-        } else {
-            NSString *msg = newState
-                ? ([Language isRTL] ? @"الخدمة متاحة للطلب الآن" : @"Service is live for bookings")
-                : ([Language isRTL] ? @"تم إيقاف الخدمة مؤقتاً" : @"Service paused temporarily");
-            [PPToast toast:msg
-                     style:PPToastStyleSuccess
-                    haptic:YES
-                  duration:2.0
-                  position:PPToastPositionBottom
-                    inView:weakSelf.view];
-        }
-    }];
-}
-
-- (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
-    PPServiceModel *s = self.filteredServices[indexPath.row];
-
-    __weak typeof(self) weakSelf = self;
-    UIContextualAction *editAct = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleNormal
-                                                                         title:[Language isRTL] ? @"تعديل" : @"Edit"
-                                                                       handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
-        PPAddEditServiceViewController *vc = [[PPAddEditServiceViewController alloc] initWithService:s];
-        [weakSelf.navigationController pushViewController:vc animated:YES];
-        completionHandler(YES);
-    }];
-    editAct.backgroundColor = [UIColor ppPrimary];
-    editAct.image = [UIImage systemImageNamed:@"pencil"];
-
-    UIContextualAction *deleteAct = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive
-                                                                           title:[Language isRTL] ? @"حذف" : @"Delete"
-                                                                         handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
-        [weakSelf confirmDeleteService:s];
-        completionHandler(YES);
-    }];
-    deleteAct.image = [UIImage systemImageNamed:@"trash.fill"];
-
-    return [UISwipeActionsConfiguration configurationWithActions:@[deleteAct, editAct]];
-}
-
-- (void)confirmDeleteService:(PPServiceModel *)service {
-    __weak typeof(self) weakSelf = self;
-    NSString *title = [Language isRTL] ? @"تأكيد حذف عرض الخدمة" : @"Confirm Service Deletion";
-    NSString *msg = [Language isRTL] ? @"هل أنت متأكد من رغبتك في حذف هذا العرض نهائياً؟" : @"Are you sure you want to permanently delete this service?";
-
-    [PPAlertHelper showConfirmationIn:self title:title subtitle:msg placeholder:nil confirmButton:kLang(@"Delete") cancelButton:kLang(@"Cancel") confirmBlock:^{
-        [PPHUD showIndeterminateIn:weakSelf.view title:[Language isRTL] ? @"جارٍ الحذف..." : @"Deleting..." subtitle:nil];
-        [[PPServiceManager sharedManager] deleteService:service completion:^(NSError * _Nullable error) {
-            [PPHUD dismiss];
-            if (error) {
-                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
-            } else {
-                [PPHUD showSuccess:[Language isRTL] ? @"تم حذف الخدمة بنجاح" : @"Service deleted"];
-                [weakSelf startObservingServices];
-            }
-        }];
-    } cancelBlock:nil];
 }
 
 @end

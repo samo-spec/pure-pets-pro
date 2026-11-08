@@ -91,4 +91,42 @@ check('recovery and company context keys exist in both languages', () => {
     for (const key of keys) assert(new RegExp(`"${key}"\\s*=`).test(strings), `${language}: ${key}`);
   }
 });
+check('Home requires provider identity before starting or requiring the provider fulfillment feed', () => {
+  const home = read('PurePetsPro/AdminDashboardViewController.m');
+  const gate = method(home, '- (BOOL)pp_shouldObserveProviderFulfillmentForUser:(UserModel *)user {',
+    '- (PPProCommandDataSource)pp_requiredCommandDataSourcesForUser:(UserModel *)user {');
+  assert(gate.includes('[user.accountType isEqualToString:@"user"]'));
+  assert(!/\.role|isAdmin|isOwner|canAccessPro|FIRFirestore/.test(gate));
+  const required = method(home, '- (PPProCommandDataSource)pp_requiredCommandDataSourcesForUser:(UserModel *)user {',
+    '- (void)pp_beginCommandDataSources:');
+  assert(required.includes('if ([self pp_shouldObserveProviderFulfillmentForUser:user])'));
+  const start = method(home, '- (void)pp_startQuickActionSignalObserversForUser:(UserModel *)user {',
+    '- (void)pp_stopQuickActionSignalObservers {');
+  assert(start.includes('BOOL observesFulfillment = uid.length > 0 && [self pp_shouldObserveProviderFulfillmentForUser:user]'));
+});
+check('Canonical account type is a read-only profile projection with backward-compatible secure cache', () => {
+  const header = read('PurePetsPro/AdminCore/Models/UserModel.h');
+  const model = read('PurePetsPro/AdminCore/Models/UserModel.m');
+  assert(header.includes('@property (nonatomic, copy, readonly) NSString *accountType;'));
+  const parse = method(model, '- (void)pp_applyDictionary:(NSDictionary *)dict fallbackDocumentID:(nullable NSString *)fallbackDocumentID {',
+    '- (NSDictionary *)toDictionary {');
+  assert(parse.includes('safeDict[kUserKeyAccountType]'));
+  assert(!parse.includes('self.accountType = @"user"'));
+  const encode = method(model, '- (void)encodeWithCoder:', '- (instancetype)initWithCoder:');
+  assert(encode.includes('[coder encodeObject:self.accountType forKey:kUserKeyAccountType]'));
+  const decode = method(model, '- (instancetype)initWithCoder:', '#pragma mark -');
+  assert(decode.includes('decodeObjectOfClass:NSString.class forKey:kUserKeyAccountType'));
+  assert(decode.includes('PPSafeString'));
+});
+check('Account type is never serialized into a client profile write', () => {
+  const model = read('PurePetsPro/AdminCore/Models/UserModel.m');
+  const write = method(model, '- (NSDictionary *)toDictionary {', '- (void)SYNC:');
+  assert(!/dict\[kUserKeyAccountType\]\s*=/.test(write));
+  assert(!/dict\[@"accountType"\]\s*=/.test(write));
+  const home = read('PurePetsPro/AdminDashboardViewController.m');
+  const finish = method(home, '- (void)pp_finishCommandDataSource:(PPProCommandDataSource)source error:(NSError *)error {',
+    '- (void)pp_clearCommandDataSources:');
+  assert(finish.includes('self.commandDegradedSources |= source'));
+  assert(finish.includes('self.commandDegradedSources &= ~source'));
+});
 console.log(`PASS ${passed} source contracts. Native runtime is UNVERIFIED.`);

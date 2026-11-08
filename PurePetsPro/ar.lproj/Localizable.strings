@@ -2858,6 +2858,9 @@
 /* مركز قيادة النبض */
 "PulseCommand_BrandName" = "بيور بيتس برو";
 "PulseCommand_Workspace_Eyebrow" = "مركز قيادة النبض";
+"PulseCommand_Action_Profile" = "الملف الشخصي والإعدادات";
+"PulseCommand_Action_ChangePhoto" = "تغيير الصورة الشخصية";
+"PulseCommand_Action_Language" = "تغيير لغة التطبيق";
 "PulseCommand_PriorityNow" = "الأولوية الآن";
 "PulseCommand_NoPendingDecisions" = "لا قرارات معلّقة";
 "PulseCommand_EnabledCapabilities" = "القدرات المفعّلة";
@@ -4382,6 +4385,12 @@
 "DriverCockpit_Idle_Paused_Title" = "التكليفات متوقفة";
 "DriverCockpit_Idle_Paused_Body" = "أوقف المنسق التكليفات الجديدة لك. تواصل معه إن كنت تعتقد أن ذلك خطأ.";
 "DriverCockpit_Wait_StoreHandover" = "بانتظار أن يسلّمك المتجر الطلب.";
+"DriverCockpit_Handover_Next" = "الخطوة التالية: تأكيد الاستلام";
+"DriverCockpit_Handover_Instructions" = "اطلب من فريق المتجر تأكيد التسليم للمندوب من شاشة الطلب. بعدها أكّد الاستلام هنا بعد استلام الطلب فعليًا.";
+"DriverCockpit_Handover_Check" = "تحقق من جاهزية الاستلام";
+"DriverCockpit_Handover_Checking" = "جارٍ التحقق من جاهزية الاستلام…";
+"DriverCockpit_Handover_Check_Hint" = "يحدّث حالة استلام هذا الطلب.";
+"DriverCockpit_Handover_Ready" = "أكد المتجر التسليم. أكّد الاستلام بعد استلام الطلب فعليًا.";
 "DriverCockpit_Wait_Dispatch" = "سيُغلق المنسق هذا التوصيل.";
 "DriverCockpit_Wait_Generic" = "لا يلزمك أي إجراء الآن.";
 "DriverCockpit_Blocked_Proof" = "يتطلب هذا التوصيل صورة أو توقيعًا لا يدعمهما التطبيق بعد. اتصل بالمنسق لإكماله.";
@@ -4500,3 +4509,21 @@
 "DeliveryLogin_UseAnotherAccount" = "استخدام حساب آخر";
 
 "DriverCockpit_UseDriverWorkspace" = "افتح «توصيلاتي» لإدارة مهام سائق الأسطول الرسمي أو شركة التوصيل.";
+
+/* Pro Home — account signature and workspace index */
+"ProHome_AccountOptions" = "خيارات الحساب";
+"ProHome_Workspaces" = "مساحات عملك";
+"ProHome_AllWorkspaces" = "الكل";
+"ProHome_Updates" = "التحديثات";
+"ProHome_UpdatesInView" = "تحديثات العرض";
+"ProHome_ScopeHint" = "يعرض التحديثات والأعمال لهذا العرض.";
+"ProHome_PendingCount" = "%@ قيد المتابعة";
+
+/* قسم جاهزية السائق في الرئيسية (قابل للطي) */
+"DriverHome_Expand_Hint" = "يعرض أدوات جاهزيتك ورابط لوحة السائق.";
+"DriverHome_Collapse_Hint" = "يخفي أدوات الجاهزية.";
+"DriverHome_State_Expanded" = "موسّع";
+"DriverHome_State_Collapsed" = "مطوي";
+"DriverHome_ActiveCount_Format" = "توصيلات جارية: %@";
+"DriverHome_Attention" = "تحتاج إلى متابعتك. افتح للمراجعة.";
+"DriverHome_Restricted" = "إسناد التوصيلات الجديدة مقيّد";

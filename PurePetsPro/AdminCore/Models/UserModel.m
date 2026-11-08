@@ -14,6 +14,7 @@ static NSString *const PPUserModelErrorDomain = @"UserModel";
 // Model / Firestore keys
 static NSString *const kUserKeyID = @"ID";
 static NSString *const kUserKeyUID = @"uid";
+static NSString *const kUserKeyAccountType = @"accountType";
 static NSString *const kUserKeyUserName = @"UserName";
 static NSString *const kUserKeyFirstName = @"FirstName";
 static NSString *const kUserKeyLastName = @"LastName";
@@ -251,6 +252,7 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
     NSString *_uid;
     NSString *_photoURL;
 }
+@property (nonatomic, copy, readwrite) NSString *accountType;
 - (void)pp_applyDefaults;
 - (void)pp_applyDictionary:(NSDictionary *)dict;
 - (void)pp_applyDictionary:(NSDictionary *)dict fallbackDocumentID:(nullable NSString *)fallbackDocumentID;
@@ -411,6 +413,7 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
 - (void)pp_applyDefaults {
     self.ID = @"";
     self.uid = @"";
+    self.accountType = @"";
     self.UserName = @"";
     self.UserEmail = @"";
     self.UserImageUrl = nil;
@@ -450,6 +453,8 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
     NSDictionary *safeDict = [dict isKindOfClass:[NSDictionary class]] ? dict : @{};
 
     self.ID = PPUserBestString3(safeDict[kUserKeyID], safeDict[kUserKeyUID], fallbackDocumentID);
+    self.accountType = [[PPSafeString(safeDict[kUserKeyAccountType]) lowercaseString]
+        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
 
     self.UserName = PPUserBestString(safeDict[kUserKeyUserName], safeDict[kUserKeyDisplayName]);
     self.UserEmail = PPUserBestString(safeDict[kUserKeyUserEmail], safeDict[kUserKeyEmail]);
@@ -691,7 +696,7 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
     dict[kUserKeyPlan] = PPSafeString(self.plan);
     dict[kUserKeyLoginSource] = @(self.loginSource);
 
-    // SECURITY: role, isAdmin, isSuperAdmin, isBlocked are server-managed.
+    // SECURITY: accountType, role, isAdmin, isSuperAdmin, isBlocked are server-managed.
     // They are intentionally NOT included in client-originated writes.
     // This prevents "Missing or insufficient permissions" errors on first save attempt.
     // Legacy token fields remain read-compatible but are never client-written.
@@ -1063,6 +1068,7 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
 - (void)encodeWithCoder:(NSCoder *)coder {
     [coder encodeObject:self.ID forKey:kUserKeyID];
     [coder encodeObject:self.uid forKey:kUserKeyUID];
+    [coder encodeObject:self.accountType forKey:kUserKeyAccountType];
     [coder encodeObject:self.UserName forKey:kUserKeyUserName];
     [coder encodeObject:self.displayName forKey:kUserKeyDisplayName];
     [coder encodeObject:self.FirstName forKey:kUserKeyFirstName];
@@ -1117,6 +1123,8 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
 
     self.ID = PPUserBestString([coder decodeObjectOfClass:NSString.class forKey:kUserKeyID],
                                [coder decodeObjectOfClass:NSString.class forKey:kUserKeyUID]);
+    self.accountType = [[PPSafeString([coder decodeObjectOfClass:NSString.class forKey:kUserKeyAccountType]) lowercaseString]
+        stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
 
     self.UserName = PPUserBestString([coder decodeObjectOfClass:NSString.class forKey:kUserKeyUserName],
                                      [coder decodeObjectOfClass:NSString.class forKey:kUserKeyDisplayName]);

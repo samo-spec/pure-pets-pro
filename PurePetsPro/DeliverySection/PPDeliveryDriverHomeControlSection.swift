@@ -71,49 +71,157 @@ struct PPDeliveryHomeEntrySection: View {
 
 /// Company drivers use the same canonical state/commands as the dashboard.
 /// The marketplace provider presentation below remains its separate workflow.
+///
+/// Readiness Beacon (NextGen v7): starts collapsed to one header that says
+/// whether the driver is receiving deliveries, how many are active and
+/// whether anything needs attention. Expanding reveals the shared confirmed
+/// availability control, recovery, fleet switching and the dashboard link.
+/// PPDriverCockpitStore stays the only state owner.
 @MainActor
 struct PPDriverHomeAvailabilitySection: View {
     @StateObject private var store = PPDriverCockpitStore(loadsTaskQueue: false)
+    /// Collapsed every time the section is created.
+    @State private var isExpanded = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let onOpenCockpit: () -> Void
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: AdminSpacing.md) {
-            HStack(alignment: .top, spacing: AdminSpacing.sm) {
-                Label(ppDriverText("DriverCockpit_Title"), systemImage: "steeringwheel")
-                    .font(AdminType.headlineBold)
-                    .foregroundStyle(AdminSurface.primaryText)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityAddTraits(.isHeader)
-                Spacer(minLength: 0)
-                if store.isResolvingContexts || store.isRefreshing {
-                    ProgressView().accessibilityLabel(ppDriverText("DriverAvailability_CheckStatus"))
-                }
+    private enum Tone {
+        case receiving, paused, attention, pending
+
+        var color: Color {
+            switch self {
+            case .receiving: return AdminSurface.emerald
+            case .paused, .pending: return AdminSurface.secondaryText
+            case .attention: return AdminSurface.amber
             }
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header
+            if isExpanded {
+                controls
+                    .padding(.top, AdminSpacing.md)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+            }
+        }
+        .padding(AdminSpacing.base)
+        .background(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous).fill(AdminSurface.card))
+        .overlay(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous).stroke(AdminSurface.hairline, lineWidth: 0.5))
+        .clipShape(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous))
+        .sensoryFeedback(.selection, trigger: isExpanded)
+        .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
+        .onAppear {
+            store.start(focus: nil)
+            store.setVisible(true)
+        }
+        .onDisappear { store.setVisible(false) }
+    }
+
+    // MARK: Collapsed header
+
+    private var header: some View {
+        Button {
+            withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86)) {
+                isExpanded.toggle()
+            }
+        } label: {
+            HStack(alignment: .center, spacing: AdminSpacing.md) {
+                beacon
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(ppDriverText("DriverCockpit_Title"))
+                        .font(AdminType.headlineBold)
+                        .foregroundStyle(AdminSurface.primaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                    statusLine
+                    if dynamicTypeSize.isAccessibilitySize && activeCount > 0 {
+                        activeBadge
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                if !dynamicTypeSize.isAccessibilitySize && activeCount > 0 {
+                    activeBadge
+                }
+                if store.isResolvingContexts || store.isRefreshing {
+                    ProgressView()
+                }
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AdminSurface.secondaryText)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+            }
+            .frame(minHeight: AdminTouchTarget.comfortable)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PPDeliveryTouchButtonStyle(pressedScale: 0.985, pressedOpacity: 0.94))
+        .accessibilityLabel(ppDriverText("DriverCockpit_Title"))
+        .accessibilityValue(accessibilitySummary)
+        .accessibilityHint(ppDriverText(isExpanded ? "DriverHome_Collapse_Hint" : "DriverHome_Expand_Hint"))
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("driver.home.readiness.disclosure")
+    }
+
+    /// The readiness control's tinted tile, so both states read as one instrument.
+    private var beacon: some View {
+        Image(systemName: "steeringwheel")
+            .font(.system(size: 19, weight: .semibold))
+            .foregroundStyle(tone.color)
+            .frame(width: 44, height: 44)
+            .background(tone.color.opacity(0.12), in: RoundedRectangle(cornerRadius: AdminRadius.medium, style: .continuous))
+            .overlay(alignment: .bottomTrailing) {
+                Circle()
+                    .fill(tone.color)
+                    .frame(width: 10, height: 10)
+                    .overlay(Circle().stroke(AdminSurface.card, lineWidth: 2))
+                    .padding(3)
+            }
+            .accessibilityHidden(true)
+    }
+
+    private var statusLine: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Image(systemName: tone == .attention ? "exclamationmark.circle.fill" : "circle.fill")
+                .font(.system(size: tone == .attention ? 12 : 7, weight: .bold))
+                .foregroundStyle(tone.color)
+                .accessibilityHidden(true)
+            Text(statusSummary)
+                .font(AdminType.footnote)
+                .foregroundStyle(tone == .attention ? AdminSurface.primaryText : AdminSurface.secondaryText)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var activeBadge: some View {
+        Label {
+            Text(localizedCount(activeCount))
+        } icon: {
+            Image(systemName: "shippingbox.fill")
+        }
+        .labelStyle(.titleAndIcon)
+        .font(AdminType.captionBold)
+        .foregroundStyle(AdminSurface.primary)
+        .padding(.horizontal, AdminSpacing.sm)
+        .padding(.vertical, 4)
+        .background(AdminSurface.primary.opacity(0.1), in: Capsule())
+        .accessibilityHidden(true)
+    }
+
+    // MARK: Expanded controls
+
+    private var controls: some View {
+        VStack(alignment: .leading, spacing: AdminSpacing.md) {
+            Rectangle()
+                .fill(AdminSurface.hairline)
+                .frame(height: 0.5)
+                .accessibilityHidden(true)
 
             if let context = store.selectedContext {
                 if store.contexts.count > 1 {
-                    Menu {
-                        ForEach(store.contexts) { choice in
-                            Button {
-                                store.select(choice)
-                            } label: {
-                                if choice.id == context.id {
-                                    Label(contextName(choice), systemImage: "checkmark")
-                                } else {
-                                    Text(contextName(choice))
-                                }
-                            }
-                        }
-                    } label: {
-                        Label(contextName(context), systemImage: "chevron.up.chevron.down")
-                            .font(AdminType.calloutBold)
-                            .frame(minHeight: AdminTouchTarget.minimum, alignment: .leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .disabled(!store.canSwitchContext || store.isResolvingContexts)
-                    .accessibilityLabel(ppDriverText("DriverCockpit_SwitchWorkspace"))
-                    .accessibilityValue(contextName(context))
-                } else {
+                    fleetMenu(context)
+                } else if !summaryIncludesFleet {
                     Text(contextName(context))
                         .font(AdminType.footnote)
                         .foregroundStyle(AdminSurface.secondaryText)
@@ -124,10 +232,13 @@ struct PPDriverHomeAvailabilitySection: View {
             if showsAvailabilityControl {
                 PPDriverAvailabilityControl(store: store)
             } else {
-                Text(ppDriverText(stateMessageKey))
-                    .font(AdminType.subheadlineBold)
-                    .foregroundStyle(AdminSurface.secondaryText)
-                    .fixedSize(horizontal: false, vertical: true)
+                // The collapsed line already carries this message when they match.
+                if ppDriverText(stateMessageKey) != statusText {
+                    Text(ppDriverText(stateMessageKey))
+                        .font(AdminType.subheadlineBold)
+                        .foregroundStyle(AdminSurface.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if store.phase == .loadFailed || store.phase == .accessEnded {
                     Button(ppDriverText("DriverAvailability_CheckStatus")) { store.resolveContexts() }
                         .font(AdminType.calloutBold)
@@ -137,46 +248,175 @@ struct PPDriverHomeAvailabilitySection: View {
             }
 
             if let notice = store.notice {
+                recoveryCallout(notice)
+            }
+
+            dashboardRow
+        }
+    }
+
+    private func fleetMenu(_ context: PPDriverContext) -> some View {
+        Menu {
+            ForEach(store.contexts) { choice in
+                Button {
+                    store.select(choice)
+                } label: {
+                    if choice.id == context.id {
+                        Label(contextName(choice), systemImage: "checkmark")
+                    } else {
+                        Text(contextName(choice))
+                    }
+                }
+            }
+        } label: {
+            Label(contextName(context), systemImage: "chevron.up.chevron.down")
+                .font(AdminType.calloutBold)
+                .frame(minHeight: AdminTouchTarget.minimum, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .disabled(!store.canSwitchContext || store.isResolvingContexts)
+        .accessibilityLabel(ppDriverText("DriverCockpit_SwitchWorkspace"))
+        .accessibilityValue(contextName(context))
+    }
+
+    private func recoveryCallout(_ notice: PPDriverNotice) -> some View {
+        VStack(alignment: .leading, spacing: AdminSpacing.sm) {
+            HStack(alignment: .firstTextBaseline, spacing: AdminSpacing.sm) {
+                Image(systemName: noticeSymbol(notice.tone))
+                    .foregroundStyle(noticeColor(notice.tone))
+                    .accessibilityHidden(true)
                 Text(notice.text)
                     .font(AdminType.footnote)
                     .foregroundStyle(AdminSurface.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
-                if store.uncertainCommand != nil {
-                    Button(ppDriverText("DriverAvailability_CheckStatus")) { store.refreshAvailability() }
-                        .frame(minHeight: AdminTouchTarget.minimum)
-                        .disabled(store.isSubmitting || store.isRefreshing || store.isResolvingContexts)
-                    Button(ppDriverText("DriverCockpit_RetrySafely")) { store.retryUncertainCommand() }
-                        .frame(minHeight: AdminTouchTarget.minimum)
-                        .disabled(store.isSubmitting || store.isVerifying)
-                }
             }
+            if store.uncertainCommand != nil {
+                Button(ppDriverText("DriverAvailability_CheckStatus")) { store.refreshAvailability() }
+                    .font(AdminType.calloutBold)
+                    .frame(minHeight: AdminTouchTarget.minimum)
+                    .disabled(store.isSubmitting || store.isRefreshing || store.isResolvingContexts)
+                Button(ppDriverText("DriverCockpit_RetrySafely")) { store.retryUncertainCommand() }
+                    .font(AdminType.calloutBold)
+                    .frame(minHeight: AdminTouchTarget.minimum)
+                    .disabled(store.isSubmitting || store.isVerifying)
+            }
+        }
+        .padding(AdminSpacing.md)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(noticeColor(notice.tone).opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: AdminRadius.medium, style: .continuous))
+    }
 
-            Button(action: onOpenCockpit) {
-                HStack(spacing: AdminSpacing.sm) {
-                    Text(ppDriverText("DriverAvailability_OpenDashboard"))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Spacer(minLength: AdminSpacing.sm)
-                    Image(systemName: "chevron.forward").accessibilityHidden(true)
-                }
-                .font(AdminType.calloutBold)
-                .foregroundStyle(AdminSurface.primary)
-                .padding(.vertical, AdminSpacing.sm)
-                .frame(minHeight: AdminTouchTarget.comfortable)
-                .contentShape(Rectangle())
+    private var dashboardRow: some View {
+        Button(action: onOpenCockpit) {
+            HStack(spacing: AdminSpacing.sm) {
+                Text(ppDriverText("DriverAvailability_OpenDashboard"))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: AdminSpacing.sm)
+                Image(systemName: "chevron.forward").accessibilityHidden(true)
             }
-            .buttonStyle(.plain)
-            .disabled(!store.canSwitchContext)
-            .accessibilityIdentifier("driver.availability.openDashboard")
+            .font(AdminType.calloutBold)
+            .foregroundStyle(AdminSurface.primary)
+            .padding(.vertical, AdminSpacing.sm)
+            .frame(minHeight: AdminTouchTarget.comfortable)
+            .contentShape(Rectangle())
         }
-        .padding(AdminSpacing.base)
-        .background(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous).fill(AdminSurface.card))
-        .overlay(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous).stroke(AdminSurface.hairline, lineWidth: 0.5))
-        .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
-        .onAppear {
-            store.start(focus: nil)
-            store.setVisible(true)
+        .buttonStyle(.plain)
+        .disabled(!store.canSwitchContext)
+        .accessibilityIdentifier("driver.availability.openDashboard")
+    }
+
+    // MARK: Derived state
+    // Same confirmed-state rules as PPDriverAvailabilityControl: stale or
+    // missing availability is unknown, and any readiness reason other than
+    // OFFLINE is a restriction.
+
+    private var confirmedAvailability: PPDriverAvailability? {
+        store.isStale ? nil : store.availability
+    }
+
+    private var isRestricted: Bool {
+        confirmedAvailability?.readinessReasons.contains(where: { $0 != "OFFLINE" }) == true
+    }
+
+    /// A pending recovery must stay visible even while the section is collapsed.
+    private var needsAttention: Bool {
+        if store.uncertainCommand != nil { return true }
+        if let notice = store.notice, notice.tone == .warning || notice.tone == .error { return true }
+        return false
+    }
+
+    private var tone: Tone {
+        if needsAttention { return .attention }
+        switch store.phase {
+        case .resolving:
+            return .pending
+        case .ready:
+            guard let availability = confirmedAvailability, !isRestricted else { return .attention }
+            return availability.online ? .receiving : .paused
+        case .noWorkspace, .loadFailed, .accessEnded, .choosingContext, .signedOut:
+            return .attention
         }
-        .onDisappear { store.setVisible(false) }
+    }
+
+    private var statusText: String {
+        if needsAttention { return ppDriverText("DriverHome_Attention") }
+        switch store.phase {
+        case .resolving: return ppDriverText("DriverCockpit_Loading_Tasks")
+        case .choosingContext: return ppDriverText("DriverAvailability_ChooseWorkspace")
+        case .loadFailed: return ppDriverText("DriverCockpit_Presence_Unavailable")
+        case .signedOut: return ppDriverText("DriverCockpit_SignedOut_Body")
+        case .accessEnded: return ppDriverText("DriverCockpit_NoWorkspace_Body")
+        case .noWorkspace(let reason):
+            return ppDriverText(reason.isEmpty ? "DriverCockpit_NoWorkspace_Body" : "DriverAvailability_AccessRequired")
+        case .ready:
+            guard let availability = confirmedAvailability else { return ppDriverText("DriverCockpit_Presence_Unknown") }
+            if isRestricted { return ppDriverText("DriverHome_Restricted") }
+            return ppDriverText(availability.online ? "DriverCockpit_Presence_Online" : "DriverCockpit_Presence_Offline")
+        }
+    }
+
+    private var summaryIncludesFleet: Bool {
+        store.phase == .ready && !needsAttention && store.selectedContext != nil
+    }
+
+    private var statusSummary: String {
+        guard summaryIncludesFleet, let context = store.selectedContext else { return statusText }
+        return "\(statusText) · \(contextName(context))"
+    }
+
+    private var activeCount: Int { confirmedAvailability?.activeDeliveryCount ?? 0 }
+
+    private var accessibilitySummary: String {
+        var parts = [statusText]
+        if summaryIncludesFleet, let context = store.selectedContext { parts.append(contextName(context)) }
+        if activeCount > 0 { parts.append(ppDriverFormat("DriverHome_ActiveCount_Format", localizedCount(activeCount))) }
+        parts.append(ppDriverText(isExpanded ? "DriverHome_State_Expanded" : "DriverHome_State_Collapsed"))
+        return parts.joined(separator: Language.isRTL() ? "، " : ", ")
+    }
+
+    private func localizedCount(_ value: Int) -> String {
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: Language.currentLanguageCode())
+        return formatter.string(from: NSNumber(value: value)) ?? String(value)
+    }
+
+    private func noticeSymbol(_ tone: PPDriverNotice.Tone) -> String {
+        switch tone {
+        case .info: return "info.circle.fill"
+        case .success: return "checkmark.circle.fill"
+        case .warning: return "exclamationmark.triangle.fill"
+        case .error: return "xmark.octagon.fill"
+        }
+    }
+
+    private func noticeColor(_ tone: PPDriverNotice.Tone) -> Color {
+        switch tone {
+        case .info: return AdminSurface.primary
+        case .success: return AdminSurface.emerald
+        case .warning: return AdminSurface.amber
+        case .error: return AdminSurface.danger
+        }
     }
 
     private func contextName(_ context: PPDriverContext) -> String {

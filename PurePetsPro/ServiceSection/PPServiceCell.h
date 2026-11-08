@@ -2,8 +2,9 @@
 //  PPServiceCell.h
 //  PurePetsPro
 //
-//  Category-defining service card with spatial continuous curvature,
-//  multi-tag pet species pills, inline availability switch, and live price badge.
+//  NextGen V8 Studio-Grade Pet Service Atelier Card.
+//  Continuous spatial curvature, species vector emblem, micro-stepper tap zone,
+//  and tactile inline availability switch.
 //
 
 #import <UIKit/UIKit.h>
@@ -22,6 +23,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, readonly) UIView *cardView;
 @property (nonatomic, strong, readonly) UISwitch *inlineSwitch;
 @property (nonatomic, copy, nullable) void(^onToggleAvailability)(BOOL newAvailable);
+@property (nonatomic, copy, nullable) void(^onTapPricing)(void);
 
 + (NSString *)reuseID;
 + (CGFloat)preferredHeight;

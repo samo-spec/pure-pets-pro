@@ -2828,6 +2828,9 @@
 /* Pulse Command Center */
 "PulseCommand_BrandName" = "Pure Pets Pro";
 "PulseCommand_Workspace_Eyebrow" = "Pulse Command Center";
+"PulseCommand_Action_Profile" = "Profile & Settings";
+"PulseCommand_Action_ChangePhoto" = "Change Profile Photo";
+"PulseCommand_Action_Language" = "Change App Language";
 "PulseCommand_PriorityNow" = "Priority now";
 "PulseCommand_NoPendingDecisions" = "No pending decisions";
 "PulseCommand_EnabledCapabilities" = "Enabled capabilities";
@@ -4353,6 +4356,12 @@
 "DriverCockpit_Idle_Paused_Title" = "Assignments paused";
 "DriverCockpit_Idle_Paused_Body" = "Your dispatcher paused new assignments for you. Contact them if you think this is a mistake.";
 "DriverCockpit_Wait_StoreHandover" = "Waiting for the store to hand over the order.";
+"DriverCockpit_Handover_Next" = "Next: confirm pickup";
+"DriverCockpit_Handover_Instructions" = "Ask the pickup team to confirm handover in the order. Then confirm pickup here after receiving it.";
+"DriverCockpit_Handover_Check" = "Check pickup readiness";
+"DriverCockpit_Handover_Checking" = "Checking pickup readiness…";
+"DriverCockpit_Handover_Check_Hint" = "Updates the pickup status for this delivery.";
+"DriverCockpit_Handover_Ready" = "Store handover confirmed. Confirm pickup after receiving the order.";
 "DriverCockpit_Wait_Dispatch" = "Your dispatcher will close this delivery.";
 "DriverCockpit_Wait_Generic" = "No action is needed from you right now.";
 "DriverCockpit_Blocked_Proof" = "This delivery needs a photo or signature, which this app can’t capture yet. Call your dispatcher to complete it.";
@@ -4471,3 +4480,21 @@
 "DeliveryLogin_UseAnotherAccount" = "Use another account";
 
 "DriverCockpit_UseDriverWorkspace" = "Open My deliveries to manage official fleet or company-driver tasks.";
+
+/* Pro Home — account signature and workspace index */
+"ProHome_AccountOptions" = "Account options";
+"ProHome_Workspaces" = "Your workspaces";
+"ProHome_AllWorkspaces" = "All";
+"ProHome_Updates" = "Updates";
+"ProHome_UpdatesInView" = "Updates in view";
+"ProHome_ScopeHint" = "Shows the updates and work for this view.";
+"ProHome_PendingCount" = "%@ pending";
+
+/* Driver home readiness section (collapsible) */
+"DriverHome_Expand_Hint" = "Shows your readiness controls and the driver dashboard link.";
+"DriverHome_Collapse_Hint" = "Hides the readiness controls.";
+"DriverHome_State_Expanded" = "Expanded";
+"DriverHome_State_Collapsed" = "Collapsed";
+"DriverHome_ActiveCount_Format" = "Active deliveries: %@";
+"DriverHome_Attention" = "Needs your attention. Open to review.";
+"DriverHome_Restricted" = "New deliveries are restricted";

@@ -42,6 +42,8 @@ typedef NS_ENUM(NSInteger, OnlineStatus) {
 @property (nonatomic, copy) NSString *uid;
 @property (nonatomic, copy) NSString *UserEmail;
 @property (nonatomic, copy) NSString *UserName;
+// Read-only server identity for choosing applicable feeds; never a client grant.
+@property (nonatomic, copy, readonly) NSString *accountType;
 
 #pragma mark - From Server
 // Compatibility aliases are kept for older call sites; they are mirrored to canonical fields internally.

@@ -696,6 +696,7 @@ struct PPDriverCockpitView: View {
         case action(PPDriverTask, PPDriverTaskAction)
         case blocked(PPDriverTask, String)
         case informational(PPDriverTask, String)
+        case awaitingStoreHandover
         case goOnline
     }
 
@@ -708,11 +709,10 @@ struct PPDriverCockpitView: View {
             }
             return .none
         }
+        if task.awaitsStoreHandover { return .awaitingStoreHandover }
         guard let action = task.primaryAction else {
             let key: String
-            if task.stage == .toPickup && task.authority == .fulfillmentV1 {
-                key = "DriverCockpit_Wait_StoreHandover"
-            } else if task.stage >= .delivered && task.stage != .unknown {
+            if task.stage >= .delivered && task.stage != .unknown {
                 key = "DriverCockpit_Wait_Dispatch"
             } else {
                 key = "DriverCockpit_Wait_Generic"
@@ -787,6 +787,34 @@ struct PPDriverCockpitView: View {
             .buttonStyle(PPDriverPrimaryButtonStyle())
             .accessibilityLabel(ppActionTitle(action.code))
             .accessibilityHint(ppActionConsequence(action, task: task))
+        case .awaitingStoreHandover:
+            Button { store.refresh() } label: {
+                VStack(spacing: 4) {
+                    HStack(spacing: AdminSpacing.sm) {
+                        if store.isRefreshing {
+                            ProgressView().tint(.white)
+                        } else {
+                            Image(systemName: "arrow.clockwise")
+                        }
+                        Text(ppDriverText(store.isRefreshing
+                                          ? "DriverCockpit_Handover_Checking"
+                                          : "DriverCockpit_Handover_Check"))
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(ppDriverText("DriverCockpit_Wait_StoreHandover"))
+                        .font(AdminType.caption1)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .opacity(0.88)
+                }
+                .padding(.vertical, AdminSpacing.xs)
+            }
+            .buttonStyle(PPDriverPrimaryButtonStyle(enabled: !store.isRefreshing))
+            .disabled(store.isRefreshing)
+            .accessibilityLabel(ppDriverText("DriverCockpit_Handover_Check"))
+            .accessibilityValue(ppDriverText(store.isRefreshing
+                                             ? "DriverCockpit_Handover_Checking"
+                                             : "DriverCockpit_Wait_StoreHandover"))
+            .accessibilityHint(ppDriverText("DriverCockpit_Handover_Check_Hint"))
         case .blocked(_, let reason), .informational(_, let reason):
             Label(reason, systemImage: "info.circle")
                 .font(AdminType.subheadline)
@@ -875,6 +903,24 @@ private struct PPDriverMissionCard: View {
 
             if task.mine {
                 PPDriverStepRail(stage: task.stage)
+            }
+
+            if task.awaitsStoreHandover {
+                VStack(alignment: .leading, spacing: AdminSpacing.sm) {
+                    Label(ppDriverText("DriverCockpit_Handover_Next"), systemImage: "shippingbox")
+                        .font(AdminType.calloutBold)
+                        .foregroundStyle(AdminSurface.primaryText)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(ppDriverText("DriverCockpit_Handover_Instructions"))
+                        .font(AdminType.subheadline)
+                        .foregroundStyle(AdminSurface.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(AdminSpacing.md)
+                .background(RoundedRectangle(cornerRadius: AdminRadius.medium, style: .continuous)
+                    .fill(AdminSurface.backgroundSecondary))
+                .accessibilityElement(children: .combine)
             }
 
             addressBlock(title: ppDriverText("DriverCockpit_Pickup"), symbol: "shippingbox",
@@ -1396,7 +1442,10 @@ private struct PPDriverConfirmSheet: View {
             }
 
             if needsOTP {
-                let otpCountDisplay = String(format: "%ld/4", (long)normalizedOTP.count)
+                let otpCountDisplay = String(
+                    format: "%ld/4",
+                    normalizedOTP.count
+                )
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Label(ppDriverText("DriverCockpit_OTP"), systemImage: "lock.shield.fill")

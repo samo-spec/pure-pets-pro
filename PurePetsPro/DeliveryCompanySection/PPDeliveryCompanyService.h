@@ -4,6 +4,9 @@
 NS_ASSUME_NONNULL_BEGIN
 
 FOUNDATION_EXPORT NSString * const PPDeliveryCompanyMembershipDidChangeNotification;
+/// Posted after the server confirms driver work for the signed-in account, so
+/// push registration can catch up without an app relaunch.
+FOUNDATION_EXPORT NSString * const PPDeliveryDriverWorkspaceConfirmedNotification;
 
 typedef void (^PPDeliveryCompanyProfileCompletion)(PPDeliveryCompanyProfile * _Nullable profile, NSError * _Nullable error);
 typedef void (^PPDeliveryCompanyRequestsCompletion)(NSArray<PPDeliveryCompanyRequest *> * _Nullable requests, NSString * _Nullable nextPageToken, NSError * _Nullable error);

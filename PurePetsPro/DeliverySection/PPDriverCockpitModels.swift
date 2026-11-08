@@ -283,6 +283,9 @@ struct PPDriverTask: Sendable, Identifiable, Equatable {
     var stage: PPDriverStage { PPDriverStage(status: status) }
     var isTerminal: Bool { stage == .closed || stage == .ended }
     var primaryAction: PPDriverTaskAction? { actions.first }
+    var awaitsStoreHandover: Bool {
+        mine && authority == .fulfillmentV1 && status == "delivery_assigned" && actions.isEmpty
+    }
 
     static func key(authority: String, taskID: String) -> String { "\(authority):\(taskID)" }
 }
@@ -1187,6 +1190,13 @@ final class PPDriverCockpitStore: ObservableObject {
             // Keep the driver's focus on the same delivery.
         } else {
             focusedTaskKey = sortedActive.first?.id
+        }
+        if let focused = focusedTask,
+           previousTasks.first(where: { $0.id == focused.id })?.awaitsStoreHandover == true,
+           focused.actions.contains(where: { $0.code == "PICK_UP" }) {
+            let text = ppDriverText("DriverCockpit_Handover_Ready")
+            notice = PPDriverNotice(tone: .info, text: text)
+            UIAccessibility.post(notification: .announcement, argument: text)
         }
         verifyPendingCommand()
     }

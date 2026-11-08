@@ -16,4 +16,12 @@
 
 + (BOOL)pp_isNotificationPayloadRoutable:(NSDictionary *)payload;
 
+/// YES when the payload is addressed to the account `uid`. Notifications V2
+/// stamps `targetUid` on every push and inbox items carry `targetUserID`.
+/// With `requiresRecipient`, a payload that names no account is treated as
+/// belonging to nobody.
++ (BOOL)pp_notificationPayload:(NSDictionary *)payload
+              isAddressedToUID:(NSString *)uid
+             requiresRecipient:(BOOL)requiresRecipient;
+
 @end

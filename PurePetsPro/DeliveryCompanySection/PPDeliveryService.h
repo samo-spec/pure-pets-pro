@@ -54,6 +54,8 @@ FOUNDATION_EXPORT NSString * const PPDeliveryServiceErrorDomain;
 @property (nonatomic, copy) NSString *shiftStatus;
 @property (nonatomic, copy) NSString *workState;
 @property (nonatomic, assign) BOOL canReceiveAssignments;
+@property (nonatomic, assign) BOOL canSelfAcceptOrders;
+@property (nonatomic, assign) BOOL canManageSelfAcceptance;
 @property (nonatomic, assign) NSInteger activeDeliveryCount;
 @property (nonatomic, strong, nullable) NSNumber *maxConcurrentDeliveries;
 @property (nonatomic, assign) NSInteger revision;
@@ -74,6 +76,8 @@ FOUNDATION_EXPORT NSString * const PPDeliveryServiceErrorDomain;
 @property (nonatomic, assign) BOOL online;
 @property (nonatomic, assign) BOOL available;
 @property (nonatomic, assign) BOOL canReceiveAssignments;
+@property (nonatomic, assign) BOOL canSelfAcceptOrders;
+@property (nonatomic, assign) BOOL canManageSelfAcceptance;
 @property (nonatomic, assign) NSInteger activeDeliveryCount;
 @property (nonatomic, assign) NSInteger revision;
 @property (nonatomic, copy, nullable) NSDate *lastSeenAt;
@@ -256,6 +260,15 @@ FOUNDATION_EXPORT NSString * const PPDeliveryServiceErrorDomain;
                   commandID:(NSString *)commandID
                  completion:(void(^)(NSError * _Nullable error))completion
     NS_SWIFT_NAME(executeDriver(action:driverUID:expectedRevision:commandID:completion:));
+
+- (void)setDriverSelfAcceptance:(BOOL)allowed
+                     driverUID:(NSString *)driverUID
+                     companyID:(NSString *)companyID
+              expectedRevision:(NSInteger)expectedRevision
+                     commandID:(NSString *)commandID
+                    completion:(void(^)(PPDeliveryCompanyMemberRecord * _Nullable member,
+                                         NSError * _Nullable error))completion
+    NS_SWIFT_NAME(setDriverSelfAcceptance(_:driverUID:companyID:expectedRevision:commandID:completion:));
 
 - (void)fetchCompanyMembersForCompanyID:(NSString *)companyID
                              completion:(void(^)(NSArray<PPDeliveryCompanyMemberRecord *> * _Nullable members,

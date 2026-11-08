@@ -140,6 +140,9 @@ FOUNDATION_EXPORT NSString *PPDeliveryCompanyFilterTitle(PPDeliveryCompanyDashbo
 @property (nonatomic, assign) BOOL online;
 @property (nonatomic, assign) BOOL available;
 @property (nonatomic, assign) BOOL canReceiveAssignments;
+@property (nonatomic, assign) BOOL canSelfAcceptOrders;
+@property (nonatomic, assign) BOOL canManageSelfAcceptance;
+@property (nonatomic, assign) NSInteger revision;
 @property (nonatomic, assign) NSInteger activeDeliveryCount;
 @property (nonatomic, strong, nullable) NSDate *lastSeenAt;
 + (instancetype)modelFromDictionary:(NSDictionary *)dictionary;

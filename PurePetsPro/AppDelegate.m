@@ -45,6 +45,31 @@ static BOOL PPAdminPayloadTargetsOtherApp(NSDictionary *payload)
     return targetApp.length > 0 && ![targetApp isEqualToString:@"pro_ios"];
 }
 
+/// The account a notification is addressed to: `targetUid` on every
+/// Notifications V2 push, `targetUserID` on inbox documents.
+static NSString *PPProNotificationRecipientUID(NSDictionary *payload)
+{
+    NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
+    NSDictionary *meta = [safePayload[@"meta"] isKindOfClass:NSDictionary.class] ? safePayload[@"meta"] : @{};
+    for (NSDictionary *source in @[safePayload, meta]) {
+        for (NSString *key in @[@"targetUid", @"recipientUid", @"targetUserID"]) {
+            NSString *value = PPAdminRouteTrimmedString(source[key]);
+            if (value.length > 0) return value;
+        }
+    }
+    return @"";
+}
+
+/// A push reaches this device only while the device is bound to its
+/// recipient, but a device can still be bound to the previous login. Such a
+/// push is never shown, listed or opened for the account signed in now.
+static BOOL PPProPushIsForSignedInAccount(NSDictionary *payload)
+{
+    return [AppDelegate pp_notificationPayload:payload
+                              isAddressedToUID:[FIRAuth auth].currentUser.uid
+                             requiresRecipient:YES];
+}
+
 static BOOL PPProPayloadHasSupportedSchema(NSDictionary *payload)
 {
     NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
@@ -209,6 +234,8 @@ static BOOL PPProIsDriverTaskPayload(NSDictionary *payload)
 @property (nonatomic, strong) NSMutableArray *notificationV2LogoutBarrierWaiters;
 @property (nonatomic, copy) NSString *notificationV2DriverCatchUpUID;
 @property (nonatomic, strong) NSDate *notificationV2DriverCatchUpAt;
+@property (nonatomic, assign) BOOL notificationV2TokenRotationInFlight;
+@property (nonatomic, copy) NSString *notificationV2RotationPendingReason;
 
 - (void)pp_finishNotificationV2RegistrationCycle;
 - (void)pp_releaseNotificationV2LogoutBarrierWaiters;
@@ -227,7 +254,21 @@ static BOOL PPProIsDriverTaskPayload(NSDictionary *payload)
 
 + (BOOL)pp_isNotificationPayloadRoutable:(NSDictionary *)payload
 {
-    return PPProPayloadHasSupportedSchema(payload) && !PPAdminPayloadTargetsOtherApp(payload);
+    // Inbox rows carry no push stamp, so an unaddressed payload stays
+    // routable here; one addressed to another account never is.
+    return PPProPayloadHasSupportedSchema(payload) && !PPAdminPayloadTargetsOtherApp(payload) &&
+        [self pp_notificationPayload:payload isAddressedToUID:[FIRAuth auth].currentUser.uid requiresRecipient:NO];
+}
+
++ (BOOL)pp_notificationPayload:(NSDictionary *)payload
+              isAddressedToUID:(NSString *)uid
+             requiresRecipient:(BOOL)requiresRecipient
+{
+    NSString *accountUID = PPAdminRouteTrimmedString(uid);
+    if (accountUID.length == 0) return NO;
+    NSString *recipientUID = PPProNotificationRecipientUID(payload);
+    if (recipientUID.length == 0) return !requiresRecipient;
+    return [recipientUID isEqualToString:accountUID];
 }
 
 static SceneDelegate *PPProActiveSceneDelegate(void)
@@ -1109,6 +1150,16 @@ extern BOOL PP_TouchDotsEnabled;
     (void)center;
     UNNotificationContent *content = notification.request.content;
     NSDictionary *payload = [content.userInfo isKindOfClass:NSDictionary.class] ? content.userInfo : @{};
+    if (!PPProPushIsForSignedInAccount(payload)) {
+        // Addressed to another login on this device: never shown, and kept
+        // out of Notification Center.
+        NSString *identifier = PPAdminRouteTrimmedString(notification.request.identifier);
+        if (identifier.length > 0) {
+            [[UNUserNotificationCenter currentNotificationCenter] removeDeliveredNotificationsWithIdentifiers:@[identifier]];
+        }
+        completionHandler(UNNotificationPresentationOptionNone);
+        return;
+    }
     if (![AppDelegate pp_isNotificationPayloadRoutable:payload]) {
         completionHandler(UNNotificationPresentationOptionNone);
         return;
@@ -1142,6 +1193,15 @@ extern BOOL PP_TouchDotsEnabled;
     NSDictionary *payload = [response.notification.request.content.userInfo isKindOfClass:NSDictionary.class]
         ? response.notification.request.content.userInfo
         : @{};
+    if (!PPProPushIsForSignedInAccount(payload)) {
+        // A banner left by the previous login opens nothing for this account.
+        NSString *identifier = PPAdminRouteTrimmedString(response.notification.request.identifier);
+        if (identifier.length > 0) {
+            [[UNUserNotificationCenter currentNotificationCenter] removeDeliveredNotificationsWithIdentifiers:@[identifier]];
+        }
+        if (completionHandler) completionHandler();
+        return;
+    }
     if (![AppDelegate pp_isNotificationPayloadRoutable:payload]) {
         if (completionHandler) completionHandler();
         return;
@@ -1164,7 +1224,7 @@ extern BOOL PP_TouchDotsEnabled;
 - (void)application:(UIApplication *)application
 didReceiveRemoteNotification:(NSDictionary *)userInfo
 fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
-    if (![AppDelegate pp_isNotificationPayloadRoutable:userInfo]) {
+    if (!PPProPushIsForSignedInAccount(userInfo) || ![AppDelegate pp_isNotificationPayloadRoutable:userInfo]) {
         if (completionHandler) {
             completionHandler(UIBackgroundFetchResultNoData);
         }

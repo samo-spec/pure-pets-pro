@@ -1,5 +1,6 @@
 #import "PPDeliveryCompanyMembersViewController.h"
 #import "PPDeliveryCompanyService.h"
+#import "PPDeliveryService.h"
 #import "PPFirebaseCompat.h"
 #import "PPUserMessagesViewController.h"
 #import "ChatThreadModel.h"
@@ -1188,6 +1189,17 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 
 @interface PPDeliveryCompanyMemberSheetViewController : UIViewController
 @property (nonatomic, strong) PPDeliveryCompanyMember *member;
+@property (nonatomic, copy) NSString *companyID;
+@property (nonatomic, copy) dispatch_block_t policyChangedHandler;
+@property (nonatomic, strong) UILabel *acceptanceModeLabel;
+@property (nonatomic, strong) UILabel *acceptanceDetailLabel;
+@property (nonatomic, strong) UILabel *acceptanceFeedbackLabel;
+@property (nonatomic, strong) UIButton *acceptanceButton;
+@property (nonatomic, copy) NSString *acceptanceCommandID;
+@property (nonatomic, assign) NSInteger acceptanceExpectedRevision;
+@property (nonatomic, assign) BOOL acceptancePendingValue;
+@property (nonatomic, assign) BOOL updatingAcceptance;
+
 @property (nonatomic, copy) dispatch_block_t contactHandler;
 @property (nonatomic, copy) dispatch_block_t chatHandler;
 - (instancetype)initWithMember:(PPDeliveryCompanyMember *)member;
@@ -1331,6 +1343,35 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
     UILabel *footnote = [self label:PPFontRegular(12) color:SeconderyTextClr lines:0];
     footnote.text = kLang(@"DeliveryCompany_Members_Sheet_Footnote");
     [actionsStack addArrangedSubview:footnote];
+
+    if ([self.member.role isEqualToString:PPDeliveryCompanyRoleDriver]) {
+        UILabel *policyTitle = [self label:PPFontBold(18) color:PrimaryTextClr lines:0];
+        policyTitle.text = kLang(@"Delivery_Driver_Acceptance_Title");
+        policyTitle.accessibilityTraits |= UIAccessibilityTraitHeader;
+        [actionsStack addArrangedSubview:policyTitle];
+        self.acceptanceModeLabel = [self label:PPFontBold(16) color:PrimaryTextClr lines:0];
+        [actionsStack addArrangedSubview:self.acceptanceModeLabel];
+        self.acceptanceDetailLabel = [self label:PPFontRegular(14) color:SeconderyTextClr lines:0];
+        [actionsStack addArrangedSubview:self.acceptanceDetailLabel];
+        self.acceptanceButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        self.acceptanceButton.titleLabel.font = [[UIFontMetrics defaultMetrics] scaledFontForFont:PPFontBold(16)];
+        self.acceptanceButton.titleLabel.adjustsFontForContentSizeCategory = YES;
+        self.acceptanceButton.titleLabel.numberOfLines = 0;
+        self.acceptanceButton.titleLabel.textAlignment = NSTextAlignmentCenter;
+        self.acceptanceButton.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+        self.acceptanceButton.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.09];
+        [self.acceptanceButton setTitleColor:AppPrimaryClr forState:UIControlStateNormal];
+        self.acceptanceButton.layer.cornerRadius = 18;
+        self.acceptanceButton.contentEdgeInsets = UIEdgeInsetsMake(14, 16, 14, 16);
+        [self.acceptanceButton.heightAnchor constraintGreaterThanOrEqualToConstant:52].active = YES;
+        [self.acceptanceButton addTarget:self action:@selector(confirmAcceptancePolicy) forControlEvents:UIControlEventTouchUpInside];
+        [actionsStack addArrangedSubview:self.acceptanceButton];
+        self.acceptanceFeedbackLabel = [self label:PPFontRegular(13) color:SeconderyTextClr lines:0];
+        self.acceptanceFeedbackLabel.hidden = YES;
+        [actionsStack addArrangedSubview:self.acceptanceFeedbackLabel];
+        [self updateAcceptancePolicyUI];
+    }
+
 
     [NSLayoutConstraint activateConstraints:@[
         [scrollView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
@@ -1525,6 +1566,77 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
         [valueLabel.bottomAnchor constraintEqualToAnchor:row.bottomAnchor],
     ]];
     return row;
+}
+
+- (void)updateAcceptancePolicyUI {
+    BOOL allowed = self.member.canSelfAcceptOrders;
+    self.acceptanceModeLabel.text = kLang(allowed ? @"Delivery_Driver_Acceptance_Self" : @"Delivery_Driver_Acceptance_Assigned");
+    self.acceptanceDetailLabel.text = kLang(allowed ? @"Delivery_Driver_Acceptance_Self_Detail" : @"Delivery_Driver_Acceptance_Assigned_Detail");
+    NSString *key = self.updatingAcceptance ? @"Delivery_Driver_Acceptance_Saving" :
+        (allowed ? @"Delivery_Driver_Acceptance_Revoke" : @"Delivery_Driver_Acceptance_Grant");
+    [self.acceptanceButton setTitle:kLang(key) forState:UIControlStateNormal];
+    self.acceptanceButton.hidden = !self.member.canManageSelfAcceptance;
+    self.acceptanceButton.enabled = !self.updatingAcceptance &&
+        (allowed || [self.member.status isEqualToString:@"active"]);
+    self.acceptanceButton.alpha = self.acceptanceButton.enabled ? 1 : 0.45;
+}
+
+- (void)confirmAcceptancePolicy {
+    if (!self.member.canManageSelfAcceptance || self.updatingAcceptance) return;
+    BOOL allowed = !self.member.canSelfAcceptOrders;
+    __weak typeof(self) weakSelf = self;
+    [PPAlertHelper showConfirmationIn:self title:kLang(@"Delivery_Driver_Acceptance_Confirm_Title")
+                             subtitle:kLang(allowed ? @"Delivery_Driver_Acceptance_Grant_Confirm" : @"Delivery_Driver_Acceptance_Revoke_Confirm")
+                        confirmButton:kLang(@"Confirm") cancelButton:kLang(@"Cancel")
+                                 icon:[UIImage systemImageNamed:@"lock.shield"]
+                         confirmBlock:^(__unused NSString *text, BOOL didConfirm) {
+        if (didConfirm) [weakSelf applyAcceptancePolicy:allowed];
+    } cancelBlock:nil];
+}
+
+- (void)applyAcceptancePolicy:(BOOL)allowed {
+    if (!self.member.canManageSelfAcceptance || self.updatingAcceptance || self.companyID.length == 0) return;
+    if (!self.acceptanceCommandID || self.acceptancePendingValue != allowed) {
+        self.acceptanceCommandID = NSUUID.UUID.UUIDString;
+        self.acceptanceExpectedRevision = self.member.revision;
+        self.acceptancePendingValue = allowed;
+    }
+    self.updatingAcceptance = YES;
+    self.acceptanceFeedbackLabel.hidden = YES;
+    [self updateAcceptancePolicyUI];
+    __weak typeof(self) weakSelf = self;
+    [PPDeliveryService.shared setDriverSelfAcceptance:allowed driverUID:self.member.uid companyID:self.companyID
+                                    expectedRevision:self.acceptanceExpectedRevision commandID:self.acceptanceCommandID
+                                          completion:^(PPDeliveryCompanyMemberRecord *confirmed, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        self.updatingAcceptance = NO;
+        self.acceptanceFeedbackLabel.hidden = NO;
+        if (confirmed && !error) {
+            self.member.canSelfAcceptOrders = confirmed.canSelfAcceptOrders;
+            self.member.canManageSelfAcceptance = confirmed.canManageSelfAcceptance;
+            self.member.revision = confirmed.revision;
+            self.acceptanceCommandID = nil;
+            self.acceptanceFeedbackLabel.text = kLang(@"Delivery_Driver_Acceptance_Saved");
+            UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, self.acceptanceFeedbackLabel.text);
+        } else {
+            self.acceptanceFeedbackLabel.text = kLang(@"Delivery_Driver_Acceptance_Sync_Error");
+            // Refresh permission/revision after a definite conflict or access change.
+            [PPDeliveryCompanyService.shared listMembersForCompanyID:self.companyID completion:^(NSArray<PPDeliveryCompanyMember *> *members, NSError *readError) {
+                __strong typeof(weakSelf) self = weakSelf;
+                if (!self || readError) return;
+                for (PPDeliveryCompanyMember *fresh in members) {
+                    if (![fresh.uid isEqualToString:self.member.uid]) continue;
+                    if (fresh.revision != self.member.revision) self.acceptanceCommandID = nil;
+                    self.member = fresh;
+                    [self updateAcceptancePolicyUI];
+                    break;
+                }
+            }];
+        }
+        [self updateAcceptancePolicyUI];
+        if (self.policyChangedHandler) self.policyChangedHandler();
+    }];
 }
 
 - (UIButton *)actionButtonWithTitle:(NSString *)title icon:(NSString *)icon color:(UIColor *)color action:(SEL)action {
@@ -1874,6 +1986,8 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 - (void)presentMemberSheetForMember:(PPDeliveryCompanyMember *)member {
     PPDeliveryCompanyMemberSheetViewController *controller = [[PPDeliveryCompanyMemberSheetViewController alloc] initWithMember:member];
     __weak typeof(self) weakSelf = self;
+    controller.companyID = self.profile.companyID;
+    controller.policyChangedHandler = ^{ [weakSelf loadMembers]; };
     controller.contactHandler = ^{
         [weakSelf callMember:member];
     };

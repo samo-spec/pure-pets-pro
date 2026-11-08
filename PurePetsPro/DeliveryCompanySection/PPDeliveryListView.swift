@@ -509,6 +509,42 @@ private final class DeliveryCommandCenterViewModel: ObservableObject {
         }
     }
 
+    // Idempotency is tied to the reviewed intent and membership revision.
+    private var acceptanceCommandIDs: [String: String] = [:]
+
+    func setDriverSelfAcceptance(_ allowed: Bool, driverUID: String) {
+        guard let member = member(for: driverUID), member.canManageSelfAcceptance,
+              !officialCompanyID.isEmpty, !isExecuting else { return }
+        let companyID = officialCompanyID
+        let key = "\(companyID)/\(driverUID)/\(member.revision)/\(allowed)"
+        let commandID = acceptanceCommandIDs[key] ?? UUID().uuidString
+        acceptanceCommandIDs[key] = commandID
+        isExecuting = true
+        memberIncident = nil
+        memberErrorKey = nil
+        memberConfirmationKey = nil
+        PPDeliveryService.shared().setDriverSelfAcceptance(allowed, driverUID: driverUID,
+            companyID: companyID, expectedRevision: member.revision, commandID: commandID) { [weak self] confirmed, error in
+            Task { @MainActor in
+                guard let self else { return }
+                self.isExecuting = false
+                guard self.officialCompanyID == companyID else { return }
+                if let error {
+                    self.recordMemberMutationError(error as NSError)
+                    self.loadMembers()
+                    return
+                }
+                guard let confirmed else { return }
+                if let index = self.companyMembers.firstIndex(where: { $0.uid == driverUID }) {
+                    self.companyMembers[index] = confirmed
+                }
+                self.acceptanceCommandIDs.removeValue(forKey: key)
+                self.memberConfirmationKey = "Delivery_Driver_Acceptance_Saved"
+                self.load(refresh: true)
+            }
+        }
+    }
+
     func inviteDriver(identifier: String, completion: @escaping @Sendable (Bool) -> Void) {
         let safeIdentifier = identifier.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !safeIdentifier.isEmpty, !officialCompanyID.isEmpty, canManageDrivers, !isExecuting else {
@@ -2631,6 +2667,7 @@ private struct DeliveryDriverDetailSheet: View {
                                 .accessibilityElement(children: .combine)
                         }
                         contactActions
+                        acceptancePolicyCard
                         managementActions
                     }
                     .padding(.horizontal, 18)
@@ -2880,6 +2917,59 @@ private struct DeliveryDriverDetailSheet: View {
     }
 
     @ViewBuilder
+    private var acceptancePolicyCard: some View {
+        let allowed = member?.canSelfAcceptOrders ?? effectiveDriver.canSelfAcceptOrders
+        let canChange = member?.canManageSelfAcceptance == true
+        return AdminCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(deliveryText("Delivery_Driver_Acceptance_Title"), systemImage: "lock.shield")
+                    .font(AdminType.headline)
+                    .foregroundColor(AdminSurface.primaryText)
+                    .accessibilityAddTraits(.isHeader)
+                Text(deliveryText(allowed ? "Delivery_Driver_Acceptance_Self" : "Delivery_Driver_Acceptance_Assigned"))
+                    .font(AdminType.subheadlineBold)
+                    .foregroundColor(AdminSurface.primaryText)
+                Text(deliveryText(allowed ? "Delivery_Driver_Acceptance_Self_Detail" : "Delivery_Driver_Acceptance_Assigned_Detail"))
+                    .font(AdminType.caption1)
+                    .foregroundColor(AdminSurface.secondaryText)
+                if canChange {
+                    Button {
+                        PPAlertHelper.showConfirmation(in: nil,
+                            title: deliveryText("Delivery_Driver_Acceptance_Confirm_Title"),
+                            subtitle: deliveryText(allowed ? "Delivery_Driver_Acceptance_Revoke_Confirm" : "Delivery_Driver_Acceptance_Grant_Confirm"),
+                            confirmButton: deliveryText("Confirm"), cancelButton: deliveryText("Cancel"),
+                            icon: UIImage(systemName: "lock.shield"),
+                            confirmBlock: { _, didConfirm in
+                                guard didConfirm else { return }
+                                viewModel.setDriverSelfAcceptance(!allowed, driverUID: effectiveDriver.uid)
+                            }, cancelBlock: nil)
+                    } label: {
+                        Label(deliveryText(allowed ? "Delivery_Driver_Acceptance_Revoke" : "Delivery_Driver_Acceptance_Grant"),
+                              systemImage: allowed ? "lock" : "checkmark.shield")
+                            .font(AdminType.subheadlineBold)
+                            .foregroundColor(AdminSurface.primary)
+                            .frame(maxWidth: .infinity, minHeight: 52)
+                            .padding(.horizontal, 12)
+                            .background(AdminSurface.primary.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(viewModel.isExecuting || (!allowed && member?.status.lowercased() != "active"))
+                } else {
+                    Text(deliveryText("Delivery_Driver_Acceptance_Managed"))
+                        .font(AdminType.caption1)
+                        .foregroundColor(AdminSurface.secondaryText)
+                }
+                if viewModel.memberConfirmationKey == "Delivery_Driver_Acceptance_Saved" {
+                    Label(deliveryText("Delivery_Driver_Acceptance_Saved"), systemImage: "checkmark.circle.fill")
+                        .font(AdminType.caption1)
+                        .foregroundColor(.green)
+                        .accessibilityAddTraits(.updatesFrequently)
+                }
+            }
+            .padding(18)
+        }
+    }
+
     private var managementActions: some View {
         if viewModel.canManageDrivers {
             AdminCard {

@@ -18,6 +18,8 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, readonly) UILabel *subscriptionLabel;
 @property (nonatomic, strong, readonly) UILabel *costLabel;
 @property (nonatomic, assign) BOOL isSplitSelected;
+@property (nonatomic, assign) BOOL canManageStatus;
+@property (nonatomic, copy, nullable) void (^onOpenTapped)(PPVetModel *vet);
 @property (nonatomic, copy, nullable) void (^onCallTapped)(PPVetModel *vet);
 @property (nonatomic, copy, nullable) void (^onWhatsAppTapped)(PPVetModel *vet);
 @property (nonatomic, copy, nullable) void (^onToggleStatusTapped)(PPVetModel *vet);

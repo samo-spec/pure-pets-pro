@@ -28,6 +28,13 @@ static NSString * const PPDCFunctionDisableMember = @"disableDeliveryCompanyMemb
 static NSString * const PPDCFunctionGetMyCompanies = @"getMyDeliveryCompanies";
 static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompanyConfiguredID";
 
+@interface PPDriverAcceptanceObservation : NSObject
+@property (nonatomic, strong) id<FIRListenerRegistration> registration;
+@end
+@implementation PPDriverAcceptanceObservation
+- (void)dealloc { [_registration remove]; }
+@end
+
 @interface PPDeliveryCompanyService ()
 @property (nonatomic, strong, readwrite, nullable) PPDeliveryCompanyProfile *verifiedProfile;
 @property (nonatomic, copy, readwrite) NSArray<PPDeliveryCompanyProfile *> *discoveredProfiles;
@@ -546,6 +553,24 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
     }];
 }
 
+- (NSObject *)observeOwnDriverAcceptanceForCompanyID:(NSString *)companyID
+                                         completion:(void(^)(BOOL, NSError *))completion {
+    PPDriverAcceptanceObservation *token = [PPDriverAcceptanceObservation new];
+    NSString *uid = FIRAuth.auth.currentUser.uid ?: @"";
+    if (!uid.length || !companyID.length || [companyID containsString:@"/"]) return token;
+    FIRCollectionReference *companies = [[FIRFirestore firestore] collectionWithPath:@"deliveryCompanies"];
+    FIRDocumentReference *member = [[[companies documentWithPath:companyID]
+        collectionWithPath:@"members"] documentWithPath:uid];
+    token.registration = [member addSnapshotListener:^(FIRDocumentSnapshot *snapshot, NSError *error) {
+        if (snapshot && snapshot.metadata.fromCache) return;
+        NSDictionary *data = snapshot.data ?: @{};
+        BOOL allowed = !error && snapshot.exists && [data[@"status"] isEqual:@"active"] &&
+            [data[@"role"] isEqual:@"driver"] && [data[@"canSelfAcceptOrders"] isEqual:@YES];
+        dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(allowed, error); });
+    }];
+    return token;
+}
+
 - (void)callDriverCockpitFunction:(NSString *)name
                           payload:(NSDictionary<NSString *,id> *)payload
                        completion:(PPDriverCockpitCompletion)completion {
@@ -560,6 +585,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
             PPDCFunctionListAssigned,
             PPDCFunctionGetRequest,
             PPDCFunctionUpdateStatus,
+            PPDCFunctionAssign,
             @"setCompanyDriverAvailability",
         ]];
     });

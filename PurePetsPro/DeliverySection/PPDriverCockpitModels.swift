@@ -166,6 +166,7 @@ struct PPDriverAvailability: Sendable, Equatable {
     let readinessReasons: [String]
     let revision: Int
     let activeDeliveryCount: Int
+    let canSelfAcceptOrders: Bool
 }
 
 struct PPDriverAddress: Sendable, Equatable {
@@ -445,7 +446,7 @@ func ppParsePartnerTask(record value: Any?, projection projectionValue: Any?) ->
                         orderNumber: orderNumber,
                         status: cpString(projection["status"]).lowercased(),
                         revision: max(0, cpInt(projection["revision"])),
-                        mine: true,
+                        mine: projection["mine"] == nil ? true : cpBool(projection["mine"]),
                         actions: actions,
                         pickup: ppParseDriverAddress(record["pickupAddress"]),
                         dropoff: dropoff,
@@ -525,7 +526,8 @@ func ppParseOfficialPage(_ result: [String: Any]) -> PPDriverOfficialPage {
                                     accountActive: cpString(row["accountStatus"]).uppercased() != "SUSPENDED",
                                     readinessReasons: reasons,
                                     revision: max(0, cpInt(row["revision"])),
-                                    activeDeliveryCount: max(0, cpInt(row["activeDeliveryCount"])))
+                                    activeDeliveryCount: max(0, cpInt(row["activeDeliveryCount"])),
+                                    canSelfAcceptOrders: cpBool(row["canSelfAcceptOrders"]))
     }
     var cursor: PPDriverPageCursor?
     if cpBool(result["hasMore"]) {
@@ -662,7 +664,11 @@ struct PPDriverCommand: Sendable, Equatable {
             var payload: [String: Any] = ["expectedState": expectedState, "expectedRevision": expectedRevision, "commandId": commandID]
             if authority == .partnerCompanyRequest {
                 payload["requestId"] = taskID
-                payload["toStatus"] = toStatus
+                if actionCode == "CLAIM" {
+                    payload["driverUid"] = PPDeliveryCompanyService.currentAccountUID()
+                } else {
+                    payload["toStatus"] = toStatus
+                }
                 if let cashAmount, actionCode == "DELIVER" { payload["cashAmountCollected"] = cashAmount }
             } else {
                 payload["taskId"] = taskID
@@ -696,7 +702,7 @@ struct PPDriverCommand: Sendable, Equatable {
             (action.code == "DELIVER" && task.authority != .fulfillmentV1 && (task.cash?.required ?? false) && !(task.cash?.collected ?? false))
         return PPDriverCommand(kind: .task,
                                commandID: UUID().uuidString,
-                               functionName: partner ? "updateCompanyDeliveryStatus" : "executeDriverDeliveryTask",
+                               functionName: partner ? (action.code == "CLAIM" ? "assignCompanyDeliveryDriver" : "updateCompanyDeliveryStatus") : "executeDriverDeliveryTask",
                                taskKey: task.id,
                                taskID: task.taskID,
                                authority: task.authority,
@@ -788,6 +794,8 @@ final class PPDriverCockpitStore: ObservableObject {
     private var selfResolvedAt: [String: Date] = [:]
     private var refreshTimer: Timer?
     private var observerTokens: [NSObjectProtocol] = []
+    private var acceptanceObservation: NSObject?
+    @Published private var liveSelfAcceptance: Bool?
 
     init(loadsTaskQueue: Bool = true) {
         boundUID = PPDeliveryCompanyService.currentAccountUID()
@@ -805,8 +813,17 @@ final class PPDriverCockpitStore: ObservableObject {
         activeTasks.filter { $0.id != focusedTaskKey }
     }
 
+    var canSelfAcceptOrders: Bool {
+        guard let context = selectedContext else { return false }
+        if let liveSelfAcceptance { return liveSelfAcceptance }
+        if context.kind == .officialDriver, let officialAvailability {
+            return officialAvailability.canSelfAcceptOrders
+        }
+        return context.capabilities["claimOffers"] == true
+    }
+
     var visibleOffers: [PPDriverTask] {
-        offers.filter { $0.id != focusedTaskKey }
+        canSelfAcceptOrders ? offers.filter { $0.id != focusedTaskKey } : []
     }
 
     /// Server-backed availability for the selected context, or nil when the
@@ -824,7 +841,8 @@ final class PPDriverCockpitStore: ObservableObject {
             return PPDriverAvailability(companyID: context.companyID, online: presence.online,
                                         assignmentsPaused: presence.assignmentsPaused, accountActive: true,
                                         readinessReasons: reasons, revision: presence.revision,
-                                        activeDeliveryCount: presence.activeDeliveryCount)
+                                        activeDeliveryCount: presence.activeDeliveryCount,
+                                        canSelfAcceptOrders: canSelfAcceptOrders)
         }
     }
 
@@ -858,10 +876,12 @@ final class PPDriverCockpitStore: ObservableObject {
         isVisible = visible
         if visible {
             installObservers()
+            observeAcceptancePolicy()
             startTimer()
             if phase == .ready { refreshAll() }
         } else {
             stopTimer()
+            acceptanceObservation = nil
             removeObservers()
         }
     }
@@ -909,6 +929,8 @@ final class PPDriverCockpitStore: ObservableObject {
         // Never switch under a pending or unconfirmed command.
         guard selectedContext == nil || canSwitchContext else { return }
         selectedContext = context
+        liveSelfAcceptance = nil
+        observeAcceptancePolicy()
         UserDefaults.standard.set(context.id, forKey: selectionKey)
         persistDashboardCompany(context)
         clearTasks()
@@ -932,6 +954,8 @@ final class PPDriverCockpitStore: ObservableObject {
         guard !contexts.isEmpty else {
             clearTasks()
             selectedContext = nil
+            acceptanceObservation = nil
+            liveSelfAcceptance = nil
             phase = .noWorkspace(resolution.restrictionReason)
             return
         }
@@ -975,6 +999,8 @@ final class PPDriverCockpitStore: ObservableObject {
     private func endAccess() {
         clearTasks()
         selectedContext = nil
+        acceptanceObservation = nil
+        liveSelfAcceptance = nil
         UserDefaults.standard.removeObject(forKey: selectionKey)
         phase = .accessEnded
     }
@@ -1074,12 +1100,19 @@ final class PPDriverCockpitStore: ObservableObject {
             case .failure(let error):
                 self.finishRefresh(failure: error)
             case .success(let page):
+                self.officialAvailability = page.availability.first(where: { $0.companyID == context.companyID }) ?? page.availability.first
+                guard self.canSelfAcceptOrders else {
+                    self.reconcile(active: ppDriverUniqueTasks(page.tasks).filter { $0.mine && !$0.isTerminal },
+                                   offers: [], history: nil)
+                    self.finishRefresh(failure: nil)
+                    return
+                }
                 self.fetchOfficialLane("available", maxPages: 1) { [weak self] offersOutcome in
                     guard let self, generation == self.listGeneration, self.isSameAccount() else { return }
                     // An offers read that fails clears the list instead of
                     // showing offers that may already be gone.
                     var offers: [PPDriverTask] = []
-                    if case .success(let offerPage) = offersOutcome {
+                    if self.canSelfAcceptOrders, case .success(let offerPage) = offersOutcome {
                         offers = ppDriverUniqueTasks(offerPage.tasks).filter { !$0.mine && !$0.isTerminal }
                     }
                     self.officialAvailability = page.availability.first(where: { $0.companyID == context.companyID }) ?? page.availability.first
@@ -1108,8 +1141,22 @@ final class PPDriverCockpitStore: ObservableObject {
             case .success(let page):
                 self.partnerCursor = page.nextPageToken
                 self.canLoadMoreActive = page.nextPageToken != nil
-                self.reconcile(active: page.active, offers: [], history: nil)
-                self.finishRefresh(failure: nil)
+                guard self.canSelfAcceptOrders else {
+                    self.reconcile(active: page.active.filter { $0.mine }, offers: [], history: nil)
+                    self.finishRefresh(failure: nil)
+                    return
+                }
+                self.call("listMyAssignedCompanyDeliveries",
+                          ["companyId": context.companyID, "pageSize": 30, "lane": "available"],
+                          parse: ppParsePartnerPage) { [weak self] offersOutcome in
+                    guard let self, generation == self.listGeneration, self.isSameAccount() else { return }
+                    var available: [PPDriverTask] = []
+                    if self.canSelfAcceptOrders, case .success(let offersPage) = offersOutcome {
+                        available = offersPage.active.filter { !$0.mine }
+                    }
+                    self.reconcile(active: page.active.filter { $0.mine }, offers: available, history: nil)
+                    self.finishRefresh(failure: nil)
+                }
             }
         }
     }
@@ -1126,7 +1173,7 @@ final class PPDriverCockpitStore: ObservableObject {
             if case .success(let page) = outcome {
                 self.partnerCursor = page.nextPageToken
                 self.canLoadMoreActive = page.nextPageToken != nil
-                self.reconcile(active: ppDriverUniqueTasks(self.activeTasks + page.active), offers: [], history: nil)
+                self.reconcile(active: ppDriverUniqueTasks(self.activeTasks + page.active), offers: self.canSelfAcceptOrders ? self.offers : [], history: nil)
             } else {
                 self.notice = PPDriverNotice(tone: .warning, text: ppDriverText("DriverCockpit_Notice_Offline"))
             }
@@ -1561,6 +1608,25 @@ final class PPDriverCockpitStore: ObservableObject {
     private func stopTimer() {
         refreshTimer?.invalidate()
         refreshTimer = nil
+    }
+
+    private func observeAcceptancePolicy() {
+        acceptanceObservation = nil
+        guard isVisible, let context = selectedContext, isSameAccount() else { return }
+        acceptanceObservation = service.observeOwnDriverAcceptance(companyID: context.companyID) { [weak self] allowed, error in
+            Task { @MainActor in
+                guard let self, self.isVisible, self.isSameAccount(), self.selectedContext?.id == context.id else { return }
+                let changed = self.canSelfAcceptOrders != allowed
+                self.liveSelfAcceptance = allowed
+                if !allowed {
+                    if let focus = self.focusedTask, !focus.mine { self.focusedTaskKey = nil }
+                    self.offers = []
+                }
+                // Membership data is read-only here. All claims are authorized
+                // again inside the backend transaction, including revocation races.
+                if changed && error == nil { self.resolveContexts() }
+            }
+        }
     }
 
     private func installObservers() {

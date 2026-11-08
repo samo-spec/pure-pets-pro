@@ -414,6 +414,9 @@ static NSString *PPDCAddressSummary(NSDictionary *address) {
     model.online = [dictionary[@"isOnline"] boolValue];
     model.available = dictionary[@"isAvailable"] == nil ? YES : [dictionary[@"isAvailable"] boolValue];
     model.canReceiveAssignments = [dictionary[@"canReceiveAssignments"] boolValue];
+    model.canSelfAcceptOrders = [dictionary[@"canSelfAcceptOrders"] isEqual:@YES];
+    model.canManageSelfAcceptance = [dictionary[@"canManageSelfAcceptance"] isEqual:@YES];
+    model.revision = MAX(0, [dictionary[@"revision"] integerValue]);
     model.activeDeliveryCount = [dictionary[@"activeDeliveryCount"] integerValue];
     model.lastSeenAt = PPDeliveryCompanyDateFromValue(dictionary[@"lastSeenAt"]);
     if (model.displayName.length == 0) {

@@ -249,6 +249,8 @@ static NSError *PPDeliveryCompanyContextError(void) {
         _online = [source[@"online"] boolValue];
         _available = [source[@"available"] boolValue];
         _canReceiveAssignments = [source[@"canReceiveAssignments"] boolValue];
+        _canSelfAcceptOrders = [source[@"canSelfAcceptOrders"] isEqual:@YES];
+        _canManageSelfAcceptance = [source[@"canManageSelfAcceptance"] isEqual:@YES];
         _activeDeliveryCount = [source[@"activeDeliveryCount"] integerValue];
         _revision = [source[@"revision"] integerValue];
         _lastSeenAt = PPDeliveryDate(source[@"lastSeenAt"]);
@@ -756,6 +758,9 @@ static NSError *PPDeliveryCompanyContextError(void) {
                 d[@"status"] = m.status ?: @"";
                 d[@"presence"] = m.online ? @"online" : @"offline";
                 d[@"canReceiveAssignments"] = @(m.canReceiveAssignments);
+                d[@"canSelfAcceptOrders"] = @(m.canSelfAcceptOrders);
+                d[@"canManageSelfAcceptance"] = @(m.canManageSelfAcceptance);
+                d[@"revision"] = @(m.revision);
                 d[@"activeDeliveryCount"] = @(m.activeDeliveryCount);
                 // Only the blockers the server checks before assignment are
                 // asserted here; the company eligibility policy is evaluated
@@ -779,6 +784,7 @@ static NSError *PPDeliveryCompanyContextError(void) {
             NSMutableArray<NSString *> *perms = [NSMutableArray array];
             if (profile.hasServerWorkspaceProjection) {
                 if ([profile serverAllowsCapability:@"viewAllDeliveries"]) [perms addObject:@"delivery.view"];
+                if ([profile serverAllowsCapability:@"manageDriverAcceptance"]) [perms addObject:@"delivery.driver.manage_acceptance"];
                 if ([profile serverAllowsCapability:@"assignDrivers"]) [perms addObject:@"delivery.assign"];
                 if ([profile serverAllowsCapability:@"completeDeliveries"]) [perms addObject:@"delivery.complete"];
                 if ([profile serverAllowsCapability:@"cancelRequests"]) [perms addObject:@"delivery.cancel"];
@@ -906,6 +912,9 @@ static NSError *PPDeliveryCompanyContextError(void) {
                 d[@"status"] = m.status ?: @"";
                 d[@"presence"] = m.online ? @"online" : @"offline";
                 d[@"canReceiveAssignments"] = @(m.canReceiveAssignments);
+                d[@"canSelfAcceptOrders"] = @(m.canSelfAcceptOrders);
+                d[@"canManageSelfAcceptance"] = @(m.canManageSelfAcceptance);
+                d[@"revision"] = @(m.revision);
                 d[@"activeDeliveryCount"] = @(m.activeDeliveryCount);
                 // Same rule as the command-center fallback: only the blockers
                 // the server checks are asserted; the backend decides the rest.
@@ -1142,6 +1151,53 @@ static NSError *PPDeliveryCompanyContextError(void) {
 
 #pragma mark - Member Management (Partner Backed)
 
+- (void)setDriverSelfAcceptance:(BOOL)allowed
+                     driverUID:(NSString *)driverUID
+                     companyID:(NSString *)companyID
+              expectedRevision:(NSInteger)expectedRevision
+                     commandID:(NSString *)commandID
+                    completion:(void(^)(PPDeliveryCompanyMemberRecord *, NSError *))completion {
+    if (driverUID.length == 0 || companyID.length == 0 || commandID.length == 0 || expectedRevision < 0) {
+        if (completion) completion(nil, PPDeliveryInvalidResponseError());
+        return;
+    }
+    [self callFunction:@"setDeliveryDriverAcceptancePolicy"
+                params:@{@"companyId": companyID, @"driverUid": driverUID,
+                         @"canSelfAcceptOrders": @(allowed), @"expectedRevision": @(expectedRevision),
+                         @"commandId": commandID,
+                         @"reason": allowed ? @"driver_self_acceptance.enabled" : @"driver_self_acceptance.disabled"}
+            completion:^(id result, NSError *error) {
+        if (error) {
+            if (completion) completion(nil, error);
+            return;
+        }
+        NSDictionary *response = PPDeliveryDictionary(result);
+        NSNumber *revision = [response[@"revision"] isKindOfClass:NSNumber.class] ? response[@"revision"] : nil;
+        if (!revision || ![response[@"companyId"] isEqual:companyID] ||
+            ![response[@"driverUid"] isEqual:driverUID] || ![response[@"canSelfAcceptOrders"] isEqual:@(allowed)]) {
+            if (completion) completion(nil, PPDeliveryInvalidResponseError());
+            return;
+        }
+        // A command receipt is not proof that the displayed projection is current.
+        [self fetchCompanyMembersForCompanyID:companyID completion:^(NSArray<PPDeliveryCompanyMemberRecord *> *members, NSError *readError) {
+            if (readError) {
+                if (completion) completion(nil, readError);
+                return;
+            }
+            for (PPDeliveryCompanyMemberRecord *member in members) {
+                if ([member.uid isEqual:driverUID] && member.canSelfAcceptOrders == allowed &&
+                    member.revision >= revision.integerValue) {
+                    if (completion) completion(member, nil);
+                    return;
+                }
+            }
+            NSError *pending = [NSError errorWithDomain:PPDeliveryServiceErrorDomain code:409
+                                               userInfo:@{NSLocalizedDescriptionKey: kLang(@"Delivery_Driver_Acceptance_Sync_Error")}];
+            if (completion) completion(nil, pending);
+        }];
+    }];
+}
+
 - (void)fetchCompanyMembersForCompanyID:(NSString *)companyID
                              completion:(void(^)(NSArray<PPDeliveryCompanyMemberRecord *> *, NSError *))completion {
     NSString *cid = companyID.length > 0 ? companyID : [self effectiveCompanyID];
@@ -1162,7 +1218,10 @@ static NSError *PPDeliveryCompanyContextError(void) {
                 @"status": m.status ?: @"active",
                 @"online": @(m.online),
                 @"available": @(m.available),
-                @"canReceiveAssignments": @(m.available),
+                @"canReceiveAssignments": @(m.canReceiveAssignments),
+                @"canSelfAcceptOrders": @(m.canSelfAcceptOrders),
+                @"canManageSelfAcceptance": @(m.canManageSelfAcceptance),
+                @"revision": @(m.revision),
                 @"activeDeliveryCount": @(m.activeDeliveryCount)
             };
             [records addObject:[[PPDeliveryCompanyMemberRecord alloc] initWithDictionary:dict]];

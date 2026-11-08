@@ -60,6 +60,12 @@ typedef void (^PPDriverCockpitCompletion)(NSDictionary<NSString *, id> * _Nullab
 
 #pragma mark - Driver cockpit
 
+/// Observes only the signed-in driver's own company membership. Releasing the
+/// returned token removes the listener. Cached snapshots never grant permission.
+- (NSObject *)observeOwnDriverAcceptanceForCompanyID:(NSString *)companyID
+                                         completion:(void(^)(BOOL allowed, NSError * _Nullable error))completion
+    NS_SWIFT_NAME(observeOwnDriverAcceptance(companyID:completion:));
+
 /// Signed-in Firebase user identifier, or an empty string.
 + (NSString *)currentAccountUID;
 

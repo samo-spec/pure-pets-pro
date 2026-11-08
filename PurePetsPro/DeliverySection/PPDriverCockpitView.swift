@@ -172,6 +172,15 @@ struct PPDriverAvailabilityControl: View {
                 .accessibilityElement(children: .combine)
             }
 
+            if store.selectedContext != nil && !store.isStale {
+                Label(ppDriverText(store.canSelfAcceptOrders ? "Delivery_Driver_Acceptance_Self" : "Delivery_Driver_Acceptance_Assigned"),
+                      systemImage: "lock.shield")
+                    .font(AdminType.footnote)
+                    .foregroundStyle(AdminSurface.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("driver.acceptance.mode")
+            }
+
             Button {
                 if online && (store.availability?.activeDeliveryCount ?? 0) > 0 {
                     confirmsGoingOffline = true

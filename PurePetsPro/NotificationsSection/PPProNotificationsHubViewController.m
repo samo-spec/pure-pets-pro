@@ -598,12 +598,22 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
 {
     [self pp_startInboxListenerIfNeeded];
 
+    // iOS keeps delivered notifications per device, across logins. List only
+    // the ones addressed to this account; the per-account inbox stays the
+    // history of record.
+    NSString *listedUID = self.uid ?: @"";
     __weak typeof(self) weakSelf = self;
     [[UNUserNotificationCenter currentNotificationCenter] getDeliveredNotificationsWithCompletionHandler:^(NSArray<UNNotification *> * _Nonnull notifications) {
         NSMutableArray<PPProHubNotificationItem *> *items = [NSMutableArray array];
+        NSMutableArray<NSString *> *foreignIdentifiers = [NSMutableArray array];
         for (UNNotification *notification in notifications ?: @[]) {
             UNNotificationContent *content = notification.request.content;
             NSDictionary *payload = [content.userInfo isKindOfClass:NSDictionary.class] ? content.userInfo : @{};
+            if (![AppDelegate pp_notificationPayload:payload isAddressedToUID:listedUID requiresRecipient:YES]) {
+                NSString *identifier = PPProHubTrimmedString(notification.request.identifier);
+                if (identifier.length > 0 && listedUID.length > 0) [foreignIdentifiers addObject:identifier];
+                continue;
+            }
 
             NSString *rawTitle = PPProHubTrimmedString(content.title);
             if (rawTitle.length == 0) rawTitle = PPProHubInboxCategoryTitle(payload);
@@ -635,9 +645,16 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
             return [second compare:first];
         }];
 
+        if (foreignIdentifiers.count > 0) {
+            [[UNUserNotificationCenter currentNotificationCenter] removeDeliveredNotificationsWithIdentifiers:foreignIdentifiers];
+        }
+
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
+            // A login change during the read starts its own reload.
+            if (![listedUID isEqualToString:strongSelf.uid ?: @""] ||
+                ![listedUID isEqualToString:[strongSelf pp_currentUID]]) return;
             strongSelf.deliveredItems = items.copy;
             [strongSelf pp_applyMergedNotificationItems];
         });
@@ -660,6 +677,8 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
     self.inboxListener = nil;
     self.uid = resolvedUID ?: @"";
     self.inboxItems = @[];
+    // Device-delivered rows were listed for the previous login.
+    self.deliveredItems = @[];
     self.inboxError = nil;
     self.lastInboxErrorSignature = nil;
 
@@ -743,6 +762,10 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
 
     NSDictionary *meta = PPProHubSafeDictionary(model.meta);
     NSMutableDictionary *payload = [NSMutableDictionary dictionaryWithDictionary:meta];
+    // Inbox rows are read only from this account's own inbox
+    // (UsersCol/{uid}/inbox or staff_users/{uid}/inbox), so the inbox owner is
+    // the recipient. Routing then applies the same account check as pushes.
+    if (self.uid.length > 0) payload[@"targetUid"] = self.uid;
     NSString *notificationId = PPProHubFirstStringForKeys(meta, @[@"notificationId", @"id"]);
     if (notificationId.length == 0) {
         notificationId = PPProHubTrimmedString(model.nid);

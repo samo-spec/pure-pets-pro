@@ -795,6 +795,7 @@ final class PPDriverCockpitStore: ObservableObject {
     private var refreshTimer: Timer?
     private var observerTokens: [NSObjectProtocol] = []
     private var acceptanceObservation: NSObject?
+    private var acceptanceObservationNeedsRetry = false
     @Published private var liveSelfAcceptance: Bool?
 
     init(loadsTaskQueue: Bool = true) {
@@ -962,6 +963,10 @@ final class PPDriverCockpitStore: ObservableObject {
         if let current = selectedContext {
             if let refreshed = contexts.first(where: { $0.id == current.id }) {
                 selectedContext = refreshed
+                if acceptanceObservationNeedsRetry && isVisible {
+                    liveSelfAcceptance = nil
+                    observeAcceptancePolicy()
+                }
                 if phase != .ready { phase = .ready }
                 refresh()
                 applyPendingFocus()
@@ -1370,6 +1375,11 @@ final class PPDriverCockpitStore: ObservableObject {
 
     func perform(_ action: PPDriverTaskAction, on task: PPDriverTask, inputs: PPDriverCommandInputs = PPDriverCommandInputs()) {
         guard canSwitchContext, phase == .ready else { return }
+        guard action.code != "CLAIM" || canSelfAcceptOrders else {
+            announce("Delivery_Driver_Acceptance_Managed")
+            refreshAll()
+            return
+        }
         send(PPDriverCommand.task(action, on: task, inputs: inputs), isRetry: false)
     }
 
@@ -1574,7 +1584,12 @@ final class PPDriverCockpitStore: ObservableObject {
     }
 
     private func isSameAccount() -> Bool {
-        !boundUID.isEmpty && PPDeliveryCompanyService.currentAccountUID() == boundUID
+        let matches = !boundUID.isEmpty && PPDeliveryCompanyService.currentAccountUID() == boundUID
+        if !matches {
+            acceptanceObservation = nil
+            liveSelfAcceptance = nil
+        }
+        return matches
     }
 
     private func call<T: Sendable>(_ name: String,
@@ -1612,11 +1627,14 @@ final class PPDriverCockpitStore: ObservableObject {
 
     private func observeAcceptancePolicy() {
         acceptanceObservation = nil
+        acceptanceObservationNeedsRetry = false
         guard isVisible, let context = selectedContext, isSameAccount() else { return }
         acceptanceObservation = service.observeOwnDriverAcceptance(companyID: context.companyID) { [weak self] allowed, error in
+            let confirmed = error == nil
             Task { @MainActor in
                 guard let self, self.isVisible, self.isSameAccount(), self.selectedContext?.id == context.id else { return }
                 let changed = self.canSelfAcceptOrders != allowed
+                self.acceptanceObservationNeedsRetry = !confirmed
                 self.liveSelfAcceptance = allowed
                 if !allowed {
                     if let focus = self.focusedTask, !focus.mine { self.focusedTaskKey = nil }
@@ -1624,7 +1642,7 @@ final class PPDriverCockpitStore: ObservableObject {
                 }
                 // Membership data is read-only here. All claims are authorized
                 // again inside the backend transaction, including revocation races.
-                if changed && error == nil { self.resolveContexts() }
+                if changed && confirmed { self.resolveContexts() }
             }
         }
     }

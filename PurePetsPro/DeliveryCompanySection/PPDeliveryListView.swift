@@ -415,7 +415,7 @@ private final class DeliveryCommandCenterViewModel: ObservableObject {
         let permissions = Set(snapshot.permissions)
         let legacy = snapshot.permissionSource == "legacy_official_delivery_bridge"
         var result = deliveryTabs
-        if legacy || permissions.contains("delivery.driver.view") { result.append(.drivers) }
+        if legacy || permissions.contains("delivery.driver.view") || permissions.contains("delivery.driver.manage_acceptance") { result.append(.drivers) }
         result.append(.overview)
         result.append(.exceptions)
         if legacy || permissions.contains("delivery.cod.view") { result.append(.cod) }
@@ -525,6 +525,12 @@ private final class DeliveryCommandCenterViewModel: ObservableObject {
         memberConfirmationKey = nil
         PPDeliveryService.shared().setDriverSelfAcceptance(allowed, driverUID: driverUID,
             companyID: companyID, expectedRevision: member.revision, commandID: commandID) { [weak self] confirmed, error in
+            // Cross the queue boundary with value types; UIKit projection
+            // objects remain owned by the main-actor view model.
+            let confirmedUID = confirmed?.uid ?? ""
+            let confirmedAllowed = confirmed?.canSelfAcceptOrders ?? false
+            let confirmedCanManage = confirmed?.canManageSelfAcceptance ?? false
+            let confirmedRevision = confirmed?.revision ?? 0
             Task { @MainActor in
                 guard let self else { return }
                 self.isExecuting = false
@@ -534,9 +540,13 @@ private final class DeliveryCommandCenterViewModel: ObservableObject {
                     self.loadMembers()
                     return
                 }
-                guard let confirmed else { return }
+                guard confirmedUID == driverUID else { return }
                 if let index = self.companyMembers.firstIndex(where: { $0.uid == driverUID }) {
-                    self.companyMembers[index] = confirmed
+                    let current = self.companyMembers[index]
+                    current.canSelfAcceptOrders = confirmedAllowed
+                    current.canManageSelfAcceptance = confirmedCanManage
+                    current.revision = confirmedRevision
+                    self.companyMembers[index] = current
                 }
                 self.acceptanceCommandIDs.removeValue(forKey: key)
                 self.memberConfirmationKey = "Delivery_Driver_Acceptance_Saved"
@@ -2466,6 +2476,43 @@ private struct DeliveryDossierSheet: View {
     }
 }
 
+private struct SheetDismissButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.88 : 1.0)
+            .opacity(configuration.isPressed ? 0.72 : 1.0)
+            .animation(.spring(response: 0.22, dampingFraction: 0.7), value: configuration.isPressed)
+    }
+}
+
+private struct SheetDismissButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            action()
+        } label: {
+            ZStack {
+                Circle()
+                    .fill(AdminSurface.surface)
+                    .overlay(
+                        Circle()
+                            .stroke(AdminSurface.hairline.opacity(0.55), lineWidth: 0.5)
+                    )
+                    .shadow(color: Color.black.opacity(0.06), radius: 6, y: 2)
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(AdminSurface.primaryText)
+            }
+            .frame(width: 34, height: 34)
+            .contentShape(Circle())
+        }
+        .buttonStyle(SheetDismissButtonStyle())
+        .accessibilityLabel(deliveryText("Close"))
+    }
+}
+
 private struct DeliveryDriverPickerSheet: View {
     let action: PPDeliveryAllowedAction
     let drivers: [PPDeliveryDriverRecord]
@@ -2473,7 +2520,6 @@ private struct DeliveryDriverPickerSheet: View {
     let onSelect: (PPDeliveryDriverRecord) -> Void
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var driverToConfirm: PPDeliveryDriverRecord?
 
     var body: some View {
         NavigationView {
@@ -2505,21 +2551,8 @@ private struct DeliveryDriverPickerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(deliveryText("Close")) { dismiss() }
+                    SheetDismissButton { dismiss() }
                 }
-            }
-            .alert(deliveryText("DeliveryDetail_AcceptDelivery"), isPresented: Binding(
-                get: { driverToConfirm != nil },
-                set: { if !$0 { driverToConfirm = nil } }
-            ), presenting: driverToConfirm) { driver in
-                Button(deliveryText("Cancel"), role: .cancel) { driverToConfirm = nil }
-                Button(deliveryText("DeliveryDetail_AcceptDelivery")) {
-                    guard driver.eligible && !isExecuting else { return }
-                    onSelect(driver)
-                    driverToConfirm = nil
-                }
-            } message: { driver in
-                Text(deliveryFormat("DeliveryDetail_AcceptDriverConfirmation", "\u{2068}\(driver.displayName)\u{2069}"))
             }
         }
         .navigationViewStyle(.stack)
@@ -2563,8 +2596,8 @@ private struct DeliveryDriverPickerSheet: View {
         let accent: Color = driver.eligible ? AdminSurface.primary : .orange
         return Button {
             guard driver.eligible && !isExecuting else { return }
-            if action.action == "ACCEPT_AND_ASSIGN" {
-                driverToConfirm = driver
+            if ["ACCEPT_AND_ASSIGN", "REASSIGN"].contains(action.action) {
+                confirmDriverAssignment(driver)
             } else {
                 onSelect(driver)
             }
@@ -2616,6 +2649,42 @@ private struct DeliveryDriverPickerSheet: View {
         .opacity(driver.eligible ? 1 : 0.68)
         .accessibilityElement(children: .combine)
         .accessibilityHint(driver.eligible ? deliveryCommandText(action.action) : deliveryText("Delivery_Why_Unavailable"))
+    }
+
+    private func confirmDriverAssignment(_ driver: PPDeliveryDriverRecord) {
+        guard driver.eligible && !isExecuting else { return }
+
+        let title: String
+        let confirmTitle: String
+        let iconName: String
+
+        if action.action == "ACCEPT_AND_ASSIGN" {
+            title = deliveryText("DeliveryDetail_AcceptDelivery")
+            confirmTitle = deliveryText("DeliveryDetail_AcceptDelivery")
+            iconName = "person.crop.circle.badge.checkmark"
+        } else {
+            title = deliveryCommandText(action.action)
+            confirmTitle = deliveryText("Confirm")
+            iconName = "arrow.triangle.2.circlepath.circle.fill"
+        }
+
+        let message = deliveryFormat("DeliveryDetail_AcceptDriverConfirmation", "\u{2068}\(driver.displayName)\u{2069}")
+        let icon = UIImage(systemName: iconName) ?? UIImage(systemName: "checkmark.circle.fill")
+
+        PPAlertHelper.showConfirmation(
+            in: nil,
+            title: title,
+            subtitle: message,
+            confirmButton: confirmTitle,
+            cancelButton: deliveryText("Cancel"),
+            icon: icon,
+            confirmBlock: { _, didConfirm in
+                guard didConfirm else { return }
+                guard driver.eligible && !isExecuting else { return }
+                onSelect(driver)
+            },
+            cancelBlock: nil
+        )
     }
 }
 
@@ -2970,6 +3039,7 @@ private struct DeliveryDriverDetailSheet: View {
         }
     }
 
+    @ViewBuilder
     private var managementActions: some View {
         if viewModel.canManageDrivers {
             AdminCard {
@@ -3172,7 +3242,7 @@ private struct DeliveryDriverInviteSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button(deliveryText("Close"), action: onDismiss)
+                    SheetDismissButton(action: onDismiss)
                 }
             }
         }

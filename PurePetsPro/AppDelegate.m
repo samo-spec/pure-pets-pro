@@ -242,6 +242,8 @@ static BOOL PPProIsDriverTaskPayload(NSDictionary *payload)
 - (BOOL)pp_hasCurrentNotificationV2BindingForUID:(NSString *)uid;
 - (void)pp_handleApplicationDidBecomeActive:(NSNotification *)notification;
 - (void)pp_handleDriverWorkspaceConfirmed:(NSNotification *)notification;
+- (void)pp_removeDeliveredNotificationsNotForSignedInAccount;
+- (void)pp_releaseNotificationV2BindingForAccountChangeThen:(dispatch_block_t)next;
 - (BOOL)pp_notificationV2RegistrationIsCurrentForUID:(NSString *)uid epoch:(NSUInteger)epoch;
 - (void)pp_compensateStaleNotificationV2Registration:(NSDictionary *)response
                                                   uid:(NSString *)uid
@@ -498,7 +500,30 @@ extern BOOL PP_TouchDotsEnabled;
     // 2. Listen for auth changes to sync token for the new user session
     self.authStateHandle = [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth * _Nonnull auth, FIRUser * _Nullable user) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || !user.uid.length) return;
+        if (!strongSelf) return;
+
+        // Notification Center belongs to one login at a time.
+        [strongSelf pp_removeDeliveredNotificationsNotForSignedInAccount];
+        NSString *uid = PPAdminRouteTrimmedString(user.uid);
+        NSDictionary *binding = [NSUserDefaults.standardUserDefaults dictionaryForKey:kPPProNotificationV2BindingDefaultsKey];
+        NSString *boundUID = [binding isKindOfClass:NSDictionary.class] ? PPAdminRouteTrimmedString(binding[@"uid"]) : @"";
+        // UserManager's logout holds the barrier and releases its own binding.
+        // Any other sign-out or account switch would leave this device bound
+        // to the previous login, which then keeps receiving that account's pushes.
+        BOOL leftForeignBinding = !strongSelf.notificationV2LogoutBarrierActive &&
+            boundUID.length > 0 && ![boundUID isEqualToString:uid];
+        if (uid.length == 0) {
+            [[UNUserNotificationCenter currentNotificationCenter] setBadgeCount:0 withCompletionHandler:nil];
+            if (leftForeignBinding) [strongSelf pp_releaseNotificationV2BindingForAccountChangeThen:nil];
+            return;
+        }
+        if (leftForeignBinding) {
+            [[UNUserNotificationCenter currentNotificationCenter] setBadgeCount:0 withCompletionHandler:nil];
+            [strongSelf pp_releaseNotificationV2BindingForAccountChangeThen:^{
+                [strongSelf pp_attemptNotificationV2RegistrationForReason:@"account_switch"];
+            }];
+            return;
+        }
         
         [strongSelf pp_resolveCurrentFCMTokenWithCompletion:^(NSString * _Nullable token) {
             if (token.length > 0) {
@@ -542,6 +567,10 @@ extern BOOL PP_TouchDotsEnabled;
     if (self.notificationV2LogoutBarrierActive) {
         return;
     }
+
+    // Anything iOS showed while the app was in the background is checked
+    // against the account signed in now.
+    [self pp_removeDeliveredNotificationsNotForSignedInAccount];
 
     NSString *uid = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
     if (uid.length == 0) {
@@ -589,6 +618,74 @@ extern BOOL PP_TouchDotsEnabled;
     self.notificationV2DriverCatchUpUID = uid;
     self.notificationV2DriverCatchUpAt = now;
     [self pp_attemptNotificationV2RegistrationForReason:@"driver_workspace"];
+}
+
+/// Notification Center is per device, not per login. Remove every delivered
+/// notification that is not addressed to the account signed in now, and all
+/// of them when nobody is signed in.
+- (void)pp_removeDeliveredNotificationsNotForSignedInAccount
+{
+    NSString *uid = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+    if (uid.length == 0) {
+        [center removeAllDeliveredNotifications];
+        return;
+    }
+    [center getDeliveredNotificationsWithCompletionHandler:^(NSArray<UNNotification *> * _Nonnull notifications) {
+        NSMutableArray<NSString *> *foreignIdentifiers = [NSMutableArray array];
+        for (UNNotification *notification in notifications ?: @[]) {
+            NSDictionary *payload = [notification.request.content.userInfo isKindOfClass:NSDictionary.class]
+                ? notification.request.content.userInfo
+                : @{};
+            NSString *identifier = PPAdminRouteTrimmedString(notification.request.identifier);
+            if (identifier.length > 0 &&
+                ![AppDelegate pp_notificationPayload:payload isAddressedToUID:uid requiresRecipient:YES]) {
+                [foreignIdentifiers addObject:identifier];
+            }
+        }
+        if (foreignIdentifiers.count > 0) {
+            [center removeDeliveredNotificationsWithIdentifiers:foreignIdentifiers];
+        }
+    }];
+}
+
+/// Deleting the FCM token retires every binding that still names the previous
+/// login on this device: Notifications V2 deactivates a binding whose token
+/// FCM no longer accepts. The next registration then uses a new token.
+- (void)pp_releaseNotificationV2BindingForAccountChangeThen:(dispatch_block_t)next
+{
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self pp_releaseNotificationV2BindingForAccountChangeThen:next];
+        });
+        return;
+    }
+    if (self.notificationV2TokenRotationInFlight) {
+        if (next) self.notificationV2RotationPendingReason = @"account_switch";
+        return;
+    }
+    self.notificationV2TokenRotationInFlight = YES;
+    // A registration still in flight was made for the previous login or token.
+    self.notificationV2LifecycleEpoch += 1;
+    DLog(@"[PPNotificationsV2] releasing previous login binding | appId=%@", kPPProNotificationV2AppID);
+
+    __weak typeof(self) weakSelf = self;
+    [PPNotifications invalidateLocalDeviceTokenWithCompletion:^(NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        strongSelf.notificationV2TokenRotationInFlight = NO;
+        if (error) {
+            DLog(@"[PPNotificationsV2] previous login token release failed | error=%@", error.localizedDescription ?: @"unknown");
+            strongSelf.notificationV2RegistrationNeedsForegroundRetry = YES;
+        }
+        NSString *pendingReason = PPAdminRouteTrimmedString(strongSelf.notificationV2RotationPendingReason);
+        strongSelf.notificationV2RotationPendingReason = nil;
+        if (next) {
+            next();
+        } else if (pendingReason.length > 0) {
+            [strongSelf pp_attemptNotificationV2RegistrationForReason:pendingReason];
+        }
+    }];
 }
 
 - (void)sendTokenToServer:(NSString *)token {
@@ -712,6 +809,18 @@ extern BOOL PP_TouchDotsEnabled;
               kPPProNotificationV2AppID,
               [activeUID isEqualToString:PPAdminRouteTrimmedString(uid)] ? @"yes" : @"no",
               bindingGeneration.length > 0 && fcmTokenHash.length > 0 ? @"yes" : @"no");
+        // The server accepted a binding for a login that has already left this
+        // device, and the session now signed in cannot deactivate it. Replacing
+        // the token retires that binding so its pushes stop arriving here.
+        BOOL serverKeptPreviousLogin = ok && bindingGeneration.length > 0 && fcmTokenHash.length > 0 &&
+            ![activeUID isEqualToString:PPAdminRouteTrimmedString(uid)] &&
+            !self.notificationV2LogoutBarrierActive;
+        if (serverKeptPreviousLogin) {
+            __weak typeof(self) weakSelf = self;
+            [self pp_releaseNotificationV2BindingForAccountChangeThen:activeUID.length > 0 ? ^{
+                [weakSelf pp_attemptNotificationV2RegistrationForReason:@"account_switch"];
+            } : nil];
+        }
         finish();
         return;
     }
@@ -753,6 +862,11 @@ extern BOOL PP_TouchDotsEnabled;
               safeReason.length > 0 ? safeReason : @"unknown",
               kPPProNotificationV2AppID,
               (unsigned long)self.notificationV2LifecycleEpoch);
+        return;
+    }
+    if (self.notificationV2TokenRotationInFlight) {
+        // The previous login's token is being replaced; register afterwards.
+        self.notificationV2RotationPendingReason = safeReason.length > 0 ? safeReason : @"coalesced";
         return;
     }
 

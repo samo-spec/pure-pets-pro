@@ -78,9 +78,38 @@ check('cockpit transport is an allowlist of driver callables only', () => {
     assert(['getMyDeliveryCompanies', 'getDriverDeliveryWorkspace', 'listMyAssignedCompanyDeliveries',
       'getCompanyDeliveryRequest'].includes(name), `unexpected cockpit read ${name}`);
   }
-  assert(models.includes('"updateCompanyDeliveryStatus" : "executeDriverDeliveryTask"'));
+  assert(models.includes('action.code == "CLAIM" ? "assignCompanyDeliveryDriver" : "updateCompanyDeliveryStatus"'));
   assert(models.includes('"setDriverDeliveryAvailability" : "setCompanyDriverAvailability"'));
   assert(!/collection\(|Firestore\.firestore|FIRFirestore/.test(models + view), 'cockpit must not read Firestore directly');
+});
+
+check('self-acceptance is company-controlled and live revocation clears offers', () => {
+  assert(models.includes('var canSelfAcceptOrders: Bool'));
+  assert(models.includes('context.capabilities["claimOffers"] == true'));
+  assert(models.includes('guard self.canSelfAcceptOrders else'));
+  assert(models.includes('guard action.code != "CLAIM" || canSelfAcceptOrders else'));
+  const observation = slice(models, 'private func observeAcceptancePolicy()', 'private func installObservers()');
+  assert(observation.includes('self.liveSelfAcceptance = allowed'));
+  assert(observation.includes('self.offers = []'));
+  assert(observation.includes('self.isSameAccount()'));
+  assert(companyService.includes('if (snapshot && snapshot.metadata.fromCache) return;'));
+  assert(companyService.includes('- (void)dealloc { [_registration remove]; }'));
+  assert(models.includes('acceptanceObservationNeedsRetry = !confirmed'));
+  assert(models.includes('if acceptanceObservationNeedsRetry && isVisible'));
+  assert(!/setDriverSelfAcceptance|setDeliveryDriverAcceptancePolicy/.test(legacyHome + view),
+    'driver Home and cockpit may display a mode, never edit their own grant');
+  assert(view.includes('.accessibilityIdentifier("driver.acceptance.mode")'));
+  assert(models.includes('mine: projection["mine"] == nil ? true : cpBool(projection["mine"])'));
+});
+
+check('company permission changes require a current target revision and fresh readback', () => {
+  const permission = method(deliveryService, '- (void)setDriverSelfAcceptance:', '- (void)fetchCompanyMembersForCompanyID:');
+  for (const token of ['setDeliveryDriverAcceptancePolicy','@"companyId"','@"driverUid"','@"canSelfAcceptOrders"',
+    '@"expectedRevision"','@"commandId"','@"reason"','fetchCompanyMembersForCompanyID',
+    'member.canSelfAcceptOrders == allowed','member.revision >= revision.integerValue']) assert(permission.includes(token), token);
+  assert(permission.includes('@"driver_self_acceptance.enabled"'), 'retry identity uses stable audit reason codes');
+  assert.equal((permission.match(/currentUser\.uid isEqualToString:actorUID/g) || []).length, 2,
+    'command receipt and member readback both stay bound to the issuing account');
 });
 
 check('success appears only after the backend confirms the command', () => {
@@ -119,7 +148,7 @@ check('unknown server actions are never offered', () => {
 
 check('official and partner authorities stay single-writer', () => {
   const command = slice(models, 'static func task(_ action: PPDriverTaskAction', 'static func availability(');
-  assert(command.includes('functionName: partner ? "updateCompanyDeliveryStatus" : "executeDriverDeliveryTask"'));
+  assert(command.includes('functionName: partner ? (action.code == "CLAIM" ? "assignCompanyDeliveryDriver" : "updateCompanyDeliveryStatus") : "executeDriverDeliveryTask"'));
   assert(command.includes('let partner = task.authority == .partnerCompanyRequest'));
 });
 

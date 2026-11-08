@@ -12,6 +12,7 @@
 #import "Styling.h"
 #import "UIViewController+PPNavBar.h"
 #import "PPAlertHelper.h"
+#import "PPFirebaseCompat.h"
 #import <UserNotifications/UserNotifications.h>
 
 static NSString * const kPPProNotifMasterPreferenceKey   = @"pp_notif_master_enabled";
@@ -808,6 +809,10 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
     content.subtitle = kLang(@"NotificationSettings_DiagnosticPromptTitle") ?: @"Test Alert";
     content.body = kLang(@"NotificationSettings_DiagnosticSentToast") ?: @"Pro notification test successful.";
     content.sound = [UNNotificationSound defaultSound];
+    // Addressed to the signed-in account like every Notifications V2 push, so
+    // the account filter keeps it for this login only.
+    NSString *diagnosticUID = [[FIRAuth auth].currentUser.uid ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (diagnosticUID.length > 0) content.userInfo = @{@"targetUid": diagnosticUID};
 
     UNTimeIntervalNotificationTrigger *trigger = [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:1.5 repeats:NO];
     UNNotificationRequest *request = [UNNotificationRequest requestWithIdentifier:@"PPProDiagnosticPulse" content:content trigger:trigger];

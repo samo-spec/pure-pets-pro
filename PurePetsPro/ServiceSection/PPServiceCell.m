@@ -15,9 +15,9 @@
 #import "Language.h"
 #import "PPFunc.h"
 
-static CGFloat const kCardRadius     = 20.0;
-static CGFloat const kImageSize      = 78.0;
-static CGFloat const kImageRadius    = 16.0;
+static CGFloat const kCardRadius  = 18.0;
+static CGFloat const kImageSize   = 76.0;
+static CGFloat const kImageRadius = 15.0;
 
 @interface PPServiceCell ()
 @property (nonatomic, strong, readwrite) UIView *cardView;
@@ -28,8 +28,10 @@ static CGFloat const kImageRadius    = 16.0;
 @property (nonatomic, strong, readwrite) UILabel *subtitleLabel;
 @property (nonatomic, strong, readwrite) UILabel *priceLabel;
 @property (nonatomic, strong) UIButton *priceButton;
-@property (nonatomic, strong, readwrite) UILabel *statusBadge;
+@property (nonatomic, strong) UIStackView *metaPillStack;
+@property (nonatomic, strong) UIView *statusBadgeContainer;
 @property (nonatomic, strong) UIView *statusDot;
+@property (nonatomic, strong, readwrite) UILabel *statusBadge;
 @property (nonatomic, strong) UILabel *speciesPill;
 @property (nonatomic, strong) UILabel *durationPill;
 @property (nonatomic, strong, readwrite) UISwitch *inlineSwitch;
@@ -40,7 +42,7 @@ static CGFloat const kImageRadius    = 16.0;
 
 + (NSString *)reuseID { return @"PPServiceCell"; }
 
-+ (CGFloat)preferredHeight { return 134.0; }
++ (CGFloat)preferredHeight { return 138.0; }
 
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
     if (self = [super initWithStyle:style reuseIdentifier:reuseIdentifier]) {
@@ -71,7 +73,7 @@ static CGFloat const kImageRadius    = 16.0;
     PPApplyContinuousCorners(_serviceImageView, kImageRadius);
     _serviceImageView.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.06];
     _serviceImageView.layer.borderWidth = 0.5;
-    _serviceImageView.layer.borderColor = [UIColor.whiteColor colorWithAlphaComponent:0.15].CGColor;
+    _serviceImageView.layer.borderColor = [UIColor.whiteColor colorWithAlphaComponent:0.18].CGColor;
     [_cardView addSubview:_serviceImageView];
 
     // ── Type Emblem (Small circular badge at corner of image) ──
@@ -109,7 +111,7 @@ static CGFloat const kImageRadius    = 16.0;
     // ── Title ──
     _titleLabel = [UILabel new];
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _titleLabel.font = [Styling fontBold:15.0];
+    _titleLabel.font = [Styling fontBold:15.5];
     _titleLabel.textColor = PrimaryTextClr;
     _titleLabel.textAlignment = Language.alignmentForCurrentLanguage;
     _titleLabel.numberOfLines = 1;
@@ -126,7 +128,49 @@ static CGFloat const kImageRadius    = 16.0;
     _subtitleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [_cardView addSubview:_subtitleLabel];
 
-    // ── Species Tag Chip ──
+    // ── Bottom Controls Row: Horizontal Stack for Metadata ──
+    _metaPillStack = [[UIStackView alloc] init];
+    _metaPillStack.translatesAutoresizingMaskIntoConstraints = NO;
+    _metaPillStack.axis = UILayoutConstraintAxisHorizontal;
+    _metaPillStack.alignment = UIStackViewAlignmentCenter;
+    _metaPillStack.spacing = 6.0;
+    [_cardView addSubview:_metaPillStack];
+
+    // Status Badge with Dot inside an integrated container
+    _statusBadgeContainer = [UIView new];
+    _statusBadgeContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    _statusBadgeContainer.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.08];
+    PPApplyContinuousCorners(_statusBadgeContainer, 6.0);
+
+    _statusDot = [UIView new];
+    _statusDot.translatesAutoresizingMaskIntoConstraints = NO;
+    _statusDot.layer.cornerRadius = 3.5;
+    _statusDot.backgroundColor = [UIColor ppSuccess];
+    [_statusBadgeContainer addSubview:_statusDot];
+
+    _statusBadge = [UILabel new];
+    _statusBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    _statusBadge.font = [Styling fontBold:10.5];
+    _statusBadge.textColor = [UIColor ppSuccess];
+    _statusBadge.textAlignment = Language.alignmentForCurrentLanguage;
+    [_statusBadgeContainer addSubview:_statusBadge];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [_statusDot.leadingAnchor constraintEqualToAnchor:_statusBadgeContainer.leadingAnchor constant:6.0],
+        [_statusDot.centerYAnchor constraintEqualToAnchor:_statusBadgeContainer.centerYAnchor],
+        [_statusDot.widthAnchor constraintEqualToConstant:7.0],
+        [_statusDot.heightAnchor constraintEqualToConstant:7.0],
+
+        [_statusBadge.leadingAnchor constraintEqualToAnchor:_statusDot.trailingAnchor constant:4.0],
+        [_statusBadge.trailingAnchor constraintEqualToAnchor:_statusBadgeContainer.trailingAnchor constant:-6.0],
+        [_statusBadge.centerYAnchor constraintEqualToAnchor:_statusBadgeContainer.centerYAnchor],
+
+        [_statusBadgeContainer.heightAnchor constraintEqualToConstant:20.0]
+    ]];
+
+    [_metaPillStack addArrangedSubview:_statusBadgeContainer];
+
+    // Species Tag Chip
     _speciesPill = [UILabel new];
     _speciesPill.translatesAutoresizingMaskIntoConstraints = NO;
     _speciesPill.font = [Styling fontBold:10.0];
@@ -135,31 +179,20 @@ static CGFloat const kImageRadius    = 16.0;
     _speciesPill.textAlignment = NSTextAlignmentCenter;
     PPApplyContinuousCorners(_speciesPill, 6.0);
     _speciesPill.clipsToBounds = YES;
-    [_cardView addSubview:_speciesPill];
+    [NSLayoutConstraint activateConstraints:@[
+        [_speciesPill.heightAnchor constraintEqualToConstant:20.0]
+    ]];
+    [_metaPillStack addArrangedSubview:_speciesPill];
 
-    // ── Duration Pill ──
+    // Duration Pill
     _durationPill = [UILabel new];
     _durationPill.translatesAutoresizingMaskIntoConstraints = NO;
     _durationPill.font = [Styling fontMedium:10.5];
     _durationPill.textColor = SeconderyTextClr;
     _durationPill.textAlignment = Language.alignmentForCurrentLanguage;
-    [_cardView addSubview:_durationPill];
+    [_metaPillStack addArrangedSubview:_durationPill];
 
-    // ── Status Dot & Badge ──
-    _statusDot = [UIView new];
-    _statusDot.translatesAutoresizingMaskIntoConstraints = NO;
-    _statusDot.layer.cornerRadius = 3.5;
-    _statusDot.backgroundColor = [UIColor ppSuccess];
-    [_cardView addSubview:_statusDot];
-
-    _statusBadge = [UILabel new];
-    _statusBadge.translatesAutoresizingMaskIntoConstraints = NO;
-    _statusBadge.font = [Styling fontBold:10.5];
-    _statusBadge.textColor = SeconderyTextClr;
-    _statusBadge.textAlignment = Language.alignmentForCurrentLanguage;
-    [_cardView addSubview:_statusBadge];
-
-    // ── Inline Availability Switch ──
+    // ── Inline Availability Switch (Pinned at Trailing Edge) ──
     _inlineSwitch = [[UISwitch alloc] init];
     _inlineSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     _inlineSwitch.onTintColor = [UIColor ppSuccess];
@@ -167,23 +200,27 @@ static CGFloat const kImageRadius    = 16.0;
     [_inlineSwitch addTarget:self action:@selector(switchToggled:) forControlEvents:UIControlEventValueChanged];
     [_cardView addSubview:_inlineSwitch];
 
-    // ── Auto Layout Constraints (RTL / LTR Safe) ──
+    // ── Unbreakable Auto Layout Constraints ──
+    NSLayoutConstraint *cardHeight = [_cardView.heightAnchor constraintEqualToConstant:126.0];
+    cardHeight.priority = UILayoutPriorityDefaultHigh; // 750
+
     [NSLayoutConstraint activateConstraints:@[
         // Card bounds
-        [_cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:4.0],
+        [_cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:5.0],
         [_cardView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16.0],
         [_cardView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16.0],
-        [_cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-4.0],
+        [_cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-5.0],
+        cardHeight,
 
-        // Image thumbnail
+        // Image thumbnail (Centered vertically on leading side)
         [_serviceImageView.leadingAnchor constraintEqualToAnchor:_cardView.leadingAnchor constant:12.0],
-        [_serviceImageView.topAnchor constraintEqualToAnchor:_cardView.topAnchor constant:12.0],
+        [_serviceImageView.centerYAnchor constraintEqualToAnchor:_cardView.centerYAnchor],
         [_serviceImageView.widthAnchor constraintEqualToConstant:kImageSize],
         [_serviceImageView.heightAnchor constraintEqualToConstant:kImageSize],
 
-        // Type Emblem
-        [_typeEmblemBg.trailingAnchor constraintEqualToAnchor:_serviceImageView.trailingAnchor constant:4.0],
-        [_typeEmblemBg.bottomAnchor constraintEqualToAnchor:_serviceImageView.bottomAnchor constant:4.0],
+        // Type Emblem on corner of image
+        [_typeEmblemBg.trailingAnchor constraintEqualToAnchor:_serviceImageView.trailingAnchor constant:3.0],
+        [_typeEmblemBg.bottomAnchor constraintEqualToAnchor:_serviceImageView.bottomAnchor constant:3.0],
         [_typeEmblemBg.widthAnchor constraintEqualToConstant:22.0],
         [_typeEmblemBg.heightAnchor constraintEqualToConstant:22.0],
         [_typeEmblemIcon.centerXAnchor constraintEqualToAnchor:_typeEmblemBg.centerXAnchor],
@@ -191,46 +228,34 @@ static CGFloat const kImageRadius    = 16.0;
         [_typeEmblemIcon.widthAnchor constraintEqualToConstant:12.0],
         [_typeEmblemIcon.heightAnchor constraintEqualToConstant:12.0],
 
-        // Price Button at Top-Trailing
+        // Price Button pinned to top-trailing
         [_priceButton.topAnchor constraintEqualToAnchor:_cardView.topAnchor constant:12.0],
         [_priceButton.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-12.0],
         [_priceButton.heightAnchor constraintEqualToConstant:26.0],
 
         [_priceLabel.topAnchor constraintEqualToAnchor:_priceButton.topAnchor],
         [_priceLabel.bottomAnchor constraintEqualToAnchor:_priceButton.bottomAnchor],
-        [_priceLabel.leadingAnchor constraintEqualToAnchor:_priceButton.leadingAnchor constant:10.0],
-        [_priceLabel.trailingAnchor constraintEqualToAnchor:_priceButton.trailingAnchor constant:-10.0],
+        [_priceLabel.leadingAnchor constraintEqualToAnchor:_priceButton.leadingAnchor constant:9.0],
+        [_priceLabel.trailingAnchor constraintEqualToAnchor:_priceButton.trailingAnchor constant:-9.0],
 
-        // Title Row
-        [_titleLabel.topAnchor constraintEqualToAnchor:_cardView.topAnchor constant:14.0],
+        // Title row (From image trailing to price leading)
+        [_titleLabel.topAnchor constraintEqualToAnchor:_cardView.topAnchor constant:13.0],
         [_titleLabel.leadingAnchor constraintEqualToAnchor:_serviceImageView.trailingAnchor constant:12.0],
         [_titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_priceButton.leadingAnchor constant:-8.0],
 
-        // Subtitle / Description
-        [_subtitleLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:4.0],
+        // Subtitle / Description (Below title, bounded by card trailing)
+        [_subtitleLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:3.0],
         [_subtitleLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
         [_subtitleLabel.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-12.0],
 
-        // Bottom Controls Row
-        [_statusDot.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
-        [_statusDot.centerYAnchor constraintEqualToAnchor:_statusBadge.centerYAnchor],
-        [_statusDot.widthAnchor constraintEqualToConstant:7.0],
-        [_statusDot.heightAnchor constraintEqualToConstant:7.0],
+        // Inline Switch pinned at bottom-trailing
+        [_inlineSwitch.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-8.0],
+        [_inlineSwitch.bottomAnchor constraintEqualToAnchor:_cardView.bottomAnchor constant:-8.0],
 
-        [_statusBadge.leadingAnchor constraintEqualToAnchor:_statusDot.trailingAnchor constant:5.0],
-        [_statusBadge.bottomAnchor constraintEqualToAnchor:_cardView.bottomAnchor constant:-13.0],
-
-        [_durationPill.leadingAnchor constraintEqualToAnchor:_statusBadge.trailingAnchor constant:10.0],
-        [_durationPill.centerYAnchor constraintEqualToAnchor:_statusBadge.centerYAnchor],
-
-        [_speciesPill.leadingAnchor constraintEqualToAnchor:_durationPill.trailingAnchor constant:8.0],
-        [_speciesPill.centerYAnchor constraintEqualToAnchor:_statusBadge.centerYAnchor],
-        [_speciesPill.heightAnchor constraintEqualToConstant:18.0],
-        [_speciesPill.trailingAnchor constraintLessThanOrEqualToAnchor:_inlineSwitch.leadingAnchor constant:-6.0],
-
-        // Inline Switch pinned at trailing edge
-        [_inlineSwitch.trailingAnchor constraintEqualToAnchor:_cardView.trailingAnchor constant:-10.0],
-        [_inlineSwitch.centerYAnchor constraintEqualToAnchor:_statusBadge.centerYAnchor]
+        // Meta pill stack on bottom-leading (Never collides with switch)
+        [_metaPillStack.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
+        [_metaPillStack.centerYAnchor constraintEqualToAnchor:_inlineSwitch.centerYAnchor],
+        [_metaPillStack.trailingAnchor constraintLessThanOrEqualToAnchor:_inlineSwitch.leadingAnchor constant:-6.0]
     ]];
 }
 
@@ -240,8 +265,9 @@ static CGFloat const kImageRadius    = 16.0;
     [PPFunc pp_playTapEffect];
     BOOL isLive = sender.isOn;
     _statusDot.backgroundColor = isLive ? [UIColor ppSuccess] : [UIColor ppWarning];
-    _statusBadge.text = isLive ? ([Language isRTL] ? @"متاح للحجز" : @"Available") : ([Language isRTL] ? @"متوقف مؤقتاً" : @"Paused");
+    _statusBadge.text = isLive ? ([Language isRTL] ? @"متاح" : @"Live") : ([Language isRTL] ? @"متوقف" : @"Paused");
     _statusBadge.textColor = isLive ? [UIColor ppSuccess] : [UIColor ppWarning];
+    _statusBadgeContainer.backgroundColor = isLive ? [[UIColor ppSuccess] colorWithAlphaComponent:0.08] : [[UIColor ppWarning] colorWithAlphaComponent:0.08];
 
     if (self.onToggleAvailability) {
         self.onToggleAvailability(isLive);
@@ -293,8 +319,9 @@ static CGFloat const kImageRadius    = 16.0;
     BOOL isLive = service.isLive;
     self.inlineSwitch.on = isLive;
     self.statusDot.backgroundColor = isLive ? [UIColor ppSuccess] : [UIColor ppWarning];
-    self.statusBadge.text = isLive ? ([Language isRTL] ? @"متاح للحجز" : @"Available") : ([Language isRTL] ? @"متوقف مؤقتاً" : @"Paused");
+    self.statusBadge.text = isLive ? ([Language isRTL] ? @"متاح" : @"Live") : ([Language isRTL] ? @"متوقف" : @"Paused");
     self.statusBadge.textColor = isLive ? [UIColor ppSuccess] : [UIColor ppWarning];
+    self.statusBadgeContainer.backgroundColor = isLive ? [[UIColor ppSuccess] colorWithAlphaComponent:0.08] : [[UIColor ppWarning] colorWithAlphaComponent:0.08];
 
     // Image loading
     if (service.imageURL.length > 0) {

@@ -36,3 +36,49 @@ test('roster supports dynamic sizes, semantic Arabic/English and honest missing 
     for(const [label, strings] of [['Arabic',ar],['English',en]]) assert.ok(strings.includes(`"${key}"`),`${label}: ${key}`);
   }
 });
+test('loading failure has a visible retry route without weakening Firestore ownership',()=>{
+  assert.match(view,/emptyRetryButton/);
+  assert.match(view,/@selector\(retryVetLoadTapped\)/);
+  assert.match(view,/- \(void\)retryVetLoadTapped/);
+  assert.match(view,/\[self\.listener remove\]/);
+  for(const loc of [ar,en]) assert.ok(loc.includes('"Vet_Roster_Retry"'));
+});
+
+test('V8 clinical passport has an authored identity stage, semantic state rail and a distinct action dock', () => {
+  assert.match(cell, /statusRail/);
+  assert.match(cell, /identityColumn/);
+  assert.match(cell, /profileActionButton/);
+  assert.match(cell, /feeColumn/);
+  assert.match(cell, /actionDock/);
+  assert.doesNotMatch(cell, /onlineDot/);
+  assert.match(cell, /Vet_Roster_View_Profile/);
+  assert.match(cell, /Vet_Roster_Fee_Label/);
+});
+
+test('state cannot masquerade as live presence, and unavailable actions remain absent', () => {
+  assert.match(cell, /self\.callButton\.hidden\s*=\s*\(vet\.phone\.length\s*==\s*0\)/);
+  assert.match(cell, /self\.whatsappButton\.hidden\s*=\s*\(vet\.whatsapp\.length\s*==\s*0\)/);
+  assert.match(cell, /if \(!self\.canManageStatus\) return/);
+  assert.match(cell, /isSubscriptionExpired/);
+  assert.match(cell, /PPMotionReduced\(\)/);
+  assert.match(cell, /UIAccessibilityIsReduceMotionEnabled/);
+});
+
+test('every primary action has a 44-point touch target and accessible label', () => {
+  for (const name of ['profileActionButton', 'callButton', 'whatsappButton', 'statusToggleButton']) {
+    assert.match(cell, new RegExp(`${name}.*heightAnchor.*44\\.0`, 's'));
+  }
+  for (const key of ['Vet_Roster_View_Profile', 'Vet_Roster_Fee_Label']) {
+    for (const strings of [ar, en]) assert.ok(strings.includes(`"${key}"`));
+  }
+});
+
+test('large accessibility text reflows state and the action dock instead of squeezing buttons', () => {
+  assert.match(cell, /pp_applyAccessibilityLayout/);
+  assert.match(cell, /self\.actionDock\.axis\s*=\s*expanded\s*\?/);
+  assert.match(cell, /self\.stateFeeBand\.axis\s*=\s*expanded\s*\?/);
+  assert.match(cell, /self\.callWidthConstraint\.active\s*=\s*!expanded/);
+  assert.match(cell, /self\.whatsappWidthConstraint\.active\s*=\s*!expanded/);
+  assert.match(cell, /self\.callButton setTitle:/);
+  assert.match(cell, /self\.whatsappButton setTitle:/);
+});

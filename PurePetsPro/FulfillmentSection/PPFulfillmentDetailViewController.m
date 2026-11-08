@@ -991,7 +991,8 @@
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || generation != self.fulfillmentListenerGeneration) return;
         if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:listenerUID] || ![self.listenerUID isEqualToString:listenerUID]) return;
-        BOOL ownsFulfillment = [fulfillment.ownerType isEqualToString:@"partner"] && [fulfillment.ownerID isEqualToString:listenerUID];
+        BOOL ownsFulfillment = ([fulfillment.ownerType isEqualToString:@"partner"] && [fulfillment.ownerID isEqualToString:listenerUID]) ||
+            [PPFulfillmentManager isOfficialPlatformFulfillment:fulfillment forUID:listenerUID];
         if (error || !fulfillment || fromCache || !ownsFulfillment) {
             self.hasLiveFulfillmentState = NO;
             [self removeActionBar];
@@ -1137,6 +1138,33 @@
 - (void)confirmAction:(NSString *)action {
     BOOL destructive = [action containsString:@"cancel"] || [action containsString:@"reject"];
     __weak typeof(self) weakSelf = self;
+    if ([PPFulfillmentManager isOfficialPlatformFulfillment:self.model forUID:[FIRAuth auth].currentUser.uid]) {
+        // Official orders go through the staff command, which records a
+        // required note of at least 3 characters for the audit log.
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:[self displayNameForAction:action]
+                                                                       message:kLang(@"Fulfillment_StaffNoteMessage")
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+            textField.placeholder = kLang(@"Fulfillment_StaffNotePlaceholder");
+            textField.textAlignment = Language.alignmentForCurrentLanguage;
+            textField.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+        }];
+        [alert addAction:[UIAlertAction actionWithTitle:kLang(@"Cancel") style:UIAlertActionStyleCancel handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:kLang(@"Confirm")
+                                                  style:destructive ? UIAlertActionStyleDestructive : UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction * _Nonnull confirm) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            NSString *note = [alert.textFields.firstObject.text ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            if (note.length < 3) {
+                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"Fulfillment_StaffNoteTooShort")];
+                return;
+            }
+            [self executeAction:action note:note];
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
     if (destructive) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:[self displayNameForAction:action]
                                                                        message:kLang(@"Fulfillment_ConfirmAction")
@@ -1349,15 +1377,26 @@
                                      note:(NSString *)note
                                completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
     NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    BOOL official = [PPFulfillmentManager isOfficialPlatformFulfillment:self.model forUID:currentUID];
     BOOL ownsLiveFulfillment = self.hasLiveFulfillmentState &&
         [self.listenerUID isEqualToString:currentUID] &&
-        [self.model.ownerType isEqualToString:@"partner"] &&
-        [self.model.ownerID isEqualToString:currentUID];
+        (official || ([self.model.ownerType isEqualToString:@"partner"] &&
+                      [self.model.ownerID isEqualToString:currentUID]));
     if (!ownsLiveFulfillment) {
         NSError *error = [NSError errorWithDomain:@"PurePetsPro.Fulfillment"
                                              code:409
                                          userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryStateChangedReload")}];
         if (completion) completion(NO, error.localizedDescription, error);
+        return;
+    }
+    if (official) {
+        [[PPFulfillmentManager sharedManager] performOfficialPlatformTransitionAction:action
+                                                                        fulfillmentID:self.model.fulfillmentID
+                                                                       expectedStatus:self.model.status
+                                                                                 note:note
+                                                                           completion:^(BOOL success, NSString *message, NSError *error) {
+            if (completion) completion(success, message, error);
+        }];
         return;
     }
     [[PPFulfillmentManager sharedManager] performTransitionAction:action

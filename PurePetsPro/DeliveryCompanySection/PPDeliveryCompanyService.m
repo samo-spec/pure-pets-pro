@@ -564,8 +564,19 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
     token.registration = [member addSnapshotListener:^(FIRDocumentSnapshot *snapshot, NSError *error) {
         if (snapshot && snapshot.metadata.fromCache) return;
         NSDictionary *data = snapshot.data ?: @{};
+        BOOL restricted = [data[@"isActive"] isEqual:@NO];
+        for (NSString *field in @[@"blocked", @"isBlocked", @"banned", @"disabled", @"isDisabled",
+                                  @"suspended", @"isSuspended", @"deleted", @"isDeleted", @"deactivated"]) {
+            if ([data[field] isEqual:@YES]) { restricted = YES; break; }
+        }
+        NSString *accountStatus = [data[@"accountStatus"] isKindOfClass:NSString.class] ?
+            [data[@"accountStatus"] lowercaseString] : @"";
+        id grant = data[@"canSelfAcceptOrders"];
+        BOOL explicitGrant = [grant isKindOfClass:NSNumber.class] &&
+            CFGetTypeID((__bridge CFTypeRef)grant) == CFBooleanGetTypeID() && [grant boolValue];
         BOOL allowed = !error && snapshot.exists && [data[@"status"] isEqual:@"active"] &&
-            [data[@"role"] isEqual:@"driver"] && [data[@"canSelfAcceptOrders"] isEqual:@YES];
+            !restricted && (!accountStatus.length || [accountStatus isEqual:@"active"]) &&
+            [data[@"role"] isEqual:@"driver"] && explicitGrant;
         dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(allowed, error); });
     }];
     return token;

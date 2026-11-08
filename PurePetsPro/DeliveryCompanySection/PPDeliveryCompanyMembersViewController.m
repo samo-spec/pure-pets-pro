@@ -1196,6 +1196,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 @property (nonatomic, strong) UILabel *acceptanceFeedbackLabel;
 @property (nonatomic, strong) UIButton *acceptanceButton;
 @property (nonatomic, copy) NSString *acceptanceCommandID;
+@property (nonatomic, copy) NSString *acceptanceActorUID;
 @property (nonatomic, assign) NSInteger acceptanceExpectedRevision;
 @property (nonatomic, assign) BOOL acceptancePendingValue;
 @property (nonatomic, assign) BOOL updatingAcceptance;
@@ -1210,6 +1211,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 - (instancetype)initWithMember:(PPDeliveryCompanyMember *)member {
     if (self = [super init]) {
         _member = member;
+        _acceptanceActorUID = [FIRAuth auth].currentUser.uid.copy ?: @"";
         self.modalPresentationStyle = UIModalPresentationPageSheet;
     }
     return self;
@@ -1345,13 +1347,13 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
     [actionsStack addArrangedSubview:footnote];
 
     if ([self.member.role isEqualToString:PPDeliveryCompanyRoleDriver]) {
-        UILabel *policyTitle = [self label:PPFontBold(18) color:PrimaryTextClr lines:0];
+        UILabel *policyTitle = [self label:[[UIFontMetrics defaultMetrics] scaledFontForFont:PPFontBold(18)] color:PrimaryTextClr lines:0];
         policyTitle.text = kLang(@"Delivery_Driver_Acceptance_Title");
         policyTitle.accessibilityTraits |= UIAccessibilityTraitHeader;
         [actionsStack addArrangedSubview:policyTitle];
-        self.acceptanceModeLabel = [self label:PPFontBold(16) color:PrimaryTextClr lines:0];
+        self.acceptanceModeLabel = [self label:[[UIFontMetrics defaultMetrics] scaledFontForFont:PPFontBold(16)] color:PrimaryTextClr lines:0];
         [actionsStack addArrangedSubview:self.acceptanceModeLabel];
-        self.acceptanceDetailLabel = [self label:PPFontRegular(14) color:SeconderyTextClr lines:0];
+        self.acceptanceDetailLabel = [self label:[[UIFontMetrics defaultMetrics] scaledFontForFont:PPFontRegular(14)] color:SeconderyTextClr lines:0];
         [actionsStack addArrangedSubview:self.acceptanceDetailLabel];
         self.acceptanceButton = [UIButton buttonWithType:UIButtonTypeSystem];
         self.acceptanceButton.titleLabel.font = [[UIFontMetrics defaultMetrics] scaledFontForFont:PPFontBold(16)];
@@ -1366,7 +1368,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
         [self.acceptanceButton.heightAnchor constraintGreaterThanOrEqualToConstant:52].active = YES;
         [self.acceptanceButton addTarget:self action:@selector(confirmAcceptancePolicy) forControlEvents:UIControlEventTouchUpInside];
         [actionsStack addArrangedSubview:self.acceptanceButton];
-        self.acceptanceFeedbackLabel = [self label:PPFontRegular(13) color:SeconderyTextClr lines:0];
+        self.acceptanceFeedbackLabel = [self label:[[UIFontMetrics defaultMetrics] scaledFontForFont:PPFontRegular(13)] color:SeconderyTextClr lines:0];
         self.acceptanceFeedbackLabel.hidden = YES;
         [actionsStack addArrangedSubview:self.acceptanceFeedbackLabel];
         [self updateAcceptancePolicyUI];
@@ -1577,12 +1579,14 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
     [self.acceptanceButton setTitle:kLang(key) forState:UIControlStateNormal];
     self.acceptanceButton.hidden = !self.member.canManageSelfAcceptance;
     self.acceptanceButton.enabled = !self.updatingAcceptance &&
+        [self.acceptanceActorUID isEqualToString:[FIRAuth auth].currentUser.uid] &&
         (allowed || [self.member.status isEqualToString:@"active"]);
     self.acceptanceButton.alpha = self.acceptanceButton.enabled ? 1 : 0.45;
 }
 
 - (void)confirmAcceptancePolicy {
-    if (!self.member.canManageSelfAcceptance || self.updatingAcceptance) return;
+    if (!self.member.canManageSelfAcceptance || self.updatingAcceptance ||
+        ![self.acceptanceActorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
     BOOL allowed = !self.member.canSelfAcceptOrders;
     __weak typeof(self) weakSelf = self;
     [PPAlertHelper showConfirmationIn:self title:kLang(@"Delivery_Driver_Acceptance_Confirm_Title")
@@ -1595,7 +1599,8 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 }
 
 - (void)applyAcceptancePolicy:(BOOL)allowed {
-    if (!self.member.canManageSelfAcceptance || self.updatingAcceptance || self.companyID.length == 0) return;
+    if (!self.member.canManageSelfAcceptance || self.updatingAcceptance || self.companyID.length == 0 ||
+        ![self.acceptanceActorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
     if (!self.acceptanceCommandID || self.acceptancePendingValue != allowed) {
         self.acceptanceCommandID = NSUUID.UUID.UUIDString;
         self.acceptanceExpectedRevision = self.member.revision;
@@ -1609,7 +1614,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
                                     expectedRevision:self.acceptanceExpectedRevision commandID:self.acceptanceCommandID
                                           completion:^(PPDeliveryCompanyMemberRecord *confirmed, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self) return;
+        if (!self || ![self.acceptanceActorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
         self.updatingAcceptance = NO;
         self.acceptanceFeedbackLabel.hidden = NO;
         if (confirmed && !error) {
@@ -1624,7 +1629,8 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
             // Refresh permission/revision after a definite conflict or access change.
             [PPDeliveryCompanyService.shared listMembersForCompanyID:self.companyID completion:^(NSArray<PPDeliveryCompanyMember *> *members, NSError *readError) {
                 __strong typeof(weakSelf) self = weakSelf;
-                if (!self || readError) return;
+                if (!self || readError ||
+                    ![self.acceptanceActorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
                 for (PPDeliveryCompanyMember *fresh in members) {
                     if (![fresh.uid isEqualToString:self.member.uid]) continue;
                     if (fresh.revision != self.member.revision) self.acceptanceCommandID = nil;

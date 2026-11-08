@@ -3,9 +3,17 @@
 @class PPFulfillmentModel;
 @protocol FIRListenerRegistration;
 
+/// Pure Pets' own account. Platform fulfillments (ownerType "platform") are
+/// owned by it and are operated through the staff command, not the partner one.
+FOUNDATION_EXPORT NSString * const PPFulfillmentOfficialOwnerUID;
+
 @interface PPFulfillmentManager : NSObject
 
 + (instancetype)sharedManager;
+
+/// YES when `uid` is the official account and the fulfillment is a platform
+/// fulfillment it owns.
++ (BOOL)isOfficialPlatformFulfillment:(PPFulfillmentModel *)fulfillment forUID:(NSString *)uid;
 
 - (id<FIRListenerRegistration>)observeFulfillmentsForOwnerID:(NSString *)ownerID
                                                     onChange:(void (^)(NSArray<PPFulfillmentModel *> *fulfillments, NSError *error))onChange;
@@ -52,5 +60,13 @@
                       commandID:(nullable NSString *)commandID
                            note:(nullable NSString *)note
                      completion:(void (^)(BOOL success, NSString *message, NSError *error))completion;
+
+/// Platform fulfillments: Infra `staffTransitionOfficialFulfillment`, which
+/// re-checks staff authority and requires a note of at least 3 characters.
+- (void)performOfficialPlatformTransitionAction:(NSString *)action
+                                  fulfillmentID:(NSString *)fulfillmentID
+                                 expectedStatus:(NSString *)expectedStatus
+                                           note:(NSString *)note
+                                     completion:(void (^)(BOOL success, NSString *message, NSError *error))completion;
 
 @end

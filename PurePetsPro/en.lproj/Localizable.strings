@@ -4503,7 +4503,7 @@
 "Vet_Roster_Title" = "Veterinary team";
 "Vet_Roster_Summary_Format" = "Total %ld  ·  Active %ld";
 "Vet_Roster_Empty_Summary" = "Manage your veterinary profiles in one place";
-"Vet_Roster_Load_Error" = "Unable to load veterinarians. Pull down to retry.";
+"Vet_Roster_Load_Error" = "Unable to load veterinarians. Try again.";
 "Vet_Action_Call" = "Call veterinarian";
 "Vet_Action_WhatsApp" = "Message on WhatsApp";
 "Vet_Action_Open" = "View veterinary profile";
@@ -4523,3 +4523,13 @@
 "Delivery_Driver_Acceptance_Saving" = "Confirming permission…";
 "Delivery_Driver_Acceptance_Saved" = "Permission confirmed";
 "Delivery_Driver_Acceptance_Sync_Error" = "Couldn't confirm the change. Check your connection and try again. Reopen the profile if its permissions changed.";
+"Vet_Roster_Retry" = "Retry";
+
+"Vet_Roster_View_Profile" = "View profile";
+
+"Vet_Roster_Fee_Label" = "Consultation fee";
+
+/* Official Pure Pets orders in Fulfillment */
+"Fulfillment_StaffNoteMessage" = "Official Pure Pets orders need a note, which is saved in the audit log.";
+"Fulfillment_StaffNotePlaceholder" = "Note (at least 3 characters)";
+"Fulfillment_StaffNoteTooShort" = "Enter a note of at least 3 characters.";

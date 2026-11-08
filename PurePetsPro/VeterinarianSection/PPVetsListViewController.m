@@ -160,6 +160,9 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 @property (nonatomic, strong) UIView *emptyContainer;
 @property (nonatomic, strong) UILabel *emptyHeadline;
 @property (nonatomic, strong) UIView *emptyRule;
+@property (nonatomic, strong) UIButton *emptyRetryButton;
+@property (nonatomic, strong) NSLayoutConstraint *emptyNormalBottomConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *emptyRetryBottomConstraint;
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, assign) BOOL isLoadingVets;
 
@@ -999,6 +1002,22 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [_emptyContainer addSubview:rule];
     _emptyRule = rule;
 
+    UIButton *retry = [UIButton buttonWithType:UIButtonTypeSystem];
+    retry.translatesAutoresizingMaskIntoConstraints = NO;
+    retry.hidden = YES;
+    [retry setTitle:kLang(@"Vet_Roster_Retry") forState:UIControlStateNormal];
+    retry.titleLabel.font = [Styling fontBold:14.0];
+    retry.tintColor = AppPrimaryClr;
+    retry.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.10];
+    PPApplyContinuousCorners(retry, 14.0);
+    retry.accessibilityLabel = kLang(@"Vet_Roster_Retry");
+    [retry addTarget:self action:@selector(retryVetLoadTapped) forControlEvents:UIControlEventTouchUpInside];
+    [_emptyContainer addSubview:retry];
+    self.emptyRetryButton = retry;
+    self.emptyNormalBottomConstraint = [rule.bottomAnchor constraintEqualToAnchor:_emptyContainer.bottomAnchor];
+    self.emptyRetryBottomConstraint = [retry.bottomAnchor constraintEqualToAnchor:_emptyContainer.bottomAnchor];
+    self.emptyRetryBottomConstraint.active = NO;
+
     _loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     _loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
     _loadingIndicator.color = AppPrimaryClr;
@@ -1019,11 +1038,25 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         [rule.centerXAnchor constraintEqualToAnchor:_emptyContainer.centerXAnchor],
         [rule.widthAnchor constraintEqualToConstant:42],
         [rule.heightAnchor constraintEqualToConstant:PPSpaceXXS],
-        [rule.bottomAnchor constraintEqualToAnchor:_emptyContainer.bottomAnchor],
+        self.emptyNormalBottomConstraint,
+
+        [retry.topAnchor constraintEqualToAnchor:rule.bottomAnchor constant:14.0],
+        [retry.centerXAnchor constraintEqualToAnchor:_emptyContainer.centerXAnchor],
+        [retry.heightAnchor constraintGreaterThanOrEqualToConstant:44.0],
+        [retry.widthAnchor constraintGreaterThanOrEqualToConstant:136.0],
 
         [_loadingIndicator.centerXAnchor constraintEqualToAnchor:_emptyContainer.centerXAnchor],
         [_loadingIndicator.centerYAnchor constraintEqualToAnchor:_emptyContainer.centerYAnchor],
     ]];
+}
+
+- (void)retryVetLoadTapped {
+    [self.listener remove];
+    self.listener = nil;
+    self.emptyRetryButton.hidden = YES;
+    self.emptyRetryBottomConstraint.active = NO;
+    self.emptyNormalBottomConstraint.active = YES;
+    [self startListening];
 }
 
 - (void)pp_setVetsLoading:(BOOL)loading {
@@ -1031,6 +1064,9 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     self.emptyHeadline.hidden = loading;
     self.emptyRule.hidden = loading;
     if (loading) {
+        self.emptyRetryButton.hidden = YES;
+        self.emptyRetryBottomConstraint.active = NO;
+        self.emptyNormalBottomConstraint.active = YES;
         self.emptyContainer.hidden = NO;
         [self.loadingIndicator startAnimating];
     } else {
@@ -1047,12 +1083,18 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         if (error) {
             [weakSelf pp_setVetsLoading:NO];
             weakSelf.emptyHeadline.text = kLang(@"Vet_Roster_Load_Error");
+            weakSelf.emptyNormalBottomConstraint.active = NO;
+            weakSelf.emptyRetryBottomConstraint.active = YES;
+            weakSelf.emptyRetryButton.hidden = NO;
             weakSelf.emptyContainer.hidden = NO;
             weakSelf.tableView.hidden = YES;
             DLog(@"[VetsList] listener error: %@", error.localizedDescription);
             return;
         }
         weakSelf.emptyHeadline.text = kLang(@"Vet_Empty_List");
+        weakSelf.emptyRetryButton.hidden = YES;
+        weakSelf.emptyRetryBottomConstraint.active = NO;
+        weakSelf.emptyNormalBottomConstraint.active = YES;
         __strong typeof(weakSelf) self = weakSelf;
         [self pp_setVetsLoading:NO];
         self.allVets = [vets mutableCopy] ?: [NSMutableArray array];

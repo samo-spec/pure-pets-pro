@@ -1159,6 +1159,20 @@
     return self.filteredServices.count;
 }
 
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (self.currentStageMode == 1) {
+        return 118.0;
+    }
+    return [PPServiceCell preferredHeight];
+}
+
+- (CGFloat)tableView:(UITableView *)tableView estimatedHeightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (self.currentStageMode == 1) {
+        return 118.0;
+    }
+    return [PPServiceCell preferredHeight];
+}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (self.currentStageMode == 1) {
         // Live Floor Pipeline Cell

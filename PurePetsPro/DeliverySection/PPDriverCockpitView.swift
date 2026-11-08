@@ -728,6 +728,9 @@ struct PPDriverCockpitView: View {
             }
             return .informational(task, ppDriverText(key))
         }
+        if action.code == "CLAIM" && !store.canSelfAcceptOrders {
+            return .blocked(task, ppDriverText("Delivery_Driver_Acceptance_Managed"))
+        }
         if action.code == "DELIVER" && task.authority != .fulfillmentV1 &&
             (task.proof.photoRequired || task.proof.signatureRequired) {
             return .blocked(task, ppDriverText("DriverCockpit_Blocked_Proof"))

@@ -211,6 +211,8 @@ static NSError *PPDeliveryCompanyContextError(void) {
         _canReceiveAssignments = [source[@"canReceiveAssignments"] respondsToSelector:@selector(boolValue)]
             ? [source[@"canReceiveAssignments"] boolValue]
             : [source[@"available"] boolValue];
+        _canSelfAcceptOrders = [source[@"canSelfAcceptOrders"] isEqual:@YES];
+        _canManageSelfAcceptance = [source[@"canManageSelfAcceptance"] isEqual:@YES];
         _activeDeliveryCount = [source[@"activeDeliveryCount"] respondsToSelector:@selector(integerValue)]
             ? [source[@"activeDeliveryCount"] integerValue]
             : [source[@"activeDeliveriesCount"] integerValue];
@@ -1157,7 +1159,8 @@ static NSError *PPDeliveryCompanyContextError(void) {
               expectedRevision:(NSInteger)expectedRevision
                      commandID:(NSString *)commandID
                     completion:(void(^)(PPDeliveryCompanyMemberRecord *, NSError *))completion {
-    if (driverUID.length == 0 || companyID.length == 0 || commandID.length == 0 || expectedRevision < 0) {
+    NSString *actorUID = [FIRAuth auth].currentUser.uid.copy ?: @"";
+    if (actorUID.length == 0 || driverUID.length == 0 || companyID.length == 0 || commandID.length == 0 || expectedRevision < 0) {
         if (completion) completion(nil, PPDeliveryInvalidResponseError());
         return;
     }
@@ -1167,6 +1170,11 @@ static NSError *PPDeliveryCompanyContextError(void) {
                          @"commandId": commandID,
                          @"reason": allowed ? @"driver_self_acceptance.enabled" : @"driver_self_acceptance.disabled"}
             completion:^(id result, NSError *error) {
+        if (![[FIRAuth auth].currentUser.uid isEqualToString:actorUID]) {
+            if (completion) completion(nil, [NSError errorWithDomain:FIRFunctionsErrorDomain code:FIRFunctionsErrorCodeUnauthenticated
+                userInfo:@{NSLocalizedDescriptionKey: kLang(@"Delivery_Driver_Acceptance_Sync_Error")}]);
+            return;
+        }
         if (error) {
             if (completion) completion(nil, error);
             return;
@@ -1180,6 +1188,11 @@ static NSError *PPDeliveryCompanyContextError(void) {
         }
         // A command receipt is not proof that the displayed projection is current.
         [self fetchCompanyMembersForCompanyID:companyID completion:^(NSArray<PPDeliveryCompanyMemberRecord *> *members, NSError *readError) {
+            if (![[FIRAuth auth].currentUser.uid isEqualToString:actorUID]) {
+                if (completion) completion(nil, [NSError errorWithDomain:FIRFunctionsErrorDomain code:FIRFunctionsErrorCodeUnauthenticated
+                    userInfo:@{NSLocalizedDescriptionKey: kLang(@"Delivery_Driver_Acceptance_Sync_Error")}]);
+                return;
+            }
             if (readError) {
                 if (completion) completion(nil, readError);
                 return;

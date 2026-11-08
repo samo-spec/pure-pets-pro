@@ -4532,7 +4532,7 @@
 "Vet_Roster_Title" = "الفريق البيطري";
 "Vet_Roster_Summary_Format" = "الإجمالي %ld  ·  النشط %ld";
 "Vet_Roster_Empty_Summary" = "إدارة ملفات فريقك البيطري بسهولة";
-"Vet_Roster_Load_Error" = "تعذر تحميل الأطباء. اسحب لأسفل لإعادة المحاولة.";
+"Vet_Roster_Load_Error" = "تعذر تحميل الأطباء. جرّب مرة أخرى.";
 "Vet_Action_Call" = "الاتصال بالطبيب";
 "Vet_Action_WhatsApp" = "مراسلة عبر واتساب";
 "Vet_Action_Open" = "عرض ملف الطبيب البيطري";
@@ -4552,3 +4552,13 @@
 "Delivery_Driver_Acceptance_Saving" = "جارٍ تأكيد الصلاحية…";
 "Delivery_Driver_Acceptance_Saved" = "تم تأكيد الصلاحية";
 "Delivery_Driver_Acceptance_Sync_Error" = "تعذر تأكيد التغيير. تحقق من الاتصال وحاول مجددًا. أعد فتح الملف إذا تغيرت صلاحياته.";
+"Vet_Roster_Retry" = "إعادة المحاولة";
+
+"Vet_Roster_View_Profile" = "عرض الملف";
+
+"Vet_Roster_Fee_Label" = "رسوم الاستشارة";
+
+/* طلبات بيور بتس الرسمية في قسم التنفيذ */
+"Fulfillment_StaffNoteMessage" = "طلبات بيور بتس الرسمية تحتاج إلى ملاحظة تُحفظ في سجل التدقيق.";
+"Fulfillment_StaffNotePlaceholder" = "ملاحظة (3 أحرف على الأقل)";
+"Fulfillment_StaffNoteTooShort" = "اكتب ملاحظة من 3 أحرف على الأقل.";

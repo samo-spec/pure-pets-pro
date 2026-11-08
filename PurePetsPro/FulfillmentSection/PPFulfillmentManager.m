@@ -4,6 +4,16 @@
 #import <CommonCrypto/CommonDigest.h>
 
 static NSString * const kColFulfillmentOrders = @"FulfillmentOrders";
+NSString * const PPFulfillmentOfficialOwnerUID = @"PUIDPOFFICILAL20262214";
+
+// Infra FULFILLMENT_STATUS. The platform lane names every status so it is
+// served by the deployed (ownerID, ownerType, status, createdAt) index.
+static NSArray<NSString *> *PPFulfillmentCanonicalStatuses(void) {
+    return @[@"new_request", @"accepted", @"rejected", @"preparing", @"ready_for_pickup",
+             @"delivery_requested", @"delivery_assigned", @"awaiting_handover", @"handed_over",
+             @"in_transit", @"delivered", @"payment_pending", @"payment_confirmed", @"completed",
+             @"cancelled", @"failed", @"returned"];
+}
 
 static NSString *PPFulfillmentTrimmedString(NSString *value) {
     return [value isKindOfClass:NSString.class]
@@ -36,6 +46,17 @@ static NSString *PPProviderFulfillmentCommandID(NSString *uid,
         [hex appendFormat:@"%02x", digest[index]];
     }
     return [@"pro-provider-v1-" stringByAppendingString:hex];
+}
+
+// Separate namespace so an official command never collides with a provider one.
+static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
+                                                NSString *fulfillmentID,
+                                                NSString *expectedStatus,
+                                                NSString *action,
+                                                NSString *note) {
+    NSString *providerID = PPProviderFulfillmentCommandID([@"official\0" stringByAppendingString:PPFulfillmentTrimmedString(uid)],
+                                                          fulfillmentID, expectedStatus, action, note);
+    return [@"pro-official-v1-" stringByAppendingString:[providerID substringFromIndex:@"pro-provider-v1-".length]];
 }
 
 // One owner for account/profile watches and all bounded child query pages.
@@ -126,27 +147,17 @@ static NSString *PPProviderFulfillmentCommandID(NSString *uid,
     for (NSString *flag in @[@"banned", @"deactivated", @"isDeleted", @"deleted", @"isSuspended", @"suspended", @"isDisabled", @"disabled"]) {
         if ([self.account[flag] isEqual:@YES]) active = NO;
     }
-    if (!active) { [self fail:nil]; return; }
+    // The official account is a staff identity, so it never passes the partner
+    // account gate above. It owns every platform fulfillment; Firestore Rules
+    // authorize that lane from its staff_users record.
+    BOOL officialLane = [self.uid isEqualToString:PPFulfillmentOfficialOwnerUID];
+    if (!active && !officialLane) { [self fail:nil]; return; }
     // Drop previously authorized rows while fresh authority queries settle.
     if (self.handler) self.handler(@[], nil, YES);
     self.authorityFromCache = self.accountFromCache || self.profilesFromCache;
     NSUInteger generation = self.generation;
     __weak typeof(self) weakSelf = self;
-    for (FIRDocumentSnapshot *profile in self.profiles) {
-        NSDictionary *data = profile.data;
-        NSString *type = PPSafeString(data[@"providerType"]);
-        NSDictionary *plan = PPSafeDict(data[@"planSnapshot"]);
-        if (![PPSafeString(data[@"userId"]) isEqualToString:self.uid] ||
-            ![PPSafeString(data[@"status"]) isEqualToString:@"active"] ||
-            PPFulfillmentTrimmedString(data[@"planId"]).length == 0 ||
-            (plan[@"providerType"] && ![plan[@"providerType"] isEqual:type]) || ![self allowsProviderType:type]) continue;
-        FIRQuery *query = [[[[[[[self.db collectionWithPath:kColFulfillmentOrders]
-            queryWhereField:@"ownerID" isEqualTo:self.uid]
-            queryWhereField:@"ownerType" isEqualTo:@"partner"]
-            queryWhereField:@"providerType" isEqualTo:type]
-            queryWhereField:@"providerProfileID" isEqualTo:profile.documentID]
-            queryOrderedByField:@"createdAt" descending:YES] queryLimitedTo:self.limit];
-        NSString *key = profile.documentID;
+    void (^listen)(NSString *, FIRQuery *) = ^(NSString *key, FIRQuery *query) {
         id<FIRListenerRegistration> child = [query addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot *snapshot, NSError *error) {
             __strong typeof(weakSelf) self = weakSelf;
             if (!self || ![self sessionCurrent] || generation != self.generation) return;
@@ -160,6 +171,30 @@ static NSString *PPProviderFulfillmentCommandID(NSString *uid,
             [self emit];
         }];
         [self.children addObject:child];
+    };
+    if (officialLane) {
+        FIRQuery *platform = [[[[[[self.db collectionWithPath:kColFulfillmentOrders]
+            queryWhereField:@"ownerID" isEqualTo:self.uid]
+            queryWhereField:@"ownerType" isEqualTo:@"platform"]
+            queryWhereField:@"status" in:PPFulfillmentCanonicalStatuses()]
+            queryOrderedByField:@"createdAt" descending:YES] queryLimitedTo:self.limit];
+        listen(@"official-platform", platform);
+    }
+    for (FIRDocumentSnapshot *profile in (active ? self.profiles : @[])) {
+        NSDictionary *data = profile.data;
+        NSString *type = PPSafeString(data[@"providerType"]);
+        NSDictionary *plan = PPSafeDict(data[@"planSnapshot"]);
+        if (![PPSafeString(data[@"userId"]) isEqualToString:self.uid] ||
+            ![PPSafeString(data[@"status"]) isEqualToString:@"active"] ||
+            PPFulfillmentTrimmedString(data[@"planId"]).length == 0 ||
+            (plan[@"providerType"] && ![plan[@"providerType"] isEqual:type]) || ![self allowsProviderType:type]) continue;
+        FIRQuery *query = [[[[[[[self.db collectionWithPath:kColFulfillmentOrders]
+            queryWhereField:@"ownerID" isEqualTo:self.uid]
+            queryWhereField:@"ownerType" isEqualTo:@"partner"]
+            queryWhereField:@"providerType" isEqualTo:type]
+            queryWhereField:@"providerProfileID" isEqualTo:profile.documentID]
+            queryOrderedByField:@"createdAt" descending:YES] queryLimitedTo:self.limit];
+        listen(profile.documentID, query);
     }
     if (self.children.count == 0 && self.handler) self.handler(@[], nil, self.authorityFromCache);
 }
@@ -397,6 +432,60 @@ static NSString *PPProviderFulfillmentCommandID(NSString *uid,
                       commandID:(NSString *)commandID
                            note:(NSString *)note
                      completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
+    [self pp_performTransitionWithCallable:@"providerTransitionFulfillment"
+                                    action:action
+                             fulfillmentID:fulfillmentID
+                            expectedStatus:expectedStatus
+                                 commandID:commandID
+                                      note:note
+                                completion:completion];
+}
+
+- (void)performOfficialPlatformTransitionAction:(NSString *)action
+                                  fulfillmentID:(NSString *)fulfillmentID
+                                 expectedStatus:(NSString *)expectedStatus
+                                           note:(NSString *)note
+                                     completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
+    NSString *requestUID = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *resolvedNote = PPFulfillmentTrimmedString(note);
+    if (![requestUID isEqualToString:PPFulfillmentOfficialOwnerUID]) {
+        NSError *error = PPFulfillmentManagerError(403, kLang(@"DeliveryStateChangedReload"));
+        if (completion) completion(NO, error.localizedDescription, error);
+        return;
+    }
+    if (resolvedNote.length < 3) {
+        NSError *error = PPFulfillmentManagerError(422, kLang(@"Fulfillment_StaffNoteTooShort"));
+        if (completion) completion(NO, error.localizedDescription, error);
+        return;
+    }
+    NSString *commandID = PPOfficialFulfillmentCommandID(requestUID,
+                                                        PPFulfillmentTrimmedString(fulfillmentID),
+                                                        PPFulfillmentTrimmedString(expectedStatus).lowercaseString,
+                                                        PPFulfillmentTrimmedString(action).lowercaseString,
+                                                        resolvedNote);
+    [self pp_performTransitionWithCallable:@"staffTransitionOfficialFulfillment"
+                                    action:action
+                             fulfillmentID:fulfillmentID
+                            expectedStatus:expectedStatus
+                                 commandID:commandID
+                                      note:resolvedNote
+                                completion:completion];
+}
+
++ (BOOL)isOfficialPlatformFulfillment:(PPFulfillmentModel *)fulfillment forUID:(NSString *)uid {
+    NSString *accountUID = PPFulfillmentTrimmedString(uid);
+    return [accountUID isEqualToString:PPFulfillmentOfficialOwnerUID] &&
+        [PPFulfillmentTrimmedString(fulfillment.ownerType).lowercaseString isEqualToString:@"platform"] &&
+        [PPFulfillmentTrimmedString(fulfillment.ownerID) isEqualToString:accountUID];
+}
+
+- (void)pp_performTransitionWithCallable:(NSString *)callableName
+                                  action:(NSString *)action
+                           fulfillmentID:(NSString *)fulfillmentID
+                          expectedStatus:(NSString *)expectedStatus
+                               commandID:(NSString *)commandID
+                                    note:(NSString *)note
+                              completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
     NSString *requestUID = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
     NSString *resolvedFulfillmentID = PPFulfillmentTrimmedString(fulfillmentID);
     NSString *resolvedAction = PPFulfillmentTrimmedString(action).lowercaseString;
@@ -417,7 +506,7 @@ static NSString *PPProviderFulfillmentCommandID(NSString *uid,
     }
 
     FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
-    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"providerTransitionFulfillment"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:callableName];
     callable.timeoutInterval = 30.0;
 
     NSMutableDictionary *payload = [NSMutableDictionary dictionary];
@@ -427,8 +516,8 @@ static NSString *PPProviderFulfillmentCommandID(NSString *uid,
     payload[@"commandId"] = resolvedCommandID;
     if (resolvedNote.length > 0) payload[@"note"] = resolvedNote;
 
-    NSLog(@"PPLAB Pro provider fulfillment command submit fulfillmentID=%@ action=%@ expectedStatus=%@ commandId=%@",
-          resolvedFulfillmentID, resolvedAction, resolvedExpectedStatus, resolvedCommandID);
+    NSLog(@"PPLAB Pro fulfillment command submit callable=%@ fulfillmentID=%@ action=%@ expectedStatus=%@ commandId=%@",
+          callableName, resolvedFulfillmentID, resolvedAction, resolvedExpectedStatus, resolvedCommandID);
 
     [callable callWithObject:[payload copy] completion:^(FIRHTTPSCallableResult *result, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{

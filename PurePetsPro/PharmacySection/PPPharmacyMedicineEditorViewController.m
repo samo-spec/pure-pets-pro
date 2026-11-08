@@ -570,6 +570,7 @@
 }
 
 - (void)pp_stageMedicineForOptionsAndOpenStudio {
+    if (!self.saveButton.enabled) return;
     [self.view endEditing:YES];
     NSString *title = [self.titleField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (title.length == 0) {
@@ -618,6 +619,7 @@
         }
 
         self.medicine = edited;
+        self.selectedImage = nil;
         [self pp_refreshVariantStudioSection];
         [self pp_openVariantStudio];
     }];
@@ -630,21 +632,12 @@
     __weak typeof(self) ws = self;
     host.onSaved = ^(PetAccessory *savedAcc) {
         if (!savedAcc) return;
-        ws.medicine.productFamilyId = savedAcc.productFamilyId;
-        ws.medicine.variantSchemaVersion = savedAcc.variantSchemaVersion;
-        ws.medicine.isVariant = savedAcc.isVariant;
-        ws.medicine.isDefaultVariant = savedAcc.isDefaultVariant;
-        ws.medicine.variantSortOrder = savedAcc.variantSortOrder;
-        ws.medicine.selectedOptions = savedAcc.selectedOptions;
-        ws.medicine.selectedOptionsSnapshot = savedAcc.selectedOptionsSnapshot;
-        ws.medicine.variantCombinationKey = savedAcc.variantCombinationKey;
-        ws.medicine.variantAxis = savedAcc.variantAxis;
-        ws.medicine.sku = savedAcc.sku;
-        ws.medicine.barcode = savedAcc.barcode;
-        if (savedAcc.price != nil) ws.medicine.price = savedAcc.price.doubleValue;
-        if (savedAcc.wholesalePrice != nil) ws.medicine.wholesalePrice = savedAcc.wholesalePrice;
-        ws.medicine.stockQuantity = savedAcc.quantity;
-        [ws populateData];
+        [ws.medicine applyVariantAccessory:savedAcc];
+        ws.priceField.text = [NSString stringWithFormat:@"%.2f", ws.medicine.price];
+        ws.stockField.text = [NSString stringWithFormat:@"%ld", (long)ws.medicine.stockQuantity];
+        ws.skuField.text = ws.medicine.sku;
+        ws.barcodeField.text = ws.medicine.barcode;
+        ws.wholesalePriceField.text = savedAcc.wholesalePrice ? [NSString stringWithFormat:@"%.2f", savedAcc.wholesalePrice.doubleValue] : @"";
         [ws pp_refreshVariantStudioSection];
     };
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:host];

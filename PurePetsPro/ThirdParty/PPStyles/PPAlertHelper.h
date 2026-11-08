@@ -3,8 +3,6 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-
-
 typedef NS_ENUM(NSInteger, PPAlertType) {
     PPAlertTypeSuccess,
     PPAlertTypeError,
@@ -20,45 +18,41 @@ typedef void (^PPAlertSimpleActionBlock)(void);
 - (instancetype)initWithType:(PPAlertType)type
                       title:(NSString *)title
                    subtitle:(NSString *)subtitle
-                       icon:(UIImage *)icon
+                       icon:(UIImage * _Nullable)icon
                 confirmTitle:(NSString * _Nullable)confirmTitle
-                 cancelTitle:(NSString * _Nullable)cancelTitle
-               confirmAction:(AlertCompletionBlock _Nullable)confirmAction
-                cancelAction:(void(^ _Nullable)(void))cancelAction;
+                  cancelTitle:(NSString * _Nullable)cancelTitle
+                confirmAction:(AlertCompletionBlock _Nullable)confirmAction
+                 cancelAction:(void(^ _Nullable)(void))cancelAction;
 
-- (void)showInViewController:(UIViewController *)vc;
+- (void)showInViewController:(UIViewController * _Nullable)vc;
  
 @end
 
-
-
-
-
-
-
 @interface PPAlertHelper : NSObject
 
-+ (void)showSuccessIn:(UIViewController *)vc
++ (void)showSuccessIn:(UIViewController * _Nullable)vc
                 title:(NSString *)title
              subtitle:(NSString *)subtitle
-             OKAction:(AlertCompletionBlock _Nullable)okAction;
+             OKAction:(AlertCompletionBlock _Nullable)okAction
+    NS_SWIFT_NAME(showSuccess(in:title:subtitle:OKAction:));
 
-
-+ (void)showFailIn:(UIViewController *)vc
++ (void)showFailIn:(UIViewController * _Nullable)vc
              title:(NSString *)title
           subtitle:(NSString * _Nullable)subtitle
-        completion:(void (^ _Nullable)(void))completion;
+        completion:(void (^ _Nullable)(void))completion
+    NS_SWIFT_NAME(showFail(in:title:subtitle:completion:));
 
-+ (void)showConfirmationIn:(UIViewController *)vc
++ (void)showConfirmationIn:(UIViewController * _Nullable)vc
                      title:(NSString *)title
                   subtitle:(NSString *)subtitle
              confirmButton:(NSString *)confirmTitle
               cancelButton:(NSString *)cancelTitle
                       icon:(UIImage * _Nullable)icon
                confirmBlock:(AlertCompletionBlock _Nullable)confirmBlock
-                cancelBlock:(void(^ _Nullable)(void))cancelBlock;
+                cancelBlock:(void(^ _Nullable)(void))cancelBlock
+    NS_SWIFT_NAME(showConfirmation(in:title:subtitle:confirmButton:cancelButton:icon:confirmBlock:cancelBlock:));
 
-+ (void)showThreeActionConfirmationIn:(UIViewController *)vc
++ (void)showThreeActionConfirmationIn:(UIViewController * _Nullable)vc
                                 title:(NSString *)title
                              subtitle:(NSString * _Nullable)subtitle
                         primaryButton:(NSString *)primaryTitle
@@ -71,37 +65,45 @@ typedef void (^PPAlertSimpleActionBlock)(void);
                        secondaryBlock:(PPAlertSimpleActionBlock _Nullable)secondaryBlock
                         tertiaryBlock:(PPAlertSimpleActionBlock _Nullable)tertiaryBlock;
 
-+ (void)showTextFieldAlertIn:(UIViewController *)vc
-                   title:(NSString *)title
-                subtitle:(NSString * _Nullable)subtitle
-             placeholder:(NSString * _Nullable)placeholder
-             initialText:(NSString * _Nullable)initialText
-             confirmText:(NSString * _Nullable)confirmText
-              cancelText:(NSString * _Nullable)cancelText
-             completion:(AlertCompletionBlock)completion;
++ (void)showTextFieldAlertIn:(UIViewController * _Nullable)vc
+                    title:(NSString *)title
+                 subtitle:(NSString * _Nullable)subtitle
+              placeholder:(NSString * _Nullable)placeholder
+              initialText:(NSString * _Nullable)initialText
+              confirmText:(NSString * _Nullable)confirmText
+               cancelText:(NSString * _Nullable)cancelText
+              completion:(AlertCompletionBlock)completion
+    NS_SWIFT_NAME(showTextField(in:title:subtitle:placeholder:initialText:confirmText:cancelText:completion:));
 
-
-+ (void)showSuccessIn:(UIViewController *)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle;
-+ (void)showErrorIn:(UIViewController *)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle;
-+ (void)showWarningIn:(UIViewController *)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle;
-+ (void)showInfoIn:(UIViewController *)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle;
-+ (void)showSuccessIn:(UIViewController *)vc
++ (void)showSuccessIn:(UIViewController * _Nullable)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle
+    NS_SWIFT_NAME(showSuccess(in:title:subtitle:));
++ (void)showErrorIn:(UIViewController * _Nullable)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle
+    NS_SWIFT_NAME(showError(in:title:subtitle:));
++ (void)showErrorIn:(UIViewController * _Nullable)vc
+              title:(NSString *)title
+           subtitle:(NSString * _Nullable)subtitle
+         completion:(void (^ _Nullable)(void))completion;
++ (void)showWarningIn:(UIViewController * _Nullable)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle
+    NS_SWIFT_NAME(showWarning(in:title:subtitle:));
++ (void)showInfoIn:(UIViewController * _Nullable)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle
+    NS_SWIFT_NAME(showInfo(in:title:subtitle:));
++ (void)showSuccessIn:(UIViewController * _Nullable)vc
                 title:(NSString *)title
              subtitle:(NSString *)subtitle
         confirmAction:(AlertCompletionBlock _Nullable)confirmAction
          cancelAction:(void (^)(void))cancelAction;
-+ (void)showWarningIn:(UIViewController *)vc
++ (void)showWarningIn:(UIViewController * _Nullable)vc
                 title:(NSString *)title
              subtitle:(NSString * _Nullable)subtitle
            completion:(void (^ _Nullable)(void))completion;
-+ (void)showInfoIn:(UIViewController *)vc
-             title:(NSString *)title
-          subtitle:(NSString * _Nullable)subtitle
-        completion:(void (^ _Nullable)(void))completion;
++ (void)showInfoIn:(UIViewController * _Nullable)vc
+              title:(NSString *)title
+           subtitle:(NSString * _Nullable)subtitle
+         completion:(void (^ _Nullable)(void))completion;
 
 #pragma mark - Backward-compatible (old AlertHelper API)
 
-+ (void)showConfirmationIn:(UIViewController *)vc
++ (void)showConfirmationIn:(UIViewController * _Nullable)vc
                      title:(NSString *)title
                   subtitle:(NSString *)subtitle
                placeholder:(NSString * _Nullable)placeholder
@@ -110,7 +112,7 @@ typedef void (^PPAlertSimpleActionBlock)(void);
               confirmBlock:(void(^_Nullable)(void))confirmBlock
                cancelBlock:(void(^_Nullable)(void))cancelBlock;
 
-+ (void)showConfirmationIn:(UIViewController *)vc
++ (void)showConfirmationIn:(UIViewController * _Nullable)vc
                      title:(NSString *)title
                   subtitle:(NSString *)subtitle
                placeholder:(NSString * _Nullable)placeholder
@@ -120,28 +122,26 @@ typedef void (^PPAlertSimpleActionBlock)(void);
               confirmBlock:(void(^_Nullable)(void))confirmBlock
                cancelBlock:(void(^_Nullable)(void))cancelBlock;
 
-+ (void)showTextPromptIn:(UIViewController *)vc
-                   title:(NSString *)title
-                subtitle:(NSString * _Nullable)subtitle
-             placeholder:(NSString * _Nullable)placeholder
-             initialText:(NSString * _Nullable)initialText
-             confirmText:(NSString * _Nullable)confirmText
-              cancelText:(NSString * _Nullable)cancelText
-              completion:(void(^)(NSString * _Nullable text))completion;
++ (void)showTextPromptIn:(UIViewController * _Nullable)vc
+                    title:(NSString *)title
+                 subtitle:(NSString * _Nullable)subtitle
+              placeholder:(NSString * _Nullable)placeholder
+              initialText:(NSString * _Nullable)initialText
+              confirmText:(NSString * _Nullable)confirmText
+               cancelText:(NSString * _Nullable)cancelText
+               completion:(void(^)(NSString * _Nullable text))completion;
 
-+ (void)showTextPromptIn:(UIViewController *)vc
-                   title:(NSString *)title
-                subtitle:(NSString * _Nullable)subtitle
-             placeholder:(NSString * _Nullable)placeholder
-             initialText:(NSString * _Nullable)initialText
-             confirmText:(NSString * _Nullable)confirmText
-              cancelText:(NSString * _Nullable)cancelText
-             secureEntry:(BOOL)secureEntry
-            keyboardType:(UIKeyboardType)keyboardType
-              completion:(void(^)(NSString * _Nullable text))completion;
++ (void)showTextPromptIn:(UIViewController * _Nullable)vc
+                    title:(NSString *)title
+                 subtitle:(NSString * _Nullable)subtitle
+              placeholder:(NSString * _Nullable)placeholder
+              initialText:(NSString * _Nullable)initialText
+              confirmText:(NSString * _Nullable)confirmText
+               cancelText:(NSString * _Nullable)cancelText
+              secureEntry:(BOOL)secureEntry
+             keyboardType:(UIKeyboardType)keyboardType
+               completion:(void(^)(NSString * _Nullable text))completion;
 
 @end
-
-
 
 NS_ASSUME_NONNULL_END

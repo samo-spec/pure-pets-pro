@@ -129,6 +129,10 @@
     return font ?: [UIFont systemFontOfSize:size]; // fallback
 }
 
++ (UIFont *)scaledFontForFont:(UIFont *)base textStyle:(UIFontTextStyle)style {
+    return PPScaledFont(base, style);
+}
+
 
 + (void)applyButtonTextStyle:(UIButton *)button
                         size:(CGFloat)pointSize
@@ -139,13 +143,7 @@
 
     // Create base font
     UIFont *baseFont = [UIFont systemFontOfSize:pointSize weight:weight];
-
-    // Apply dynamic scaling (so it respects Accessibility > Larger Text)
-    UIFontMetrics *metrics = [UIFontMetrics metricsForTextStyle:scale];
-    UIFont *scaledFont = [metrics scaledFontForFont:baseFont];
-
-    // Apply to button title
-    button.titleLabel.font = scaledFont;
+    button.titleLabel.font = PPScaledFont(baseFont, scale);
     button.titleLabel.adjustsFontForContentSizeCategory = YES;
 
     DLog(@"[Styling] Applied button font size %.1f, weight %.1f, scale %@",

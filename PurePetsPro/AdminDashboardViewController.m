@@ -523,8 +523,14 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
                                             deliveryCompanyProfile.name.length ? deliveryCompanyProfile.name : deliveryCompanyProfile.companyID,
                                             PPDeliveryCompanyRoleDisplayName(deliveryCompanyProfile.role)])
             : kLang(@"DeliveryCompany_SetupEntry_Subtitle");
+        // The server-resolved workspace decides the destination: a driver-only or
+        // restricted membership opens the unified driver cockpit; dispatch
+        // workspaces keep the company list.
+        BOOL opensDriverCockpit = hasVerifiedDeliveryCompany && deliveryCompanyProfile.prefersDriverCockpit;
         Class deliveryCompanyEntryClass = hasVerifiedDeliveryCompany
-            ? PPDeliveryCompanyDashboardViewController.class
+            ? (opensDriverCockpit
+               ? PPDriverCockpitHostController.class
+               : (NSClassFromString(@"PurePetsPro.PPDeliveryListHostController") ?: PPDeliveryCompanyDashboardViewController.class))
             : PPDeliveryCompanySetupViewController.class;
         XLFormRowDescriptor *deliveryCompanyRow =
             [self adminRowWithTag:@"deliveryCompany"
@@ -542,6 +548,26 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
                           subtitle:deliveryCompanySubtitle
                            vcClass:deliveryCompanyEntryClass];
         [deliveryCompanySection addFormRow:deliveryCompanyRow];
+
+        // A member who dispatches (or drives for another fleet) keeps the
+        // company list above and reaches their own deliveries here.
+        if (hasVerifiedDeliveryCompany && !opensDriverCockpit &&
+            (deliveryCompanyProfile.hasDriverWorkspace || PPDeliveryCompanyService.shared.hasDiscoveredDriverWorkspace ||
+             (deliveryCompanyProfile.hasServerWorkspaceProjection &&
+              [deliveryCompanyProfile.role isEqualToString:PPDeliveryCompanyRoleDriver]))) {
+            XLFormRowDescriptor *driverCockpitRow =
+                [self adminRowWithTag:@"driverCockpit"
+                                 icon:[UIImage pp_symbolNamed:@"steeringwheel"
+                                                   pointSize:pointSize
+                                                      weight:UIImageSymbolWeightSemibold
+                                                       scale:UIImageSymbolScaleDefault
+                                                     palette:palette
+                                                  makeTemplate:NO]
+                                title:kLang(@"DriverCockpit_DashboardRow_Title")
+                             subtitle:kLang(@"DriverCockpit_DashboardRow_Subtitle")
+                              vcClass:PPDriverCockpitHostController.class];
+            [deliveryCompanySection addFormRow:driverCockpitRow];
+        }
 
         if (hasVerifiedDeliveryCompany && deliveryCompanyProfile.canViewMembers) {
             XLFormRowDescriptor *membersRow =
@@ -1033,7 +1059,12 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
         return;
     }
     [PPFunc pp_playTapEffect];
-    PPDeliveryCompanyDashboardViewController *controller = [[PPDeliveryCompanyDashboardViewController alloc] init];
+    if (self.deliveryCompanyContext.prefersDriverCockpit) {
+        [self.navigationController pushViewController:[[PPDriverCockpitHostController alloc] init] animated:YES];
+        return;
+    }
+    Class hostClass = NSClassFromString(@"PurePetsPro.PPDeliveryListHostController");
+    UIViewController *controller = hostClass ? [[hostClass alloc] init] : [[PPDeliveryCompanyDashboardViewController alloc] init];
     [self.navigationController pushViewController:controller animated:YES];
 }
 
@@ -1206,7 +1237,14 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
 BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.isAdmin || incomingUser.isSuperAdmin;
         BOOL canAccessDeliveryPro = PPAdminDashboardActivateDeliveryProviders && (incomingUser.canDelivery || incomingUser.canDeliveryFeature);
         BOOL canAccessDeliveryCompanyPro = incomingUser.canDeliveryCompanyFeature;
+        // A restricted server projection keeps its recovery screen reachable.
+        // It grants no task capability; the callables still authorize all work.
+        BOOL hasResolvedDeliveryMembership = strongSelf.isDeliveryCompanyMode &&
+            strongSelf.deliveryCompanyContext.companyID.length > 0 &&
+            (!strongSelf.deliveryCompanyContext.isRestrictedWorkspace ||
+             strongSelf.deliveryCompanyContext.hasServerWorkspaceProjection);
         BOOL canAccessPro = canAccessAdmin ||
+        hasResolvedDeliveryMembership ||
         canAccessDeliveryPro ||
         canAccessDeliveryCompanyPro ||
         incomingUser.canOfferServices ||
@@ -1219,7 +1257,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         NSLog(@"👂 Role update: role=%@ admin=%d pro=%d blocked=%d review=%d",
               [PPRolePermission roleName:incomingUser.role], incomingUser.isAdmin, canAccessPro, blocked, hasReviewApplication);
 
-        if ((blocked || !canAccessPro || hasReviewApplication) && !strongSelf.didForceLogoutForAccess) {
+        if ((blocked || !canAccessPro || (hasReviewApplication && !hasResolvedDeliveryMembership)) && !strongSelf.didForceLogoutForAccess) {
             strongSelf.didForceLogoutForAccess = YES;
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (blocked) {
@@ -3062,7 +3100,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
                                                                handler:^{
             [PPFunc pp_playTapEffect];
             [weakSelf pp_markQuickActionKindSeen:PPAdminQuickActionSignalDelivery];
-            PPDeliveryDashboardViewController *vc = [[PPDeliveryDashboardViewController alloc] init];
+            PPDeliveryDriverDashboardHostController *vc = [[PPDeliveryDriverDashboardHostController alloc] init];
             [weakSelf.navigationController pushViewController:vc animated:YES];
         }]];
     }
@@ -3254,6 +3292,26 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_startPendingOrdersObserverForUID:(NSString *)uid {
+    UserModel *user = [self pp_activeDashboardUser];
+    NSString *roleName = [PPRolePermission roleName:user.role].lowercaseString;
+    NSString *roleSummary = user.roleSummary.lowercaseString ?: @"";
+    BOOL canReadRootOrders = user.isAdmin ||
+                             user.isSuperAdmin ||
+                             user.isOwner ||
+                             user.role == UserRoleAdmin ||
+                             user.role == UserRoleOwner ||
+                             [roleName isEqualToString:@"admin"] ||
+                             [roleName isEqualToString:@"owner"] ||
+                             [roleName isEqualToString:@"operations_manager"] ||
+                             [roleSummary isEqualToString:@"admin"] ||
+                             [roleSummary isEqualToString:@"owner"] ||
+                             [roleSummary isEqualToString:@"operations_manager"];
+    if (!canReadRootOrders) {
+        self.pendingOrders = @[];
+        [self pp_refreshQuickActions];
+        return;
+    }
+
     FIRCollectionReference *ordersRef = [[FIRFirestore firestore] collectionWithPath:@"Orders"];
     NSUInteger observationGeneration = self.quickActionObservationGeneration;
     __weak typeof(self) weakSelf = self;
@@ -3740,7 +3798,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 
     if (deliveryCount > 0 && canOpenDelivery) {
         [self pp_markQuickActionKindSeen:PPAdminQuickActionSignalDelivery];
-        PPDeliveryDashboardViewController *vc = [[PPDeliveryDashboardViewController alloc] init];
+        PPDeliveryDriverDashboardHostController *vc = [[PPDeliveryDriverDashboardHostController alloc] init];
         [self.navigationController pushViewController:vc animated:YES];
         return;
     }
@@ -3785,7 +3843,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     }
 
     if (canOpenDelivery) {
-        PPDeliveryDashboardViewController *vc = [[PPDeliveryDashboardViewController alloc] init];
+        PPDeliveryDriverDashboardHostController *vc = [[PPDeliveryDriverDashboardHostController alloc] init];
         [self.navigationController pushViewController:vc animated:YES];
         return;
     }
@@ -4500,6 +4558,19 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
             [self pp_refreshPulseAfterInvalidActionTarget];
             return;
         }
+        if (profile.prefersDriverCockpit) {
+            // A driver progresses its own delivery only in the driver cockpit,
+            // which re-reads and re-authorizes the task before showing it.
+            [PPFunc pp_playTapEffect];
+            NSString *authority = profile.isOfficialDriverWorkspace ? @"COMPANY_DELIVERY_REQUEST" : @"PARTNER_COMPANY_REQUEST";
+            PPDriverCockpitHostController *cockpit =
+                [[PPDriverCockpitHostController alloc] initWithFocusTaskID:target.requestID
+                                                                 authority:authority
+                                                                 companyID:profile.companyID];
+            [self.navigationController pushViewController:cockpit animated:YES];
+            [self pp_finishCommandCenterActionNavigation];
+            return;
+        }
         [PPDeliveryCompanyService.shared getRequestWithID:target.requestID completion:^(PPDeliveryCompanyRequest * _Nullable request, NSError * _Nullable error) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
@@ -4804,13 +4875,31 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
         NSString *fleetSubtitle = self.isDeliveryCompanyMode && self.deliveryCompanyContext.isDriver
             ? kLang(@"DeliveryCompany_DashboardShell_MyAssignedSubtitle")
             : kLang(@"DeliveryCompany_DashboardShell_OpenCompanySubtitle");
+        // Driver-only workspaces route to the unified driver cockpit.
+        NSString *fleetRouteTag = (self.isDeliveryCompanyMode && self.deliveryCompanyContext.prefersDriverCockpit)
+            ? @"driverCockpit"
+            : @"deliveryCompany";
         [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"deliveryCompany"
                                                                    title:fleetTitle
                                                                 subtitle:fleetSubtitle
                                                               symbolName:@"truck.box.fill"
-                                                                routeTag:@"deliveryCompany"
+                                                                routeTag:fleetRouteTag
                                                              actionCount:deliveryCompanyCount
                                                                 readOnly:(self.isDeliveryCompanyMode && self.deliveryCompanyContext.isViewer)]];
+        // The command surface hides the form table, so a member whose company
+        // entry is not the cockpit still gets a visible way to their deliveries.
+        if (self.isDeliveryCompanyMode && !self.deliveryCompanyContext.prefersDriverCockpit &&
+            (self.deliveryCompanyContext.hasDriverWorkspace || PPDeliveryCompanyService.shared.hasDiscoveredDriverWorkspace ||
+             (self.deliveryCompanyContext.hasServerWorkspaceProjection &&
+              [self.deliveryCompanyContext.role isEqualToString:PPDeliveryCompanyRoleDriver]))) {
+            [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"driverCockpit"
+                                                                       title:kLang(@"DriverCockpit_DashboardRow_Title")
+                                                                    subtitle:kLang(@"DriverCockpit_DashboardRow_Subtitle")
+                                                                  symbolName:@"steeringwheel"
+                                                                    routeTag:@"driverCockpit"
+                                                                 actionCount:0
+                                                                    readOnly:NO]];
+        }
     }
     if (canManageDelivery) {
         [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"delivery"
@@ -4879,18 +4968,21 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
         NSString *fleetSubtitle = (self.isDeliveryCompanyMode && self.deliveryCompanyContext.isDriver)
             ? kLang(@"DeliveryCompany_DashboardShell_MyAssignedSubtitle")
             : kLang(@"DeliveryCompany_DashboardShell_OpenCompanySubtitle");
+        NSString *fleetRouteTag = (self.isDeliveryCompanyMode && self.deliveryCompanyContext.prefersDriverCockpit)
+            ? @"driverCockpit"
+            : @"deliveryCompany";
         PPProCommandSignalDescriptor *signal = [self pp_commandSignalWithIdentifier:@"deliveryCompany"
                                                                capabilityIdentifiers:@[@"deliveryCompany"]
                                                                               title:fleetTitle
                                                                            subtitle:fleetSubtitle
                                                                          symbolName:@"truck.box.fill"
-                                                                           routeTag:@"deliveryCompany"
+                                                                           routeTag:fleetRouteTag
                                                                          badgeCount:deliveryCompanyCount
                                                                            priority:1
                                                                              unseen:NO];
         signal.actionTarget = [self pp_resolveCommandActionTargetForSignalIdentifier:@"deliveryCompany"
                                                                 capabilityIdentifier:@"deliveryCompany"
-                                                                     workspaceRouteTag:@"deliveryCompany"
+                                                                     workspaceRouteTag:fleetRouteTag
                                                                 workspaceActionTitle:kLang(@"PulseCommand_ViewAllCompanyDeliveries")
                                                                              priority:1];
         [signals addObject:signal];
@@ -5131,7 +5223,8 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
 
     if ([route isEqualToString:@"fulfillmentOrders"]) {
         [self pp_markQuickActionKindSeen:PPAdminQuickActionSignalFulfillment];
-    } else if ([route isEqualToString:@"delivery"]) {
+    } else if ([route isEqualToString:@"delivery"] || [route isEqualToString:@"deliveryCompany"] ||
+               [route isEqualToString:@"deliveryCockpit"] || [route isEqualToString:@"driverCockpit"]) {
         [self pp_markQuickActionKindSeen:PPAdminQuickActionSignalDelivery];
     }
 
@@ -5142,21 +5235,37 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     }
 
     // Keep current quick-action reachability if a role-gated XLForm row is absent.
-    if ([route isEqualToString:@"delivery"] && [self pp_canManageDelivery]) {
+    if ([route isEqualToString:@"delivery"] || [route isEqualToString:@"deliveryCockpit"]) {
+        [PPFunc pp_playTapEffect];
         PPDeliveryDriverDashboardHostController *controller = [[PPDeliveryDriverDashboardHostController alloc] init];
         [self.navigationController pushViewController:controller animated:YES];
+        return;
+    } else if ([route isEqualToString:@"driverCockpit"]) {
+        [PPFunc pp_playTapEffect];
+        [self.navigationController pushViewController:[[PPDriverCockpitHostController alloc] init] animated:YES];
+        return;
+    } else if ([route isEqualToString:@"deliveryCompany"]) {
+        [PPFunc pp_playTapEffect];
+        if (self.isDeliveryCompanyMode) {
+            if (self.deliveryCompanyContext.prefersDriverCockpit) {
+                [self.navigationController pushViewController:[[PPDriverCockpitHostController alloc] init] animated:YES];
+            } else if (self.deliveryCompanyContext.isDriver) {
+                PPDeliveryDriverDashboardHostController *controller = [[PPDeliveryDriverDashboardHostController alloc] init];
+                [self.navigationController pushViewController:controller animated:YES];
+            } else {
+                [self pp_openDeliveryCompanyDashboard];
+            }
+        } else {
+            PPDeliveryCompanySetupViewController *vc = [[PPDeliveryCompanySetupViewController alloc] init];
+            [self.navigationController pushViewController:vc animated:YES];
+        }
+        return;
     } else if ([route isEqualToString:@"profileSettings"]) {
         [self pp_openProfileSettings];
-    } else if ([route isEqualToString:@"providerSupportChats"] &&
-               [self.form formRowWithTag:@"providerSupportChats"]) {
+        return;
+    } else if ([route isEqualToString:@"providerSupportChats"]) {
         [self pp_openSupportChats];
-    } else if ([route isEqualToString:@"deliveryCompany"] && self.isDeliveryCompanyMode) {
-        if (self.deliveryCompanyContext.isDriver) {
-            PPDeliveryDriverDashboardHostController *controller = [[PPDeliveryDriverDashboardHostController alloc] init];
-            [self.navigationController pushViewController:controller animated:YES];
-        } else {
-            [self pp_openDeliveryCompanyDashboard];
-        }
+        return;
     }
 }
 
@@ -5174,6 +5283,21 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
 - (void)commandCenterSurfaceDidRequestProfile:(PPProCommandCenterSurfaceController *)controller {
     (void)controller;
     [self pp_openProfileSettings];
+}
+
+- (void)commandCenterSurfaceDidRequestLanguageChange:(PPProCommandCenterSurfaceController *)controller {
+    (void)controller;
+    [self didTapLanguage];
+}
+
+- (void)commandCenterSurfaceDidRequestLogout:(PPProCommandCenterSurfaceController *)controller {
+    (void)controller;
+    [self didTapAuthButton];
+}
+
+- (void)commandCenterSurfaceDidRequestChangePhoto:(PPProCommandCenterSurfaceController *)controller {
+    (void)controller;
+    [self didTapAddProfilePhoto];
 }
 
 #pragma mark - Lifecycle

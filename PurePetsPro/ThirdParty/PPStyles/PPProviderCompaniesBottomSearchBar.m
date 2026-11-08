@@ -17,11 +17,10 @@ static UIColor *PPProviderCompaniesSearchStrokeColor(void)
 
 static UIFont *PPProviderCompaniesSearchScaledFont(UIFont *font, UIFontTextStyle textStyle)
 {
-    UIFont *resolvedFont = font ?: [UIFont preferredFontForTextStyle:textStyle];
-    if (@available(iOS 11.0, *)) {
-        return [[UIFontMetrics metricsForTextStyle:textStyle] scaledFontForFont:resolvedFont];
+    if (!font) {
+        return [UIFont preferredFontForTextStyle:textStyle];
     }
-    return resolvedFont;
+    return PPScaledFont(font, textStyle) ?: font;
 }
 
 static void PPProviderCompaniesSearchApplyContinuousCorners(UIView *view, CGFloat radius)

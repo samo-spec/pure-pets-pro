@@ -8,10 +8,57 @@
 #import "PPStaffAuth.h"
 #import "UserManager.h"
 #import "UserModel.h"
+#import "PPDeliveryCompanyService.h"
 #import <CommonCrypto/CommonDigest.h>
 
 NSString * const PPDeliveryOrdersDidChangeNotification = @"PPDeliveryOrdersDidChangeNotification";
 static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL20262214";
+
+static BOOL PPDeliveryBranchFlag(NSDictionary *data, NSString *key) {
+    id value = data[key];
+    return [value isKindOfClass:[NSNumber class]] && [value boolValue];
+}
+
+static NSString *PPDeliveryBranchText(id value) {
+    return [value isKindOfClass:[NSString class]]
+        ? [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
+        : @"";
+}
+
+// Console stores `name: {ar, en}`; Admin stores `nameAr` / `nameEn`.
+static NSString *PPDeliveryBranchDisplayName(NSDictionary *data) {
+    id nameVal = data[@"name"];
+    NSDictionary *names = [nameVal isKindOfClass:[NSDictionary class]] ? nameVal : @{};
+    NSString *single = PPDeliveryBranchText(nameVal);
+    NSString *ar = PPDeliveryBranchText(names[@"ar"]);
+    NSString *en = PPDeliveryBranchText(names[@"en"]);
+    if (ar.length == 0) ar = PPDeliveryBranchText(data[@"nameAr"]);
+    if (en.length == 0) en = PPDeliveryBranchText(data[@"nameEn"]);
+    if (ar.length == 0) ar = single;
+    if (en.length == 0) en = single;
+    return Language.isRTL ? (ar.length ? ar : en) : (en.length ? en : ar);
+}
+
+static NSString *PPDeliveryBranchAddress(NSDictionary *data) {
+    for (NSString *key in @[@"address", @"formattedAddress", @"fullAddress"]) {
+        NSString *value = PPDeliveryBranchText(data[key]);
+        if (value.length) return value;
+    }
+    return @"";
+}
+
+// Mirrors Infra's owner rule: no owner, "platform" or the official account.
+static BOOL PPDeliveryOrderIsPlatformFulfilled(PPDeliveryOrderModel *order) {
+    for (PPDeliveryOrderItem *item in order.items) {
+        if ([item.ownerType.lowercaseString isEqualToString:@"partner"]) return NO;
+        NSString *owner = item.ownerID ?: @"";
+        if (owner.length && ![owner isEqualToString:@"platform"] &&
+            ![owner isEqualToString:PPDeliveryOfficialSupportUserID]) {
+            return NO;
+        }
+    }
+    return YES;
+}
 
 static NSString *PPDeliveryV1CommandID(NSString *actorUID,
                                        NSString *orderID,
@@ -141,6 +188,8 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 }
 
 @interface PPDeliveryManager ()
+- (void)pp_startProviderOrderListenersForUID:(NSString *)uid;
+- (void)pp_performProviderDeliveryAction:(NSString *)action orderId:(NSString *)orderId note:(NSString *)note completion:(PPDeliveryActionBlock)completion;
 @property (nonatomic, strong, readwrite) NSArray<PPDeliveryOrderModel *> *allOrders;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> primaryListener;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> secondaryListener;
@@ -162,6 +211,9 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 @property (nonatomic, assign) BOOL deliveryUserAssignedSourceServerReady;
 @property (nonatomic, assign) BOOL driverAliasAssignedSourceServerReady;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *branchNameCache;
+/// Branch whose stock the consumer app sells; the pickup of a Pure Pets order with none set.
+@property (nonatomic, copy, nullable) NSString *consumerStockBranchName;
+@property (nonatomic, copy, nullable) NSString *consumerStockBranchAddress;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *providerNameCache;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UserModel *> *providerUserCache;
 - (void)startOrderListenersForStaff:(PPStaffDoc * _Nullable)staff uid:(NSString *)uid;
@@ -274,16 +326,31 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
 - (void)startListeningForDeliveryOrders {
     [self stopListening];
-    [self startBranchesListener];
-
-    NSString *uid = [FIRAuth auth].currentUser.uid;
+    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
     if (!uid.length) {
-        DLog(@"[PPDeliveryManager] ❌ No authenticated user — cannot listen for orders.");
         [self postOrdersChangeWithError:[NSError errorWithDomain:@"PPDeliveryManager"
                                                              code:401
-                                                         userInfo:@{NSLocalizedDescriptionKey: @"Authentication is required to load delivery orders."}]];
+                                                         userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}]];
         return;
     }
+    NSUInteger generation = self.staffListenerGeneration;
+    __weak typeof(self) weakSelf = self;
+    [PPDeliveryCompanyService.shared resolveDriverCockpitRequirementWithCompletion:^(BOOL requiresDriverCockpit, NSError * _Nullable error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || generation != self.staffListenerGeneration || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+        if (error) { [self postOrdersChangeWithError:error]; return; }
+        if (requiresDriverCockpit) {
+            // Driver queues belong to the canonical cockpit. Never fill the
+            // provider card from broad staff SDK listeners.
+            [self postOrdersChangeWithError:nil];
+            return;
+        }
+        [self pp_startProviderOrderListenersForUID:uid];
+    }];
+}
+
+- (void)pp_startProviderOrderListenersForUID:(NSString *)uid {
+    [self startBranchesListener];
 
     [self.staffListener remove];
     self.staffListener = nil;
@@ -351,11 +418,30 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     self.lastStaffAuthorizationRole = [role copy];
     self.lastStaffAuthorizationIsActive = isActive;
     [self stopOrderListeners];
+    if (!staff || !staff.isActive) {
+        return;
+    }
+    BOOL canDelivery = [PPStaffAuth isAdminRole:staff.role] ||
+                       [staff.role isEqualToString:PPStaffRoleOperationsManager] ||
+                       [staff.role.lowercaseString isEqualToString:@"delivery"] ||
+                       [staff.role.lowercaseString isEqualToString:@"delivery_driver"] ||
+                       [staff hasPermission:@"delivery.view"] ||
+                       [staff hasPermission:@"delivery.manage"];
+    if (!canDelivery) {
+        return;
+    }
     [self startOrderListenersForStaff:staff uid:uid];
 }
 
 - (void)startOrderListenersForStaff:(PPStaffDoc *)staff uid:(NSString *)uid {
-    if (uid.length == 0) return;
+    if (uid.length == 0 || !staff || !staff.isActive) return;
+    BOOL canDelivery = [PPStaffAuth isAdminRole:staff.role] ||
+                       [staff.role isEqualToString:PPStaffRoleOperationsManager] ||
+                       [staff.role.lowercaseString isEqualToString:@"delivery"] ||
+                       [staff.role.lowercaseString isEqualToString:@"delivery_driver"] ||
+                       [staff hasPermission:@"delivery.view"] ||
+                       [staff hasPermission:@"delivery.manage"];
+    if (!canDelivery) return;
 
     FIRCollectionReference *ordersRef = [[FIRFirestore firestore] collectionWithPath:@"Orders"];
     BOOL canSeeAllDeliveryOrders = staff.isActive &&
@@ -704,14 +790,9 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         if (order.orderId.length && !merged[order.orderId]) merged[order.orderId] = [order copy];
     }
 
-    // Enrich orders with cached branch names
+    // Enrich orders with cached branch names and the user-app stock pickup.
     for (PPDeliveryOrderModel *order in merged.allValues) {
-        if (order.branchName.length == 0 && order.branchID.length > 0) {
-            NSString *cached = self.branchNameCache[order.branchID];
-            if (cached.length) {
-                order.branchName = [cached copy];
-            }
-        }
+        [self applyPickupFallbackToOrder:order];
     }
 
     NSArray<PPDeliveryOrderModel *> *sorted = [[merged allValues] sortedArrayUsingComparator:^NSComparisonResult(PPDeliveryOrderModel *obj1, PPDeliveryOrderModel *obj2) {
@@ -740,33 +821,58 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         if (!strongSelf || error || !snapshot) return;
 
         BOOL changed = NO;
+        NSDictionary *flaggedStock = nil;
+        NSDictionary *primaryBranch = nil;
         for (FIRDocumentSnapshot *doc in snapshot.documents) {
             NSDictionary *data = doc.data;
             if (!data) continue;
 
             NSString *docID = doc.documentID;
-            NSString *resolvedName = nil;
-
-            id nameVal = data[@"name"];
-            if ([nameVal isKindOfClass:[NSDictionary class]]) {
-                NSDictionary *nameDict = (NSDictionary *)nameVal;
-                NSString *ar = nameDict[@"ar"] ?: @"";
-                NSString *en = nameDict[@"en"] ?: @"";
-                resolvedName = Language.isRTL ? (ar.length ? ar : en) : (en.length ? en : ar);
-            } else if ([nameVal isKindOfClass:[NSString class]]) {
-                resolvedName = (NSString *)nameVal;
-            }
+            NSString *resolvedName = PPDeliveryBranchDisplayName(data);
 
             if (resolvedName.length > 0 && ![strongSelf.branchNameCache[docID] isEqualToString:resolvedName]) {
                 strongSelf.branchNameCache[docID] = resolvedName;
                 changed = YES;
             }
+            if (!flaggedStock && (PPDeliveryBranchFlag(data, @"isConsumerAppStock") ||
+                                  PPDeliveryBranchFlag(data, @"isUserAppStock") ||
+                                  PPDeliveryBranchFlag(data, @"isConsumerStockBranch"))) {
+                flaggedStock = data;
+            }
+            if (!primaryBranch && PPDeliveryBranchFlag(data, @"isDefault")) primaryBranch = data;
+        }
+
+        // Same selection as Admin's consumer stock branch and Infra's
+        // deliveryRouteProjection: the user-app stock branch, else the primary one.
+        NSDictionary *stock = flaggedStock ?: primaryBranch;
+        BOOL usable = stock && ![stock[@"isActive"] isEqual:@NO] && !PPDeliveryBranchFlag(stock, @"isDeleted");
+        NSString *stockName = usable ? PPDeliveryBranchDisplayName(stock) : @"";
+        NSString *stockAddress = usable ? PPDeliveryBranchAddress(stock) : @"";
+        if (![(strongSelf.consumerStockBranchName ?: @"") isEqualToString:stockName] ||
+            ![(strongSelf.consumerStockBranchAddress ?: @"") isEqualToString:stockAddress]) {
+            strongSelf.consumerStockBranchName = stockName;
+            strongSelf.consumerStockBranchAddress = stockAddress;
+            changed = YES;
         }
 
         if (changed && (strongSelf.primaryOrders.count > 0 || strongSelf.secondaryOrders.count > 0)) {
             [strongSelf mergeAndPublishOrders];
         }
     }];
+}
+
+- (void)applyPickupFallbackToOrder:(PPDeliveryOrderModel *)order {
+    if (!order) return;
+    if (order.branchName.length == 0 && order.branchID.length > 0) {
+        NSString *cached = self.branchNameCache[order.branchID];
+        if (cached.length) order.branchName = [cached copy];
+    }
+    // A pickup that was set is never replaced, and a provider's order never
+    // borrows a Pure Pets branch.
+    if (order.pickupAddress.length || order.branchID.length || order.branchName.length) return;
+    if (!PPDeliveryOrderIsPlatformFulfilled(order)) return;
+    if (self.consumerStockBranchName.length) order.branchName = [self.consumerStockBranchName copy];
+    if (self.consumerStockBranchAddress.length) order.pickupAddress = [self.consumerStockBranchAddress copy];
 }
 
 #pragma mark - Filtering
@@ -1097,6 +1203,26 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 }
 
 - (void)performDeliveryAction:(NSString *)action orderId:(NSString *)orderId note:(NSString *)note completion:(PPDeliveryActionBlock)completion {
+    NSString *actorUID = [FIRAuth auth].currentUser.uid ?: @"";
+    if (!actorUID.length) {
+        NSError *error = [NSError errorWithDomain:@"com.firebase.functions" code:FIRFunctionsErrorCodeUnauthenticated
+                                         userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}];
+        if (completion) completion(NO, error.localizedDescription, error);
+        return;
+    }
+    [PPDeliveryCompanyService.shared resolveDriverCockpitRequirementWithCompletion:^(BOOL requiresDriverCockpit, NSError * _Nullable error) {
+        if (![[FIRAuth auth].currentUser.uid isEqualToString:actorUID]) return;
+        if (error || requiresDriverCockpit) {
+            NSError *entryError = error ?: [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany" code:403
+                                                         userInfo:@{NSLocalizedDescriptionKey: kLang(@"DriverCockpit_UseDriverWorkspace")}];
+            if (completion) completion(NO, entryError.localizedDescription, entryError);
+            return;
+        }
+        [self pp_performProviderDeliveryAction:action orderId:orderId note:note completion:completion];
+    }];
+}
+
+- (void)pp_performProviderDeliveryAction:(NSString *)action orderId:(NSString *)orderId note:(NSString *)note completion:(PPDeliveryActionBlock)completion {
     PPDeliveryOrderModel *order = [self pp_deliveryOrderForOrderID:orderId];
     if (order.fulfillmentVersion == 1) {
         NSArray<NSString *> *selectedIDs = [action isEqualToString:@"order_accept_delivery"]
@@ -1121,8 +1247,10 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     data[@"orderId"] = orderId ?: @"";
     data[@"note"]    = (note.length > 0) ? note : kLang(@"DeliveryDefaultActionNote");
 
+    NSString *actorUID = [FIRAuth auth].currentUser.uid ?: @"";
     [callable callWithObject:[data copy] completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
+            if (![[FIRAuth auth].currentUser.uid isEqualToString:actorUID]) return;
             if (error) {
                 NSString *msg = error.localizedDescription;
                 NSDictionary *details = error.userInfo[@"details"];

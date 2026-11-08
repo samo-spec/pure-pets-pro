@@ -1098,7 +1098,7 @@ import UIKit
             hasResolvedRetailPrice: accessory.hasResolvedSellingPrice,
             showInAppMarket: accessory.showInAppMarket,
             revision: accessory.revision,
-            media: (accessory.imageURLsArray ?? []).map { PPAccessoryVariantMedia(remoteURL: $0) },
+            media: accessory.imageURLsArray.map { PPAccessoryVariantMedia(remoteURL: $0) },
             selectedOptions: [PPAccessoryVariantContract.axisColor: color.identifier],
             combinationKey: "\(PPAccessoryVariantContract.axisColor)=\(color.identifier)"
         )
@@ -1135,7 +1135,7 @@ import UIKit
             retailPrice: product.hasResolvedSellingPrice ? product.finalPrice : nil, wholesalePrice: product.wholesalePrice,
             costPrice: product.costPrice,
             hasResolvedRetailPrice: product.hasResolvedSellingPrice, showInAppMarket: product.showInAppMarket,
-            revision: product.revision, media: (product.imageURLsArray ?? []).map { PPAccessoryVariantMedia(remoteURL: $0) },
+            revision: product.revision, media: product.imageURLsArray.map { PPAccessoryVariantMedia(remoteURL: $0) },
             selectedOptions: selectedOptions, combinationKey: combinationKey)
     }
 
@@ -1393,14 +1393,14 @@ import UIKit
             hasResolvedRetailPrice: accessory.hasResolvedSellingPrice,
             showInAppMarket: accessory.showInAppMarket,
             revision: accessory.revision,
-            media: (accessory.imageURLsArray ?? []).map { PPAccessoryVariantMedia(remoteURL: $0) }
+            media: accessory.imageURLsArray.map { PPAccessoryVariantMedia(remoteURL: $0) }
         )
 
         return PPAccessoryVariantFamily(
             familyId: accessory.productFamilyId ?? "",
-            name: accessory.name ?? "",
+            name: accessory.name,
             nameEn: accessory.nameEn ?? "",
-            desc: accessory.desc ?? "",
+            desc: accessory.desc,
             descEn: accessory.descEn ?? "",
             accessKindType: Int(accessory.accessKindType.rawValue),
             accessoryCategoryID: accessory.catalogCategoryIdentifier ?? "",

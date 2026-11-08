@@ -374,16 +374,33 @@
 
 - (void)pp_applyTypography
 {
+    UIFont *msgBase = PPFontRegular(16.0) ?: [UIFont systemFontOfSize:16.0];
+    UIFont *timeBase = PPFontRegular(10.5) ?: [UIFont systemFontOfSize:10.5];
+    UIFont *repTitleBase = PPFontBold(11.0) ?: [UIFont boldSystemFontOfSize:11.0];
+    UIFont *repSubBase = PPFontMedium(12.0) ?: [UIFont systemFontOfSize:12.0];
+
     UIFontMetrics *bodyMetrics = [UIFontMetrics metricsForTextStyle:UIFontTextStyleBody];
     UIFontMetrics *captionMetrics = [UIFontMetrics metricsForTextStyle:UIFontTextStyleCaption2];
-    self.messageLabel.font = [bodyMetrics scaledFontForFont:(PPFontRegular(16.0) ?: [UIFont systemFontOfSize:16.0])
-                                        maximumPointSize:22.0];
-    self.timeLabel.font = [captionMetrics scaledFontForFont:(PPFontRegular(10.5) ?: [UIFont systemFontOfSize:10.5])
-                                        maximumPointSize:15.0];
-    self.replyTitleLabel.font = [captionMetrics scaledFontForFont:(PPFontBold(11.0) ?: [UIFont boldSystemFontOfSize:11.0])
-                                            maximumPointSize:15.0];
-    self.replySubtitleLabel.font = [captionMetrics scaledFontForFont:(PPFontMedium(12.0) ?: [UIFont systemFontOfSize:12.0])
-                                                 maximumPointSize:16.0];
+
+    @try {
+        self.messageLabel.font = PPIsFontScaled(msgBase)
+            ? msgBase
+            : [bodyMetrics scaledFontForFont:msgBase maximumPointSize:22.0];
+        self.timeLabel.font = PPIsFontScaled(timeBase)
+            ? timeBase
+            : [captionMetrics scaledFontForFont:timeBase maximumPointSize:15.0];
+        self.replyTitleLabel.font = PPIsFontScaled(repTitleBase)
+            ? repTitleBase
+            : [captionMetrics scaledFontForFont:repTitleBase maximumPointSize:15.0];
+        self.replySubtitleLabel.font = PPIsFontScaled(repSubBase)
+            ? repSubBase
+            : [captionMetrics scaledFontForFont:repSubBase maximumPointSize:16.0];
+    } @catch (NSException *e) {
+        self.messageLabel.font = msgBase;
+        self.timeLabel.font = timeBase;
+        self.replyTitleLabel.font = repTitleBase;
+        self.replySubtitleLabel.font = repSubBase;
+    }
 
     if (!self.isDeleted && [self pp_isEmojiOnlyText:self.messageLabel.text]) {
         self.messageLabel.font = [UIFont systemFontOfSize:46.0];

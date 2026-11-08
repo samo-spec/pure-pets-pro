@@ -6,6 +6,7 @@
 //
 
 #import "AppDelegate.h"
+#import "PPDeliveryCompanyService.h"
 #import "SceneDelegate.h"
 #import "PPFirebaseCompat.h"
 #import "PPProInAppNotificationPresenter.h"
@@ -168,6 +169,33 @@ static NSString *PPAdminCurrentDeviceModel(void)
         return PPAdminRouteTrimmedString(UIDevice.currentDevice.model);
     }
     return [NSString stringWithCString:systemInfo.machine encoding:NSUTF8StringEncoding] ?: @"";
+}
+
+static NSString * const kPPDriverCockpitShouldRefreshNotification = @"PPDriverCockpitShouldRefreshNotification";
+
+/// UsersCol marks official workforce accounts with accountType "staff". Pro
+/// hosts such an account only as a workforce driver (see Infra
+/// STAFF_SCOPE_HOST_APP_IDS); the backend still authorizes every binding.
+static BOOL PPProUserDocIsStaffAccount(NSDictionary *userDoc)
+{
+    if (![userDoc isKindOfClass:NSDictionary.class]) return NO;
+    return [[PPAdminRouteTrimmedString(userDoc[@"accountType"]) lowercaseString] isEqualToString:@"staff"];
+}
+
+/// A push about the recipient's own driver task: workforce "driver_task"
+/// (FULFILLMENT_V1 or COMPANY_DELIVERY_REQUEST) or partner "fleet_partner"
+/// with PARTNER_COMPANY_REQUEST. Company and dispatcher pushes carry no task
+/// authority and are not matched.
+static BOOL PPProIsDriverTaskPayload(NSDictionary *payload)
+{
+    NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
+    NSString *route = [PPAdminRouteTrimmedString(safePayload[@"route"]) lowercaseString];
+    NSString *authority = [PPAdminRouteTrimmedString(safePayload[@"authority"]) uppercaseString];
+    if (PPAdminRouteTrimmedString(safePayload[@"taskId"]).length == 0) return NO;
+    if ([route isEqualToString:@"driver_task"]) {
+        return [authority isEqualToString:@"FULFILLMENT_V1"] || [authority isEqualToString:@"COMPANY_DELIVERY_REQUEST"];
+    }
+    return [route isEqualToString:@"fleet_partner"] && [authority isEqualToString:@"PARTNER_COMPANY_REQUEST"];
 }
 
 @interface AppDelegate ()
@@ -706,116 +734,190 @@ extern BOOL PP_TouchDotsEnabled;
                     return;
                 }
 
-                NSString *bundleId = PPAdminRouteTrimmedString(NSBundle.mainBundle.bundleIdentifier);
-                NSString *locale = PPAdminRouteTrimmedString([Language currentLanguageCode]);
-                NSString *timezone = PPAdminRouteTrimmedString(NSTimeZone.localTimeZone.name);
-                NSString *appVersion = PPAdminRouteTrimmedString(AppMgr.appVersion);
-                NSString *osVersion = PPAdminRouteTrimmedString(UIDevice.currentDevice.systemVersion);
-                NSString *deviceModel = PPAdminCurrentDeviceModel();
-                NSString *apnsTokenHex = PPAdminRouteTrimmedString(strongSelf.apnsTokenHexString);
-                NSArray<NSString *> *notificationScopes = @[@"provider.orders", @"provider.chat", @"provider.account", @"provider.settlements"];
-                NSArray<NSString *> *providerIds = @[uid];
-                NSDictionary *capabilities = @{
-                    @"customer": @NO,
-                    @"provider": @YES,
-                    @"staff": @NO
-                };
-
-                NSMutableDictionary *payload = [@{
-                    @"installationId": safeInstallationId,
-                    @"platform": @"ios",
-                    @"appId": @"pro_ios",
-                    @"bundleId": bundleId,
-                    @"environment": PPAdminNotificationEnvironment(),
-                    @"fcmToken": safeToken,
-                    @"notificationScopes": notificationScopes,
-                    @"providerIds": providerIds,
-                    @"capabilities": capabilities,
-                    @"locale": locale,
-                    @"timezone": timezone,
-                    @"appVersion": appVersion,
-                    @"osVersion": osVersion,
-                    @"deviceModel": deviceModel
-                } mutableCopy];
-
-                if (apnsTokenHex.length > 0) {
-                    // Backend contract: this legacy key carries raw APNs hex;
-                    // notificationsV2 hashes it in Infra before persistence.
-                    payload[@"apnsTokenHash"] = apnsTokenHex;
-                }
-
-                FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"registerNotificationDeviceV2"];
-                callable.timeoutInterval = 30.0;
-
-                NSLog(@"PPLAB NotificationsV2 registration start | reason=%@ hasUID=yes appId=pro_ios scopes=%lu providerIds=%lu hasAPNS=%@",
-                      safeReason.length > 0 ? safeReason : @"unknown",
-                      (unsigned long)notificationScopes.count,
-                      (unsigned long)providerIds.count,
-                      apnsTokenHex.length > 0 ? @"yes" : @"no");
-
-                [callable callWithObject:[payload copy] completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+                // Paid provider access and fleet membership are independent.
+                // Resolve live driver workspaces before choosing hosted staff
+                // or member-only order scopes; Infra validates every grant.
+                [AppMgr checkIfUserWithUID:uid canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable accessError) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         __strong typeof(weakSelf) strongSelf = weakSelf;
                         if (!strongSelf) return;
 
-                        if (error) {
-                            strongSelf.notificationV2RegistrationNeedsForegroundRetry = YES;
-                            DLog(@"[PPNotificationsV2] registration failed | reason=%@ appId=pro_ios scopes=%lu error=%@",
+                        if (![strongSelf pp_notificationV2RegistrationIsCurrentForUID:uid epoch:registrationEpoch]) {
+                            DLog(@"[PPNotificationsV2] registration cancelled | reason=%@ appId=%@ auth_changed_or_stale=yes",
                                   safeReason.length > 0 ? safeReason : @"unknown",
-                                  (unsigned long)notificationScopes.count,
-                                  error.localizedDescription ?: @"unknown");
+                                  kPPProNotificationV2AppID);
                             [strongSelf pp_finishNotificationV2RegistrationCycle];
                             return;
                         }
 
-                        NSDictionary *response = [result.data isKindOfClass:NSDictionary.class] ? result.data : @{};
-                        if (![strongSelf pp_notificationV2RegistrationIsCurrentForUID:uid epoch:registrationEpoch]) {
-                            DLog(@"[PPNotificationsV2] registration ignored | reason=%@ appId=%@ auth_changed_or_stale=yes",
-                                  safeReason.length > 0 ? safeReason : @"unknown",
-                                  kPPProNotificationV2AppID);
-                            [strongSelf pp_compensateStaleNotificationV2Registration:response
-                                                                               uid:uid
-                                                                    installationId:safeInstallationId
-                                                                        environment:PPAdminNotificationEnvironment()
-                                                                         completion:^{
-                                [strongSelf pp_finishNotificationV2RegistrationCycle];
-                            }];
+                        if (accessError) {
+                            [strongSelf pp_finishNotificationV2RegistrationCycle];
                             return;
                         }
-
-                        BOOL ok = [response[@"ok"] respondsToSelector:@selector(boolValue)] ? [response[@"ok"] boolValue] : NO;
-                        NSArray *scopes = [response[@"scopes"] isKindOfClass:NSArray.class] ? response[@"scopes"] : notificationScopes;
-                        BOOL storedCurrentBinding = NO;
-                        if (ok) {
-                            NSString *bindingGeneration = PPAdminRouteTrimmedString(response[@"bindingGeneration"]);
-                            NSString *fcmTokenHash = PPAdminRouteTrimmedString(response[@"fcmTokenHash"]);
-                            NSString *environment = PPAdminRouteTrimmedString(response[@"environment"]);
-                            if (environment.length == 0) environment = PPAdminNotificationEnvironment();
-                            if (bindingGeneration.length > 0 && fcmTokenHash.length > 0) {
-                                NSDictionary *binding = @{
-                                    @"uid": uid,
-                                    @"installationId": safeInstallationId,
-                                    @"appId": kPPProNotificationV2AppID,
-                                    @"environment": environment,
-                                    @"bindingGeneration": bindingGeneration,
-                                    @"fcmTokenHash": fcmTokenHash
-                                };
-                                [NSUserDefaults.standardUserDefaults setObject:binding forKey:kPPProNotificationV2BindingDefaultsKey];
-                                storedCurrentBinding = YES;
-                            }
+                        if (allowed && !PPProUserDocIsStaffAccount(userDoc)) {
+                            [strongSelf pp_sendNotificationV2RegistrationForUID:uid
+                                                                      token:safeToken
+                                                             installationId:safeInstallationId
+                                                                hostedStaff:NO
+                                                         deliveryCompanyIDs:@[]
+                                                                     reason:safeReason
+                                                                      epoch:registrationEpoch];
+                            return;
                         }
-                        strongSelf.notificationV2RegistrationNeedsForegroundRetry = !ok || !storedCurrentBinding;
-                        DLog(@"[PPNotificationsV2] registration finish | reason=%@ ok=%@ appId=%@ scopes=%lu isActive=%@",
-                              safeReason.length > 0 ? safeReason : @"unknown",
-                              ok ? @"yes" : @"no",
-                              PPAdminRouteTrimmedString(response[@"appId"]).length > 0 ? PPAdminRouteTrimmedString(response[@"appId"]) : @"pro_ios",
-                              (unsigned long)scopes.count,
-                              [response[@"isActive"] respondsToSelector:@selector(boolValue)] && [response[@"isActive"] boolValue] ? @"yes" : @"no");
-                        [strongSelf pp_finishNotificationV2RegistrationCycle];
+                        // Membership is an independent Pro grant. Resolve the
+                        // live server workspace before choosing notification
+                        // scopes; a profile flag never grants staff authority.
+                        [PPDeliveryCompanyService.shared discoverCompanyMembershipsWithCompletion:^(NSArray<PPDeliveryCompanyProfile *> * _Nullable profiles, NSError * _Nullable membershipError) {
+                            __strong typeof(weakSelf) self = weakSelf;
+                            if (!self) return;
+                            if (![self pp_notificationV2RegistrationIsCurrentForUID:uid epoch:registrationEpoch] || membershipError) {
+                                [self pp_finishNotificationV2RegistrationCycle];
+                                return;
+                            }
+                            BOOL hostedStaff = NO;
+                            NSMutableArray<NSString *> *companyIDs = [NSMutableArray array];
+                            for (PPDeliveryCompanyProfile *profile in profiles) {
+                                if (profile.isOfficialDriverWorkspace) hostedStaff = YES;
+                                if ([profile.workspaceKinds containsObject:@"PARTNER_DRIVER"] && profile.companyID.length > 0 && companyIDs.count < 10) {
+                                    [companyIDs addObject:profile.companyID];
+                                }
+                            }
+                            if (!hostedStaff && companyIDs.count == 0) {
+                                [self pp_finishNotificationV2RegistrationCycle];
+                                return;
+                            }
+                            [self pp_sendNotificationV2RegistrationForUID:uid token:safeToken installationId:safeInstallationId
+                                hostedStaff:hostedStaff deliveryCompanyIDs:(hostedStaff ? @[] : companyIDs.copy)
+                                reason:safeReason epoch:registrationEpoch];
+                        }];
                     });
                 }];
             });
         }];
+    }];
+}
+
+- (void)pp_sendNotificationV2RegistrationForUID:(NSString *)uid
+                                          token:(NSString *)safeToken
+                                 installationId:(NSString *)safeInstallationId
+                                    hostedStaff:(BOOL)hostedStaff
+                             deliveryCompanyIDs:(NSArray<NSString *> *)deliveryCompanyIDs
+                                         reason:(NSString *)safeReason
+                                          epoch:(NSUInteger)registrationEpoch {
+    __weak typeof(self) weakSelf = self;
+    NSString *bundleId = PPAdminRouteTrimmedString(NSBundle.mainBundle.bundleIdentifier);
+    NSString *locale = PPAdminRouteTrimmedString([Language currentLanguageCode]);
+    NSString *timezone = PPAdminRouteTrimmedString(NSTimeZone.localTimeZone.name);
+    NSString *appVersion = PPAdminRouteTrimmedString(AppMgr.appVersion);
+    NSString *osVersion = PPAdminRouteTrimmedString(UIDevice.currentDevice.systemVersion);
+    NSString *deviceModel = PPAdminCurrentDeviceModel();
+    NSString *apnsTokenHex = PPAdminRouteTrimmedString(self.apnsTokenHexString);
+    // Hosted staff registrations carry no provider scope, no
+    // providerIds and the staff capability alone (Infra contract).
+    NSArray<NSString *> *notificationScopes = hostedStaff
+        ? @[@"staff.delivery"]
+        : (deliveryCompanyIDs.count > 0 ? @[@"provider.orders"]
+            : @[@"provider.orders", @"provider.chat", @"provider.account", @"provider.settlements"]);
+    NSArray<NSString *> *providerIds = hostedStaff ? @[] : @[uid];
+    NSDictionary *capabilities = @{
+        @"customer": @NO,
+        @"provider": @(!hostedStaff),
+        @"staff": @(hostedStaff)
+    };
+
+    NSMutableDictionary *payload = [@{
+        @"installationId": safeInstallationId,
+        @"platform": @"ios",
+        @"appId": @"pro_ios",
+        @"bundleId": bundleId,
+        @"environment": PPAdminNotificationEnvironment(),
+        @"fcmToken": safeToken,
+        @"notificationScopes": notificationScopes,
+        @"providerIds": providerIds,
+        @"deliveryCompanyIds": deliveryCompanyIDs ?: @[],
+        @"capabilities": capabilities,
+        @"locale": locale,
+        @"timezone": timezone,
+        @"appVersion": appVersion,
+        @"osVersion": osVersion,
+        @"deviceModel": deviceModel
+    } mutableCopy];
+
+    if (apnsTokenHex.length > 0) {
+        // Backend contract: this legacy key carries raw APNs hex;
+        // notificationsV2 hashes it in Infra before persistence.
+        payload[@"apnsTokenHash"] = apnsTokenHex;
+    }
+
+    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"registerNotificationDeviceV2"];
+    callable.timeoutInterval = 30.0;
+
+    NSLog(@"PPLAB NotificationsV2 registration start | reason=%@ hasUID=yes appId=pro_ios scopes=%lu providerIds=%lu hasAPNS=%@",
+          safeReason.length > 0 ? safeReason : @"unknown",
+          (unsigned long)notificationScopes.count,
+          (unsigned long)providerIds.count,
+          apnsTokenHex.length > 0 ? @"yes" : @"no");
+
+    [callable callWithObject:[payload copy] completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+
+            if (error) {
+                strongSelf.notificationV2RegistrationNeedsForegroundRetry = YES;
+                DLog(@"[PPNotificationsV2] registration failed | reason=%@ appId=pro_ios scopes=%lu error=%@",
+                      safeReason.length > 0 ? safeReason : @"unknown",
+                      (unsigned long)notificationScopes.count,
+                      error.localizedDescription ?: @"unknown");
+                [strongSelf pp_finishNotificationV2RegistrationCycle];
+                return;
+            }
+
+            NSDictionary *response = [result.data isKindOfClass:NSDictionary.class] ? result.data : @{};
+            if (![strongSelf pp_notificationV2RegistrationIsCurrentForUID:uid epoch:registrationEpoch]) {
+                DLog(@"[PPNotificationsV2] registration ignored | reason=%@ appId=%@ auth_changed_or_stale=yes",
+                      safeReason.length > 0 ? safeReason : @"unknown",
+                      kPPProNotificationV2AppID);
+                [strongSelf pp_compensateStaleNotificationV2Registration:response
+                                                                   uid:uid
+                                                        installationId:safeInstallationId
+                                                            environment:PPAdminNotificationEnvironment()
+                                                             completion:^{
+                    [strongSelf pp_finishNotificationV2RegistrationCycle];
+                }];
+                return;
+            }
+
+            BOOL ok = [response[@"ok"] respondsToSelector:@selector(boolValue)] ? [response[@"ok"] boolValue] : NO;
+            NSArray *scopes = [response[@"scopes"] isKindOfClass:NSArray.class] ? response[@"scopes"] : notificationScopes;
+            BOOL storedCurrentBinding = NO;
+            if (ok) {
+                NSString *bindingGeneration = PPAdminRouteTrimmedString(response[@"bindingGeneration"]);
+                NSString *fcmTokenHash = PPAdminRouteTrimmedString(response[@"fcmTokenHash"]);
+                NSString *environment = PPAdminRouteTrimmedString(response[@"environment"]);
+                if (environment.length == 0) environment = PPAdminNotificationEnvironment();
+                if (bindingGeneration.length > 0 && fcmTokenHash.length > 0) {
+                    NSDictionary *binding = @{
+                        @"uid": uid,
+                        @"installationId": safeInstallationId,
+                        @"appId": kPPProNotificationV2AppID,
+                        @"environment": environment,
+                        @"bindingGeneration": bindingGeneration,
+                        @"fcmTokenHash": fcmTokenHash
+                    };
+                    [NSUserDefaults.standardUserDefaults setObject:binding forKey:kPPProNotificationV2BindingDefaultsKey];
+                    storedCurrentBinding = YES;
+                }
+            }
+            strongSelf.notificationV2RegistrationNeedsForegroundRetry = !ok || !storedCurrentBinding;
+            DLog(@"[PPNotificationsV2] registration finish | reason=%@ ok=%@ appId=%@ scopes=%lu isActive=%@",
+                  safeReason.length > 0 ? safeReason : @"unknown",
+                  ok ? @"yes" : @"no",
+                  PPAdminRouteTrimmedString(response[@"appId"]).length > 0 ? PPAdminRouteTrimmedString(response[@"appId"]) : @"pro_ios",
+                  (unsigned long)scopes.count,
+                  [response[@"isActive"] respondsToSelector:@selector(boolValue)] && [response[@"isActive"] boolValue] ? @"yes" : @"no");
+            [strongSelf pp_finishNotificationV2RegistrationCycle];
+        });
     }];
 }
 
@@ -873,8 +975,26 @@ extern BOOL PP_TouchDotsEnabled;
     }
     NSString *subtitle = effectiveBody.length > 0 ? effectiveBody : kLang(@"New notification");
 
+    BOOL isDriverTask = PPProIsDriverTaskPayload(safePayload);
+    if (isDriverTask) {
+        // A visible driver cockpit re-reads its tasks at once; the push itself
+        // is never treated as the task state.
+        [[NSNotificationCenter defaultCenter] postNotificationName:kPPDriverCockpitShouldRefreshNotification object:nil];
+    }
+
     if (![PPProInAppNotificationPresenter notificationPreferencesAllowPayload:safePayload]) {
         DLog(@"[Push] Pro foreground notification suppressed by local notification settings. type=%@", effectiveType);
+        return YES;
+    }
+
+    if (isDriverTask) {
+        // Shown with the generic presenter so the payload keeps its route and
+        // task authority for the cockpit hand-off on tap.
+        [[PPProInAppNotificationPresenter sharedPresenter] showNotificationWithPayload:safePayload
+                                                                                 title:effectiveTitle
+                                                                              subtitle:subtitle
+                                                                              iconName:@"truck.box.fill"
+                                                                           accentColor:AppPrimaryClr];
         return YES;
     }
 
@@ -1021,6 +1141,10 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
     
     DLog(@"[Push] didReceiveRemoteNotification | type=%@ notificationType=%@ effectiveType=%@ orderId=%@ title=%@ body=%@",
           type, notificationType, effectiveType, orderId, title, body);
+
+    if (PPProIsDriverTaskPayload(userInfo)) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:kPPDriverCockpitShouldRefreshNotification object:nil];
+    }
     
     if (application.applicationState == UIApplicationStateActive) {
         BOOL didShowLocalNotification = NO;
@@ -1094,6 +1218,25 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
     //if(!Language.languageVal)
     //    [Language userSelectedLanguage:LanguageCode[1]];
 
+    NSDictionary *titleAttrs = @{
+        NSFontAttributeName: [Styling fontBold:22],
+        NSForegroundColorAttributeName: PrimaryTextClr
+    };
+    NSDictionary *largeTitleAttrs = @{
+        NSFontAttributeName: [Styling fontBold:30],
+        NSForegroundColorAttributeName: PrimaryTextClr
+    };
+    if (@available(iOS 13.0, *)) {
+        UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+        [appearance configureWithTransparentBackground];
+        appearance.titleTextAttributes = titleAttrs;
+        appearance.largeTitleTextAttributes = largeTitleAttrs;
+        [UINavigationBar appearance].standardAppearance = appearance;
+        [UINavigationBar appearance].scrollEdgeAppearance = appearance;
+        [UINavigationBar appearance].compactAppearance = appearance;
+    } else {
+        [UINavigationBar appearance].titleTextAttributes = titleAttrs;
+    }
 }
 
 

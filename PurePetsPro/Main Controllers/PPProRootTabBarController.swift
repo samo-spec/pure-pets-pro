@@ -311,8 +311,9 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
             "vetList": "PPVetsListViewController",
             "__vet": "PPVetsListViewController",
             "veterinary": "PPVetsListViewController",
-            "delivery": "PPDeliveryDashboardViewController",
-            "deliveryCompany": "PPDeliveryCompanyDashboardViewController",
+            "delivery": "PPDeliveryDriverDashboardHostController",
+            "deliveryCompany": "PPDeliveryListHostController",
+            "driverCockpit": "PPDriverCockpitHostController",
             "adoptPetsList": "PPAdoptPetsListViewController",
             "fulfillmentOrders": "PPFulfillmentListViewController",
             "notificationsInbox": "NotificationsListViewController",
@@ -378,8 +379,8 @@ private final class PPProSurfaceTabController: UIViewController {
         lockedLabel.textColor = UIColor.ppTextSecondary
         lockedLabel.numberOfLines = 0
         lockedLabel.textAlignment = .center
-        lockedLabel.font = UIFontMetrics(forTextStyle: .subheadline)
-            .scaledFont(for: Styling.fontRegular(14))
+        let baseFont = Styling.fontRegular(14) ?? UIFont.systemFont(ofSize: 14)
+        lockedLabel.font = Styling.scaledFont(for: baseFont, textStyle: .subheadline) ?? baseFont
         lockedLabel.adjustsFontForContentSizeCategory = true
         lockedLabel.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(lockedLabel)

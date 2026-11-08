@@ -1,0 +1,462 @@
+// Source-contract checks for the unified driver cockpit (official Pure Pets
+// fleet + partner fleets). They prove wiring and invariants in source only;
+// native behavior still requires an authorized physical-device run.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const root = path.resolve(__dirname, '..');
+const read = name => fs.readFileSync(path.join(root, name), 'utf8');
+const slice = (source, start, end) => {
+  const begin = source.indexOf(start);
+  const finish = source.indexOf(end, begin + start.length);
+  assert(begin >= 0 && finish > begin, `Missing boundary: ${start}`);
+  return source.slice(begin, finish);
+};
+// Objective-C methods are often declared in a class extension before they are
+// defined; this skips declarations (ending in ";") and slices the definition.
+const method = (source, start, end) => {
+  let begin = source.indexOf(start);
+  while (begin >= 0) {
+    const brace = source.indexOf('{', begin);
+    const semicolon = source.indexOf(';', begin);
+    if (brace >= 0 && (semicolon < 0 || brace < semicolon)) break;
+    begin = source.indexOf(start, begin + start.length);
+  }
+  assert(begin >= 0, `Missing definition: ${start}`);
+  const finish = source.indexOf(end, begin + start.length);
+  assert(finish > begin, `Missing boundary after: ${start}`);
+  return source.slice(begin, finish);
+};
+
+const project = read('PurePetsPro.xcodeproj/project.pbxproj');
+const models = read('PurePetsPro/DeliverySection/PPDriverCockpitModels.swift');
+const view = read('PurePetsPro/DeliverySection/PPDriverCockpitView.swift');
+const legacyModels = read('PurePetsPro/DeliverySection/PPDeliveryDriverModels.swift');
+const legacyControl = read('PurePetsPro/DeliverySection/PPDeliveryDriverControlView.swift');
+const legacyHome = read('PurePetsPro/DeliverySection/PPDeliveryDriverHomeControlSection.swift');
+const companyService = read('PurePetsPro/DeliveryCompanySection/PPDeliveryCompanyService.m');
+const companyModels = read('PurePetsPro/DeliveryCompanySection/PPDeliveryCompanyModels.m');
+const deliveryService = read('PurePetsPro/DeliveryCompanySection/PPDeliveryService.m');
+const scene = read('PurePetsPro/SceneDelegate.m');
+const sceneHeader = read('PurePetsPro/SceneDelegate.h');
+const appDelegate = read('PurePetsPro/AppDelegate.m');
+const login = read('PurePetsPro/AdminCore/Auth/AdminLoginViewController.m');
+const dashboard = read('PurePetsPro/AdminDashboardViewController.m');
+const tabBar = read('PurePetsPro/Main Controllers/PPProRootTabBarController.swift');
+const targets = read('PurePetsPro/NotificationsSection/NotificationManager+Targets.m');
+const strings = {
+  en: read('PurePetsPro/en.lproj/Localizable.strings'),
+  ar: read('PurePetsPro/ar.lproj/Localizable.strings'),
+};
+
+let passed = 0;
+function check(name, body) { body(); passed++; console.log(`PASS ${name}`); }
+
+check('both cockpit sources are compiled by the app target', () => {
+  for (const file of ['PPDriverCockpitModels.swift', 'PPDriverCockpitView.swift']) {
+    const ref = new RegExp(`(\\w{24}) /\\* ${file} \\*/ = \\{isa = PBXFileReference;`).exec(project);
+    assert(ref, `${file}: missing file reference`);
+    const build = new RegExp(`(\\w{24}) /\\* ${file} in Sources \\*/ = \\{isa = PBXBuildFile; fileRef = ${ref[1]} `).exec(project);
+    assert(build, `${file}: missing build file`);
+    const appSources = slice(project, 'F2B41E8E2E5647BD0054D8CD /* Sources */ = {', 'runOnlyForDeploymentPostprocessing');
+    assert(appSources.includes(`${build[1]} /* ${file} in Sources */`), `${file}: not in the app Sources phase`);
+    assert(project.includes(`${ref[1]} /* ${file} */,`), `${file}: not in a group`);
+  }
+});
+
+check('cockpit transport is an allowlist of driver callables only', () => {
+  const body = method(companyService, '- (void)callDriverCockpitFunction:', '- (PPDeliveryCompanyProfile *)preferredProfileFromProfiles:');
+  for (const name of ['getDriverDeliveryWorkspace', 'executeDriverDeliveryTask', 'setDriverDeliveryAvailability',
+    'PPDCFunctionGetMyCompanies', 'PPDCFunctionListAssigned', 'PPDCFunctionGetRequest', 'PPDCFunctionUpdateStatus',
+    'setCompanyDriverAvailability']) {
+    assert(body.includes(name), `allowlist lacks ${name}`);
+  }
+  assert(body.includes('if (![allowedFunctions containsObject:name ?: @""])'));
+  const called = new Set([...models.matchAll(/call\("([A-Za-z]+)"/g)].map(match => match[1]));
+  for (const name of called) {
+    assert(['getMyDeliveryCompanies', 'getDriverDeliveryWorkspace', 'listMyAssignedCompanyDeliveries',
+      'getCompanyDeliveryRequest'].includes(name), `unexpected cockpit read ${name}`);
+  }
+  assert(models.includes('"updateCompanyDeliveryStatus" : "executeDriverDeliveryTask"'));
+  assert(models.includes('"setDriverDeliveryAvailability" : "setCompanyDriverAvailability"'));
+  assert(!/collection\(|Firestore\.firestore|FIRFirestore/.test(models + view), 'cockpit must not read Firestore directly');
+});
+
+check('success appears only after the backend confirms the command', () => {
+  const body = slice(models, 'private func send(_ command: PPDriverCommand, isRetry: Bool)', 'private func handleCommandFailure');
+  const success = body.indexOf('case .success:');
+  assert(success > 0);
+  assert(body.indexOf('tone: .success') > success, 'success notice must be inside the confirmed branch');
+  assert(body.indexOf('DriverCockpit_Notice_Waiting') < success, 'pending state precedes the result');
+  assert(body.includes('guard self.isSameAccount() else'), 'responses for another account are dropped');
+});
+
+check('an uncertain outcome keeps the same command for a safe retry', () => {
+  const failure = slice(models, 'private func handleCommandFailure', 'private func verifyPendingCommand');
+  assert(/case \.transport, \.unknown:[\s\S]*uncertainCommand = command/.test(failure));
+  const retry = slice(models, 'func retryUncertainCommand()', 'func discardUncertainCommand()');
+  assert(retry.includes('send(command, isRetry: true)'));
+  assert(models.includes('commandID: UUID().uuidString'));
+  assert(/"commandId": commandID/.test(models));
+  assert(/case \.changed, \.notEligible:[\s\S]*if isRetry \{[\s\S]*pendingVerification = command/.test(failure));
+});
+
+check('a retried command is confirmed only by progressed server state', () => {
+  const helper = slice(models, 'func ppDriverStageProgressed', '\n}\n');
+  assert(helper.includes('stage != .unknown') && helper.includes('stage != .ended') && helper.includes('stage > expected'));
+  const verify = slice(models, 'private func verifyPendingCommand()', 'private func reportVerification');
+  assert(verify.includes('ppDriverStageProgressed(task.stage, from: expected)'));
+  assert(verify.includes('verifyWithFreshRead(command, expected: expected)'));
+  assert(!/\["DELIVER", "CONFIRM_PAYMENT", "COMPLETE"\]\.contains\(command\.actionCode\)/.test(verify),
+    'a vanished task must not be assumed delivered');
+});
+
+check('unknown server actions are never offered', () => {
+  assert(models.includes('static let supportedCodes: Set<String> = ["CLAIM", "PICK_UP", "START_TRANSIT"'));
+  assert((models.match(/PPDriverTaskAction\.supportedCodes\.contains\(code\)/g) || []).length === 2);
+});
+
+check('official and partner authorities stay single-writer', () => {
+  const command = slice(models, 'static func task(_ action: PPDriverTaskAction', 'static func availability(');
+  assert(command.includes('functionName: partner ? "updateCompanyDeliveryStatus" : "executeDriverDeliveryTask"'));
+  assert(command.includes('let partner = task.authority == .partnerCompanyRequest'));
+});
+
+check('scene routing opens the cockpit for well-formed driver tasks only', () => {
+  const parser = slice(scene, 'static NSDictionary<NSString *, NSString *> *PPSceneDriverTaskRoute', '\n}\n');
+  assert(parser.includes('[route isEqualToString:@"driver_task"]'));
+  assert(parser.includes('[authority isEqualToString:@"FULFILLMENT_V1"]'));
+  assert(parser.includes('[authority isEqualToString:@"COMPANY_DELIVERY_REQUEST"]'));
+  assert(parser.includes('[route isEqualToString:@"fleet_partner"] && [authority isEqualToString:@"PARTNER_COMPANY_REQUEST"]'));
+  assert(parser.includes('taskID.length > 256 || [taskID containsString:@"/"]'));
+  const consume = method(scene, '- (void)pp_consumePendingNotificationRouteIfPossible\n{', '- (UINavigationController *)pp_notificationsNavigationController');
+  assert(consume.indexOf('PPSceneDriverTaskRoute(') < consume.indexOf('pp_notificationsNavigationController'),
+    'driver route is handled before the notifications tab is selected');
+  assert(consume.indexOf('PPSceneDriverTaskRoute(') < consume.indexOf('[NotificationManager routePayload:'));
+  const company = method(scene, '- (void)pp_handleCompanyDeliveryNotification:', '- (void)pp_routePendingCompanyDeliveryNotificationIfPossible');
+  assert(company.indexOf('PPSceneDriverTaskRoute(payload)') < company.indexOf('self.pp_pendingCompanyDeliveryPayload = payload.copy'));
+  const open = method(scene, '- (void)openDriverCockpitWithTaskID:', '- (void)pp_handleCompanyDeliveryNotification:');
+  assert(open.includes('focusWithTaskID:safeTaskID'), 'an open cockpit is refocused, not duplicated');
+  assert(open.includes('initWithFocusTaskID:safeTaskID'));
+  assert(sceneHeader.includes('- (void)openDriverCockpitWithTaskID:'));
+  assert(sceneHeader.includes('- (void)showDeliveryWorkspaceForProfile:'));
+});
+
+check('inbox rows for workforce driver tasks hand off to the scene router', () => {
+  const kind = slice(targets, 'static BOOL PPProNotificationTargetsIsCompanyDeliveryPayload', '\n}\n');
+  assert(kind.includes('[route isEqualToString:@"driver_task"]'));
+});
+
+check('sign-in selects a server-resolved workspace instead of the first profile', () => {
+  for (const [name, source] of [['scene', method(scene, '- (void)pp_routeAfterDeliveryCompanyPreflightForUID:', '- (void)showDashboardWithDeliveryCompanyProfile:')],
+    ['login', method(login, '- (void)pp_preflightDeliveryCompanyMembershipForUID:', '- (void)pp_gatekeepServiceProviderForUID:')]]) {
+    assert(source.includes('preferredProfileFromProfiles:'), `${name}: preferred profile`);
+    assert(!source.includes('profiles.firstObject'), `${name}: first-profile shortcut`);
+    assert(source.includes('if (!profile.isRestrictedWorkspace) {'), `${name}: storage guard`);
+    assert(source.includes('showDeliveryWorkspaceForProfile:'), `${name}: workspace landing`);
+  }
+  assert(companyModels.includes('if (!self.hasServerWorkspaceProjection) return NO;'),
+    'pre-v2 responses keep the legacy destinations');
+});
+
+check('dashboard and tab routes send driver-only workspaces to the cockpit', () => {
+  assert(dashboard.includes('opensDriverCockpit\n               ? PPDriverCockpitHostController.class'));
+  assert(dashboard.includes('[self adminRowWithTag:@"driverCockpit"'));
+  assert(dashboard.includes('? @"driverCockpit"\n            : @"deliveryCompany";'));
+  const action = method(dashboard, '- (void)pp_executeCommandCenterActionTarget:', '- (void)pp_executeCommandCenterQuickActionTarget:');
+  assert(/if \(profile\.prefersDriverCockpit\) \{[\s\S]*initWithFocusTaskID:target\.requestID/.test(action));
+  assert(tabBar.includes('"driverCockpit": "PPDriverCockpitHostController"'));
+});
+
+check('Pro registers workforce drivers as hosted staff, never as providers', () => {
+  const registration = method(appDelegate, '- (void)pp_attemptNotificationV2RegistrationForReason:(NSString *)reason {', '- (void)pp_finishNotificationV2RegistrationCycle');
+  assert(registration.includes('if (profile.isOfficialDriverWorkspace) hostedStaff = YES;'));
+  assert(registration.includes('discoverCompanyMembershipsWithCompletion:'));
+  assert(registration.includes('? @[@"staff.delivery"]'));
+  assert(registration.includes('NSArray<NSString *> *providerIds = hostedStaff ? @[] : @[uid];'));
+  assert(registration.includes('@"provider": @(!hostedStaff)'));
+  assert(registration.includes('@"staff": @(hostedStaff)'));
+  assert(/pp_notificationV2RegistrationIsCurrentForUID:uid epoch:registrationEpoch\][\s\S]*BOOL hostedStaff/.test(registration),
+    'the account check re-validates the registration epoch');
+  assert(appDelegate.includes('isEqualToString:@"staff"]'));
+});
+
+check('driver pushes refresh a visible cockpit and keep their route', () => {
+  assert(appDelegate.includes('@"PPDriverCockpitShouldRefreshNotification"'));
+  assert(models.includes('Notification.Name("PPDriverCockpitShouldRefreshNotification")'));
+  const banner = method(appDelegate, '- (BOOL)pp_showProInAppNotificationWithPayload:', '- (void)pp_showProInAppNotificationAfterActivationWithPayload:');
+  assert(banner.indexOf('postNotificationName:kPPDriverCockpitShouldRefreshNotification') <
+    banner.indexOf('notificationPreferencesAllowPayload:'), 'refresh does not depend on banner preferences');
+  assert(banner.indexOf('if (isDriverTask) {\n        // Shown with the generic presenter') <
+    banner.indexOf('PPAdminIsCompanyDeliveryPayload(safePayload)'), 'driver payloads are not rewritten as company pushes');
+});
+
+check('legacy cockpit no longer fabricates metrics or local duty state', () => {
+  for (const source of [legacyModels, legacyControl, legacyHome]) {
+    assert(!/todayTotalEarningsQAR|onTimeScorePercentage|func toggleDuty/.test(source));
+  }
+  assert(!/eligible"\]\s*=\s*@YES|eligible\s*=\s*YES|"eligible":\s*@YES/.test(deliveryService), 'partner fallbacks must not grant eligibility');
+});
+
+check('review fixes: focus, workspace switching, paging and truthful states', () => {
+  const finish = method(scene, '- (void)showDeliveryWorkspaceForProfile:', '- (void)openDriverCockpitWithTaskID:');
+  assert(finish.includes('hasPendingRoute'), 'a tapped notification is not covered by the auto-opened cockpit');
+  assert(scene.includes('One cockpit per scene'));
+  const refreshEnd = slice(models, 'private func finishRefresh(failure:', 'private func reconcile(');
+  assert(refreshEnd.indexOf('refreshQueued = false') < refreshEnd.indexOf('applyPendingFocus()'));
+  assert(!slice(models, 'private func reconcile(', 'private func explainVanishedTask').includes('applyPendingFocus()'));
+  const select = slice(models, 'func select(_ context: PPDriverContext)', 'func showContextChooser()');
+  assert(select.includes('guard selectedContext == nil || canSwitchContext else { return }'));
+  assert(select.includes('listGeneration += 1'));
+  assert(models.includes('self.phase = .loadFailed'));
+  assert(models.includes('case 1, 2, 4, 13, 14, 16: failure = .transport'));
+  assert(models.includes('fetchOfficialLane("active", maxPages: 4)'));
+  assert(models.includes('service.verifyAndStoreCompanyID(context.companyID)'));
+  assert(!models.includes('"status": "active"'), 'no synthetic company profile is stored');
+  const failure = method(models, 'private func handleCommandFailure', 'private func verifyPendingCommand');
+  assert(/case \.invalidCode:[\s\S]*uncertainCommand = nil/.test(failure));
+  assert(failure.includes('DriverCockpit_Notice_AvailabilityChanged'));
+  const list = method(companyService, '- (void)listRequestsForProfile:', '- (void)getRequestWithID:');
+  assert(list.indexOf('if (profile.isRestrictedWorkspace)') < list.indexOf('[self callFunction:'));
+  assert(dashboard.includes('pp_commandCapabilityWithIdentifier:@"driverCockpit"'));
+});
+check('verification stays pending until its asynchronous read settles', () => {
+  const guard = slice(models, 'var canSwitchContext: Bool', '\n');
+  assert(guard.includes('!isVerifying'));
+  const failure = slice(models, 'private func handleCommandFailure', 'private func verifyPendingCommand');
+  assert(/pendingVerification = command\s+isVerifying = true/.test(failure));
+  const verify = slice(models, 'private func verifyPendingCommand()', 'private func reportVerification');
+  assert(!verify.includes('pendingVerification = nil'), 'a fresh read must keep the verification lock');
+  const perform = slice(models, 'func perform(', 'func retryUncertainCommand()');
+  assert(perform.includes('guard canSwitchContext'));
+  assert(perform.includes('guard canChangeAvailability'));
+  const availabilityGuard = slice(models, 'var canChangeAvailability: Bool', 'func refreshAvailability');
+  assert(availabilityGuard.includes('canSwitchContext'));
+  assert(availabilityGuard.includes('!isStale'));
+  assert(availabilityGuard.includes('!isResolvingContexts'));
+  assert(view.includes('store.isSubmitting || store.isVerifying'));
+});
+check('partner lists separate live work from history and retain the page cursor', () => {
+  assert(models.includes('"pageSize": 30, "lane": "active"'));
+  assert(models.includes('"lane": "history", "pageSize": 15'));
+  assert(models.includes('nextPageToken: token.isEmpty ? nil : token'));
+  assert(models.includes('"nextPageToken": cursor'));
+  assert(view.includes('store.loadMoreActive()'));
+});
+check('partner recovery uses the company dispatcher contact with an honest missing-contact state', () => {
+  assert(models.includes('dispatcherPhone: cpString(entry["dispatcherPhone"])'));
+  assert(models.includes(': context.dispatcherPhone'));
+  assert(view.includes('DriverCockpit_DispatchContactMissing'));
+});
+check('cockpit copy is localized in Arabic and English with matching formats', () => {
+  assert(!/(?<![A-Za-z_])(Text|Label|Button)\("/.test(view), 'no hard-coded user-facing literals');
+  const used = new Set([...(models + view + dashboard).matchAll(/"(DriverCockpit_[A-Za-z0-9_]+)"/g)].map(match => match[1]));
+  for (const code of ['CLAIM', 'PICK_UP', 'START_TRANSIT', 'DELIVER', 'CONFIRM_PAYMENT', 'COMPLETE']) {
+    used.add(`DriverCockpit_Action_${code}`); used.add(`DriverCockpit_Success_${code}`); used.add(`DriverCockpit_Consequence_${code}`);
+  }
+  for (const status of ['delivery_requested', 'accepted_by_company', 'offered', 'delivery_assigned', 'awaiting_handover',
+    'assigned_to_driver', 'handed_over', 'picked_up', 'in_transit', 'delivered', 'payment_pending', 'payment_confirmed',
+    'completed', 'cancelled', 'failed', 'returned', 'rejected', 'expired', 'unknown', 'customer_unavailable',
+    'address_issue', 'payment_issue', 'return_required', 'returning']) used.add(`DriverCockpit_Status_${status}`);
+  for (const reason of ['ACCOUNT_NOT_ACTIVE', 'ASSIGNMENTS_PAUSED', 'OFFLINE', 'PRESENCE_STALE', 'ON_BREAK', 'OFF_SHIFT',
+    'CAPACITY_EXCEEDED']) used.add(`DriverCockpit_Reason_${reason}`);
+  for (const reason of ['WORKFORCE_DRIVER_GRANT_REQUIRED', 'OFFICIAL_DELIVERY_GRANT_REQUIRED', 'ROLE_NOT_RECOGNIZED']) {
+    used.add(`DriverCockpit_Restricted_${reason}`);
+  }
+  const value = (language, key) => {
+    const match = new RegExp(`^"${key}"\\s*=\\s*"((?:[^"\\\\]|\\\\.)*)";`, 'm').exec(strings[language]);
+    assert(match, `${language}: ${key}`);
+    return match[1];
+  };
+  const specifiers = text => (text.match(/%(\d+\$)?(ld|@|d)/g) || []).sort().join(',');
+  for (const key of used) {
+    const en = value('en', key);
+    const ar = value('ar', key);
+    assert.equal(specifiers(en), specifiers(ar), `format mismatch: ${key}`);
+    assert(/[\u0600-\u06FF]/.test(ar), `Arabic copy missing: ${key}`);
+  }
+  assert(used.size > 100, `expected the full cockpit key set, saw ${used.size}`);
+});
+
+check('Home and the dashboard share confirmed driver availability and the real fleet route', () => {
+  const home = slice(legacyHome, 'struct PPDriverHomeAvailabilitySection', '// MARK: - Reusable Tactile');
+  assert(home.includes('PPDriverCockpitStore(loadsTaskQueue: false)'));
+  assert(models.includes('init(loadsTaskQueue: Bool = true)'));
+  assert(models.includes('["availabilityOnly": true]'));
+  assert(home.includes('PPDriverAvailabilityControl(store: store)'));
+  assert(home.includes('store.setVisible(false)'));
+  assert(home.includes('store.retryUncertainCommand()'));
+  assert(home.includes('store.select(choice)'));
+  assert(!home.includes('PPDeliveryDriverObservableState'));
+  assert(view.includes('PPDriverAvailabilityControl(store: store)'));
+  const surface = read('PurePetsPro/AdminCore/Auth/PPProLoginSurfaceController.swift');
+  const pulse = slice(surface, 'struct PPProPulseView', 'private struct PPProMoreDestinationView');
+  assert.equal((pulse.match(/PPDriverHomeAvailabilitySection/g) || []).length, 2, 'both compact and regular Home layouts');
+  assert.equal((pulse.match(/activate\(driverRoute\)/g) || []).length, 2);
+  assert(pulse.includes('$0.routeTag == "driverCockpit"'));
+  assert(pulse.includes('.id(PPDeliveryCompanyService.currentAccountUID())'));
+  assert(!/\.collection\(|Firestore\.firestore/.test(home));
+});
+check('availability has fresh-revision guards, contextual confirmation and honest status', () => {
+  const control = slice(view, 'struct PPDriverAvailabilityControl', 'struct PPDriverCockpitView');
+  assert(control.includes('store.canChangeAvailability'));
+  assert(control.includes('store.isSubmitting || store.isVerifying'));
+  assert(control.includes('store.availability?.activeDeliveryCount'));
+  assert(control.includes('store.setOnline(false)'));
+  assert(control.includes('DriverAvailability_RestrictedHint'));
+  assert(control.includes('minHeight: AdminTouchTarget.comfortable'));
+  assert(control.includes('.accessibilityIdentifier("driver.availability.toggle")'));
+  assert(!control.includes('Toggle('), 'no optimistic local switch state');
+  const polling = slice(models, 'private func startTimer()', 'private func stopTimer()');
+  assert(polling.includes('refreshAll()'), 'partner polling must renew membership presence too');
+});
+check('fleet registration retries retain command identity and localize protected-grant failures', () => {
+  const invite = method(companyService, '- (void)inviteMemberIdentifier:', '- (void)disableMemberUID:');
+  assert(invite.includes('self.memberInvitationCommandIDs[identityKey]'));
+  assert(invite.includes('@"commandId": commandID'));
+  assert(invite.includes('isEqualToString:issuerUID'));
+  assert(invite.includes('if (!error) [self.memberInvitationCommandIDs removeObjectForKey:identityKey]'));
+  for (const code of ['DELIVERY_DRIVER_PROVISIONING_AUTHORITY_REQUIRED','DELIVERY_WORKFORCE_GRANT_REQUIRED','DELIVERY_DRIVER_TARGET_ACCOUNT_INACTIVE','DELIVERY_DRIVER_TARGET_REGISTRATION_REQUIRED']) {
+    assert(companyService.includes(code));
+  }
+  assert(dashboard.includes('hasResolvedDeliveryMembership'));
+  assert(dashboard.includes('(hasReviewApplication && !hasResolvedDeliveryMembership)'));
+  for (const key of new Set([...view.matchAll(/"(DriverAvailability_[A-Za-z_]+)"/g),
+    ...legacyHome.matchAll(/"(DriverAvailability_[A-Za-z_]+)"/g),
+    ...companyService.matchAll(/@"(DriverRegistration_[A-Za-z_]+)"/g)].map(match => match[1]))) {
+    for (const language of ['ar','en']) {
+      assert.equal((strings[language].match(new RegExp(`^"${key}" = `,'gm')) || []).length, 1, `${language}: ${key}`);
+    }
+  }
+});
+
+check('member-only drivers register for delivery pushes without provider feature or staff elevation', () => {
+  const registration = slice(appDelegate, '// Membership is an independent Pro grant.', '#pragma mark -');
+  assert(registration.includes('discoverCompanyMembershipsWithCompletion:'));
+  assert(registration.includes('profile.isOfficialDriverWorkspace'));
+  assert(registration.includes('[profile.workspaceKinds containsObject:@"PARTNER_DRIVER"]'));
+  assert(registration.includes('companyIDs.count < 10'));
+  assert(registration.includes('deliveryCompanyIDs.count > 0 ? @[@"provider.orders"]'));
+  assert(registration.includes('@"deliveryCompanyIds": deliveryCompanyIDs ?: @[]'));
+  assert(registration.includes('pp_notificationV2RegistrationIsCurrentForUID:uid epoch:registrationEpoch'));
+});
+
+check('membership-check failure is recoverable and never treated as confirmed onboarding', () => {
+  const preflight = method(login, '- (void)pp_preflightDeliveryCompanyMembershipForUID:', '- (void)pp_gatekeepServiceProviderForUID:');
+  const failure = slice(preflight, 'if (error) {', '[self pp_continueToProviderOnboarding];');
+  assert(failure.includes('DeliveryLogin_CheckFailed_Body'));
+  assert(failure.includes('[retrySelf pp_preflightDeliveryCompanyMembershipForUID:uid]'));
+  assert(failure.includes('return;'));
+  const scenePreflight = method(scene, '- (void)pp_routeAfterDeliveryCompanyPreflightForUID:', '- (void)showDashboardWithDeliveryCompanyProfile:');
+  const sceneFailure = slice(scenePreflight, 'if (error) {', 'self.pp_autoPresentProviderStatusOnNextRoot = autoPresentOnboarding;');
+  assert(sceneFailure.includes('DeliveryLogin_CheckFailed_Body'));
+  assert(sceneFailure.includes('setRoot:AppRootLogin'));
+  assert(sceneFailure.includes('pp_applyAdminRoutingForAuthUser:'));
+  assert(sceneFailure.includes('return;'));
+  assert(!preflight.includes('continuing onboarding:') && !scenePreflight.includes('continuing onboarding:'));
+});
+
+check('restricted drivers keep an explanatory availability surface without a client grant', () => {
+  const companyView = read('PurePetsPro/DeliveryCompanySection/PPDeliveryListView.swift');
+  assert(dashboard.includes('hasResolvedDeliveryMembership'));
+  assert(dashboard.includes('[deliveryCompanyProfile.role isEqualToString:PPDeliveryCompanyRoleDriver]'));
+  assert(dashboard.includes('[self.deliveryCompanyContext.role isEqualToString:PPDeliveryCompanyRoleDriver]'));
+  assert(legacyHome.includes('if case .noWorkspace(let reason) = store.phase'));
+  assert(view.includes('DriverAvailability_AccessRequired'));
+  assert(view.includes('.disabled(!store.canChangeAvailability)'));
+  assert(companyView.includes('Delivery_Driver_Active_Offline_Hint'));
+  for (const key of ['Driver_Dispatcher_Assignments_Enabled', 'Driver_Dispatcher_Account_Active',
+    'Driver_Dispatcher_Account_Restricted', 'Delivery_Driver_Active_Offline_Hint',
+    'Delivery_Value_WORKFORCE_DRIVER_GRANT_REQUIRED', 'DriverAvailability_AccessRequired',
+    'DeliveryLogin_CheckFailed_Title', 'DeliveryLogin_CheckFailed_Body', 'DeliveryLogin_UseAnotherAccount']) {
+    for (const language of ['ar', 'en']) {
+      assert.equal((strings[language].match(new RegExp(`^"${key}"\\s*=`, 'gm')) || []).length, 1, `${language}: ${key}`);
+    }
+  }
+});
+
+check('older delivery shortcuts resolve the account-bound driver workspace before showing provider tasks', () => {
+  const entry = read('PurePetsPro/DeliverySection/PPDeliveryDriverDashboardHostController.swift');
+  assert(entry.includes('resolveDriverCockpitRequirement'));
+  assert(entry.includes('PPDriverCockpitView(store: store'));
+  assert(entry.includes('PPDeliveryDriverControlView(onDismiss:'));
+  assert(entry.includes('requestedUID == PPDeliveryCompanyService.currentAccountUID()'));
+  assert(entry.includes('if let error'));
+  assert(tabBar.includes('"delivery": "PPDeliveryDriverDashboardHostController"'));
+  assert(!dashboard.includes('PPDeliveryDashboardViewController *vc = [[PPDeliveryDashboardViewController alloc] init]'));
+  const gate = method(companyService, '- (void)resolveDriverCockpitRequirementWithCompletion:', '- (void)callDriverCockpitFunction:');
+  assert(gate.includes('checkIfUserWithUID:uid canAccessPro:'));
+  assert(gate.includes('[accountType isEqualToString:@"staff"]'));
+  assert(gate.includes('discoverCompanyMembershipsWithCompletion:'));
+  assert(gate.includes('profile.hasDriverWorkspace || profile.isRestrictedWorkspace'));
+  assert(gate.includes('[activeUID isEqualToString:uid]'));
+  assert(legacyHome.includes('struct PPDeliveryHomeEntrySection'));
+});
+
+check('stale provider records cannot submit official staff actions through the provider adapter', () => {
+  const manager = read('PurePetsPro/DeliverySection/PPDeliveryManager.m');
+  const action = method(manager, '- (void)performDeliveryAction:', '- (void)pp_performProviderDeliveryAction:');
+  assert(action.includes('resolveDriverCockpitRequirementWithCompletion:'));
+  assert(action.includes('error || requiresDriverCockpit'));
+  assert(action.includes('DriverCockpit_UseDriverWorkspace'));
+  assert(!action.includes('HTTPSCallableWithName:'));
+  const listening = method(manager, '- (void)startListeningForDeliveryOrders', '- (void)pp_startProviderOrderListenersForUID:');
+  assert(listening.includes('resolveDriverCockpitRequirementWithCompletion:'));
+  assert(listening.includes('generation != self.staffListenerGeneration'));
+  assert(listening.includes('if (requiresDriverCockpit)'));
+  assert(!listening.includes('startOrderListenersForStaff:'));
+  for (const language of ['ar', 'en']) {
+    assert.equal((strings[language].match(/^"DriverCockpit_UseDriverWorkspace"\s*=/gm) || []).length, 1);
+  }
+});
+
+check('fulfillment accept-and-assign uses one canonical command, never company-request mutations', () => {
+  const submit = method(deliveryService, '- (void)executeAllowedAction:', '- (void)executeCanonicalAllowedAction:');
+  const atomic = slice(submit, 'if ([act isEqualToString:@"ACCEPT_AND_ASSIGN"]) {', '// Delegate directly to partner-authorized actions');
+  assert(atomic.includes('executeCanonicalAllowedAction:allowedAction'));
+  assert(atomic.includes('targetDriver.length == 0'));
+  assert(atomic.includes('allowedAction.expectedRevision < 0'));
+  assert(atomic.includes('allowedAction.expectedState isEqualToString:@"delivery_requested"'));
+  assert(!/acceptRequestID:|assignRequestID:/.test(atomic));
+  assert(submit.includes('if ([act isEqualToString:@"ACCEPT"]) {'), 'legacy partner acceptance remains separate');
+  assert(!submit.includes('allowedAction.expectedRevision + 2'), 'an atomic fulfillment command never manufactures a two-write result');
+});
+
+check('canonical acceptance preserves the envelope and returns only the backend result', () => {
+  const body = method(deliveryService, '- (void)executeCanonicalAllowedAction:', '- (void)executeDriverAction:');
+  for (const field of ['@"requestId": requestID', '@"commandId": commandID', '@"action": allowedAction.action',
+    '@"expectedRevision": @(allowedAction.expectedRevision)', '@"expectedState": allowedAction.expectedState',
+    'payload[@"driverUid"] = driverUID']) assert(body.includes(field), field);
+  assert.equal((body.match(/callFunction:@"executeDeliveryCommand"/g) || []).length, 1);
+  assert(body.includes('initWithDictionary:result'));
+  assert(!/acceptRequestID:|assignRequestID:|@"APPLIED"/.test(body));
+});
+
+check('explicit empty server actions and fulfillment authority cannot acquire guessed partner actions', () => {
+  const body = slice(deliveryService, '@implementation PPDeliveryRequestRecord', '@implementation PPDeliveryDriverRecord');
+  assert(body.includes('if ([rawActionsValue isKindOfClass:NSArray.class])'));
+  assert(body.includes('else if ([_authority isEqualToString:@"COMPANY_DELIVERY_REQUEST"])'));
+  assert(!body.includes('if (rawActions.count > 0)'));
+});
+
+check('dossier commands require a fresh matching server action and recover before re-enabling', () => {
+  const companyView = read('PurePetsPro/DeliveryCompanySection/PPDeliveryListView.swift');
+  const gate = slice(companyView, 'var canExecuteDossierCommands:', 'var records:');
+  for (const token of ['dossier?.record.requestID == selectedRequestID', '!isExecuting', '!isLoadingDossier',
+    'dossierIncident == nil', 'commandIncident == nil']) assert(gate.includes(token), token);
+  const execute = slice(companyView, 'func execute(_ action:', 'func executeDriver(');
+  assert(execute.includes('selectedRequestID, canExecuteDossierCommands'));
+  assert(execute.includes('$0.expectedRevision == action.expectedRevision'));
+  assert(execute.includes('$0.expectedState == action.expectedState'));
+  for (const code of ['DELIVERY_REQUEST_NOT_FOUND', 'DELIVERY_AUTHORITY_MISMATCH']) assert(execute.includes(code));
+  const load = slice(companyView, 'func loadDossier(', 'func execute(_ action:');
+  assert(load.includes('guard let dossier, dossier.record.requestID == requestID'));
+  assert(load.indexOf('self.commandIncident = nil') > load.indexOf('self.dossier = dossier'));
+  const footer = slice(companyView, 'private var actionFooter:', 'private func close()');
+  const dock = slice(companyView, 'private func commandDock(', 'private func deliveryActionButton(');
+  assert(footer.includes('.disabled(!viewModel.canExecuteDossierCommands'));
+  assert(dock.includes('.disabled(!viewModel.canExecuteDossierCommands)'));
+});
+
+console.log(`PASS ${passed} driver cockpit source contracts. Native runtime is UNVERIFIED.`);

@@ -10,6 +10,7 @@ import SwiftUI
 import UIKit
 import AVFoundation
 import AudioToolbox
+import PhotosUI
 
 // MARK: - AdminSurface Colors
 
@@ -517,7 +518,7 @@ extension String {
         sanitizedNumericInput(allowsDecimal: true)
     }
 
-    public func normalizedEnglishDigits(allowsDecimal: Bool = false) -> String {
+    public func normalizedEnglishDigits(allowsDecimal: Bool) -> String {
         sanitizedNumericInput(allowsDecimal: allowsDecimal)
     }
 
@@ -696,6 +697,137 @@ public struct PPLivePetCameraPicker: UIViewControllerRepresentable {
 
         public func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
             parent.dismiss()
+        }
+    }
+}
+
+// MARK: - PPVariantImagePickerSheet
+
+public struct PPVariantImagePickerSheet: UIViewControllerRepresentable {
+    public let maxSelection: Int
+    public let onPicked: ([UIImage]) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    public init(maxSelection: Int, onPicked: @escaping ([UIImage]) -> Void) {
+        self.maxSelection = maxSelection
+        self.onPicked = onPicked
+    }
+
+    public func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration()
+        config.selectionLimit = maxSelection
+        config.filter = .images
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    public func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {
+        context.coordinator.parent = self
+    }
+
+    public func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    public final class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        var parent: PPVariantImagePickerSheet
+
+        init(_ parent: PPVariantImagePickerSheet) {
+            self.parent = parent
+        }
+
+        public func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            let onPicked = parent.onPicked
+            parent.dismiss()
+            guard !results.isEmpty else {
+                onPicked([])
+                return
+            }
+
+            final class ImageAccumulator: @unchecked Sendable {
+                private let lock = NSLock()
+                private var slots: [UIImage?]
+
+                init(count: Int) {
+                    self.slots = Array(repeating: nil, count: count)
+                }
+
+                func set(image: UIImage, at index: Int) {
+                    lock.lock()
+                    if index < slots.count {
+                        slots[index] = image
+                    }
+                    lock.unlock()
+                }
+
+                var orderedImages: [UIImage] {
+                    lock.lock()
+                    defer { lock.unlock() }
+                    return slots.compactMap { $0 }
+                }
+            }
+
+            final class AtomicGate: @unchecked Sendable {
+                private let lock = NSLock()
+                private var opened = false
+                func openOnce() -> Bool {
+                    lock.lock()
+                    defer { lock.unlock() }
+                    if opened { return false }
+                    opened = true
+                    return true
+                }
+            }
+
+            let accumulator = ImageAccumulator(count: results.count)
+            let group = DispatchGroup()
+
+            for (index, result) in results.enumerated() {
+                group.enter()
+                let provider = result.itemProvider
+                let gate = AtomicGate()
+
+                let finish: @Sendable (UIImage?) -> Void = { img in
+                    guard gate.openOnce() else { return }
+                    if let img = img {
+                        accumulator.set(image: img, at: index)
+                    }
+                    group.leave()
+                }
+
+                if provider.canLoadObject(ofClass: UIImage.self) {
+                    provider.loadObject(ofClass: UIImage.self) { [finish] object, _ in
+                        if let image = object as? UIImage {
+                            finish(image)
+                        } else if provider.hasItemConformingToTypeIdentifier("public.image") {
+                            provider.loadDataRepresentation(forTypeIdentifier: "public.image") { [finish] data, _ in
+                                let img = data.flatMap { UIImage(data: $0) }
+                                finish(img)
+                            }
+                        } else {
+                            finish(nil)
+                        }
+                    }
+                } else if provider.hasItemConformingToTypeIdentifier("public.image") {
+                    provider.loadDataRepresentation(forTypeIdentifier: "public.image") { [finish] data, _ in
+                        let img = data.flatMap { UIImage(data: $0) }
+                        finish(img)
+                    }
+                } else if provider.hasItemConformingToTypeIdentifier("public.item") {
+                    provider.loadFileRepresentation(forTypeIdentifier: "public.item") { [finish] url, _ in
+                        if let url = url, let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
+                            finish(img)
+                        } else {
+                            finish(nil)
+                        }
+                    }
+                } else {
+                    finish(nil)
+                }
+            }
+
+            group.notify(queue: .main) {
+                onPicked(accumulator.orderedImages)
+            }
         }
     }
 }
@@ -967,3 +1099,38 @@ extension PPDeliveryOrderItem: @unchecked Sendable, Identifiable {
 }
 extension PPDeliveryCompanyProfile: @unchecked Sendable {}
 extension PPDeliveryCompanyRequest: @unchecked Sendable {}
+
+// MARK: - AdminSquircleBackButton
+
+public struct AdminSquircleBackButton: View {
+    public var action: () -> Void
+
+    public init(action: @escaping () -> Void) {
+        self.action = action
+    }
+
+    public var body: some View {
+        Button {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            action()
+        } label: {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(AdminSurface.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .strokeBorder(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 0.8)
+                    )
+                Image(
+                    systemName: Language.isRTL() ? "arrow.right" : "arrow.left"
+                )
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(AdminSurface.primaryText)
+            }
+            .frame(width: 44, height: 44)
+            .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Language.get("Back", alter: "رجوع"))
+    }
+}

@@ -1,13 +1,16 @@
 #import "PPProviderMarketItemsViewController.h"
 #import "PPProviderMarketItemEditorViewController.h"
 #import "PPProviderMarketItem.h"
+#import "PPProviderMarketFamilyCardCell.h"
 #import "PPProviderMarketplaceManager.h"
 #import "PPMarketplaceBranchesViewController.h"
+#import "PPPharmacyMedicinesViewController.h"
 #import "PPFirebaseCompat.h"
 #import "PPToast.h"
 #import "PPHUD.h"
 #import "PPAlertHelper.h"
 #import <IQKeyboardManager/IQKeyboardManager.h>
+#import <SDWebImage/SDWebImage.h>
 #import "PurePetsPro-Swift.h"
 
 // MARK: - Multi-Dimensional Filter & Sort Criteria
@@ -216,7 +219,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     PPApplyContinuousCorners(thumb, PPCornerSmall);
     thumb.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.06];
     if (self.item.imageURLsArray.firstObject.length > 0) {
-        [thumb setImageURL:[NSURL URLWithString:self.item.imageURLsArray.firstObject]];
+        [thumb sd_setImageWithURL:[NSURL URLWithString:self.item.imageURLsArray.firstObject] placeholderImage:[UIImage systemImageNamed:@"shippingbox.fill"]];
     } else {
         thumb.image = [UIImage systemImageNamed:@"shippingbox.fill"];
         thumb.tintColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.3];
@@ -235,7 +238,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     UILabel *sheetTitle = [[UILabel alloc] init];
     sheetTitle.translatesAutoresizingMaskIntoConstraints = NO;
     sheetTitle.text = kLang(@"Market_StockSheet_Title");
-    sheetTitle.font = [Styling fontMedium:12.5];
+    sheetTitle.font = [Styling fontBold:16.0];
     sheetTitle.textColor = [UIColor ppPrimary];
     sheetTitle.textAlignment = Language.alignmentForCurrentLanguage;
     [headerCard addSubview:sheetTitle];
@@ -596,7 +599,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     PPApplyContinuousCorners(thumb, PPCornerSmall);
     thumb.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.06];
     if (self.item.imageURLsArray.firstObject.length > 0) {
-        [thumb setImageURL:[NSURL URLWithString:self.item.imageURLsArray.firstObject]];
+        [thumb sd_setImageWithURL:[NSURL URLWithString:self.item.imageURLsArray.firstObject] placeholderImage:[UIImage systemImageNamed:@"tag.fill"]];
     } else {
         thumb.image = [UIImage systemImageNamed:@"tag.fill"];
         thumb.tintColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.3];
@@ -615,7 +618,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     UILabel *sheetTitle = [[UILabel alloc] init];
     sheetTitle.translatesAutoresizingMaskIntoConstraints = NO;
     sheetTitle.text = kLang(@"Market_OfferSheet_Title");
-    sheetTitle.font = [Styling fontMedium:12.5];
+    sheetTitle.font = [Styling fontBold:16.0];
     sheetTitle.textColor = [UIColor ppDiscount];
     sheetTitle.textAlignment = Language.alignmentForCurrentLanguage;
     [headerCard addSubview:sheetTitle];
@@ -974,7 +977,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     PPApplyContinuousCorners(heroImage, PPCornerCard);
     heroImage.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.06];
     if (self.item.imageURLsArray.firstObject.length > 0) {
-        [heroImage setImageURL:[NSURL URLWithString:self.item.imageURLsArray.firstObject]];
+        [heroImage sd_setImageWithURL:[NSURL URLWithString:self.item.imageURLsArray.firstObject] placeholderImage:[UIImage systemImageNamed:@"shippingbox.fill"]];
     } else {
         heroImage.image = [UIImage systemImageNamed:@"shippingbox.fill"];
         heroImage.tintColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.3];
@@ -2132,7 +2135,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     for (PPProviderMarketItem *it in self.items) {
         if (kind == PPProviderMarketKindFilterAll) c++;
         else if (kind == PPProviderMarketKindFilterAccessories && it.accessKindType == 1) c++;
-        else if (kind == PPProviderMarketKindFilterFood && it.accessKindType == 0) c++;
+        else if (kind == PPProviderMarketKindFilterFood && (it.accessKindType == 2 || it.accessKindType == 0)) c++;
     }
     return c;
 }
@@ -2393,6 +2396,8 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     optLbl.font = [Styling fontBold:13.0];
     optLbl.textColor = [UIColor ppTextPrimary];
     optLbl.text = self.member.pos_variantOptionLabel.length ? self.member.pos_variantOptionLabel : self.member.pos_smartVariantDescription;
+    optLbl.numberOfLines = 0;
+    optLbl.textAlignment = Language.alignmentForCurrentLanguage;
     [hStack addArrangedSubview:optLbl];
 
     UILabel *qtyBadge = [[UILabel alloc] init];
@@ -2419,8 +2424,8 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     PPApplyContinuousCorners(stkBtn, 10);
     [stkBtn addTarget:self action:@selector(stockTapped) forControlEvents:UIControlEventTouchUpInside];
     [hStack addArrangedSubview:stkBtn];
-    [stkBtn.widthAnchor constraintEqualToConstant:28].active = YES;
-    [stkBtn.heightAnchor constraintEqualToConstant:28].active = YES;
+    [stkBtn.widthAnchor constraintEqualToConstant:44].active = YES;
+    [stkBtn.heightAnchor constraintEqualToConstant:44].active = YES;
 
     UIButton *ofrBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     [ofrBtn setImage:[UIImage systemImageNamed:@"tag.fill" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:11 weight:UIImageSymbolWeightSemibold]] forState:UIControlStateNormal];
@@ -2429,8 +2434,10 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     PPApplyContinuousCorners(ofrBtn, 10);
     [ofrBtn addTarget:self action:@selector(offerTapped) forControlEvents:UIControlEventTouchUpInside];
     [hStack addArrangedSubview:ofrBtn];
-    [ofrBtn.widthAnchor constraintEqualToConstant:28].active = YES;
-    [ofrBtn.heightAnchor constraintEqualToConstant:28].active = YES;
+    [ofrBtn.widthAnchor constraintEqualToConstant:44].active = YES;
+    [ofrBtn.heightAnchor constraintEqualToConstant:44].active = YES;
+    ofrBtn.hidden = self.member.accessKindType == 4;
+    stkBtn.accessibilityLabel = [NSString stringWithFormat:@"%@ — %@", kLang(@"Pharmacy_Field_Quantity"), optLbl.text ?: @""];
 
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(rowTapped)];
     [self addGestureRecognizer:tap];
@@ -2452,7 +2459,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 
 // MARK: - Category-Defining Product Family Card Cell
 
-@interface PPProviderMarketFamilyCardCell : UITableViewCell
+@interface PPProviderMarketFamilyCardCell ()
 
 @property (nonatomic, strong) UIView *cardView;
 @property (nonatomic, strong) UIImageView *thumbnailView;
@@ -2467,15 +2474,9 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 @property (nonatomic, strong) UIButton *studioButton;
 @property (nonatomic, strong) UIStackView *subVariantsStack;
 @property (nonatomic, strong) PPProviderMarketDisplayGroup *group;
-
-@property (nonatomic, copy) void (^onExpandTapped)(void);
-@property (nonatomic, copy) void (^onStudioTapped)(void);
-@property (nonatomic, copy) void (^onMemberSelected)(PPProviderMarketItem *item);
-@property (nonatomic, copy) void (^onMemberStockTapped)(PPProviderMarketItem *item);
-@property (nonatomic, copy) void (^onMemberOfferTapped)(PPProviderMarketItem *item);
-
-- (void)configureWithGroup:(PPProviderMarketDisplayGroup *)group;
-- (void)updateExpandedState;
+@property (nonatomic, strong) NSLayoutConstraint *actionsBottomConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *subVariantsBottomConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *cardBottomConstraint;
 
 @end
 
@@ -2493,8 +2494,10 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 }
 
 - (void)setupCellUI {
+    self.contentView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     self.cardView = [[UIView alloc] init];
     self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.cardView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     PPStyleCardSurface(self.cardView, PPCornerCard);
     [self.contentView addSubview:self.cardView];
 
@@ -2610,12 +2613,15 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     self.subVariantsStack.hidden = YES;
     [self.cardView addSubview:self.subVariantsStack];
 
+    self.cardBottomConstraint = [self.cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6];
+    self.cardBottomConstraint.priority = UILayoutPriorityDefaultHigh;
+    self.cardBottomConstraint.active = YES;
+
     // Constraints
     [NSLayoutConstraint activateConstraints:@[
         [self.cardView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:PPSpaceBase],
         [self.cardView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-PPSpaceBase],
         [self.cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
-        [self.cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6],
 
         // Thumbnail (84x84)
         [self.thumbnailView.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:12],
@@ -2659,7 +2665,8 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
         [self.swatchesStack.heightAnchor constraintEqualToConstant:20],
 
         // Action Strip
-        [stripDivider.topAnchor constraintEqualToAnchor:self.thumbnailView.bottomAnchor constant:12],
+        [stripDivider.topAnchor constraintGreaterThanOrEqualToAnchor:self.thumbnailView.bottomAnchor constant:12],
+        [stripDivider.topAnchor constraintGreaterThanOrEqualToAnchor:self.priceRangeLabel.bottomAnchor constant:12],
         [stripDivider.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:12],
         [stripDivider.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-12],
         [stripDivider.heightAnchor constraintEqualToConstant:0.8],
@@ -2667,14 +2674,18 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
         [actionsStack.topAnchor constraintEqualToAnchor:stripDivider.bottomAnchor constant:8],
         [actionsStack.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:10],
         [actionsStack.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-10],
-        [actionsStack.heightAnchor constraintEqualToConstant:34],
+        [actionsStack.heightAnchor constraintGreaterThanOrEqualToConstant:44],
 
         // Sub-variants Stack
         [self.subVariantsStack.topAnchor constraintEqualToAnchor:actionsStack.bottomAnchor constant:8],
         [self.subVariantsStack.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:10],
         [self.subVariantsStack.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-10],
-        [self.subVariantsStack.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor constant:-10]
     ]];
+
+    self.actionsBottomConstraint = [actionsStack.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor constant:-10];
+    self.subVariantsBottomConstraint = [self.subVariantsStack.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor constant:-10];
+    self.actionsBottomConstraint.active = YES;
+    self.subVariantsBottomConstraint.active = NO;
 }
 
 - (void)expandBtnTapped {
@@ -2692,7 +2703,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     PPProviderMarketItem *def = group.defaultMember;
 
     if (def.imageURLsArray.firstObject.length > 0) {
-        [self.thumbnailView setImageURL:[NSURL URLWithString:def.imageURLsArray.firstObject]];
+        [self.thumbnailView sd_setImageWithURL:[NSURL URLWithString:def.imageURLsArray.firstObject] placeholderImage:[UIImage systemImageNamed:@"shippingbox.fill"]];
     } else {
         self.thumbnailView.image = [UIImage systemImageNamed:@"shippingbox.fill"];
         self.thumbnailView.tintColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.3];
@@ -2755,6 +2766,8 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 - (void)updateExpandedState {
     BOOL exp = self.group.isExpanded;
     self.subVariantsStack.hidden = !exp;
+    self.actionsBottomConstraint.active = !exp;
+    self.subVariantsBottomConstraint.active = exp;
 
     UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightSemibold];
     NSString *chevronName = exp ? @"chevron.up" : @"chevron.down";
@@ -2836,8 +2849,10 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 }
 
 - (void)setupCellUI {
+    self.contentView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     self.cardView = [[UIView alloc] init];
     self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.cardView.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     PPStyleCardSurface(self.cardView, PPCornerCard);
     [self.contentView addSubview:self.cardView];
 
@@ -2950,12 +2965,15 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     [self.moreActionButton addTarget:self action:@selector(moreBtnTapped) forControlEvents:UIControlEventTouchUpInside];
     [actionsStack addArrangedSubview:self.moreActionButton];
 
+    NSLayoutConstraint *cardBottom = [self.cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6];
+    cardBottom.priority = UILayoutPriorityDefaultHigh;
+    cardBottom.active = YES;
+
     // Constraints
     [NSLayoutConstraint activateConstraints:@[
         [self.cardView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:PPSpaceBase],
         [self.cardView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-PPSpaceBase],
         [self.cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
-        [self.cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6],
 
         // Thumbnail (84x84)
         [self.thumbnailView.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:12],
@@ -3038,7 +3056,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 
     // Thumbnail
     if (item.imageURLsArray.firstObject.length > 0) {
-        [self.thumbnailView setImageURL:[NSURL URLWithString:item.imageURLsArray.firstObject]];
+        [self.thumbnailView sd_setImageWithURL:[NSURL URLWithString:item.imageURLsArray.firstObject] placeholderImage:[UIImage systemImageNamed:@"shippingbox.fill"]];
     } else {
         self.thumbnailView.image = [UIImage systemImageNamed:@"shippingbox.fill"];
         self.thumbnailView.tintColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.3];
@@ -3169,6 +3187,13 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 @property (nonatomic, strong) UILabel *searchResultsCountLabel;
 @property (nonatomic, strong) UIButton *filterButton;
 @property (nonatomic, strong) UIView *filterBadgeDot;
+@property (nonatomic, strong) UIScrollView *inventoryRail;
+@property (nonatomic, strong) UIStackView *inventoryCategories;
+@property (nonatomic, assign) NSInteger inventoryKind;
+@property (nonatomic, strong) UILabel *inventoryEmptyTitle;
+@property (nonatomic, strong) UILabel *inventoryEmptySubtitle;
+@property (nonatomic, strong) UIButton *inventoryEmptyAction;
+@property (nonatomic, assign) BOOL loadFailed;
 
 @end
 
@@ -3186,8 +3211,10 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     self.activeCriteria = [[PPProviderMarketFilterCriteria alloc] init];
     self.activeFilter = PPProviderMarketFilterAll;
     self.activeSort = PPProviderMarketSortNewest;
+    self.inventoryKind = 1;
 
     [self setupNavButtons];
+    [self setupInventoryCategories];
     [self setupTableView];
     [self buildEmptyState];
     [self startListening];
@@ -3210,6 +3237,10 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     [self pp_navBarRemoveButtonForKey:@"branches"];
     [self pp_navBarAddActionButton:self.addButton key:@"add"];
     [self pp_navBarAddActionButton:self.branchesNavButton key:@"branches"];
+
+    if (self.hasLoaded && self.items.count > 0) {
+        [self.tableView reloadData];
+    }
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -3217,8 +3248,21 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     [IQKeyboardManager sharedManager].enable = YES;
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    if (self.flightDeckHeaderView) {
+        CGFloat w = self.tableView.bounds.size.width;
+        if (w > 0 && fabs(self.flightDeckHeaderView.frame.size.width - w) > 0.5) {
+            CGRect f = self.flightDeckHeaderView.frame;
+            f.size.width = w;
+            self.flightDeckHeaderView.frame = f;
+            self.tableView.tableHeaderView = self.flightDeckHeaderView;
+        }
+    }
+}
+
 - (void)setupNavButtons {
-    // 1. Add Button
+    // 1. Add Button (Icon-only)
     self.addButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.addButton.translatesAutoresizingMaskIntoConstraints = NO;
     UIImageSymbolConfiguration *cfg = [UIImageSymbolConfiguration configurationWithPointSize:15 weight:UIImageSymbolWeightBold];
@@ -3229,36 +3273,32 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     PPApplyButtonShadow(self.addButton);
     [self.addButton.widthAnchor constraintEqualToConstant:PPTouchTargetMin].active = YES;
     [self.addButton.heightAnchor constraintEqualToConstant:PPTouchTargetMin].active = YES;
+    self.addButton.accessibilityLabel = kLang(@"Market_EmptyCTA");
     [self.addButton addTarget:self action:@selector(addTapped) forControlEvents:UIControlEventTouchUpInside];
 
-    // 2. Branches Button
-    UIImageSymbolConfiguration *bCfg = [UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightSemibold];
+    // 2. Branches Button (Icon-only without title)
+    self.branchesNavButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.branchesNavButton.translatesAutoresizingMaskIntoConstraints = NO;
+    UIImageSymbolConfiguration *bCfg = [UIImageSymbolConfiguration configurationWithPointSize:15 weight:UIImageSymbolWeightSemibold];
     if (@available(iOS 15.0, *)) {
         UIButtonConfiguration *bConfig = [UIButtonConfiguration plainButtonConfiguration];
         bConfig.image = [UIImage systemImageNamed:@"building.2.crop.circle.fill" withConfiguration:bCfg];
-        bConfig.imagePadding = 6;
-        bConfig.contentInsets = NSDirectionalEdgeInsetsMake(0, 12, 0, 14);
-        NSMutableAttributedString *titleAttr = [[NSMutableAttributedString alloc] initWithString:kLang(@"Market_Branches_Button") attributes:@{
-            NSFontAttributeName: [Styling fontBold:12.5] ?: [UIFont boldSystemFontOfSize:12.5],
-            NSForegroundColorAttributeName: [UIColor ppPrimary]
-        }];
-        bConfig.attributedTitle = [[NSAttributedString alloc] initWithAttributedString:titleAttr];
         bConfig.baseForegroundColor = [UIColor ppPrimary];
         bConfig.background.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.09];
-        bConfig.background.cornerRadius = PPTouchTargetMin / 2.0;
-        self.branchesNavButton = [UIButton buttonWithConfiguration:bConfig primaryAction:nil];
+        bConfig.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
+        bConfig.contentInsets = NSDirectionalEdgeInsetsZero;
+        self.branchesNavButton.configuration = bConfig;
     } else {
-        self.branchesNavButton = [UIButton buttonWithType:UIButtonTypeSystem];
         [self.branchesNavButton setImage:[UIImage systemImageNamed:@"building.2.crop.circle.fill" withConfiguration:bCfg] forState:UIControlStateNormal];
-        [self.branchesNavButton setTitle:[NSString stringWithFormat:@" %@", kLang(@"Market_Branches_Button")] forState:UIControlStateNormal];
-        self.branchesNavButton.titleLabel.font = [Styling fontBold:12.5];
         self.branchesNavButton.tintColor = [UIColor ppPrimary];
         self.branchesNavButton.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.09];
-        self.branchesNavButton.contentEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 14);
         PPApplyContinuousCorners(self.branchesNavButton, PPTouchTargetMin / 2.0);
     }
-    self.branchesNavButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.branchesNavButton.layer.borderWidth = 0.75;
+    self.branchesNavButton.layer.borderColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.18].CGColor;
+    [self.branchesNavButton.widthAnchor constraintEqualToConstant:PPTouchTargetMin].active = YES;
     [self.branchesNavButton.heightAnchor constraintEqualToConstant:PPTouchTargetMin].active = YES;
+    self.branchesNavButton.accessibilityLabel = kLang(@"Market_Branches_Button");
     [self.branchesNavButton addTarget:self action:@selector(openBranchesTapped) forControlEvents:UIControlEventTouchUpInside];
 }
 
@@ -3292,7 +3332,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     [NSLayoutConstraint activateConstraints:@[
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.tableView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.tableView.topAnchor constraintEqualToAnchor:self.inventoryRail.bottomAnchor],
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
 
         [self.spinner.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
@@ -3300,6 +3340,168 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     ]];
 
     [self rebuildFlightDeckHeader];
+}
+
+// The same canonical category identities as Admin's CatalogHorizonTab. Keep
+// the rail outside the table so empty/error states retain category navigation.
+- (void)setupInventoryCategories {
+    self.inventoryRail = [UIScrollView new];
+    self.inventoryRail.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inventoryRail.showsHorizontalScrollIndicator = NO;
+    self.inventoryRail.alwaysBounceHorizontal = YES;
+    self.inventoryRail.clipsToBounds = NO;
+    self.inventoryRail.backgroundColor = UIColor.clearColor;
+    self.inventoryRail.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.view addSubview:self.inventoryRail];
+
+    self.inventoryCategories = [UIStackView new];
+    self.inventoryCategories.translatesAutoresizingMaskIntoConstraints = NO;
+    self.inventoryCategories.spacing = 8.0;
+    self.inventoryCategories.axis = UILayoutConstraintAxisHorizontal;
+    self.inventoryCategories.alignment = UIStackViewAlignmentCenter;
+    self.inventoryCategories.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+    [self.inventoryRail addSubview:self.inventoryCategories];
+
+    NSArray *keys = @[@"Market_Accessory", @"Market_Food", @"ProInventory_LivePets", @"ProInventory_Medicines"];
+    for (NSInteger index = 0; index < keys.count; index++) {
+        UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+        button.tag = index + 1;
+        button.translatesAutoresizingMaskIntoConstraints = NO;
+        [button.heightAnchor constraintGreaterThanOrEqualToConstant:40.0].active = YES;
+        [button addTarget:self action:@selector(inventoryCategoryTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [self.inventoryCategories addArrangedSubview:button];
+    }
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.inventoryRail.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:2.0],
+        [self.inventoryRail.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.inventoryRail.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.inventoryRail.heightAnchor constraintEqualToAnchor:self.inventoryCategories.heightAnchor constant:14.0],
+
+        [self.inventoryCategories.leadingAnchor constraintEqualToAnchor:self.inventoryRail.contentLayoutGuide.leadingAnchor constant:16.0],
+        [self.inventoryCategories.trailingAnchor constraintEqualToAnchor:self.inventoryRail.contentLayoutGuide.trailingAnchor constant:-16.0],
+        [self.inventoryCategories.topAnchor constraintEqualToAnchor:self.inventoryRail.contentLayoutGuide.topAnchor constant:7.0],
+        [self.inventoryCategories.bottomAnchor constraintEqualToAnchor:self.inventoryRail.contentLayoutGuide.bottomAnchor constant:-7.0],
+        [self.inventoryCategories.centerYAnchor constraintEqualToAnchor:self.inventoryRail.centerYAnchor],
+    ]];
+
+    [self updateInventoryCategories];
+}
+
+- (void)updateInventoryCategories {
+    NSArray *keys = @[@"Market_Accessory", @"Market_Food", @"ProInventory_LivePets", @"ProInventory_Medicines"];
+    NSArray *icons = @[@"shippingbox.fill", @"fork.knife", @"pawprint.fill", @"pills.fill"];
+
+    for (NSInteger index = 0; index < self.inventoryCategories.arrangedSubviews.count; index++) {
+        UIButton *button = (UIButton *)self.inventoryCategories.arrangedSubviews[index];
+        BOOL isSelected = (button.tag == self.inventoryKind);
+        button.selected = isSelected;
+
+        NSString *title = kLang(keys[index]);
+        NSString *iconName = icons[index];
+
+        if (@available(iOS 15.0, *)) {
+            UIButtonConfiguration *cfg;
+            if (isSelected) {
+                cfg = [UIButtonConfiguration filledButtonConfiguration];
+                cfg.baseBackgroundColor = [UIColor ppPrimary];
+                cfg.baseForegroundColor = UIColor.whiteColor;
+                cfg.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
+                cfg.image = [UIImage systemImageNamed:iconName
+                                    withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:13.5 weight:UIImageSymbolWeightBold]];
+                cfg.imagePlacement = NSDirectionalRectEdgeLeading;
+                cfg.imagePadding = 7.0;
+                cfg.contentInsets = NSDirectionalEdgeInsetsMake(9, 16, 9, 16);
+
+                NSDictionary *attrs = @{
+                    NSFontAttributeName: [Styling fontBold:13.5] ?: [UIFont boldSystemFontOfSize:13.5],
+                    NSForegroundColorAttributeName: UIColor.whiteColor
+                };
+                cfg.attributedTitle = [[NSAttributedString alloc] initWithString:title attributes:attrs];
+                button.configuration = cfg;
+
+                // Elevated drop shadow with brand crimson glow
+                button.layer.shadowColor = [UIColor ppPrimary].CGColor;
+                button.layer.shadowOpacity = 0.32;
+                button.layer.shadowOffset = CGSizeMake(0, 3);
+                button.layer.shadowRadius = 8;
+                button.layer.masksToBounds = NO;
+            } else {
+                cfg = [UIButtonConfiguration plainButtonConfiguration];
+                cfg.baseBackgroundColor = UIColor.clearColor;
+                cfg.baseForegroundColor = [UIColor ppTextPrimary];
+                cfg.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
+                cfg.background.backgroundColor = [UIColor ppSurface];
+                cfg.background.strokeColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.75];
+                cfg.background.strokeWidth = 0.75;
+                cfg.image = [UIImage systemImageNamed:iconName
+                                    withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:13.5 weight:UIImageSymbolWeightMedium]];
+                cfg.imagePlacement = NSDirectionalRectEdgeLeading;
+                cfg.imagePadding = 7.0;
+                cfg.contentInsets = NSDirectionalEdgeInsetsMake(9, 16, 9, 16);
+
+                NSDictionary *attrs = @{
+                    NSFontAttributeName: [Styling fontMedium:13.5] ?: [UIFont systemFontOfSize:13.5 weight:UIFontWeightMedium],
+                    NSForegroundColorAttributeName: [UIColor ppTextPrimary]
+                };
+                cfg.attributedTitle = [[NSAttributedString alloc] initWithString:title attributes:attrs];
+                button.configuration = cfg;
+
+                // Ultra-subtle calm ambient shadow
+                button.layer.shadowColor = [UIColor blackColor].CGColor;
+                button.layer.shadowOpacity = 0.03;
+                button.layer.shadowOffset = CGSizeMake(0, 1);
+                button.layer.shadowRadius = 3;
+                button.layer.masksToBounds = NO;
+            }
+        } else {
+            // iOS 14 fallback
+            button.backgroundColor = isSelected ? [UIColor ppPrimary] : [UIColor ppSurface];
+            button.tintColor = isSelected ? UIColor.whiteColor : [UIColor ppTextPrimary];
+            [button setImage:[UIImage systemImageNamed:iconName] forState:UIControlStateNormal];
+            [button setTitle:title forState:UIControlStateNormal];
+            [button setTitleColor:(isSelected ? UIColor.whiteColor : [UIColor ppTextPrimary]) forState:UIControlStateNormal];
+            button.titleLabel.font = isSelected ? [Styling fontBold:13.5] : [Styling fontMedium:13.5];
+            button.contentEdgeInsets = UIEdgeInsetsMake(9, 16, 9, 16);
+            PPApplyContinuousCorners(button, 20.0);
+            button.layer.borderWidth = isSelected ? 0 : 0.75;
+            button.layer.borderColor = isSelected ? UIColor.clearColor.CGColor : [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.75].CGColor;
+            button.layer.shadowColor = isSelected ? [UIColor ppPrimary].CGColor : [UIColor blackColor].CGColor;
+            button.layer.shadowOpacity = isSelected ? 0.30 : 0.03;
+            button.layer.shadowOffset = isSelected ? CGSizeMake(0, 3) : CGSizeMake(0, 1);
+            button.layer.shadowRadius = isSelected ? 8 : 3;
+            button.layer.masksToBounds = NO;
+        }
+
+        button.accessibilityTraits = UIAccessibilityTraitButton | (isSelected ? UIAccessibilityTraitSelected : 0);
+    }
+}
+
+- (void)inventoryCategoryTapped:(UIButton *)sender {
+    if (sender.tag == 4) {
+        [self.navigationController pushViewController:[PPPharmacyMedicinesViewController new] animated:YES];
+        return;
+    }
+
+    if (self.inventoryKind == sender.tag) return;
+
+    UISelectionFeedbackGenerator *feedback = [UISelectionFeedbackGenerator new];
+    [feedback prepare];
+    [feedback selectionChanged];
+
+    self.inventoryKind = sender.tag;
+    self.activeCriteria.kindFilter = PPProviderMarketKindFilterAll;
+
+    [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.82 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseInOut | UIViewAnimationOptionAllowUserInteraction animations:^{
+        [self updateInventoryCategories];
+        [self.view layoutIfNeeded];
+    } completion:nil];
+
+    // Smoothly scroll tapped category into view with breathing margin
+    CGRect targetRect = CGRectInset(sender.frame, -20, 0);
+    [self.inventoryRail scrollRectToVisible:targetRect animated:YES];
+
+    [self updateUI];
 }
 
 // MARK: - Reimagined Telemetry & Filter Flight Deck
@@ -3489,6 +3691,9 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
         [self.filterBadgeDot.heightAnchor constraintEqualToConstant:7],
     ]];
 
+    [header setNeedsLayout];
+    [header layoutIfNeeded];
+
     self.flightDeckHeaderView = header;
     self.tableView.tableHeaderView = header;
 }
@@ -3551,6 +3756,11 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     PPProviderMarketFilterSheet *sheet = [[PPProviderMarketFilterSheet alloc] initWithCriteria:self.activeCriteria items:self.items];
     __weak typeof(self) ws = self;
     sheet.onApplyCriteria = ^(PPProviderMarketFilterCriteria *criteria) {
+        if (criteria.kindFilter != PPProviderMarketKindFilterAll) {
+            ws.inventoryKind = criteria.kindFilter == PPProviderMarketKindFilterFood ? 2 : 1;
+            criteria.kindFilter = PPProviderMarketKindFilterAll;
+            [ws updateInventoryCategories];
+        }
         ws.activeCriteria = criteria;
         ws.activeFilter = criteria.primaryLegacyFilter;
         ws.activeSort = criteria.sort;
@@ -3618,6 +3828,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     [self.emptyView addSubview:emptyIcon];
 
     UILabel *emptyTitle = [[UILabel alloc] init];
+    self.inventoryEmptyTitle = emptyTitle;
     emptyTitle.translatesAutoresizingMaskIntoConstraints = NO;
     emptyTitle.text = kLang(@"Market_EmptyTitle");
     emptyTitle.font = [Styling fontBold:18.0];
@@ -3626,15 +3837,17 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     [self.emptyView addSubview:emptyTitle];
 
     UILabel *emptySub = [[UILabel alloc] init];
+    self.inventoryEmptySubtitle = emptySub;
     emptySub.translatesAutoresizingMaskIntoConstraints = NO;
     emptySub.text = kLang(@"Market_EmptySubtitle");
     emptySub.font = [Styling fontRegular:13.5];
     emptySub.textColor = [UIColor ppTextSecondary];
     emptySub.textAlignment = NSTextAlignmentCenter;
-    emptySub.numberOfLines = 2;
+    emptySub.numberOfLines = 0;
     [self.emptyView addSubview:emptySub];
 
     UIButton *createBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.inventoryEmptyAction = createBtn;
     createBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [createBtn setTitle:[NSString stringWithFormat:@" +  %@", kLang(@"Market_AddTitle")] forState:UIControlStateNormal];
     createBtn.titleLabel.font = [Styling fontBold:15.0];
@@ -3647,7 +3860,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 
     [NSLayoutConstraint activateConstraints:@[
         [self.emptyView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.emptyView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor constant:60],
+        [self.emptyView.centerYAnchor constraintEqualToAnchor:self.tableView.centerYAnchor constant:60],
         [self.emptyView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:PPSpaceXL],
         [self.emptyView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-PPSpaceXL],
 
@@ -3675,6 +3888,9 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 // MARK: - Data Synchronization
 
 - (void)startListening {
+    [self.listener remove];
+    self.listener = nil;
+    self.loadFailed = NO;
     NSString *uid = [FIRAuth auth].currentUser.uid;
     if (!uid) {
         self.hasLoaded = YES;
@@ -3689,6 +3905,8 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
         [self.refreshControl endRefreshing];
         self.hasLoaded = YES;
         if (error) {
+            self.loadFailed = YES;
+            [self updateUI];
             [PPToast toast:kLang(@"Market_LoadError") style:PPToastStyleError haptic:NO duration:3.0];
             return;
         }
@@ -3710,7 +3928,13 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 
     BOOL hasItems = self.filteredItems.count > 0;
     self.emptyView.hidden = hasItems || !self.hasLoaded;
-    self.tableView.hidden = !hasItems && self.hasLoaded && self.items.count == 0;
+    self.tableView.hidden = NO;
+    BOOL livePets = self.inventoryKind == 3;
+    self.addButton.enabled = !livePets;
+    self.inventoryEmptyAction.hidden = livePets;
+    self.inventoryEmptyTitle.text = kLang(livePets ? @"ProInventory_LivePets" : (self.loadFailed ? @"Market_LoadError" : @"Market_EmptyTitle"));
+    self.inventoryEmptySubtitle.text = kLang(livePets ? @"ProInventory_LivePets_Guidance" : @"Market_EmptySubtitle");
+    [self.inventoryEmptyAction setTitle:kLang(self.loadFailed ? @"Retry" : @"Market_AddTitle") forState:UIControlStateNormal];
 
     self.searchResultsCountLabel.text = [NSString stringWithFormat:@"%ld", (long)self.displayGroups.count];
     self.clearSearchButton.hidden = (self.searchQuery.length == 0);
@@ -3740,12 +3964,17 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     NSInteger alerts = 0;
 
     for (PPProviderMarketItem *it in self.items) {
+        if (it.accessKindType != self.inventoryKind && !(self.inventoryKind == 2 && it.accessKindType == 0)) continue;
         double p = it.finalPrice > 0 ? it.finalPrice : it.price;
         valuation += (it.quantity * p);
         if (it.hasOffer) offers++;
         if (it.quantity <= 5 || it.noStock) alerts++;
     }
 
+    total = 0;
+    for (PPProviderMarketItem *item in self.items) {
+        if (item.accessKindType == self.inventoryKind || (self.inventoryKind == 2 && item.accessKindType == 0)) total++;
+    }
     self.totalSKUsBadge.text = [NSString stringWithFormat:@"%ld", (long)total];
     self.totalValuationBadge.text = [NSString stringWithFormat:@"%.0f QAR", valuation];
     self.activeOffersBadge.text = [NSString stringWithFormat:@"%ld", (long)offers];
@@ -3757,6 +3986,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     NSString *query = [self.searchQuery stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]].lowercaseString;
 
     for (PPProviderMarketItem *item in self.items) {
+        if (item.accessKindType != self.inventoryKind && !(self.inventoryKind == 2 && item.accessKindType == 0)) continue;
         // 1. Filter Pass
         BOOL passesFilter = YES;
         if (self.activeCriteria) {
@@ -3868,7 +4098,10 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 }
 
 - (void)addTapped {
+    if (self.loadFailed) { [self startListening]; return; }
+    if (self.inventoryKind == 3) return;
     PPProviderMarketItemEditorViewController *vc = [[PPProviderMarketItemEditorViewController alloc] initForCreate];
+    vc.initialAccessKindType = self.inventoryKind;
     __weak typeof(self) ws = self;
     vc.onSave = ^{ [ws updateUI]; };
     [self.navigationController pushViewController:vc animated:YES];
@@ -3988,6 +4221,16 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     return self.displayGroups.count;
 }
 
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    return UITableViewAutomaticDimension;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView estimatedHeightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (indexPath.row >= self.displayGroups.count) return 0.0;
+    PPProviderMarketDisplayGroup *group = self.displayGroups[indexPath.row];
+    return group.isFamily ? 174.0 : 168.0;
+}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.row >= self.displayGroups.count) {
         return [[UITableViewCell alloc] init];
@@ -3998,11 +4241,12 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     if (group.isFamily) {
         PPProviderMarketFamilyCardCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PPProviderMarketFamilyCardCell" forIndexPath:indexPath];
         [cell configureWithGroup:group];
+        __weak PPProviderMarketFamilyCardCell *weakCell = cell;
         cell.onExpandTapped = ^{
             group.isExpanded = !group.isExpanded;
-            [tableView beginUpdates];
-            [cell updateExpandedState];
-            [tableView endUpdates];
+            [ws.tableView beginUpdates];
+            [weakCell updateExpandedState];
+            [ws.tableView endUpdates];
         };
         cell.onStudioTapped = ^{
             [ws openVariantStudioForItem:group.defaultMember];

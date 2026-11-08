@@ -4,6 +4,7 @@
 #import "PPProviderApplicationStatusViewController.h"
 #import "PPDeliveryCompanyDetailViewController.h"
 #import "PPDeliveryCompanyService.h"
+#import "PPAlertHelper.h"
 #import "NotificationManager+Targets.h"
 #import "NotificationsListViewController.h"
 #import "PPProInAppNotificationPresenter.h"
@@ -54,27 +55,13 @@ void PPAdminSetLoginInProgress(BOOL inProgress) { _pp_adminLoginInProgress = inP
 - (void)pp_handleCompanyDeliveryNotification:(NSNotification *)notification;
 - (void)pp_routePendingCompanyDeliveryNotificationIfPossible;
 - (void)pp_presentPendingCompanyDeliveryWithProfile:(PPDeliveryCompanyProfile *)profile;
+- (void)pp_applyNavigationAppearance;
 @end
 
 static NSTimeInterval const kPPSplashMinDisplayTime = 2.2;
 
-static BOOL PPSceneRootBoolValue(id value) {
-     if ([value respondsToSelector:@selector(boolValue)]) {
-          return [value boolValue];
-     }
-     return NO;
-}
-
 static BOOL PPSceneUserDocIsBlocked(NSDictionary *root) {
-     if (![root isKindOfClass:NSDictionary.class]) {
-          return NO;
-     }
-     NSString *accountStatus = [PPSafeString(root[@"accountStatus"]).lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-     return PPSceneRootBoolValue(root[@"isBlocked"]) ||
-            PPSceneRootBoolValue(root[@"blocked"]) ||
-            PPSceneRootBoolValue(root[@"isDeleted"]) ||
-            [accountStatus isEqualToString:@"blocked"] ||
-            [accountStatus isEqualToString:@"disabled"];
+     return [AppManager isProAccountBlocked:root];
 }
 
 static BOOL PPSceneUserHasPartnerApplicationInReview(UserModel *user) {
@@ -110,6 +97,39 @@ static NSString *PPSceneNotificationRouteSignature(NSDictionary *payload)
      return parts.count > 0 ? [parts componentsJoinedByString:@"|"] : @"";
 }
 
+static NSString *PPSceneTrimmed(id value)
+{
+     return [PPSafeString(value) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+}
+
+/// Driver pushes carry the task identity and the backend authority that owns
+/// it. Workforce drivers receive route "driver_task" (FULFILLMENT_V1 or
+/// COMPANY_DELIVERY_REQUEST); partner-company drivers receive route
+/// "fleet_partner" with PARTNER_COMPANY_REQUEST. Company and dispatcher pushes
+/// carry no authority and keep their existing destinations. Returns nil when
+/// the payload is not a well-formed driver task.
+static NSDictionary<NSString *, NSString *> *PPSceneDriverTaskRoute(NSDictionary *payload)
+{
+     NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
+     NSString *route = PPSceneTrimmed(safePayload[@"route"]).lowercaseString;
+     NSString *authority = PPSceneTrimmed(safePayload[@"authority"]).uppercaseString;
+     BOOL officialTask = [route isEqualToString:@"driver_task"] &&
+          ([authority isEqualToString:@"FULFILLMENT_V1"] || [authority isEqualToString:@"COMPANY_DELIVERY_REQUEST"]);
+     BOOL partnerTask = [route isEqualToString:@"fleet_partner"] && [authority isEqualToString:@"PARTNER_COMPANY_REQUEST"];
+     if (!officialTask && !partnerTask) {
+          return nil;
+     }
+     NSString *taskID = PPSceneTrimmed(safePayload[@"taskId"]);
+     if (taskID.length == 0) taskID = PPSceneTrimmed(safePayload[@"requestId"]);
+     if (taskID.length == 0 || taskID.length > 256 || [taskID containsString:@"/"]) {
+          return nil;
+     }
+     NSString *companyID = PPSceneTrimmed(safePayload[@"carrierId"]);
+     if (companyID.length == 0) companyID = PPSceneTrimmed(safePayload[@"companyId"]);
+     if (companyID.length > 128 || [companyID containsString:@"/"]) companyID = @"";
+     return @{ @"taskId": taskID, @"authority": authority, @"companyId": companyID };
+}
+
 static void PPProApplyThemeToWindow(UIWindow *window) {
      if (@available(iOS 13.0, *)) {
           NSString *pref = [[NSUserDefaults standardUserDefaults] stringForKey:@"themePreference"] ?: PPProThemePreferenceSystem;
@@ -141,6 +161,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
      // --- UI / Appearance ---
      [Styling setupFormAppearance];      // ✅ move from SceneDelegate
+     [self pp_applyNavigationAppearance];
      
      if (![scene isKindOfClass:[UIWindowScene class]]) return;
 
@@ -237,7 +258,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      __weak typeof(self) weakSelf = self;
      [AppMgr checkIfUserWithUID:authUser.uid canAccessPro:^(BOOL isAllowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
           dispatch_async(dispatch_get_main_queue(), ^{
-                if (!weakSelf) {
+                if (!weakSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:authUser.uid]) {
                      return;
                 }
                 // Re-check: login controller may have started between the async gap
@@ -307,19 +328,43 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                return;
           }
 
-          PPDeliveryCompanyProfile *profile = profiles.firstObject;
+          BOOL requiresSelection = NO;
+          PPDeliveryCompanyProfile *profile = [PPDeliveryCompanyService.shared preferredProfileFromProfiles:profiles ?: @[]
+                                                                                         requiresSelection:&requiresSelection];
           if (profile.companyID.length > 0) {
-               NSLog(@"[SceneDelegate] delivery company membership granted uid=%@ company=%@ role=%@",
-                     uid, profile.companyID, profile.role);
-               [PPDeliveryCompanyService.shared storeVerifiedProfile:profile];
+               NSLog(@"[SceneDelegate] delivery company membership granted uid=%@ company=%@ role=%@ selection=%@",
+                     uid, profile.companyID, profile.role, requiresSelection ? @"required" : @"resolved");
+               // A usable workspace becomes the dashboard company (several are
+               // ordered by preferredProfileFromProfiles:); a restricted
+               // membership is never remembered.
+               if (!profile.isRestrictedWorkspace) {
+                    [PPDeliveryCompanyService.shared storeVerifiedProfile:profile];
+               }
                self.pp_autoPresentProviderStatusOnNextRoot = NO;
-               [self showDashboardWithDeliveryCompanyProfile:profile animated:animated];
+               [self showDeliveryWorkspaceForProfile:profile
+                                 hasProviderDashboard:(fallbackRoot == AppRootDashboard)
+                                             animated:animated];
                return;
           }
 
           if (error) {
-               NSLog(@"[SceneDelegate] delivery company membership preflight failed; continuing onboarding: %@",
-                     error.localizedDescription);
+               // Keep a failed membership check recoverable; onboarding is
+               // reached only after a successful response confirms no fleet.
+               self.pp_autoPresentProviderStatusOnNextRoot = NO;
+               [self setRoot:AppRootLogin animated:animated];
+               [PPAlertHelper showConfirmationIn:self.window.rootViewController
+                                           title:kLang(@"DeliveryLogin_CheckFailed_Title")
+                                        subtitle:kLang(@"DeliveryLogin_CheckFailed_Body")
+                                   confirmButton:kLang(@"TryAgain")
+                                    cancelButton:kLang(@"DeliveryLogin_UseAnotherAccount")
+                                            icon:nil
+                                    confirmBlock:^(NSString * _Nullable text, BOOL didConfirm) {
+                    if (!didConfirm || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                    [weakSelf pp_applyAdminRoutingForAuthUser:[FIRAuth auth].currentUser animated:YES];
+               } cancelBlock:^{
+                    if ([[FIRAuth auth].currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+               }];
+               return;
           }
           self.pp_autoPresentProviderStatusOnNextRoot = autoPresentOnboarding;
           [self setRoot:fallbackRoot animated:animated];
@@ -361,12 +406,109 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      [self pp_presentPendingCompanyDeliveryWithProfile:profile];
 }
 
+- (void)showDeliveryWorkspaceForProfile:(PPDeliveryCompanyProfile *)profile
+                     hasProviderDashboard:(BOOL)hasProviderDashboard
+                                 animated:(BOOL)animated {
+     // A tapped notification decides the first screen; a driver task route
+     // opens the cockpit itself.
+     BOOL hasPendingRoute = self.pp_pendingNotificationRoutePayload.count > 0 ||
+                            self.pp_pendingCompanyDeliveryPayload.count > 0;
+     [self showDashboardWithDeliveryCompanyProfile:profile animated:animated];
+     if (hasPendingRoute || hasProviderDashboard || !profile.prefersDriverCockpit ||
+         self.currentRoot != AppRootDashboard) {
+          return;
+     }
+     // A driver-only or restricted account has no other work in Pro, so it
+     // lands in its cockpit.
+     [self openDriverCockpitWithTaskID:nil authority:nil companyID:nil animated:NO];
+}
+
+- (void)openDriverCockpitWithTaskID:(NSString *)taskID
+                          authority:(NSString *)authority
+                          companyID:(NSString *)companyID
+                           animated:(BOOL)animated {
+     UIViewController *root = self.window.rootViewController;
+     UITabBarController *tabBar = [root isKindOfClass:UITabBarController.class] ? (UITabBarController *)root : nil;
+     NSArray<UIViewController *> *tabs = tabBar ? tabBar.viewControllers : (root ? @[root] : @[]);
+     UINavigationController *navigationController = nil;
+     PPDriverCockpitHostController *existing = nil;
+     // One cockpit per scene: reuse an open one on any tab before pushing.
+     for (UIViewController *candidate in tabs) {
+          if (![candidate isKindOfClass:UINavigationController.class]) continue;
+          for (UIViewController *child in ((UINavigationController *)candidate).viewControllers) {
+               if ([child isKindOfClass:PPDriverCockpitHostController.class]) {
+                    navigationController = (UINavigationController *)candidate;
+                    existing = (PPDriverCockpitHostController *)child;
+                    break;
+               }
+          }
+          if (existing) break;
+     }
+     if (!navigationController) {
+          for (UIViewController *candidate in tabs) {
+               if ([candidate isKindOfClass:UINavigationController.class] &&
+                   [((UINavigationController *)candidate).viewControllers.firstObject isKindOfClass:AdminDashboardViewController.class]) {
+                    navigationController = (UINavigationController *)candidate;
+                    break;
+               }
+          }
+     }
+     if (!navigationController) {
+          NSLog(@"[DriverCockpit] Dashboard navigation is not available; cockpit not opened.");
+          return;
+     }
+
+     NSString *safeTaskID = PPSceneTrimmed(taskID);
+     NSString *safeAuthority = PPSceneTrimmed(authority);
+     NSString *safeCompanyID = PPSceneTrimmed(companyID);
+     void (^showCockpit)(void) = ^{
+          if (tabBar && tabBar.selectedViewController != navigationController) {
+               tabBar.selectedViewController = navigationController;
+          }
+          if (existing) {
+               if (navigationController.topViewController != existing) {
+                    [navigationController popToViewController:existing animated:animated];
+               }
+               if (safeTaskID.length > 0) {
+                    [existing focusWithTaskID:safeTaskID authority:safeAuthority companyID:safeCompanyID];
+               }
+               return;
+          }
+          PPDriverCockpitHostController *cockpit = safeTaskID.length > 0
+               ? [[PPDriverCockpitHostController alloc] initWithFocusTaskID:safeTaskID authority:safeAuthority companyID:safeCompanyID]
+               : [[PPDriverCockpitHostController alloc] init];
+          [navigationController pushViewController:cockpit animated:animated];
+     };
+
+     UIViewController *presenter = tabBar ?: navigationController;
+     UIViewController *presented = presenter.presentedViewController;
+     if (presented && !presented.isBeingDismissed) {
+          [presenter dismissViewControllerAnimated:animated completion:showCockpit];
+     } else {
+          showCockpit();
+     }
+}
+
 - (void)pp_handleCompanyDeliveryNotification:(NSNotification *)notification {
      NSMutableDictionary *payload = [NSMutableDictionary dictionaryWithDictionary:
                                      [notification.userInfo isKindOfClass:NSDictionary.class] ? notification.userInfo : @{}];
      NSString *requestID = PPSafeString(notification.object);
      if (requestID.length > 0 && PPSafeString(payload[@"requestId"]).length == 0) {
           payload[@"requestId"] = requestID;
+     }
+     // A driver's own task opens the driver cockpit, never the dispatcher's
+     // request detail. Inbox rows and banners reach this handler too.
+     NSDictionary<NSString *, NSString *> *driverRoute = PPSceneDriverTaskRoute(payload);
+     if (driverRoute) {
+          if (self.currentRoot != AppRootDashboard) {
+               self.pp_pendingNotificationRoutePayload = payload.copy;
+               return;
+          }
+          [self openDriverCockpitWithTaskID:driverRoute[@"taskId"]
+                                  authority:driverRoute[@"authority"]
+                                  companyID:driverRoute[@"companyId"]
+                                   animated:YES];
+          return;
      }
      if (PPSafeString(payload[@"requestId"]).length == 0) {
           return;
@@ -516,6 +658,18 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
      if (self.currentRoot != AppRootDashboard || !self.window.rootViewController) {
           NSLog(@"[NotificationRoute] Dashboard root is not ready yet. Deferring notification route.");
+          return;
+     }
+
+     NSDictionary<NSString *, NSString *> *driverRoute = PPSceneDriverTaskRoute(self.pp_pendingNotificationRoutePayload);
+     if (driverRoute) {
+          // Opened before the notifications tab is selected so the driver goes
+          // straight to the task without a tab flicker.
+          self.pp_pendingNotificationRoutePayload = nil;
+          [self openDriverCockpitWithTaskID:driverRoute[@"taskId"]
+                                  authority:driverRoute[@"authority"]
+                                  companyID:driverRoute[@"companyId"]
+                                   animated:YES];
           return;
      }
 
@@ -697,9 +851,10 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      self.awaitingModel = YES;
      [self setRoot:AppRootSplash animated:animated]; // keep splash while loading
      
+     NSString *authUID = user.uid;
      __weak typeof(self) weakSelf = self;
-     [UserManager.shared loadUserByUIDOrID:user.uid completion:^(UserModel * _Nullable user, NSError * _Nullable error) {
-          
+     [UserManager.shared loadUserByUIDOrID:authUID completion:^(UserModel * _Nullable user, NSError * _Nullable error) {
+          if (!weakSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:authUID]) return;
           weakSelf.awaitingModel = NO;
           
           UserModel *effectiveUser = user;
@@ -712,22 +867,26 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           if (effectiveUser) {
                UserManager.shared.currentUser = effectiveUser;
                BOOL shouldShowProviderStatus = PPSceneUserHasPartnerApplicationInReview(effectiveUser);
-               [AppMgr checkIfUserWithUID:effectiveUser.ID canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
+               [AppMgr checkIfUserWithUID:authUID canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
                     dispatch_async(dispatch_get_main_queue(), ^{
+                         if (!weakSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:authUID]) return;
+                         if (error) {
+                              [weakSelf setRoot:AppRootLogin animated:YES];
+                              return;
+                         }
                          if (!allowed) {
-                              BOOL blocked = [userDoc[@"isBlocked"] boolValue] || [userDoc[@"blocked"] boolValue] || [userDoc[@"isDeleted"] boolValue];
-                              if (blocked) {
+                              if (PPSceneUserDocIsBlocked(userDoc ?: @{})) {
                                    [UserManager.shared signOut];
                                    [weakSelf setRoot:AppRootLogin animated:YES];
                                    return;
                               }
-                              [weakSelf pp_routeAfterDeliveryCompanyPreflightForUID:effectiveUser.ID
+                              [weakSelf pp_routeAfterDeliveryCompanyPreflightForUID:authUID
                                                                              userDoc:userDoc ?: @{}
                                                                         fallbackRoot:AppRootProviderStatus
                                                              autoPresentOnboarding:!(shouldShowProviderStatus || PPSceneUserDocHasPartnerApplicationInReview(userDoc ?: @{}))
                                                                             animated:YES];
                          } else {
-                              [weakSelf pp_routeAfterDeliveryCompanyPreflightForUID:effectiveUser.ID
+                              [weakSelf pp_routeAfterDeliveryCompanyPreflightForUID:authUID
                                                                              userDoc:userDoc ?: @{}
                                                                         fallbackRoot:(shouldShowProviderStatus ? AppRootProviderStatus : AppRootDashboard)
                                                              autoPresentOnboarding:NO
@@ -813,13 +972,51 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
 #pragma mark - Language rebuild
 
+- (void)pp_applyNavigationAppearance {
+     UISemanticContentAttribute attr = [Language semanticAttributeForCurrentLanguage];
+     UIColor *titleColor = PrimaryTextClr;
+     UIImage *backImage = [UIImage systemImageNamed:(Language.isRTL ? @"chevron.forward" : @"chevron.backward")];
+
+     UINavigationBarAppearance *appearance = [UINavigationBarAppearance new];
+     [appearance configureWithTransparentBackground];
+     appearance.backgroundColor = UIColor.clearColor;
+     appearance.shadowColor = UIColor.clearColor;
+     appearance.titleTextAttributes = @{
+          NSForegroundColorAttributeName: titleColor,
+          NSFontAttributeName: [Styling fontBold:22]
+     };
+     appearance.largeTitleTextAttributes = @{
+          NSForegroundColorAttributeName: titleColor,
+          NSFontAttributeName: [Styling fontBold:30]
+     };
+     if (backImage) {
+          [appearance setBackIndicatorImage:backImage transitionMaskImage:backImage];
+     }
+
+     UIBarButtonItemAppearance *backButtonAppearance = [[UIBarButtonItemAppearance alloc] init];
+     backButtonAppearance.normal.titleTextAttributes = @{
+          NSForegroundColorAttributeName: UIColor.clearColor
+     };
+     backButtonAppearance.highlighted.titleTextAttributes = backButtonAppearance.normal.titleTextAttributes;
+     backButtonAppearance.disabled.titleTextAttributes = backButtonAppearance.normal.titleTextAttributes;
+     appearance.backButtonAppearance = backButtonAppearance;
+
+     UINavigationBar *navigationBar = [UINavigationBar appearance];
+     navigationBar.semanticContentAttribute = attr;
+     navigationBar.tintColor = titleColor;
+     navigationBar.standardAppearance = appearance;
+     navigationBar.scrollEdgeAppearance = appearance;
+     navigationBar.compactAppearance = appearance;
+     navigationBar.prefersLargeTitles = NO;
+}
+
 - (void)rebuildForLanguage {
      // Apply semantic direction + nav appearance, then rebuild current target.
-     //UISemanticContentAttribute attr = [Language semanticAttributeForCurrentLanguage];
-     //[UIView appearance].semanticContentAttribute = attr;
-     //[UINavigationBar appearance].semanticContentAttribute = attr;
-     //self.window.semanticContentAttribute = attr;
-     //[self pp_applyNavigationAppearance];
+     UISemanticContentAttribute attr = [Language semanticAttributeForCurrentLanguage];
+     [UIView appearance].semanticContentAttribute = attr;
+     [UINavigationBar appearance].semanticContentAttribute = attr;
+     self.window.semanticContentAttribute = attr;
+     [self pp_applyNavigationAppearance];
      
      // If we are waiting on model, keep splash; else rebuild the same target
      AppRoot target = self.awaitingModel ? AppRootSplash : self.currentRoot;
@@ -829,17 +1026,13 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 #pragma mark - Language
 
 - (void)reloadRootViewControllerForLanguageChange {
+     [self pp_applyNavigationAppearance];
      if ([self.window.rootViewController isKindOfClass:NSClassFromString(@"PPProRootTabBarController")]) {
           PPProRootTabBarController *tabBar = (PPProRootTabBarController *)self.window.rootViewController;
           [tabBar refreshForLanguageChange];
           return;
      }
-     //UISemanticContentAttribute attr = [Language semanticAttributeForCurrentLanguage];
-     //[UIView appearance].semanticContentAttribute = attr;
-     //[UINavigationBar appearance].semanticContentAttribute = attr;
-     //self.window.semanticContentAttribute = attr;
      
-     // [self pp_applyNavigationAppearance];
      [self updateRootForUser:[FIRAuth auth].currentUser animated:YES];
 }
 

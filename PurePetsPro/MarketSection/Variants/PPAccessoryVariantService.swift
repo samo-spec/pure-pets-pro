@@ -215,7 +215,8 @@ import FirebaseFunctions
         created.imageMeta = []
         created.normalizeInventoryState()
 
-        let payload = created.toFirestoreDictionary()
+        var payload = created.toFirestoreDictionary()
+        payload["commandId"] = commandId
 
         let confirmedId: String = try await withCheckedThrowingContinuation { continuation in
             PPProviderMarketplaceManager.shared().createMarketItem(payload) { success, itemID, message, error in
@@ -231,7 +232,7 @@ import FirebaseFunctions
         }
 
         created.accessoryID = confirmedId
-        return created
+        return try await loadProduct(productId: confirmedId)
     }
 
     // MARK: - Write

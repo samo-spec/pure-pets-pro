@@ -1,10 +1,14 @@
 //
-//  SplashViewController 2.h
-//  PurePetsAdmin
-//
-//  Created by Mohammed Ahmed on 29/08/2025.
+//  SplashViewController.h
+//  PurePetsPro
 //
 
+#import <UIKit/UIKit.h>
 
-// SplashViewController.h
-@interface SplashViewController : UIViewController @end
+NS_ASSUME_NONNULL_BEGIN
+
+@interface SplashViewController : UIViewController
+
+@end
+
+NS_ASSUME_NONNULL_END

@@ -37,7 +37,7 @@ static const void *kPPNavBarViewKey = &kPPNavBarViewKey;
 
     UILabel *title = [UILabel new];
     title.translatesAutoresizingMaskIntoConstraints = NO;
-    title.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
+    title.font = [Styling fontBold:20];
     title.textColor = [UIColor ppTextPrimary];
     title.text = self.title.length ? self.title : @"";
     title.adjustsFontSizeToFitWidth = YES;

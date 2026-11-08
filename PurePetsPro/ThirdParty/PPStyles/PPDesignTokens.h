@@ -299,16 +299,46 @@ static inline void PPTapFeedbackUp(UIView *view) {
 // user's text-size preference.  These helpers make Dynamic Type, Reduce Motion
 // and card styling one-line adoptions so screens stop hand-rolling them.
 
+/// Returns YES if the font is already a Dynamic Type scaled font.
+static inline BOOL PPIsFontScaled(UIFont * _Nullable font) {
+    if (!font) { return NO; }
+    if (font.fontDescriptor.fontAttributes[UIFontDescriptorTextStyleAttribute] != nil) {
+        return YES;
+    }
+    SEL isScaledSel = NSSelectorFromString(@"_isScaledFont");
+    if ([font respondsToSelector:isScaledSel]) {
+        IMP imp = [font methodForSelector:isScaledSel];
+        if (imp && ((BOOL (*)(id, SEL))imp)(font, isScaledSel)) {
+            return YES;
+        }
+    }
+    NSDictionary *attrs = font.fontDescriptor.fontAttributes;
+    if (attrs[@"NSCTFontUIUsageAttribute"] != nil || attrs[@"_UIFontAttributeMetrics"] != nil) {
+        return YES;
+    }
+    return NO;
+}
+
 /// Scales a fixed-size brand font for the current content size category.
 static inline UIFont * _Nullable PPScaledFont(UIFont * _Nullable base, UIFontTextStyle style) {
     if (!base) { return nil; }
-    return [[UIFontMetrics metricsForTextStyle:style] scaledFontForFont:base];
+    if (PPIsFontScaled(base)) {
+        return base;
+    }
+    @try {
+        return [[UIFontMetrics metricsForTextStyle:style] scaledFontForFont:base];
+    } @catch (NSException *exception) {
+        return base;
+    }
 }
 
 /// Keeps the label's existing brand font but makes it scale with Dynamic Type.
 /// Safe to call on any label already configured through `Styling`.
 static inline void PPEnableDynamicType(UILabel * _Nullable label, UIFontTextStyle style) {
     if (!label || !label.font) { return; }
+    if (label.adjustsFontForContentSizeCategory) {
+        return;
+    }
     label.font = PPScaledFont(label.font, style);
     label.adjustsFontForContentSizeCategory = YES;
 }
@@ -316,6 +346,9 @@ static inline void PPEnableDynamicType(UILabel * _Nullable label, UIFontTextStyl
 /// Same contract for editable/button text.
 static inline void PPEnableDynamicTypeForTextField(UITextField * _Nullable field, UIFontTextStyle style) {
     if (!field || !field.font) { return; }
+    if (field.adjustsFontForContentSizeCategory) {
+        return;
+    }
     field.font = PPScaledFont(field.font, style);
     field.adjustsFontForContentSizeCategory = YES;
 }

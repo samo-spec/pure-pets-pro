@@ -9,6 +9,16 @@ FOUNDATION_EXPORT PPDeliveryCompanyRole const PPDeliveryCompanyRoleDispatcher;
 FOUNDATION_EXPORT PPDeliveryCompanyRole const PPDeliveryCompanyRoleDriver;
 FOUNDATION_EXPORT PPDeliveryCompanyRole const PPDeliveryCompanyRoleViewer;
 
+/// Server-resolved delivery workspace kinds (getMyDeliveryCompanies and
+/// getDeliveryCompanyProfile contractVersion 2). Display and routing only;
+/// every command is re-authorized by the backend.
+typedef NSString *PPDeliveryWorkspaceKind NS_TYPED_EXTENSIBLE_ENUM;
+FOUNDATION_EXPORT PPDeliveryWorkspaceKind const PPDeliveryWorkspaceKindOfficialDriver;
+FOUNDATION_EXPORT PPDeliveryWorkspaceKind const PPDeliveryWorkspaceKindOfficialFleetStaff;
+FOUNDATION_EXPORT PPDeliveryWorkspaceKind const PPDeliveryWorkspaceKindPartnerDriver;
+FOUNDATION_EXPORT PPDeliveryWorkspaceKind const PPDeliveryWorkspaceKindPartnerDispatch;
+FOUNDATION_EXPORT PPDeliveryWorkspaceKind const PPDeliveryWorkspaceKindRestricted;
+
 typedef NSString *PPDeliveryCompanyStatus NS_TYPED_EXTENSIBLE_ENUM;
 FOUNDATION_EXPORT PPDeliveryCompanyStatus const PPDeliveryCompanyStatusOffered;
 FOUNDATION_EXPORT PPDeliveryCompanyStatus const PPDeliveryCompanyStatusAccepted;
@@ -49,6 +59,12 @@ FOUNDATION_EXPORT NSString *PPDeliveryCompanyFilterTitle(PPDeliveryCompanyDashbo
 @property (nonatomic, copy) PPDeliveryCompanyRole role;
 @property (nonatomic, strong, nullable) NSDate *createdAt;
 @property (nonatomic, strong, nullable) NSDate *updatedAt;
+/// Server-resolved workspace kinds; empty for responses that predate contractVersion 2.
+@property (nonatomic, copy) NSArray<NSString *> *workspaceKinds;
+/// Union of server-projected capabilities across the resolved workspaces.
+@property (nonatomic, copy) NSDictionary<NSString *, NSNumber *> *serverCapabilities;
+/// Server reason when the membership resolves no usable workspace.
+@property (nonatomic, copy) NSString *restrictionReason;
 
 + (instancetype)modelFromResponse:(NSDictionary *)response;
 - (BOOL)isOwner;
@@ -58,6 +74,17 @@ FOUNDATION_EXPORT NSString *PPDeliveryCompanyFilterTitle(PPDeliveryCompanyDashbo
 - (BOOL)canDispatch;
 - (BOOL)canViewMembers;
 - (BOOL)canManageMembers;
+- (BOOL)hasServerWorkspaceProjection;
+- (BOOL)hasDriverWorkspace;
+- (BOOL)hasDispatchWorkspace;
+- (BOOL)isOfficialDriverWorkspace;
+- (BOOL)isRestrictedWorkspace;
+- (BOOL)serverAllowsCapability:(NSString *)capability;
+/// YES when the unified driver cockpit is this profile's primary workspace:
+/// the server resolved a driver workspace without dispatch, or a restricted
+/// membership whose reason the cockpit explains. Responses that predate the
+/// server workspace projection keep the legacy destinations.
+- (BOOL)prefersDriverCockpit;
 @end
 
 @interface PPDeliveryCompanyEvent : NSObject

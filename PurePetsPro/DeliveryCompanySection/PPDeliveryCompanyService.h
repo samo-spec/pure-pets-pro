@@ -10,6 +10,7 @@ typedef void (^PPDeliveryCompanyRequestsCompletion)(NSArray<PPDeliveryCompanyReq
 typedef void (^PPDeliveryCompanyRequestCompletion)(PPDeliveryCompanyRequest * _Nullable request, NSError * _Nullable error);
 typedef void (^PPDeliveryCompanyMembersCompletion)(NSArray<PPDeliveryCompanyMember *> * _Nullable members, NSError * _Nullable error);
 typedef void (^PPDeliveryCompanyActionCompletion)(NSDictionary * _Nullable result, NSError * _Nullable error);
+typedef void (^PPDriverCockpitCompletion)(NSDictionary<NSString *, id> * _Nullable result, NSError * _Nullable error);
 
 @interface PPDeliveryCompanyService : NSObject
 
@@ -53,6 +54,39 @@ typedef void (^PPDeliveryCompanyActionCompletion)(NSDictionary * _Nullable resul
 - (void)cancelRequestID:(NSString *)requestID reason:(nullable NSString *)reason completion:(PPDeliveryCompanyActionCompletion)completion;
 - (void)inviteMemberIdentifier:(NSString *)targetIdentifier role:(NSString *)role companyID:(NSString *)companyID completion:(PPDeliveryCompanyActionCompletion)completion;
 - (void)disableMemberUID:(NSString *)targetUID companyID:(NSString *)companyID completion:(PPDeliveryCompanyActionCompletion)completion;
+
+#pragma mark - Driver cockpit
+
+/// Signed-in Firebase user identifier, or an empty string.
++ (NSString *)currentAccountUID;
+
+/// Resolves older delivery entry points from the authenticated profile and
+/// server membership projection. Staff and fleet drivers use the canonical
+/// cockpit; unresolved identity never falls back to provider operations.
+/// Routing only: this method does not grant any delivery capability.
+- (void)resolveDriverCockpitRequirementWithCompletion:(void(^)(BOOL requiresDriverCockpit, NSError * _Nullable error))completion
+    NS_SWIFT_NAME(resolveDriverCockpitRequirement(completion:));
+
+/// Transport for the allowlisted driver-cockpit callables (official workforce
+/// driver workspace, partner driver assignments/status/presence and context
+/// discovery). The completion always runs on the main queue and every call is
+/// re-authorized by the backend; this is not a generic callable gateway.
+- (void)callDriverCockpitFunction:(NSString *)name
+                          payload:(NSDictionary<NSString *, id> *)payload
+                       completion:(PPDriverCockpitCompletion)completion;
+
+/// Chooses the company profile for the dashboard shell: the configured company,
+/// else a single usable workspace. With several usable workspaces it prefers a
+/// dispatch workspace (else the first) and sets requiresSelection; driver work
+/// stays reachable through the cockpit's own workspace chooser. A profile whose
+/// only workspace is restricted is returned last so the explanation can be
+/// shown instead of unrelated provider onboarding.
+- (nullable PPDeliveryCompanyProfile *)preferredProfileFromProfiles:(NSArray<PPDeliveryCompanyProfile *> *)profiles
+                                                  requiresSelection:(BOOL * _Nullable)requiresSelection;
+
+/// YES when the last membership discovery for the signed-in account found a
+/// driver workspace in any company (not only the configured one).
+@property (nonatomic, assign, readonly) BOOL hasDiscoveredDriverWorkspace;
 
 @end
 

@@ -338,7 +338,7 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
     [iconWell addSubview:icon];
 
     UILabel *title = [[UILabel alloc] init];
-    title.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleHeadline] scaledFontForFont:[Styling fontBold:16.5]];
+    title.font = PPScaledFont([Styling fontBold:16.5], UIFontTextStyleHeadline);
     title.adjustsFontForContentSizeCategory = YES;
     title.numberOfLines = 2;
     title.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -349,7 +349,7 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
     self.titleLabel = title;
 
     UILabel *subtitle = [[UILabel alloc] init];
-    subtitle.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline] scaledFontForFont:[Styling fontMedium:13.0]];
+    subtitle.font = PPScaledFont([Styling fontMedium:13.0], UIFontTextStyleSubheadline);
     subtitle.adjustsFontForContentSizeCategory = YES;
     subtitle.numberOfLines = 2;
     subtitle.lineBreakMode = NSLineBreakByTruncatingTail;

@@ -228,6 +228,24 @@
     [super viewDidLoad];
     self.view.backgroundColor = AppBackgroundClr;
     self.view.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+
+    // Category-defining modern delivery command center
+    Class hostClass = NSClassFromString(@"PurePetsPro.PPDeliveryListHostController");
+    if (hostClass) {
+        UIViewController *hostVC = [[hostClass alloc] init];
+        [self addChildViewController:hostVC];
+        [self.view addSubview:hostVC.view];
+        hostVC.view.translatesAutoresizingMaskIntoConstraints = NO;
+        [NSLayoutConstraint activateConstraints:@[
+            [hostVC.view.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+            [hostVC.view.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+            [hostVC.view.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+            [hostVC.view.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+        ]];
+        [hostVC didMoveToParentViewController:self];
+        return;
+    }
+
     self.requests = @[];
     self.filteredRequests = @[];
     self.tabButtons = [NSMutableArray array];
@@ -238,8 +256,19 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    if (self.childViewControllers.count > 0) {
+        [self.navigationController setNavigationBarHidden:YES animated:animated];
+        return;
+    }
     [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:kLang(@"DeliveryCompany_NavTitle") showBack:YES];
     [self scrollTabsToLeadingEdgeIfNeeded];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    if (self.childViewControllers.count > 0) {
+        [self.navigationController setNavigationBarHidden:NO animated:animated];
+    }
 }
 
 - (void)viewDidAppear:(BOOL)animated {

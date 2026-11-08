@@ -7,6 +7,8 @@
 #import "PPVetModel.h"
 #import "PPFirebaseCompat.h"
 #import "PetAccessory.h"
+#import "PPProviderMarketplaceManager.h"
+#import "PPProviderMarketItem.h"
 
 static NSString * const kColVets = @"veterinarians";
 static NSString * const kColPetAccessories = @"petAccessories";
@@ -34,6 +36,13 @@ static NSArray<NSString *> *PPVetManagerStringArray(id value) {
         }
     }
     return items.copy;
+}
+
+static NSArray<NSDictionary *> *PPVetManagerDictionaryArray(id value) {
+    if (![value isKindOfClass:NSArray.class]) return @[];
+    return [value filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id entry, NSDictionary *bindings) {
+        return [entry isKindOfClass:NSDictionary.class];
+    }]];
 }
 
 static NSDate * _Nullable PPVetManagerDateFromValue(id value) {
@@ -106,6 +115,7 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         _title = @"";
         _medicineDescription = @"";
         _imageUrl = @"";
+        _imageURLsArray = @[];
         _blurHash = @"";
         _vetId = @"";
         _userId = @"";
@@ -129,10 +139,8 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     NSInteger quantity = MAX(0, self.stockQuantity);
     BOOL active = self.isPublished && !self.isDisabled;
     BOOL visibleInUserApp = active && self.isAvailable && quantity > 0;
-    NSMutableArray<NSString *> *imageURLs = [NSMutableArray array];
-    if (self.imageUrl.length > 0) {
-        [imageURLs addObject:self.imageUrl];
-    }
+    NSMutableArray<NSString *> *imageURLs = [PPVetManagerStringArray(self.imageURLsArray) mutableCopy];
+    if (self.imageUrl.length > 0 && ![imageURLs containsObject:self.imageUrl]) [imageURLs insertObject:self.imageUrl atIndex:0];
     NSMutableDictionary *dict = [@{
         @"medicineID": self.medicineID ?: @"",
         @"itemID": self.medicineID ?: @"",
@@ -141,12 +149,12 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         @"providerType": @"pharmacy",
         @"listingType": @"medicine",
         @"name": title,
-        @"nameEn": title,
+        @"nameEn": self.titleEn ?: @"",
         @"title": title,
         @"title_lowercase": self.title_lowercase,
         @"searchTitle": self.title_lowercase,
         @"desc": desc,
-        @"descEn": desc,
+        @"descEn": self.medicineDescriptionEn ?: @"",
         @"description": desc,
         @"imageUrl": self.imageUrl ?: @"",
         @"imageURLsArray": imageURLs.copy,
@@ -171,10 +179,14 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         @"active": @(active),
         @"isPublished": @(self.isPublished),
         @"isDisabled": @(self.isDisabled),
+        @"isArchived": @(self.isDisabled),
         @"condition": @(1),
     } mutableCopy];
     if (self.createdAt) dict[@"createdAt"] = self.createdAt;
     if (self.updatedAt) dict[@"updatedAt"] = self.updatedAt;
+    if (self.imageMeta) dict[@"imageMeta"] = self.imageMeta;
+    if (self.revision > 0) dict[@"revision"] = @(self.revision);
+    if (self.variantColorDictionary) dict[@"variantAttributes"] = @{@"color": self.variantColorDictionary};
 
     if (self.productFamilyId.length > 0) dict[@"productFamilyId"] = self.productFamilyId;
     if (self.variantSchemaVersion > 0) dict[@"variantSchemaVersion"] = @(self.variantSchemaVersion);
@@ -205,10 +217,14 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     NSString *nameEn = PPVetManagerSafeString(dict[@"nameEn"]);
     NSString *title = PPVetManagerSafeString(dict[@"title"]);
     model.title = title.length > 0 ? title : (name.length > 0 ? name : nameEn);
+    model.titleEn = nameEn;
     NSString *desc = PPVetManagerSafeString(dict[@"desc"]);
     NSString *descEn = PPVetManagerSafeString(dict[@"descEn"]);
     NSString *legacyDescription = PPVetManagerSafeString(dict[@"description"]);
     model.medicineDescription = legacyDescription.length > 0 ? legacyDescription : (desc.length > 0 ? desc : descEn);
+    model.medicineDescriptionEn = descEn;
+    model.imageURLsArray = PPVetManagerStringArray(dict[@"imageURLsArray"]);
+    model.imageMeta = PPVetManagerDictionaryArray(dict[@"imageMeta"]);
     NSString *imageUrl = PPVetManagerFirstImageURL(dict[@"imageUrl"]);
     if (imageUrl.length == 0) {
         imageUrl = PPVetManagerFirstImageURL(dict[@"imageURLsArray"]);
@@ -223,7 +239,7 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     model.category = PPVetManagerSafeString(dict[@"category"]);
     model.price = [dict[@"price"] respondsToSelector:@selector(doubleValue)] ? [dict[@"price"] doubleValue] : ([dict[@"finalPrice"] respondsToSelector:@selector(doubleValue)] ? [dict[@"finalPrice"] doubleValue] : 0.0);
     model.currency = PPVetManagerSafeString(dict[@"currency"]).length > 0 ? PPVetManagerSafeString(dict[@"currency"]) : @"QAR";
-    model.stockQuantity = [dict[@"stockQuantity"] respondsToSelector:@selector(integerValue)] ? [dict[@"stockQuantity"] integerValue] : ([dict[@"quantity"] respondsToSelector:@selector(integerValue)] ? [dict[@"quantity"] integerValue] : 0);
+    model.stockQuantity = [dict[@"quantity"] respondsToSelector:@selector(integerValue)] ? [dict[@"quantity"] integerValue] : ([dict[@"stockQuantity"] respondsToSelector:@selector(integerValue)] ? [dict[@"stockQuantity"] integerValue] : 0);
     BOOL noStock = PPVetManagerBoolFromValue(dict[@"noStock"]);
     model.isAvailable = dict[@"isAvailable"] == nil ? (model.stockQuantity > 0 && !noStock) : [dict[@"isAvailable"] boolValue];
     BOOL blocked = PPVetManagerBoolFromValue(dict[@"isBlocked"]);
@@ -240,11 +256,14 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     model.isVariant = PPVetManagerBoolFromValue(dict[@"isVariant"]);
     model.isDefaultVariant = PPVetManagerBoolFromValue(dict[@"isDefaultVariant"]);
     model.variantSortOrder = [dict[@"variantSortOrder"] respondsToSelector:@selector(integerValue)] ? [dict[@"variantSortOrder"] integerValue] : 0;
+    model.revision = [dict[@"revision"] respondsToSelector:@selector(integerValue)] ? [dict[@"revision"] integerValue] : 0;
+    NSDictionary *attributes = [dict[@"variantAttributes"] isKindOfClass:NSDictionary.class] ? dict[@"variantAttributes"] : @{};
+    model.variantColorDictionary = [attributes[@"color"] isKindOfClass:NSDictionary.class] ? attributes[@"color"] : nil;
     if ([dict[@"selectedOptions"] isKindOfClass:[NSDictionary class]]) {
         model.selectedOptions = dict[@"selectedOptions"];
     }
     if ([dict[@"selectedOptionsSnapshot"] isKindOfClass:[NSArray class]]) {
-        model.selectedOptionsSnapshot = dict[@"selectedOptionsSnapshot"];
+        model.selectedOptionsSnapshot = PPVetManagerDictionaryArray(dict[@"selectedOptionsSnapshot"]);
     }
     model.variantCombinationKey = PPVetManagerSafeString(dict[@"variantCombinationKey"]);
     model.variantAxis = PPVetManagerSafeString(dict[@"variantAxis"]);
@@ -267,8 +286,14 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     PPVetMedicineModel *copy = [[PPVetMedicineModel allocWithZone:zone] init];
     copy.medicineID = self.medicineID;
     copy.title = self.title;
+    copy.titleEn = self.titleEn;
     copy.medicineDescription = self.medicineDescription;
+    copy.medicineDescriptionEn = self.medicineDescriptionEn;
     copy.imageUrl = self.imageUrl;
+    copy.imageURLsArray = self.imageURLsArray;
+    copy.imageMeta = self.imageMeta;
+    copy.revision = self.revision;
+    copy.variantColorDictionary = self.variantColorDictionary;
     copy.blurHash = self.blurHash;
     copy.vetId = self.vetId;
     copy.userId = self.userId;
@@ -309,14 +334,13 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     PetAccessory *acc = [[PetAccessory alloc] init];
     acc.accessoryID = self.medicineID ?: @"";
     acc.name = self.title ?: @"";
-    acc.nameEn = self.title;
+    acc.nameEn = self.titleEn;
     acc.desc = self.medicineDescription ?: @"";
-    acc.descEn = self.medicineDescription;
-    if (self.imageUrl.length > 0) {
-        acc.imageURLsArray = @[self.imageUrl];
-    } else {
-        acc.imageURLsArray = @[];
-    }
+    acc.descEn = self.medicineDescriptionEn;
+    acc.imageURLsArray = [self toDictionary][@"imageURLsArray"];
+    acc.imageMeta = self.imageMeta;
+    acc.revision = self.revision;
+    acc.variantColorDictionary = self.variantColorDictionary;
     acc.price = @(self.price);
     acc.quantity = self.stockQuantity;
     acc.noStock = self.stockQuantity <= 0;
@@ -344,10 +368,39 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     return acc;
 }
 
+- (void)applyVariantAccessory:(PetAccessory *)accessory {
+    if (!accessory || ![accessory.accessoryID isEqualToString:self.medicineID]) return;
+    self.productFamilyId = accessory.productFamilyId;
+    self.variantSchemaVersion = accessory.variantSchemaVersion;
+    self.isVariant = accessory.isVariant;
+    self.isDefaultVariant = accessory.isDefaultVariant;
+    self.variantSortOrder = accessory.variantSortOrder;
+    self.revision = accessory.revision;
+    self.variantColorDictionary = accessory.variantColorDictionary;
+    self.selectedOptions = accessory.selectedOptions;
+    self.selectedOptionsSnapshot = accessory.selectedOptionsSnapshot;
+    self.variantCombinationKey = accessory.variantCombinationKey;
+    self.variantAxis = accessory.variantAxis;
+    self.sku = accessory.sku;
+    self.barcode = accessory.barcode;
+    self.price = accessory.price.doubleValue;
+    self.wholesalePrice = accessory.wholesalePrice;
+    self.stockQuantity = accessory.quantity;
+    self.imageURLsArray = PPVetManagerStringArray(accessory.imageURLsArray);
+    self.imageUrl = self.imageURLsArray.firstObject ?: @"";
+    self.imageMeta = accessory.imageMeta;
+}
+
+- (NSString *)variantOptionDescription {
+    PPProviderMarketItem *item = [PPProviderMarketItem fromDictionary:[self toDictionary] itemID:self.medicineID];
+    return item.variantOptionLabel;
+}
+
 @end
 
 @interface PPVetManager ()
 @property (nonatomic, strong) FIRFirestore *db;
+- (NSDictionary *)marketFieldsForMedicine:(PPVetMedicineModel *)medicine;
 @end
 
 @implementation PPVetManager
@@ -684,8 +737,13 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         return;
     }
 
-    NSString *docID = [[NSUUID UUID] UUIDString];
-    medicine.medicineID = docID;
+    // The options studio stages a real item. Final Save must update that exact
+    // item instead of creating a second medicine detached from its family.
+    if (medicine.medicineID.length > 0) {
+        [self updateMedicine:medicine image:image completion:completion];
+        return;
+    }
+    NSString *uploadID = NSUUID.UUID.UUIDString;
     NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
     if (currentUID.length == 0) {
         if (completion) completion(PPVetError(401, @"Sign in before adding medicine."));
@@ -705,11 +763,20 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         if (imageURL.length > 0) {
             medicine.imageUrl = imageURL;
         }
-        [[[self medicineCol] documentWithPath:docID] setData:[medicine toDictionary] completion:completion];
+        NSMutableDictionary *fields = [[self marketFieldsForMedicine:medicine] mutableCopy];
+        fields[@"accessKindType"] = @4;
+        fields[@"showInAppMarket"] = @(medicine.isPublished && !medicine.isDisabled);
+        [[PPProviderMarketplaceManager sharedManager] createMarketItem:fields completion:^(BOOL success, NSString *itemID, NSString *message, NSError *error) {
+            if (success && itemID.length > 0) {
+                medicine.medicineID = itemID;
+                medicine.revision = 1;
+            }
+            if (completion) completion(error ?: (success && itemID.length > 0 ? nil : PPVetError(500, kLang(@"ProInventory_SaveFailed"))));
+        }];
     };
 
     if (image) {
-        [self uploadMedicineImage:image medicineID:docID completion:saveBlock];
+        [self uploadMedicineImage:image medicineID:uploadID completion:saveBlock];
     } else {
         saveBlock(@"");
     }
@@ -738,9 +805,10 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         if (imageURL.length > 0) {
             medicine.imageUrl = imageURL;
         }
-        NSMutableDictionary *payload = [[medicine toDictionary] mutableCopy];
-        payload[@"requiresPrescription"] = [FIRFieldValue fieldValueForDelete];
-        [[[self medicineCol] documentWithPath:medicine.medicineID] setData:payload merge:YES completion:completion];
+        [[PPProviderMarketplaceManager sharedManager] updateMarketItem:medicine.medicineID fields:[self marketFieldsForMedicine:medicine] completion:^(BOOL success, NSString *message, NSError *error) {
+            if (success) medicine.revision += 1;
+            if (completion) completion(error ?: (success ? nil : PPVetError(500, kLang(@"ProInventory_SaveFailed"))));
+        }];
     };
 
     if (image) {
@@ -755,16 +823,24 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         if (completion) completion(PPVetError(400, @"Medicine ID is required for deletion."));
         return;
     }
-    NSDictionary *patch = @{
-        @"isDeleted": @YES,
-        @"active": @NO,
-        @"isAvailable": @NO,
-        @"showInAppMarket": @NO,
-        @"noStock": @YES,
-        @"quantity": @0,
-        @"updatedAt": [FIRTimestamp timestampWithDate:[NSDate date]]
-    };
-    [[[self medicineCol] documentWithPath:medicine.medicineID] updateData:patch completion:completion];
+    [[PPProviderMarketplaceManager sharedManager] archiveMarketItemWithID:medicine.medicineID completion:^(BOOL success, NSString *message, NSError *error) {
+        if (completion) completion(error ?: (success ? nil : PPVetError(500, kLang(@"ProInventory_SaveFailed"))));
+    }];
+}
+
+- (NSDictionary *)marketFieldsForMedicine:(PPVetMedicineModel *)medicine {
+    NSDictionary *model = [medicine toDictionary];
+    NSMutableDictionary *fields = [NSMutableDictionary dictionary];
+    for (NSString *key in @[@"name", @"nameEn", @"desc", @"descEn", @"price", @"quantity", @"imageURLsArray", @"barcode", @"sku", @"wholesalePrice", @"dosageForm", @"strength", @"packSize", @"volume", @"batchNumber", @"category", @"animalTypes", @"vetId", @"blurHash", @"isPublished", @"isAvailable"]) {
+        if (model[key]) fields[key] = model[key];
+    }
+    for (NSString *key in @[@"barcode", @"sku", @"dosageForm", @"strength", @"packSize", @"volume", @"batchNumber"]) {
+        fields[key] = model[key] ?: @"";
+    }
+    fields[@"wholesalePrice"] = medicine.wholesalePrice ?: NSNull.null;
+    if (medicine.expiryDate) fields[@"expiryDate"] = @(medicine.expiryDate.timeIntervalSince1970);
+    if (medicine.medicineID.length > 0) fields[@"expectedRevision"] = @(medicine.revision);
+    return fields.copy;
 }
 
 #pragma mark - Count

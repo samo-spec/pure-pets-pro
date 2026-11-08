@@ -27,33 +27,8 @@ static NSUInteger const kPPMinPhoneDigits = 8;
 static NSInteger const kPPAppleRetryMax = 1;
 static NSTimeInterval const kPPSMSCooldownSeconds = 30.0;
 
-static BOOL PPProLoginBoolValue(id value) {
-    if ([value respondsToSelector:@selector(boolValue)]) {
-        return [value boolValue];
-    }
-    return NO;
-}
-
 static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
-    if (![root isKindOfClass:NSDictionary.class]) {
-        return NO;
-    }
-
-    NSString *accountType = [PPSafeString(root[@"accountType"]).lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    NSDictionary *staffProfile = [root[@"staffProfile"] isKindOfClass:NSDictionary.class] ? (NSDictionary *)root[@"staffProfile"] : nil;
-    
-    NSString *accountStatus = [PPSafeString(root[@"accountStatus"]).lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    
-    NSString *effectiveStatus = accountStatus;
-    if (staffProfile && [accountType isEqualToString:@"staff"]) {
-        effectiveStatus = [PPSafeString(staffProfile[@"status"]).lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    }
-
-    return PPProLoginBoolValue(root[@"isBlocked"]) ||
-           PPProLoginBoolValue(root[@"blocked"]) ||
-           PPProLoginBoolValue(root[@"isDeleted"]) ||
-           [effectiveStatus isEqualToString:@"blocked"] ||
-           [effectiveStatus isEqualToString:@"disabled"];
+    return [AppManager isProAccountBlocked:root];
 }
 
 @interface PPNoPermissionBottomSheetViewController : UIViewController
@@ -74,7 +49,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.text = kLang(@"StatusAccessDenied");
-    titleLabel.font = [UIFont boldSystemFontOfSize:22];
+    titleLabel.font = [Styling fontBold:22];
     titleLabel.textColor = [UIColor ppTextPrimary];
     titleLabel.textAlignment = NSTextAlignmentCenter;
     
@@ -700,43 +675,53 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     [PPHUD showIndeterminateIn:self.view title:kLang(@"ProLoginGoogleConnecting") subtitle:nil];
     PPAdminSetLoginInProgress(YES);
 
-    // GIDSignIn.sharedInstance.configuration removed to preserve App Check
-
     __weak typeof(self) weakSelf = self;
-    [GIDSignIn.sharedInstance signInWithPresentingViewController:self
+    [AppMgr prepareGoogleSignInWithCompletion:^(NSError *configurationError) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        if (configurationError) {
+            [PPHUD dismiss];
+            self.isAuthenticating = NO;
+            [self pp_setInteractionEnabled:YES];
+            PPAdminSetLoginInProgress(NO);
+            [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"StatusAppCheckInvalid")];
+            return;
+        }
+        [GIDSignIn.sharedInstance signInWithPresentingViewController:self
                                                             hint:nil
                                                       completion:^(GIDSignInResult *result, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) {
-                return;
-            }
-
-            if (error) {
-                [PPHUD dismiss];
-                self.isAuthenticating = NO;
-                [self pp_setInteractionEnabled:YES];
-                PPAdminSetLoginInProgress(NO);
-                if (error.code != kGIDSignInErrorCodeCanceled) {
-                    [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) self = weakSelf;
+                if (!self) {
+                    return;
                 }
-                return;
-            }
 
-            NSString *identityToken = result.user.idToken.tokenString;
-            NSString *accessToken = result.user.accessToken.tokenString;
-            if (!identityToken || !accessToken) {
-                [PPHUD dismiss];
-                self.isAuthenticating = NO;
-                [self pp_setInteractionEnabled:YES];
-                PPAdminSetLoginInProgress(NO);
-                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"ProLoginGoogleTokenMissing")];
-                return;
-            }
+                if (error) {
+                    [PPHUD dismiss];
+                    self.isAuthenticating = NO;
+                    [self pp_setInteractionEnabled:YES];
+                    PPAdminSetLoginInProgress(NO);
+                    if (error.code != kGIDSignInErrorCodeCanceled) {
+                        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
+                    }
+                    return;
+                }
 
-            FIRAuthCredential *credential = [FIRGoogleAuthProvider credentialWithIDToken:identityToken accessToken:accessToken];
-            [self pp_signInWithCredential:credential displayName:result.user.profile.name];
-        });
+                NSString *identityToken = result.user.idToken.tokenString;
+                NSString *accessToken = result.user.accessToken.tokenString;
+                if (!identityToken || !accessToken) {
+                    [PPHUD dismiss];
+                    self.isAuthenticating = NO;
+                    [self pp_setInteractionEnabled:YES];
+                    PPAdminSetLoginInProgress(NO);
+                    [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"ProLoginGoogleTokenMissing")];
+                    return;
+                }
+
+                FIRAuthCredential *credential = [FIRGoogleAuthProvider credentialWithIDToken:identityToken accessToken:accessToken];
+                [self pp_signInWithCredential:credential displayName:result.user.profile.name];
+            });
+        }];
     }];
 }
 
@@ -799,6 +784,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                 [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:subtitle];
                 return;
             }
+            if (![[FIRAuth auth].currentUser.uid isEqualToString:user.uid]) return;
 
             // Update Firebase Auth display name if provided and not already set
             NSString *trimmedName = [name stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
@@ -821,7 +807,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                                                                      completion:^(NSError *documentError) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     __strong typeof(weakSelf) self = weakSelf;
-                    if (!self) {
+                    if (!self || ![[FIRAuth auth].currentUser.uid isEqualToString:user.uid]) {
                         return;
                     }
                     if (documentError) {
@@ -893,16 +879,23 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
             return;
         }
 
-        PPDeliveryCompanyProfile *profile = profiles.firstObject;
+        BOOL requiresSelection = NO;
+        PPDeliveryCompanyProfile *profile = [PPDeliveryCompanyService.shared preferredProfileFromProfiles:profiles ?: @[]
+                                                                                       requiresSelection:&requiresSelection];
         if (profile.companyID.length > 0) {
-            DLog(@"[ProGate] delivery company membership granted uid=%@ company=%@ role=%@",
-                 uid, profile.companyID, profile.role);
-            [PPDeliveryCompanyService.shared storeVerifiedProfile:profile];
+            DLog(@"[ProGate] delivery company membership granted uid=%@ company=%@ role=%@ selection=%@",
+                 uid, profile.companyID, profile.role, requiresSelection ? @"required" : @"resolved");
+            // A usable workspace becomes the dashboard company (several are
+            // ordered by preferredProfileFromProfiles:); a restricted
+            // membership is never remembered.
+            if (!profile.isRestrictedWorkspace) {
+                [PPDeliveryCompanyService.shared storeVerifiedProfile:profile];
+            }
             PPAdminSetLoginInProgress(NO);
 
             SceneDelegate *sceneDelegate = (SceneDelegate *)self.view.window.windowScene.delegate;
             if ([sceneDelegate isKindOfClass:SceneDelegate.class]) {
-                [sceneDelegate showDashboardWithDeliveryCompanyProfile:profile animated:YES];
+                [sceneDelegate showDeliveryWorkspaceForProfile:profile hasProviderDashboard:NO animated:YES];
             } else {
                 AdminDashboardViewController *dashboard =
                     [[AdminDashboardViewController alloc] initWithDeliveryCompanyProfile:profile];
@@ -912,8 +905,24 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
         }
 
         if (error) {
-            DLog(@"[ProGate] delivery company membership preflight failed; continuing onboarding: %@",
-                 error.localizedDescription);
+            // Failure to check membership is not evidence of no membership.
+            PPAdminSetLoginInProgress(NO);
+            [self pp_setInteractionEnabled:YES];
+            [PPAlertHelper showConfirmationIn:self
+                                        title:kLang(@"DeliveryLogin_CheckFailed_Title")
+                                     subtitle:kLang(@"DeliveryLogin_CheckFailed_Body")
+                                confirmButton:kLang(@"TryAgain")
+                                 cancelButton:kLang(@"DeliveryLogin_UseAnotherAccount")
+                                         icon:nil
+                                 confirmBlock:^(NSString * _Nullable text, BOOL didConfirm) {
+                __strong typeof(weakSelf) retrySelf = weakSelf;
+                if (!didConfirm || !retrySelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                PPAdminSetLoginInProgress(YES);
+                [retrySelf pp_preflightDeliveryCompanyMembershipForUID:uid];
+            } cancelBlock:^{
+                if ([[FIRAuth auth].currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+            }];
+            return;
         }
         [self pp_continueToProviderOnboarding];
     }];
@@ -933,11 +942,11 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     __weak typeof(self) weakSelf = self;
     [AppMgr checkIfUserWithUID:uid canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            [PPHUD dismiss];
             __strong typeof(weakSelf) self = weakSelf;
-            if (!self) {
+            if (!self || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
                 return;
             }
+            [PPHUD dismiss];
             if (error) {
                 DLog(@"[ProGate] fetch error: %@", error.localizedDescription);
                 if ([self pp_errorLooksLikeAppCheckFailure:error]) {

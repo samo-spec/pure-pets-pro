@@ -77,7 +77,11 @@ static BOOL PPProNotificationTargetsIsCompanyDeliveryPayload(NSDictionary *paylo
     NSDictionary *safePayload = PPProNotificationTargetsSafeDictionary(payload);
     NSString *type = PPProNotificationTargetsNormalizedString(PPProNotificationTargetsFirstStringForKeys(safePayload, @[@"notificationType", @"type", @"eventKey"]));
     NSString *route = PPProNotificationTargetsNormalizedString(safePayload[@"route"]);
-    return [type hasPrefix:@"company_delivery"] || [route isEqualToString:@"fleet_partner"];
+    // Workforce driver tasks ("driver_task") are delivery requests too. They are
+    // handed to the scene's company-delivery handler, which opens the driver
+    // cockpit instead of reading FulfillmentOrders/Orders from the client.
+    return [type hasPrefix:@"company_delivery"] || [route isEqualToString:@"fleet_partner"] ||
+           [route isEqualToString:@"driver_task"];
 }
 
 static void PPProNotificationTargetsComplete(BOOL handled, void (^completion)(BOOL handled))

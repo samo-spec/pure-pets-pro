@@ -217,40 +217,40 @@ public struct PPDeliveryTelemetryGrid: View {
 
     public var body: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)], spacing: 12) {
-            // 1. Completed Stops Today
+            // 1. Delivered today (server deliveredAt)
             telemetryTile(
                 icon: "checkmark.seal.fill",
                 iconColor: AdminSurface.emerald,
                 value: "\(state.todayCompletedCount)",
-                title: Language.get("Deliv_Metric_Stops", alter: "توصيلات اليوم"),
-                badge: Language.get("Deliv_Metric_OnTrack", alter: "ممتاز")
+                title: Language.get("Deliv_Metric_DeliveredToday", alter: "سُلّمت اليوم"),
+                badge: ""
             )
 
-            // 2. Today's Shift Earnings
+            // 2. In progress now
             telemetryTile(
-                icon: "banknote.fill",
+                icon: "figure.walk.motion",
                 iconColor: AdminSurface.primary,
-                value: String(format: "%.0f %@", state.todayTotalEarningsQAR, Language.get("QAR", alter: "ر.ق")),
-                title: Language.get("Deliv_Metric_Earnings", alter: "أرباح الشيفت"),
-                badge: Language.get("Deliv_Metric_Live", alter: "مباشر")
+                value: "\(state.inProgressCount)",
+                title: Language.get("Deliv_Metric_InProgress", alter: "قيد التنفيذ"),
+                badge: ""
             )
 
-            // 3. Cash on Hand (COD to remit)
+            // 3. Cash collected on deliveries completed today
             telemetryTile(
                 icon: "dollarsign.circle.fill",
                 iconColor: AdminSurface.amber,
                 value: String(format: "%.0f %@", state.todayCODCollectedQAR, Language.get("QAR", alter: "ر.ق")),
-                title: Language.get("Deliv_Metric_CODHand", alter: "كاش في العهدة"),
-                badge: Language.get("Deliv_Metric_Remit", alter: "للتحصيل")
+                title: Language.get("Deliv_Metric_CODToday", alter: "نقد محصّل اليوم"),
+                badge: ""
             )
 
-            // 4. On-Time Score Index
+            // 4. Open requests visible to this provider
             telemetryTile(
-                icon: "gauge.with.needle.fill",
-                iconColor: Color.blue,
-                value: "\(state.onTimeScorePercentage)%",
-                title: Language.get("Deliv_Metric_OnTime", alter: "دقة المواعيد"),
-                badge: Language.get("Deliv_Metric_Target", alter: "هدف 98%+")
+                icon: "shippingbox.fill",
+                iconColor: AdminSurface.secondaryText,
+                value: "\(state.availableDispatches.count)",
+                title: Language.get("Deliv_ReadyPickup", alter: "جاهزة للاستلام"),
+                badge: ""
             )
         }
     }
@@ -275,14 +275,16 @@ public struct PPDeliveryTelemetryGrid: View {
 
                 Spacer()
 
-                Text(badge)
-                    .font(PPBrandFont.caption(10))
-                    .foregroundColor(iconColor)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(
-                        Capsule().fill(iconColor.opacity(0.1))
-                    )
+                if !badge.isEmpty {
+                    Text(badge)
+                        .font(PPBrandFont.caption(10))
+                        .foregroundColor(iconColor)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            Capsule().fill(iconColor.opacity(0.1))
+                        )
+                }
             }
 
             Text(value)
@@ -696,12 +698,27 @@ public struct PPDeliveryDispatchRadarSection: View {
             }
 
             HStack {
-                Text(String(format: Language.get("Deliv_ItemsCount", alter: "%ld أغراض"), order.items.count))
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    state.selectedOrderDetail = order
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(String(format: Language.get("Deliv_ItemsCount", alter: "%ld أغراض"), order.items.count))
+                        Text(Language.get("Deliv_Dossier_Details", alter: nil))
+                            .font(PPBrandFont.bold(11))
+                        Image(systemName: "chevron.forward")
+                            .font(.system(size: 9, weight: .bold))
+                            .accessibilityHidden(true)
+                    }
                     .font(PPBrandFont.caption(11))
-                    .foregroundColor(AdminSurface.secondaryText)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(Capsule().fill(AdminSurface.cardElevated))
+                    .foregroundColor(AdminSurface.primary)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 6)
+                    .frame(minHeight: 32)
+                    .background(Capsule().fill(AdminSurface.primary.opacity(0.08)))
+                }
+                .buttonStyle(PPDeliveryTouchButtonStyle(pressedScale: 0.96))
+                .accessibilityHint(Language.get("Deliv_Dossier_OpenHint", alter: nil))
 
                 Spacer()
 
@@ -733,6 +750,13 @@ public struct PPDeliveryDispatchRadarSection: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(AdminSurface.hairline, lineWidth: 1)
         )
+        // The whole card opens the dossier; the Accept and Details buttons
+        // keep their own taps.
+        .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .onTapGesture {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            state.selectedOrderDetail = order
+        }
     }
 }
 
@@ -910,10 +934,33 @@ public struct PPDeliveryCashCollectionSheet: View {
 public struct PPDeliveryDriverControlView: View {
     @StateObject private var state = PPDeliveryDriverObservableState()
     @Environment(\.dismiss) private var dismiss
+    public var onDismiss: (() -> Void)?
+    /// Opens the full UIKit order record (chat, report issue, map).
+    public var onOpenRecord: ((PPDeliveryOrderModel) -> Void)?
+    /// Record requested from the dossier; pushed once the dossier sheet has dismissed.
+    @State private var pendingRecordOrder: PPDeliveryOrderModel?
 
     private var isRTL: Bool { Language.isRTL() }
 
-    public init() {}
+    public init(onDismiss: (() -> Void)? = nil, onOpenRecord: ((PPDeliveryOrderModel) -> Void)? = nil) {
+        self.onDismiss = onDismiss
+        self.onOpenRecord = onOpenRecord
+    }
+
+    /// Nil when the host cannot open the UIKit record, which hides the dossier link.
+    private var dossierRecordHandler: ((PPDeliveryOrderModel) -> Void)? {
+        guard onOpenRecord != nil else { return nil }
+        return { record in
+            pendingRecordOrder = record
+            state.selectedOrderDetail = nil
+        }
+    }
+
+    private func openPendingRecord() {
+        guard let record = pendingRecordOrder else { return }
+        pendingRecordOrder = nil
+        onOpenRecord?(record)
+    }
 
     public var body: some View {
         NavigationStack {
@@ -953,10 +1000,28 @@ public struct PPDeliveryDriverControlView: View {
                 .refreshable {
                     state.refreshOrders()
                 }
+                .sheet(item: $state.selectedOrderDetail, onDismiss: openPendingRecord) { order in
+                    PPDeliveryMissionDossierView(orderID: order.orderId, state: state, onOpenRecord: dossierRecordHandler)
+                }
             }
             .navigationTitle(Language.get("Deliv_Cockpit_Title", alter: "غرفة عمليات التوصيل"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        if let onDismiss = onDismiss {
+                            onDismiss()
+                        } else {
+                            dismiss()
+                        }
+                    }) {
+                        Image(systemName: isRTL ? "chevron.right" : "chevron.left")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundColor(AdminSurface.primary)
+                    }
+                }
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         state.refreshOrders()
@@ -1002,32 +1067,27 @@ public struct PPDeliveryDriverControlView: View {
 
             Spacer()
 
-            // Duty Toggle Pill
-            Button(action: {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
-                    state.toggleDuty()
-                }
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: state.dutyState.systemIcon)
-                        .font(.system(size: 12, weight: .bold))
+            // Read-only work state: availability is not a local switch.
+            HStack(spacing: 6) {
+                Image(systemName: state.dutyState.systemIcon)
+                    .font(.system(size: 12, weight: .bold))
 
-                    Text(state.dutyState.shortTitle)
-                        .font(PPBrandFont.bold(13))
-                }
-                .foregroundColor(state.dutyState.tintColor)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 7)
-                .background(
-                    Capsule()
-                        .fill(state.dutyState.tintColor.opacity(0.12))
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(state.dutyState.tintColor.opacity(0.3), lineWidth: 1)
-                )
+                Text(state.dutyState.shortTitle)
+                    .font(PPBrandFont.bold(13))
             }
-            .buttonStyle(PPDeliveryTouchButtonStyle(pressedScale: 0.94))
+            .foregroundColor(state.dutyState.tintColor)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 7)
+            .background(
+                Capsule()
+                    .fill(state.dutyState.tintColor.opacity(0.12))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(state.dutyState.tintColor.opacity(0.3), lineWidth: 1)
+            )
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(state.dutyState.title)
         }
         .padding(16)
         .background(
@@ -1135,7 +1195,14 @@ public struct PPDeliveryDriverControlView: View {
                 )
             } else {
                 ForEach(filtered, id: \.orderId) { order in
-                    orderSummaryRow(order)
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        state.selectedOrderDetail = order
+                    } label: {
+                        orderSummaryRow(order)
+                    }
+                    .buttonStyle(PPDeliveryTouchButtonStyle())
+                    .accessibilityHint(Language.get("Deliv_Dossier_OpenHint", alter: nil))
                 }
             }
         }
@@ -1156,6 +1223,11 @@ public struct PPDeliveryDriverControlView: View {
                     .padding(.horizontal, 8)
                     .padding(.vertical, 3)
                     .background(Capsule().fill(AdminSurface.primary.opacity(0.1)))
+
+                Image(systemName: "chevron.forward")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(AdminSurface.secondaryText)
+                    .accessibilityHidden(true)
             }
 
             HStack {

@@ -44,7 +44,7 @@ import UIKit
     }
 
     @objc public var totalStock: Int {
-        members.reduce(0) { $0 + max(0, $1.quantity) }
+        activeMembers.reduce(0) { $0 + max(0, $1.quantity) }
     }
 
     @objc public var hasLowStock: Bool {

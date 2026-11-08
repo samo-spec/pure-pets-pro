@@ -15,6 +15,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import PhotosUI
 
 // MARK: - Active Matrix Sheet Enum
 
@@ -161,7 +162,7 @@ struct PPAccessoryVariantMatrixView: View {
         }
         .confirmationDialog(
             Language.get("Variant_Delete_Confirm_Title", alter: "حذف المتغير من المجموعة"),
-            isPresented: Binding(
+            isPresented: Binding<Bool>(
                 get: { variantToDelete != nil },
                 set: { if !$0 { variantToDelete = nil } }
             ),
@@ -2758,45 +2759,18 @@ struct PPAccessoryCreateCombinationSheet: View {
 
 // MARK: - FlowLayout & Simulated Barcode Visualizer
 
-@available(iOS 16.0, *)
-private struct FlowLayout: Layout {
+private struct FlowLayout<Content: View>: View {
     var spacing: CGFloat = 8
+    let content: Content
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 0
-        var height: CGFloat = 0
-        var x: CGFloat = 0
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > width && x > 0 {
-                x = 0
-                height += rowHeight + spacing
-                rowHeight = 0
-            }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-        height += rowHeight
-        return CGSize(width: width, height: height)
+    init(spacing: CGFloat = 8, @ViewBuilder content: () -> Content) {
+        self.spacing = spacing
+        self.content = content()
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX
-        var y = bounds.minY
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > bounds.maxX && x > bounds.minX {
-                x = bounds.minX
-                y += rowHeight + spacing
-                rowHeight = 0
-            }
-            subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 75), spacing: spacing)], alignment: .leading, spacing: spacing) {
+            content
         }
     }
 }
@@ -2890,8 +2864,13 @@ struct PPProviderVariantStockSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(Language.get("Save", alter: "حفظ")) {
                         isSaving = true
-                        PPProviderMarketplaceManager.shared().updateMarketStock(item.accessoryID, quantity: quantity) { ok, msg, err in
-                            DispatchQueue.main.async {
+                        PPProviderMarketplaceManager
+                            .shared()
+                            .updateMarketStock(
+                                item.accessoryID,
+                                quantity: quantity
+                            ) { ok, msg, err in
+                            Task { @MainActor in
                                 isSaving = false
                                 if ok {
                                     item.quantity = quantity
@@ -2899,7 +2878,7 @@ struct PPProviderVariantStockSheet: View {
                                     onStockChanged()
                                     dismiss()
                                 } else {
-                                    errorMessage = msg ?? err?.localizedDescription
+                                    errorMessage = (msg?.isEmpty == false ? msg : err?.localizedDescription) ?? Language.get("Variant_Error_Unknown", alter: "حدث خطأ غير متوقع.")
                                 }
                             }
                         }

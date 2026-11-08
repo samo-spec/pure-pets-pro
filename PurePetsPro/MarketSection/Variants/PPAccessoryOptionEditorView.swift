@@ -1311,71 +1311,18 @@ fileprivate struct PPOptionCardPressStyle: ButtonStyle {
 
 // MARK: - Option Studio Flow Layout Helper
 
-@available(iOS 16.0, *)
-fileprivate struct PPOptionChipsFlow: Layout {
+fileprivate struct PPOptionChipsFlow<Content: View>: View {
     var spacing: CGFloat = 8
+    let content: Content
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let width = proposal.width ?? 320
-        var height: CGFloat = 0
-        var x: CGFloat = 0
-        var rowHeight: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if x + size.width > width && x > 0 {
-                x = 0
-                height += rowHeight + spacing
-                rowHeight = 0
-            }
-            x += size.width + spacing
-            rowHeight = max(rowHeight, size.height)
-        }
-        height += rowHeight
-        return CGSize(width: width, height: height)
+    init(spacing: CGFloat = 8, @ViewBuilder content: () -> Content) {
+        self.spacing = spacing
+        self.content = content()
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let isRTL = Language.isRTL()
-        let width = bounds.width
-
-        var rows: [[(subview: LayoutSubview, size: CGSize)]] = []
-        var currentRow: [(subview: LayoutSubview, size: CGSize)] = []
-        var currentRowWidth: CGFloat = 0
-
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if currentRowWidth + size.width > width && !currentRow.isEmpty {
-                rows.append(currentRow)
-                currentRow = [(subview, size)]
-                currentRowWidth = size.width + spacing
-            } else {
-                currentRow.append((subview, size))
-                currentRowWidth += size.width + spacing
-            }
-        }
-        if !currentRow.isEmpty {
-            rows.append(currentRow)
-        }
-
-        var y = bounds.minY
-        for row in rows {
-            let rowHeight = row.map(\.size.height).max() ?? 0
-            if isRTL {
-                var x = bounds.maxX
-                for item in row {
-                    let itemX = x - item.size.width
-                    item.subview.place(at: CGPoint(x: itemX, y: y), proposal: ProposedViewSize(item.size))
-                    x -= (item.size.width + spacing)
-                }
-            } else {
-                var x = bounds.minX
-                for item in row {
-                    item.subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(item.size))
-                    x += item.size.width + spacing
-                }
-            }
-            y += rowHeight + spacing
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 75), spacing: spacing)], alignment: .leading, spacing: spacing) {
+            content
         }
     }
 }

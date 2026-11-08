@@ -170,6 +170,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
             } else {
                 strongSelf.hasLiveV1ActionState = YES;
             }
+            [[PPDeliveryManager shared] applyPickupFallbackToOrder:freshOrder];
             strongSelf.order = freshOrder;
             [strongSelf refreshUI];
         });

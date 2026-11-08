@@ -11,6 +11,8 @@
 #import "PPPharmacyMedicinesViewController.h"
 #import "PPPharmacyMedicineEditorViewController.h"
 #import "PPVetManager.h"
+#import "../MarketSection/PPProviderMarketFamilyCardCell.h"
+#import "PPProviderMarketItem.h"
 #import "PPFirebaseCompat.h"
 #import "Language.h"
 #import "Styling.h"
@@ -826,6 +828,9 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     }
     
     self.descLabel.text = self.medicine.medicineDescription.length ? self.medicine.medicineDescription : ([Language isRTL] ? @"لا يوجد وصف طبي مضاف لهذا المستحضر." : @"No medical description provided.");
+    if (self.medicine.variantOptionDescription.length > 0) {
+        self.descLabel.text = [NSString stringWithFormat:@"%@\n\n%@", self.medicine.variantOptionDescription, self.descLabel.text];
+    }
     
     for (UIView *sub in self.animalTagsStack.arrangedSubviews) {
         [self.animalTagsStack removeArrangedSubview:sub];
@@ -896,6 +901,13 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
 
 - (void)confirmDelete {
     [PPFunc pp_playTapEffect];
+    if (self.medicine.productFamilyId.length > 0) {
+        __weak typeof(self) ws = self;
+        [PPAlertHelper showConfirmationIn:self title:kLang(@"Variant_Studio_Title") subtitle:kLang(@"ProInventory_FamilyLifecycleGuidance") placeholder:nil confirmButton:kLang(@"Variant_Studio_Title") cancelButton:kLang(@"Cancel") confirmBlock:^{
+            [ws openVariantStudio];
+        } cancelBlock:nil];
+        return;
+    }
     [PPAlertHelper showConfirmationIn:self
                                 title:kLang(@"Pharmacy_Delete_Confirm_Title")
                              subtitle:kLang(@"Pharmacy_Delete_Confirm_Msg")
@@ -928,20 +940,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
         if (!savedAcc) return;
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
-        self.medicine.productFamilyId = savedAcc.productFamilyId;
-        self.medicine.variantSchemaVersion = savedAcc.variantSchemaVersion;
-        self.medicine.isVariant = savedAcc.isVariant;
-        self.medicine.isDefaultVariant = savedAcc.isDefaultVariant;
-        self.medicine.variantSortOrder = savedAcc.variantSortOrder;
-        self.medicine.selectedOptions = savedAcc.selectedOptions;
-        self.medicine.selectedOptionsSnapshot = savedAcc.selectedOptionsSnapshot;
-        self.medicine.variantCombinationKey = savedAcc.variantCombinationKey;
-        self.medicine.variantAxis = savedAcc.variantAxis;
-        self.medicine.sku = savedAcc.sku;
-        self.medicine.barcode = savedAcc.barcode;
-        if (savedAcc.price != nil) self.medicine.price = savedAcc.price.doubleValue;
-        if (savedAcc.wholesalePrice != nil) self.medicine.wholesalePrice = savedAcc.wholesalePrice;
-        self.medicine.stockQuantity = savedAcc.quantity;
+        [self.medicine applyVariantAccessory:savedAcc];
         [self reloadMedicineData];
         if (self.onUpdated) self.onUpdated();
     };
@@ -1261,6 +1260,8 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     
     // Animals snippet or Variant/Medical Spec snippet
     NSMutableArray *snippets = [NSMutableArray array];
+    NSString *options = medicine.variantOptionDescription;
+    if (options.length > 0) [snippets addObject:options];
     if (medicine.strength.length > 0) [snippets addObject:medicine.strength];
     if (medicine.dosageForm.length > 0) [snippets addObject:medicine.dosageForm];
     if (medicine.packSize.length > 0) [snippets addObject:medicine.packSize];
@@ -1321,6 +1322,8 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) NSArray<PPVetMedicineModel *> *allMedicines;
 @property (nonatomic, strong) NSArray<PPVetMedicineModel *> *filteredMedicines;
+@property (nonatomic, strong) NSArray<PPProviderMarketDisplayGroup *> *medicineGroups;
+@property (nonatomic, strong) NSDictionary<NSString *, PPVetMedicineModel *> *medicineByID;
 @property (nonatomic, copy) NSString *searchQuery;
 @property (nonatomic, assign) PPPharmacyFilterLens currentLens;
 @property (nonatomic, copy, nullable) NSString *selectedCategoryName;
@@ -1461,6 +1464,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     _tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
     _tableView.contentInset = UIEdgeInsetsMake(8, 0, 100, 0);
     [_tableView registerClass:[PPPharmacyMedicineCardCell class] forCellReuseIdentifier:@"PharmaCardCell"];
+    [_tableView registerClass:PPProviderMarketFamilyCardCell.class forCellReuseIdentifier:@"PharmaFamilyCell"];
     [self.view addSubview:_tableView];
     
     UIRefreshControl *refresh = [[UIRefreshControl alloc] init];
@@ -1966,13 +1970,21 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
         
         // Search query filter
         if (query.length > 0) {
-            NSString *haystack = [NSString stringWithFormat:@"%@ %@ %@ %@ %@ %@ %@ %@", med.title, med.medicineDescription, med.category, med.sku ?: @"", med.barcode ?: @"", med.strength ?: @"", med.dosageForm ?: @"", med.packSize ?: @""].lowercaseString;
+            NSString *haystack = [NSString stringWithFormat:@"%@ %@ %@ %@ %@ %@ %@ %@ %@ %@", med.title, med.medicineDescription, med.category, med.sku ?: @"", med.barcode ?: @"", med.strength ?: @"", med.dosageForm ?: @"", med.packSize ?: @"", med.variantOptionDescription, med.titleEn ?: @""].lowercaseString;
             if (![haystack containsString:query]) return NO;
         }
         return YES;
     }];
     
     self.filteredMedicines = [self.allMedicines filteredArrayUsingPredicate:pred];
+    NSMutableArray *items = [NSMutableArray array];
+    NSMutableDictionary *byID = [NSMutableDictionary dictionary];
+    for (PPVetMedicineModel *medicine in self.filteredMedicines) {
+        byID[medicine.medicineID] = medicine;
+        [items addObject:[PPProviderMarketItem fromDictionary:medicine.toDictionary itemID:medicine.medicineID]];
+    }
+    self.medicineByID = byID.copy;
+    self.medicineGroups = [PPProviderMarketDisplayGroup groupedItems:items];
     if (query.length > 0) {
         self.searchResultBadge.text = [NSString stringWithFormat:@"%ld", (long)self.filteredMedicines.count];
         self.searchResultBadge.hidden = NO;
@@ -2012,12 +2024,44 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
 #pragma mark - Table View Data Source & Delegate
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.filteredMedicines.count;
+    return self.medicineGroups.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    PPProviderMarketDisplayGroup *group = self.medicineGroups[indexPath.row];
+    if (group.isFamily) {
+        PPProviderMarketFamilyCardCell *familyCell = [tableView dequeueReusableCellWithIdentifier:@"PharmaFamilyCell" forIndexPath:indexPath];
+        __weak typeof(self) ws = self;
+        __weak PPProviderMarketFamilyCardCell *weakCell = familyCell;
+        familyCell.onExpandTapped = ^{
+            group.isExpanded = !group.isExpanded;
+            [ws.tableView beginUpdates];
+            [weakCell updateExpandedState];
+            [ws.tableView endUpdates];
+        };
+        familyCell.onMemberSelected = ^(PPProviderMarketItem *item) {
+            PPVetMedicineModel *medicine = ws.medicineByID[item.itemID];
+            if (medicine) [ws openDetailForMedicine:medicine];
+        };
+        familyCell.onMemberStockTapped = ^(PPProviderMarketItem *item) {
+            PPVetMedicineModel *medicine = ws.medicineByID[item.itemID];
+            if (medicine) [ws openQuickStockForMedicine:medicine];
+        };
+        familyCell.onMemberOfferTapped = nil;
+        familyCell.onStudioTapped = ^{
+            PPVetMedicineModel *medicine = ws.medicineByID[group.defaultMember.itemID];
+            if (!medicine) return;
+            PPAccessoryVariantStudioHostController *studio = [[PPAccessoryVariantStudioHostController alloc] initWithAccessory:medicine.asPetAccessory];
+            studio.onSaved = ^(PetAccessory *saved) { [medicine applyVariantAccessory:saved]; [ws pp_reloadMedicines]; };
+            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:studio];
+            nav.modalPresentationStyle = UIModalPresentationPageSheet;
+            [ws presentViewController:nav animated:YES completion:nil];
+        };
+        [familyCell configureWithGroup:group];
+        return familyCell;
+    }
     PPPharmacyMedicineCardCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PharmaCardCell" forIndexPath:indexPath];
-    PPVetMedicineModel *medicine = self.filteredMedicines[indexPath.row];
+    PPVetMedicineModel *medicine = self.medicineByID[group.defaultMember.itemID];
     [cell configureWithMedicine:medicine];
     
     __weak typeof(self) weakSelf = self;
@@ -2087,8 +2131,9 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [PPFunc pp_playTapEffect];
-    PPVetMedicineModel *medicine = self.filteredMedicines[indexPath.row];
-    [self openDetailForMedicine:medicine];
+    PPProviderMarketDisplayGroup *group = self.medicineGroups[indexPath.row];
+    PPVetMedicineModel *medicine = self.medicineByID[group.defaultMember.itemID];
+    if (medicine) [self openDetailForMedicine:medicine];
 }
 
 #pragma mark - Navigation & Actions

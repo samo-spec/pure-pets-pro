@@ -1,5 +1,6 @@
 #import "PPDeliveryCompanyService.h"
 #import "PPFirebaseCompat.h"
+#import "AppManager.h"
 #if __has_include(<FirebaseAppCheck/FirebaseAppCheck.h>)
 #import <FirebaseAppCheck/FirebaseAppCheck.h>
 #elif __has_feature(modules)
@@ -30,7 +31,12 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 @property (nonatomic, strong, readwrite, nullable) PPDeliveryCompanyProfile *verifiedProfile;
 @property (nonatomic, copy, readwrite) NSArray<PPDeliveryCompanyProfile *> *discoveredProfiles;
 @property (nonatomic, copy) NSString *verifiedUID;
+/// Account for which the last membership discovery found a driver workspace.
+@property (nonatomic, copy) NSString *driverWorkspaceUID;
 @property (nonatomic, assign, readwrite) BOOL isRefreshingProfile;
+@property (nonatomic, strong) NSMutableArray *profileRefreshCompletions;
+/// Memory-only retry identity, scoped to issuer + carrier + target + role.
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *memberInvitationCommandIDs;
 @end
 
 @implementation PPDeliveryCompanyService
@@ -64,7 +70,17 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
     }
 
     NSString *lower = message.lowercaseString;
-    if (error.code == FIRFunctionsErrorCodeUnauthenticated ||
+    NSString *domainCode = [details isKindOfClass:NSDictionary.class] && [details[@"domainCode"] isKindOfClass:NSString.class]
+        ? details[@"domainCode"] : @"";
+    if ([domainCode isEqualToString:@"DELIVERY_DRIVER_PROVISIONING_AUTHORITY_REQUIRED"]) {
+        message = kLang(@"DriverRegistration_WorkforceAuthorityRequired");
+    } else if ([domainCode isEqualToString:@"DELIVERY_WORKFORCE_GRANT_REQUIRED"]) {
+        message = kLang(@"DriverRegistration_ExistingStaffGrantRequired");
+    } else if ([domainCode isEqualToString:@"DELIVERY_DRIVER_TARGET_ACCOUNT_INACTIVE"]) {
+        message = kLang(@"DriverRegistration_AccountInactive");
+    } else if ([domainCode isEqualToString:@"DELIVERY_DRIVER_TARGET_REGISTRATION_REQUIRED"]) {
+        message = kLang(@"DriverRegistration_AccountRequired");
+    } else if (error.code == FIRFunctionsErrorCodeUnauthenticated ||
         [lower containsString:@"unauthenticated"] ||
         [lower containsString:@"authentication is required"] ||
         [lower containsString:@"authentication required"]) {
@@ -75,12 +91,12 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         message = kLang(@"DeliveryCompany_Error_NotMember");
     }
 
-    return [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany"
-                               code:error.code
-                           userInfo:@{
-        NSLocalizedDescriptionKey: message,
-        NSUnderlyingErrorKey: error
-    }];
+    // Keep the server's domainCode and recovery details when localizing the
+    // message. Dropping them turns a permission denial into a generic outage.
+    NSMutableDictionary *info = error.userInfo.mutableCopy ?: [NSMutableDictionary dictionary];
+    info[NSLocalizedDescriptionKey] = message;
+    info[NSUnderlyingErrorKey] = error;
+    return [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany" code:error.code userInfo:info];
 }
 
 - (void)callFunction:(NSString *)name
@@ -136,6 +152,10 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 }
 
 - (void)refreshConfiguredProfileWithCompletion:(PPDeliveryCompanyProfileCompletion)completion {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self refreshConfiguredProfileWithCompletion:completion]; });
+        return;
+    }
     NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
     if (self.verifiedUID.length && ![self.verifiedUID isEqualToString:currentUID]) {
         self.verifiedProfile = nil;
@@ -148,21 +168,37 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         if (completion) completion(nil, nil);
         return;
     }
-    if (self.isRefreshingProfile) {
-        if (completion) completion(self.verifiedProfile, nil);
-        return;
-    }
+    if (!self.profileRefreshCompletions) self.profileRefreshCompletions = [NSMutableArray array];
+    if (completion) [self.profileRefreshCompletions addObject:[completion copy]];
+    if (self.isRefreshingProfile) return;
     self.isRefreshingProfile = YES;
     [self callFunction:PPDCFunctionGetProfile
                payload:@{@"companyId": companyID}
             completion:^(NSDictionary * _Nullable result, NSError * _Nullable error) {
         self.isRefreshingProfile = NO;
+        NSArray *completions = self.profileRefreshCompletions.copy;
+        [self.profileRefreshCompletions removeAllObjects];
+        void (^finish)(PPDeliveryCompanyProfile *, NSError *) = ^(PPDeliveryCompanyProfile *profile, NSError *profileError) {
+            for (PPDeliveryCompanyProfileCompletion pending in completions) pending(profile, profileError);
+        };
         NSString *activeUID = [FIRAuth auth].currentUser.uid ?: @"";
         if (![activeUID isEqualToString:currentUID]) {
             self.verifiedProfile = nil;
             self.discoveredProfiles = @[];
             self.verifiedUID = @"";
-            if (completion) completion(nil, nil);
+            NSError *sessionError = [NSError errorWithDomain:@"com.firebase.functions"
+                                                       code:FIRFunctionsErrorCodeUnauthenticated
+                                                   userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}];
+            finish(nil, sessionError);
+            return;
+        }
+        if (![self.configuredCompanyID isEqualToString:companyID]) {
+            // A response for a disconnected/replaced company cannot restore it.
+            NSError *contextError = [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany" code:2 userInfo:@{
+                NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Setup_CompanyIDRequired"),
+                @"details": @{@"domainCode": @"DELIVERY_COMPANY_NOT_CONFIGURED"}
+            }];
+            finish(nil, contextError);
             return;
         }
         if (error) {
@@ -170,7 +206,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
             self.discoveredProfiles = @[];
             self.verifiedUID = @"";
             [[NSNotificationCenter defaultCenter] postNotificationName:PPDeliveryCompanyMembershipDidChangeNotification object:self];
-            if (completion) completion(nil, error);
+            finish(nil, error);
             return;
         }
         PPDeliveryCompanyProfile *profile = [PPDeliveryCompanyProfile modelFromResponse:result ?: @{}];
@@ -178,7 +214,10 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         self.discoveredProfiles = self.verifiedProfile ? @[self.verifiedProfile] : @[];
         self.verifiedUID = self.verifiedProfile ? currentUID : @"";
         [[NSNotificationCenter defaultCenter] postNotificationName:PPDeliveryCompanyMembershipDidChangeNotification object:self];
-        if (completion) completion(self.verifiedProfile, nil);
+        NSError *profileError = self.verifiedProfile ? nil :
+            [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany" code:2
+                             userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_InvalidProfile")}];
+        finish(self.verifiedProfile, profileError);
     }];
 }
 
@@ -201,6 +240,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         }
         NSMutableArray<PPDeliveryCompanyProfile *> *profiles = [NSMutableArray array];
         NSArray *items = [result[@"companies"] isKindOfClass:NSArray.class] ? result[@"companies"] : @[];
+        BOOL anyDriverWorkspace = NO;
         for (NSDictionary *item in items) {
             if (![item isKindOfClass:NSDictionary.class]) {
                 continue;
@@ -208,9 +248,11 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
             PPDeliveryCompanyProfile *profile = [PPDeliveryCompanyProfile modelFromResponse:item];
             if (profile.companyID.length > 0) {
                 [profiles addObject:profile];
+                if (profile.hasDriverWorkspace) anyDriverWorkspace = YES;
             }
         }
         self.discoveredProfiles = profiles.copy;
+        self.driverWorkspaceUID = anyDriverWorkspace ? currentUID : @"";
         if (completion) completion(self.discoveredProfiles, nil);
     }];
 }
@@ -266,7 +308,21 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 - (void)listRequestsForProfile:(PPDeliveryCompanyProfile *)profile
                  nextPageToken:(NSString *)nextPageToken
                     completion:(PPDeliveryCompanyRequestsCompletion)completion {
+    if (profile.companyID.length == 0) {
+        NSError *contextError = [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany" code:2 userInfo:@{
+            NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Setup_CompanyIDRequired"),
+            @"details": @{@"domainCode": @"DELIVERY_COMPANY_NOT_CONFIGURED"}
+        }];
+        if (completion) completion(nil, nil, contextError);
+        return;
+    }
     BOOL driver = profile.isDriver;
+    if (profile.isRestrictedWorkspace) {
+        // A restricted membership has no workspace to list; asking the
+        // dispatcher endpoint would only return a permission error.
+        if (completion) completion(@[], nil, nil);
+        return;
+    }
     NSString *function = driver ? PPDCFunctionListAssigned : PPDCFunctionListRequests;
     NSMutableDictionary *payload = [@{@"companyId": profile.companyID ?: @"", @"pageSize": @20} mutableCopy];
     if (nextPageToken.length) payload[@"nextPageToken"] = nextPageToken;
@@ -389,17 +445,166 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 }
 - (void)inviteMemberIdentifier:(NSString *)targetIdentifier role:(NSString *)role companyID:(NSString *)companyID completion:(PPDeliveryCompanyActionCompletion)completion {
     NSString *identifier = [targetIdentifier stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self inviteMemberIdentifier:identifier role:role companyID:companyID completion:completion];
+        });
+        return;
+    }
+    NSString *issuerUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSData *identity = [NSJSONSerialization dataWithJSONObject:@[issuerUID, companyID ?: @"", identifier, role ?: @""] options:0 error:nil];
+    NSString *identityKey = [[NSString alloc] initWithData:identity encoding:NSUTF8StringEncoding];
+    if (!self.memberInvitationCommandIDs) self.memberInvitationCommandIDs = [NSMutableDictionary dictionary];
+    NSString *commandID = self.memberInvitationCommandIDs[identityKey];
+    if (!commandID) {
+        commandID = NSUUID.UUID.UUIDString;
+        self.memberInvitationCommandIDs[identityKey] = commandID;
+    }
     [self callFunction:PPDCFunctionInviteMember
                payload:@{
         @"companyId": companyID ?: @"",
         @"targetIdentifier": identifier,
         @"targetUid": identifier,
-        @"role": role ?: @""
+        @"role": role ?: @"",
+        @"commandId": commandID
     }
-            completion:completion];
+            completion:^(NSDictionary * _Nullable result, NSError * _Nullable error) {
+        if (![[FIRAuth auth].currentUser.uid isEqualToString:issuerUID]) return;
+        if (!error) [self.memberInvitationCommandIDs removeObjectForKey:identityKey];
+        if (completion) completion(result, error);
+    }];
 }
 - (void)disableMemberUID:(NSString *)targetUID companyID:(NSString *)companyID completion:(PPDeliveryCompanyActionCompletion)completion {
     [self callFunction:PPDCFunctionDisableMember payload:@{@"companyId": companyID ?: @"", @"targetUid": targetUID ?: @""} completion:completion];
+}
+
+#pragma mark - Driver cockpit
+
++ (NSString *)currentAccountUID {
+    return [FIRAuth auth].currentUser.uid ?: @"";
+}
+
+- (void)resolveDriverCockpitRequirementWithCompletion:(void(^)(BOOL requiresDriverCockpit, NSError * _Nullable error))completion {
+    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    if (!uid.length) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            completion(NO, [NSError errorWithDomain:@"com.firebase.functions" code:FIRFunctionsErrorCodeUnauthenticated
+                                           userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}]);
+        });
+        return;
+    }
+    [[AppManager shared] checkIfUserWithUID:uid canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSString *activeUID = [FIRAuth auth].currentUser.uid ?: @"";
+            if (![activeUID isEqualToString:uid]) {
+                completion(NO, [NSError errorWithDomain:@"com.firebase.functions" code:FIRFunctionsErrorCodeUnauthenticated
+                                               userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}]);
+                return;
+            }
+            if (error) { completion(NO, error); return; }
+            if ([AppManager isProAccountBlocked:userDoc ?: @{}]) {
+                completion(NO, [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany" code:403
+                                               userInfo:@{NSLocalizedDescriptionKey: kLang(@"StatusAccountBlocked")}]);
+                return;
+            }
+            NSString *accountType = [PPSafeString(userDoc[@"accountType"]).lowercaseString
+                                    stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            // Staff never operates through the provider-only transition API.
+            // The canonical cockpit independently resolves grants or recovery.
+            if ([accountType isEqualToString:@"staff"]) { completion(YES, nil); return; }
+            if (![accountType isEqualToString:@"user"]) {
+                completion(NO, [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany" code:403
+                                               userInfo:@{NSLocalizedDescriptionKey: kLang(@"StatusNoPartnerAccess")}]);
+                return;
+            }
+            [self discoverCompanyMembershipsWithCompletion:^(NSArray<PPDeliveryCompanyProfile *> * _Nullable profiles, NSError * _Nullable membershipError) {
+                if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+                    completion(NO, [NSError errorWithDomain:@"com.firebase.functions" code:FIRFunctionsErrorCodeUnauthenticated
+                                                   userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}]);
+                    return;
+                }
+                if (membershipError) { completion(NO, membershipError); return; }
+                for (PPDeliveryCompanyProfile *profile in profiles ?: @[]) {
+                    if (profile.hasDriverWorkspace || profile.isRestrictedWorkspace ||
+                        [profile.role isEqualToString:PPDeliveryCompanyRoleDriver]) {
+                        completion(YES, nil);
+                        return;
+                    }
+                }
+                if (!allowed) {
+                    completion(NO, [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany" code:403
+                                                   userInfo:@{NSLocalizedDescriptionKey: kLang(@"StatusNoPartnerAccess")}]);
+                    return;
+                }
+                completion(NO, nil);
+            }];
+        });
+    }];
+}
+
+- (void)callDriverCockpitFunction:(NSString *)name
+                          payload:(NSDictionary<NSString *,id> *)payload
+                       completion:(PPDriverCockpitCompletion)completion {
+    static NSSet<NSString *> *allowedFunctions;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        allowedFunctions = [NSSet setWithArray:@[
+            @"getDriverDeliveryWorkspace",
+            @"executeDriverDeliveryTask",
+            @"setDriverDeliveryAvailability",
+            PPDCFunctionGetMyCompanies,
+            PPDCFunctionListAssigned,
+            PPDCFunctionGetRequest,
+            PPDCFunctionUpdateStatus,
+            @"setCompanyDriverAvailability",
+        ]];
+    });
+    if (![allowedFunctions containsObject:name ?: @""]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSError *error = [NSError errorWithDomain:@"PurePetsPro.DriverCockpit"
+                                                 code:FIRFunctionsErrorCodeInvalidArgument
+                                             userInfo:@{NSLocalizedDescriptionKey: kLang(@"DriverCockpit_Error_Generic")}];
+            if (completion) completion(nil, error);
+        });
+        return;
+    }
+    [self callFunction:name payload:payload ?: @{} completion:^(NSDictionary * _Nullable result, NSError * _Nullable error) {
+        if (completion) completion(result, error);
+    }];
+}
+
+- (PPDeliveryCompanyProfile *)preferredProfileFromProfiles:(NSArray<PPDeliveryCompanyProfile *> *)profiles
+                                         requiresSelection:(BOOL *)requiresSelection {
+    if (requiresSelection) *requiresSelection = NO;
+    NSMutableArray<PPDeliveryCompanyProfile *> *usable = [NSMutableArray array];
+    for (PPDeliveryCompanyProfile *profile in profiles ?: @[]) {
+        if (profile.companyID.length > 0 && !profile.isRestrictedWorkspace) [usable addObject:profile];
+    }
+    NSString *configured = self.configuredCompanyID;
+    if (configured.length > 0) {
+        for (PPDeliveryCompanyProfile *profile in usable) {
+            if ([profile.companyID isEqualToString:configured]) return profile;
+        }
+    }
+    if (usable.count == 1) return usable.firstObject;
+    if (usable.count > 1) {
+        if (requiresSelection) *requiresSelection = YES;
+        // The dashboard is company-centric, so a dispatch workspace leads;
+        // driver work stays reachable through the cockpit's own chooser.
+        for (PPDeliveryCompanyProfile *profile in usable) {
+            if (profile.hasDispatchWorkspace) return profile;
+        }
+        return usable.firstObject;
+    }
+    for (PPDeliveryCompanyProfile *profile in profiles ?: @[]) {
+        if (profile.companyID.length > 0) return profile;
+    }
+    return nil;
+}
+
+- (BOOL)hasDiscoveredDriverWorkspace {
+    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    return uid.length > 0 && [self.driverWorkspaceUID isEqualToString:uid];
 }
 
 @end

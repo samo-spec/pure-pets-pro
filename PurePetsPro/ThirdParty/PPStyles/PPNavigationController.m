@@ -77,6 +77,26 @@
     UISemanticContentAttribute attribute = [Language semanticAttributeForCurrentLanguage];
     self.view.semanticContentAttribute = attribute;
     self.navigationBar.semanticContentAttribute = attribute;
+
+    NSDictionary *titleAttrs = @{
+        NSFontAttributeName: [Styling fontBold:22],
+        NSForegroundColorAttributeName: PrimaryTextClr
+    };
+    NSDictionary *largeTitleAttrs = @{
+        NSFontAttributeName: [Styling fontBold:30],
+        NSForegroundColorAttributeName: PrimaryTextClr
+    };
+    if (@available(iOS 13.0, *)) {
+        UINavigationBarAppearance *appearance = self.navigationBar.standardAppearance ? [self.navigationBar.standardAppearance copy] : [[UINavigationBarAppearance alloc] init];
+        [appearance configureWithTransparentBackground];
+        appearance.titleTextAttributes = titleAttrs;
+        appearance.largeTitleTextAttributes = largeTitleAttrs;
+        self.navigationBar.standardAppearance = appearance;
+        self.navigationBar.compactAppearance = appearance;
+        self.navigationBar.scrollEdgeAppearance = appearance;
+    } else {
+        self.navigationBar.titleTextAttributes = titleAttrs;
+    }
 }
 
 #pragma mark - UIGestureRecognizerDelegate

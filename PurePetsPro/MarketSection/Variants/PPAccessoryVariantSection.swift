@@ -39,7 +39,7 @@ enum PPAccessoryVariantColorLibrary {
 
 // MARK: - Failure State
 
-public struct PPAccessoryVariantFailureState {
+struct PPAccessoryVariantFailureState {
     public let message: String
     public let recovery: PPAccessoryVariantRecovery
     public let affectedProductIds: [String]
@@ -115,7 +115,7 @@ public struct PPAccessoryVariantFailureState {
 // MARK: - Section Model
 
 @MainActor
-public final class PPAccessoryVariantSectionModel: ObservableObject {
+final class PPAccessoryVariantSectionModel: ObservableObject {
     @Published public private(set) var baseline: PPAccessoryVariantFamily?
     @Published public var draft: PPAccessoryVariantFamily?
     @Published public var selectedProductId: String = ""
@@ -151,7 +151,7 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
     private var pendingVariantCreationIntent: [String: String]?
     private var pendingCreatedVariantProduct: PetAccessory?
 
-    public var canManageVariants: Bool { true }
+    public var canManageVariants: Bool { PPAccessoryVariantService.shared.canManageVariants }
     public var canViewCosts: Bool { true }
 
     public var isEditingLocked: Bool { isSaving || isCreatingVariant || isDissolving || pendingSaveDraft != nil }
@@ -256,7 +256,6 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
             root.isDefaultVariant = matched.isDefault
             root.variantSortOrder = matched.sortOrder
             rootAccessoryRevision = max(rootAccessoryRevision, root.revision)
-            onRootAccessoryUpdated?(root)
         } else if let root = rootAccessory {
             rootAccessoryRevision = max(rootAccessoryRevision, root.revision)
         }
@@ -273,6 +272,31 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
             }
         }
         validationMessages = []
+    }
+
+    /// Only committed commands notify the parent editor. Loading or closing the
+    /// studio must not replace an unsaved form with a partial family projection.
+    private func publishCommittedRoot() async throws {
+        guard let id = rootAccessory?.accessoryID, !id.isEmpty else { return }
+        let product = try await PPAccessoryVariantService.shared.loadProduct(productId: id)
+        rootAccessory = product
+        rootAccessoryRevision = max(rootAccessoryRevision, product.revision)
+        onRootAccessoryUpdated?(product)
+    }
+
+    private func refreshCommittedCatalog(productId: String) async throws {
+        let product = try await PPAccessoryVariantService.shared.loadProduct(productId: productId)
+        if let index = draft?.variants.firstIndex(where: { $0.productId == productId }), let variant = draft?.variants[index] {
+            draft?.variants[index] = variant.refreshingCatalog(from: product)
+        }
+        if let index = baseline?.variants.firstIndex(where: { $0.productId == productId }), let variant = baseline?.variants[index] {
+            baseline?.variants[index] = variant.refreshingCatalog(from: product)
+        }
+        if rootAccessory?.accessoryID == productId {
+            rootAccessory = product
+            rootAccessoryRevision = product.revision
+            onRootAccessoryUpdated?(product)
+        }
     }
 
     // MARK: - Media
@@ -364,6 +388,7 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
             for entry in commit.imageMeta {
                 if let url = entry["url"] as? String { imageMetadataByURL[url] = entry }
             }
+            try await refreshCommittedCatalog(productId: productId)
             confirmation = Language.get("Variant_Media_Saved", alter: "تم حفظ صور اللون.")
         } catch let mediaError as PPAccessoryVariantMediaError {
             stagedImages[productId] = staged
@@ -770,6 +795,7 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
             let latest = try await PPAccessoryVariantService.shared.loadFamily(familyId: current.familyId)
             if latest.variant(forProductId: product.accessoryID) != nil {
                 apply(loaded: latest)
+                try await publishCommittedRoot()
                 clearPendingVariantCreation()
                 confirmation = Language.get("Variant_Add_Confirmed", alter: "تمت إضافة المتغير وحفظه.")
                 return true
@@ -814,6 +840,7 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
             let reloaded = try await PPAccessoryVariantService.shared.loadFamily(familyId: current.familyId, minimumRevision: attached.revision)
             apply(loaded: reloaded)
             selectedProductId = refreshedProduct.accessoryID
+            try await publishCommittedRoot()
             clearPendingVariantCreation()
             confirmation = Language.get("Variant_Add_Confirmed", alter: "تمت إضافة المتغير وحفظه.")
             return true
@@ -890,8 +917,18 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
                 apply(loaded: reloaded)
             }
         }
+        do {
+            if successCount > 0 { try await publishCommittedRoot() }
+        } catch {
+            failure = PPAccessoryVariantFailureState(error: error)
+            return false
+        }
+        guard successCount == productIds.count else {
+            failure = PPAccessoryVariantFailureState(message: Language.get("ProInventory_BulkPartial", alter: "لم تُحفظ جميع الأسعار. راجع المتغيرات ثم أعد المحاولة."), recovery: .correctInput)
+            return false
+        }
         confirmation = Language.get("Variant_BulkPricing_Success", alter: "تم تحديث أسعار المتغيرات بنجاح.")
-        return successCount > 0
+        return true
     }
 
     public func updateVariant(
@@ -928,6 +965,7 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
             if !newImages.isEmpty {
                 addImages(newImages, forProductId: productId)
                 await saveMedia(forProductId: productId, color: color)
+                guard failure == nil else { return false }
             }
 
             var updateFields: [String: Any] = [
@@ -949,6 +987,7 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
                 }
             }
             guard success else { throw PPAccessoryVariantServiceError.invalidResponse }
+            try await refreshCommittedCatalog(productId: productId)
 
             if let selectedOptions, let variant = draft?.variant(forProductId: productId) {
                 var normalized: [String: String] = [:]
@@ -967,9 +1006,11 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
 
             if isDirty {
                 await save()
+                guard failure == nil else { return false }
             } else if let familyId = currentDraft.familyId.isEmpty ? nil : currentDraft.familyId,
                       let reloaded = try? await PPAccessoryVariantService.shared.loadFamily(familyId: familyId) {
                 apply(loaded: reloaded)
+                try await publishCommittedRoot()
             }
 
             confirmation = Language.get("Variant_Studio_UpdateSuccess", alter: "تم حفظ وتحديث المتغير بنجاح.")
@@ -1035,6 +1076,7 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
             let result = try await PPAccessoryVariantService.shared.saveFamily(draft, commandId: commandId)
             let reloaded = try await PPAccessoryVariantService.shared.loadFamily(familyId: result.familyId, minimumRevision: result.revision)
             apply(loaded: reloaded)
+            try await publishCommittedRoot()
             pendingCommandId = nil
             pendingSaveDraft = nil
             failure = nil
@@ -1110,19 +1152,19 @@ public final class PPAccessoryVariantSectionModel: ObservableObject {
 
 // MARK: - Section View (SwiftUI)
 
-public struct PPAccessoryVariantSection: View {
-    @ObservedObject public var model: PPAccessoryVariantSectionModel
-    public var onOpenVariantProduct: ((String) -> Void)?
-    public var onDidRevertToNormal: (() -> Void)? = nil
-    public var onRootAccessoryUpdated: ((PetAccessory) -> Void)? = nil
+struct PPAccessoryVariantSection: View {
+    @ObservedObject var model: PPAccessoryVariantSectionModel
+    var onOpenVariantProduct: ((String) -> Void)?
+    var onDidRevertToNormal: (() -> Void)? = nil
+    var onRootAccessoryUpdated: ((PetAccessory) -> Void)? = nil
 
-    public enum VariantSectionTab: String, CaseIterable, Identifiable {
+    enum VariantSectionTab: String, CaseIterable, Identifiable {
         case options
         case variants
 
-        public var id: String { rawValue }
+        var id: String { rawValue }
 
-        public var localizedTitle: String {
+        var localizedTitle: String {
             switch self {
             case .options:
                 return Language.get("Options_Tab_Options", alter: "الخيارات")
@@ -1135,14 +1177,14 @@ public struct PPAccessoryVariantSection: View {
     @State private var selectedTab: VariantSectionTab = .options
     @State private var isPresentingRevertConfirmation = false
 
-    public init(model: PPAccessoryVariantSectionModel, onOpenVariantProduct: ((String) -> Void)? = nil, onDidRevertToNormal: (() -> Void)? = nil, onRootAccessoryUpdated: ((PetAccessory) -> Void)? = nil) {
+    init(model: PPAccessoryVariantSectionModel, onOpenVariantProduct: ((String) -> Void)? = nil, onDidRevertToNormal: (() -> Void)? = nil, onRootAccessoryUpdated: ((PetAccessory) -> Void)? = nil) {
         self.model = model
         self.onOpenVariantProduct = onOpenVariantProduct
         self.onDidRevertToNormal = onDidRevertToNormal
         self.onRootAccessoryUpdated = onRootAccessoryUpdated
     }
 
-    public var body: some View {
+    var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if model.isLoading {
                 loadingState
@@ -1522,6 +1564,8 @@ public struct PPAccessoryVariantSection: View {
 
     public override func viewDidLoad() {
         super.viewDidLoad()
+        isModalInPresentation = true
+        navigationController?.isModalInPresentation = true
         view.backgroundColor = .ppBackground
         title = Language.get("Variant_Studio_Title", alter: "خيارات المنتج والمصفوفة")
 
@@ -1565,10 +1609,18 @@ public struct PPAccessoryVariantSection: View {
     }
 
     @objc private func handleDone() {
-        if let root = model.rootAccessory {
-            onSavedHandler?(root)
+        guard !model.isEditingLocked, !model.isSavingMedia else { return }
+        let hasMediaDraft = model.stagedImages.values.contains { !$0.isEmpty }
+        guard model.isDirty || hasMediaDraft else {
+            dismiss(animated: true, completion: nil)
+            return
         }
-        dismiss(animated: true, completion: nil)
+        let alert = UIAlertController(title: Language.get("ProInventory_DiscardTitle", alter: "تجاهل التغييرات غير المحفوظة؟"), message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: Language.get("Cancel", alter: "إلغاء"), style: .cancel))
+        alert.addAction(UIAlertAction(title: Language.get("Discard", alter: "تجاهل"), style: .destructive) { [weak self] _ in
+            self?.dismiss(animated: true, completion: nil)
+        })
+        present(alert, animated: true)
     }
 }
 
@@ -3387,130 +3439,4 @@ fileprivate extension UIColor {
 
 // MARK: - Image picker
 //
-// A file-local picker, matching the existing pattern in this module: the
-// equivalents in PPAccessoryEditorView.swift and PPLivePetBasicDataEditorView.swift
-// are both file-private, so they cannot be shared.
-
-struct PPVariantImagePickerSheet: UIViewControllerRepresentable {
-    let maxSelection: Int
-    let onPicked: ([UIImage]) -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    func makeUIViewController(context: Context) -> PHPickerViewController {
-        var config = PHPickerConfiguration()
-        config.selectionLimit = maxSelection
-        config.filter = .images
-        let picker = PHPickerViewController(configuration: config)
-        picker.delegate = context.coordinator
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {
-        context.coordinator.parent = self
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    final class Coordinator: NSObject, PHPickerViewControllerDelegate {
-        var parent: PPVariantImagePickerSheet
-
-        init(_ parent: PPVariantImagePickerSheet) {
-            self.parent = parent
-        }
-
-        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-            let onPicked = parent.onPicked
-            parent.dismiss()
-            guard !results.isEmpty else {
-                onPicked([])
-                return
-            }
-
-            final class ImageAccumulator: @unchecked Sendable {
-                private let lock = NSLock()
-                private var slots: [UIImage?]
-
-                init(count: Int) {
-                    self.slots = Array(repeating: nil, count: count)
-                }
-
-                func set(image: UIImage, at index: Int) {
-                    lock.lock()
-                    if index < slots.count {
-                        slots[index] = image
-                    }
-                    lock.unlock()
-                }
-
-                var orderedImages: [UIImage] {
-                    lock.lock()
-                    defer { lock.unlock() }
-                    return slots.compactMap { $0 }
-                }
-            }
-
-            final class AtomicGate: @unchecked Sendable {
-                private let lock = NSLock()
-                private var opened = false
-                func openOnce() -> Bool {
-                    lock.lock()
-                    defer { lock.unlock() }
-                    if opened { return false }
-                    opened = true
-                    return true
-                }
-            }
-
-            let accumulator = ImageAccumulator(count: results.count)
-            let group = DispatchGroup()
-
-            for (index, result) in results.enumerated() {
-                group.enter()
-                let provider = result.itemProvider
-                let gate = AtomicGate()
-
-                let finish: @Sendable (UIImage?) -> Void = { img in
-                    guard gate.openOnce() else { return }
-                    if let img = img {
-                        accumulator.set(image: img, at: index)
-                    }
-                    group.leave()
-                }
-
-                if provider.canLoadObject(ofClass: UIImage.self) {
-                    provider.loadObject(ofClass: UIImage.self) { [finish] object, _ in
-                        if let image = object as? UIImage {
-                            finish(image)
-                        } else if provider.hasItemConformingToTypeIdentifier("public.image") {
-                            provider.loadDataRepresentation(forTypeIdentifier: "public.image") { [finish] data, _ in
-                                let img = data.flatMap { UIImage(data: $0) }
-                                finish(img)
-                            }
-                        } else {
-                            finish(nil)
-                        }
-                    }
-                } else if provider.hasItemConformingToTypeIdentifier("public.image") {
-                    provider.loadDataRepresentation(forTypeIdentifier: "public.image") { [finish] data, _ in
-                        let img = data.flatMap { UIImage(data: $0) }
-                        finish(img)
-                    }
-                } else if provider.hasItemConformingToTypeIdentifier("public.item") {
-                    provider.loadFileRepresentation(forTypeIdentifier: "public.item") { [finish] url, _ in
-                        if let url = url, let data = try? Data(contentsOf: url), let img = UIImage(data: data) {
-                            finish(img)
-                        } else {
-                            finish(nil)
-                        }
-                    }
-                } else {
-                    finish(nil)
-                }
-            }
-
-            group.notify(queue: .main) {
-                onPicked(accumulator.orderedImages)
-            }
-        }
-    }
-}
+// PPVariantImagePickerSheet is provided by PPAdminDesignCompat.swift for module-wide accessibility.

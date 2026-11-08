@@ -5,6 +5,12 @@ PPDeliveryCompanyRole const PPDeliveryCompanyRoleDispatcher = @"dispatcher";
 PPDeliveryCompanyRole const PPDeliveryCompanyRoleDriver = @"driver";
 PPDeliveryCompanyRole const PPDeliveryCompanyRoleViewer = @"viewer";
 
+PPDeliveryWorkspaceKind const PPDeliveryWorkspaceKindOfficialDriver = @"OFFICIAL_DRIVER";
+PPDeliveryWorkspaceKind const PPDeliveryWorkspaceKindOfficialFleetStaff = @"OFFICIAL_FLEET_STAFF";
+PPDeliveryWorkspaceKind const PPDeliveryWorkspaceKindPartnerDriver = @"PARTNER_DRIVER";
+PPDeliveryWorkspaceKind const PPDeliveryWorkspaceKindPartnerDispatch = @"PARTNER_DISPATCH";
+PPDeliveryWorkspaceKind const PPDeliveryWorkspaceKindRestricted = @"RESTRICTED";
+
 PPDeliveryCompanyStatus const PPDeliveryCompanyStatusOffered = @"offered";
 PPDeliveryCompanyStatus const PPDeliveryCompanyStatusAccepted = @"accepted_by_company";
 PPDeliveryCompanyStatus const PPDeliveryCompanyStatusAssigned = @"assigned_to_driver";
@@ -181,16 +187,83 @@ static NSString *PPDCAddressSummary(NSDictionary *address) {
     model.role = PPDCString(response[@"myRole"]).lowercaseString;
     model.createdAt = PPDeliveryCompanyDateFromValue(company[@"createdAt"]);
     model.updatedAt = PPDeliveryCompanyDateFromValue(company[@"updatedAt"]);
+
+    // contractVersion 2: server-resolved workspaces and capabilities.
+    NSArray *workspaces = [response[@"workspaces"] isKindOfClass:NSArray.class]
+        ? response[@"workspaces"]
+        : ([response[@"workspace"] isKindOfClass:NSDictionary.class] ? @[response[@"workspace"]] : @[]);
+    NSMutableArray<NSString *> *kinds = [NSMutableArray array];
+    NSMutableDictionary<NSString *, NSNumber *> *capabilities = [NSMutableDictionary dictionary];
+    NSString *restrictionReason = @"";
+    for (id rawWorkspace in workspaces) {
+        NSDictionary *workspace = PPDCDictionary(rawWorkspace);
+        NSString *kind = PPDCString(workspace[@"kind"]).uppercaseString;
+        if (kind.length == 0) continue;
+        if (![kinds containsObject:kind]) [kinds addObject:kind];
+        if ([kind isEqualToString:PPDeliveryWorkspaceKindRestricted] && restrictionReason.length == 0) {
+            restrictionReason = PPDCString(workspace[@"reason"]);
+        }
+        NSDictionary *workspaceCapabilities = PPDCDictionary(workspace[@"capabilities"]);
+        for (id key in workspaceCapabilities) {
+            if (![key isKindOfClass:NSString.class]) continue;
+            id value = workspaceCapabilities[key];
+            BOOL allowed = [value respondsToSelector:@selector(boolValue)] && [value boolValue];
+            capabilities[key] = @([capabilities[key] boolValue] || allowed);
+        }
+    }
+    model.workspaceKinds = kinds.copy;
+    model.serverCapabilities = capabilities.copy;
+    model.restrictionReason = restrictionReason;
     return model;
 }
 
 - (BOOL)isOwner { return [self.role isEqualToString:PPDeliveryCompanyRoleOwner]; }
 - (BOOL)isDispatcher { return [self.role isEqualToString:PPDeliveryCompanyRoleDispatcher]; }
-- (BOOL)isDriver { return [self.role isEqualToString:PPDeliveryCompanyRoleDriver]; }
 - (BOOL)isViewer { return [self.role isEqualToString:PPDeliveryCompanyRoleViewer]; }
-- (BOOL)canDispatch { return self.isOwner || self.isDispatcher; }
-- (BOOL)canViewMembers { return self.role.length > 0 && !self.isDriver; }
-- (BOOL)canManageMembers { return self.isOwner; }
+
+// Server projections win when present; the role fallback mirrors the backend
+// role tables for older responses and never widens them.
+- (BOOL)hasServerWorkspaceProjection { return self.workspaceKinds.count > 0; }
+- (BOOL)hasDriverWorkspace {
+    return [self.workspaceKinds containsObject:PPDeliveryWorkspaceKindOfficialDriver] ||
+           [self.workspaceKinds containsObject:PPDeliveryWorkspaceKindPartnerDriver];
+}
+- (BOOL)hasDispatchWorkspace {
+    return [self.workspaceKinds containsObject:PPDeliveryWorkspaceKindPartnerDispatch] ||
+           [self.workspaceKinds containsObject:PPDeliveryWorkspaceKindOfficialFleetStaff];
+}
+- (BOOL)isOfficialDriverWorkspace { return [self.workspaceKinds containsObject:PPDeliveryWorkspaceKindOfficialDriver]; }
+- (BOOL)isRestrictedWorkspace {
+    return self.hasServerWorkspaceProjection && !self.hasDriverWorkspace && !self.hasDispatchWorkspace;
+}
+- (BOOL)serverAllowsCapability:(NSString *)capability {
+    return capability.length > 0 && [self.serverCapabilities[capability] boolValue];
+}
+- (BOOL)prefersDriverCockpit {
+    if (!self.hasServerWorkspaceProjection) return NO;
+    return self.isRestrictedWorkspace || (self.hasDriverWorkspace && !self.hasDispatchWorkspace);
+}
+
+- (BOOL)isDriver {
+    if (self.hasServerWorkspaceProjection) return self.hasDriverWorkspace && !self.hasDispatchWorkspace;
+    return [self.role isEqualToString:PPDeliveryCompanyRoleDriver];
+}
+- (BOOL)canDispatch {
+    if (self.hasServerWorkspaceProjection) {
+        return [self serverAllowsCapability:@"acceptRequests"] || [self serverAllowsCapability:@"assignDrivers"];
+    }
+    return self.isOwner || self.isDispatcher;
+}
+- (BOOL)canViewMembers {
+    if (self.hasServerWorkspaceProjection) {
+        return [self serverAllowsCapability:@"viewAllDeliveries"] || [self serverAllowsCapability:@"manageMembers"];
+    }
+    return self.role.length > 0 && !self.isDriver;
+}
+- (BOOL)canManageMembers {
+    if (self.hasServerWorkspaceProjection) return [self serverAllowsCapability:@"manageMembers"];
+    return self.isOwner;
+}
 
 @end
 
@@ -243,7 +316,17 @@ static NSString *PPDCAddressSummary(NSDictionary *address) {
     return self.orderNumber.length ? self.orderNumber : (self.orderID.length ? self.orderID : self.requestID);
 }
 
-- (NSString *)pickupSummary { return PPDCAddressSummary(self.pickupAddress); }
+- (NSString *)pickupSummary {
+    // The server names the pickup branch in both languages; show it in the
+    // reader's language ahead of its street address.
+    NSDictionary *names = PPDCDictionary(PPDCDictionary(self.pickupAddress)[@"branchName"]);
+    NSString *ar = PPDCString(names[@"ar"]), *en = PPDCString(names[@"en"]);
+    NSString *branch = Language.isRTL ? (ar.length ? ar : en) : (en.length ? en : ar);
+    NSString *address = PPDCAddressSummary(self.pickupAddress);
+    if (branch.length == 0) return address;
+    BOOL hasAddress = ![address isEqualToString:kLang(@"DeliveryCompany_NotAvailable")] && ![address isEqualToString:branch];
+    return hasAddress ? [NSString stringWithFormat:@"%@ · %@", branch, address] : branch;
+}
 - (NSString *)dropoffSummary { return PPDCAddressSummary(self.dropoffAddress); }
 - (NSString *)formattedFee {
     return self.deliveryFee > 0.0

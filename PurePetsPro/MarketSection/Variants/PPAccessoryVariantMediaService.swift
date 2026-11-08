@@ -97,7 +97,7 @@ final class PPAccessoryVariantMediaService {
                 return true
             case .none, .noneSkipFirst, .noneSkipLast:
                 return false
-            default:
+            @unknown default:
                 return false
             }
         }()
@@ -296,14 +296,20 @@ final class PPAccessoryVariantMediaService {
                 "imageURLsArray": commit.imageURLs,
                 "imageMeta": commit.imageMeta
             ]
-            PPProviderMarketplaceManager.shared().updateMarketItem(commit.productId, fields: fields) { success, message, error in
+            PPProviderMarketplaceManager
+                .shared()
+                .updateMarketItem(
+                    commit.productId,
+                    fields: fields
+                ) { success, message, error in
                 if success {
                     continuation.resume(returning: ())
                 } else {
+                    let errDesc: String = message ?? error?.localizedDescription ?? "Failed to save variant media"
                     continuation.resume(throwing: error ?? NSError(
                         domain: "pp.variant.media",
                         code: -1,
-                        userInfo: [NSLocalizedDescriptionKey: message ?? "Failed to save variant media"]
+                        userInfo: [NSLocalizedDescriptionKey: errDesc]
                     ))
                 }
             }

@@ -61,10 +61,7 @@ static NSInteger PPMessageStatusValue(id status)
 
 static UIFont *PPMessageScaledFont(UIFont *font, UIFontTextStyle textStyle)
 {
-    if (@available(iOS 11.0, *)) {
-        return [[UIFontMetrics metricsForTextStyle:textStyle] scaledFontForFont:font];
-    }
-    return font;
+    return PPScaledFont(font, textStyle);
 }
 
 static NSString *PPMessageStatusText(id status)

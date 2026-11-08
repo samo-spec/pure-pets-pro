@@ -144,7 +144,8 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSInteger)normalizedQuantity;
 - (void)normalizeInventoryState;
 
-+ (nullable NSURL *)firstImageURLForAccessory:(PetAccessory *)accessory;
++ (nullable NSURL *)firstImageURLForAccessory:(PetAccessory *)accessory
+    NS_SWIFT_NAME(firstImageURL(for:));
 + (NSString *)typeTextForAccessory:(PetAccessory *)accessory;
 + (NSString *)conditionTextForAccessory:(PetAccessory *)accessory;
 + (NSString *)formatCurrency:(NSNumber *)amount;

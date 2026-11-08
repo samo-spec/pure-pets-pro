@@ -14,6 +14,7 @@
 #import "PPFirebaseCompat.h"
 #import "PPStaffAuth.h"
 #import "PPRolePermission.h"
+#import <CoreFoundation/CoreFoundation.h>
 @import GoogleSignIn;
 
 @interface PPStaffAuth (PPAppManagerCacheAccess)
@@ -119,149 +120,80 @@ static BOOL PPAdminSafeClaimBoolValue(id value)
     return NO;
 }
 
-static BOOL PPUserDocAllowsProAccess(NSDictionary *root)
-{
-    if (![root isKindOfClass:NSDictionary.class]) {
-        return NO;
-    }
+static BOOL PPProStrictTrue(id value) {
+    return [value isKindOfClass:NSNumber.class] &&
+           CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID() &&
+           [value boolValue];
+}
 
-    NSString *accountType = [PPAdminSafeClaimString(root[@"accountType"]) lowercaseString];
-    NSDictionary *staffProfile = [root[@"staffProfile"] isKindOfClass:NSDictionary.class] ? (NSDictionary *)root[@"staffProfile"] : nil;
-    
-    NSString *accountStatus =
-        [PPAdminSafeClaimString(root[@"accountStatus"]) stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    
-    // Unified status check (root or staffProfile)
-    NSString *effectiveStatus = accountStatus;
-    if (staffProfile && [accountType isEqualToString:@"staff"]) {
-        effectiveStatus = [PPAdminSafeClaimString(staffProfile[@"status"]) lowercaseString];
+static BOOL PPProAccountIsBlocked(NSDictionary *root) {
+    if (![root isKindOfClass:NSDictionary.class]) return NO;
+    for (NSString *key in @[@"isBlocked", @"blocked", @"banned", @"deactivated", @"isDeleted",
+                            @"deleted", @"isSuspended", @"suspended", @"isDisabled", @"disabled"]) {
+        if (PPProStrictTrue(root[key])) return YES;
     }
-    
-    BOOL blocked = PPAdminSafeClaimBoolValue(root[@"isBlocked"]) ||
-                   PPAdminSafeClaimBoolValue(root[@"blocked"]) ||
-                   [effectiveStatus isEqualToString:@"blocked"] ||
-                   [effectiveStatus isEqualToString:@"disabled"];
-    
-    BOOL deleted = PPAdminSafeClaimBoolValue(root[@"isDeleted"]);
-    if (blocked || deleted) {
-        return NO;
-    }
-
-    // New Infrastructure check
-    if ([accountType isEqualToString:@"staff"]) {
-        // Active staff members always get access to the Pro app
-        return YES;
-    }
-
-    // Legacy/Existing checks
-    if (PPAdminSafeClaimBoolValue(root[@"isAdmin"]) ||
-        PPAdminSafeClaimBoolValue(root[@"isSuperAdmin"]) ||
-        PPAdminSafeClaimBoolValue(root[@"isAdminAll"])) {
-        return YES;
-    }
-
-    UserRole rootRole = PPParseRoleFromUserDoc(root);
-    if (PPIsAllowedAdminRole(rootRole)) {
-        return YES;
-    }
-
-    id features = root[@"features"];
-    BOOL canOfferServices = PPAdminSafeClaimBoolValue(root[@"canOfferServices"]);
-    BOOL canDelivery = PPAdminSafeClaimBoolValue(root[@"canDelivery"]);
-    BOOL canDeliveryCompany = PPAdminSafeClaimBoolValue(root[@"canDeliveryCompany"]);
-    BOOL canVet = PPAdminSafeClaimBoolValue(root[@"canVet"]);
-    BOOL canPharmacy = PPAdminSafeClaimBoolValue(root[@"canPharmacy"]);
-    BOOL canAccessProviderMarketplace = PPAdminSafeClaimBoolValue(root[@"canAccessProviderMarketplace"]);
-    if ([features isKindOfClass:NSDictionary.class]) {
-        if (!canOfferServices) {
-            canOfferServices =
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"canOfferServices"]) ||
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"service_provider"]);
-        }
-        if (!canDelivery) {
-            canDelivery =
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"canDelivery"]) ||
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"delivery"]);
-        }
-        if (!canDeliveryCompany) {
-            canDeliveryCompany =
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"canDeliveryCompany"]);
-        }
-        if (!canVet) {
-            canVet =
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"canVet"]) ||
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"vet"]);
-        }
-        if (!canPharmacy) {
-            canPharmacy =
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"canPharmacy"]) ||
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"pharmacy"]);
-        }
-        if (!canAccessProviderMarketplace) {
-            canAccessProviderMarketplace =
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"canAccessProviderMarketplace"]) ||
-                PPAdminSafeClaimBoolValue(((NSDictionary *)features)[@"marketplace"]);
+    for (NSString *key in @[@"status", @"accountStatus"]) {
+        if ([@[@"blocked", @"deleted", @"suspended", @"disabled"] containsObject:PPAdminSafeClaimString(root[key])]) {
+            return YES;
         }
     }
-    if (!canOfferServices && !canDelivery && !canDeliveryCompany && !canVet && !canPharmacy && !canAccessProviderMarketplace) {
-        return NO;
+    return NO;
+}
+
+// Match Infra's providerSubscriptionValueActive, including legacy absent status.
+static BOOL PPProSubscriptionIsActive(id value) {
+    if (!value) return YES;
+    id status = value;
+    if ([value isKindOfClass:NSDictionary.class]) {
+        status = value[@"status"];
+        if (!status) return YES;
+    }
+    return [status isKindOfClass:NSString.class] &&
+           [@[@"active", @"approved", @"trial"] containsObject:status];
+}
+
+static BOOL PPUserDocAllowsProAccess(NSDictionary *root) {
+    if (![root isKindOfClass:NSDictionary.class] || PPProAccountIsBlocked(root)) return NO;
+    for (NSString *key in @[@"status", @"accountStatus"]) {
+        id status = root[key];
+        if (status && (![status isKindOfClass:NSString.class] ||
+                       ![@[@"active", @"approved"] containsObject:status])) return NO;
     }
 
-    id subscription = root[@"subscription"];
-    if ([subscription isKindOfClass:NSDictionary.class]) {
-        NSString *status = PPAdminSafeClaimString(((NSDictionary *)subscription)[@"status"]);
-        if ([status isEqualToString:@"blocked"]) {
-            return NO;
-        }
-    }
+    NSDictionary *features = [root[@"features"] isKindOfClass:NSDictionary.class] ? root[@"features"] : @{};
+    NSDictionary *subscriptions = [root[@"subscriptions"] isKindOfClass:NSDictionary.class] ? root[@"subscriptions"] : @{};
+    if (!PPProSubscriptionIsActive(root[@"subscription"]) ||
+        !PPProSubscriptionIsActive(subscriptions[@"pro"])) return NO;
 
-    return YES;
+    // Canonical feature, legacy feature, legacy nested alias, Infra provider type.
+    // Staff membership and admin claims deliberately do not grant provider access.
+    NSArray<NSArray<NSString *> *> *providerFeatures = @[
+        @[@"serviceProvider", @"canOfferServices", @"service_provider", @"service"],
+        @[@"production", @"canAccessProviderMarketplace", @"marketplace", @"marketplace"],
+        @[@"veterinarians", @"canVet", @"vet", @"vet"],
+        @[@"pharmacy", @"canPharmacy", @"pharmacy", @"pharmacy"],
+        @[@"delivery", @"canDelivery", @"delivery", @"delivery_subscription"],
+        @[@"delivery", @"canDeliveryCompany", @"canDeliveryCompany", @"delivery_company"]
+    ];
+    for (NSArray<NSString *> *feature in providerFeatures) {
+        BOOL hasFeatureProjection = features[feature[0]] != nil || features[feature[1]] != nil || features[feature[2]] != nil;
+        BOOL enabled = PPProStrictTrue(features[feature[0]]) || PPProStrictTrue(features[feature[1]]) ||
+                       PPProStrictTrue(features[feature[2]]);
+        // Retain old server-issued root flags only when no newer projection exists.
+        if (!hasFeatureProjection) enabled = PPProStrictTrue(root[feature[1]]);
+        if (enabled && PPProSubscriptionIsActive(subscriptions[feature[0]]) &&
+            PPProSubscriptionIsActive(subscriptions[feature[3]])) return YES;
+    }
+    return NO;
 }
 
 typedef void (^PPUsersColRootCompletion)(NSDictionary * _Nullable root, NSError * _Nullable error);
 
-static void PPQueryUsersColRootMatchingField(FIRFirestore *db,
-                                             NSString *field,
-                                             NSString *value,
-                                             PPUsersColRootCompletion completion)
-{
-    NSString *safeField = PPSafeString(field);
-    NSString *safeValue = PPSafeString(value);
-    if (safeField.length == 0 || safeValue.length == 0) {
-        if (completion) completion(nil, nil);
-        return;
-    }
-
-    FIRQuery *query =
-        [[[db collectionWithPath:kPPUsersCol]
-            queryWhereField:safeField
-                 isEqualTo:safeValue]
-            queryLimitedTo:1];
-
-    [query getDocumentsWithCompletion:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
-        if (error) {
-            if (completion) completion(nil, error);
-            return;
-        }
-
-        FIRDocumentSnapshot *document = snapshot.documents.firstObject;
-        if (!document.exists) {
-            if (completion) completion(nil, nil);
-            return;
-        }
-
-        DLog(@"[ProAccess] Matched UsersCol by %@=%@ (docID=%@)", safeField, safeValue, document.documentID);
-        if (completion) completion(document.data ?: @{}, nil);
-    }];
-}
-
 static void PPFetchUsersColRootForAuthIdentity(FIRFirestore *db,
                                                NSString *uid,
-                                               NSString * _Nullable email,
                                                PPUsersColRootCompletion completion)
 {
     NSString *safeUID = PPSafeString(uid);
-    NSString *safeEmail = PPSafeString(email);
     if (safeUID.length == 0) {
         if (completion) completion(nil, nil);
         return;
@@ -275,56 +207,27 @@ static void PPFetchUsersColRootForAuthIdentity(FIRFirestore *db,
             return;
         }
 
-        if (snapshot.exists) {
-            if (completion) completion(snapshot.data ?: @{}, nil);
-            return;
-        }
-
-        PPQueryUsersColRootMatchingField(db, @"uid", safeUID, ^(NSDictionary * _Nullable root, NSError * _Nullable uidError) {
-            if (uidError || root) {
-                if (completion) completion(root, uidError);
-                return;
-            }
-
-            PPQueryUsersColRootMatchingField(db, @"ID", safeUID, ^(NSDictionary * _Nullable legacyRoot, NSError * _Nullable legacyError) {
-                if (legacyError || legacyRoot || safeEmail.length == 0) {
-                    if (completion) completion(legacyRoot, legacyError);
-                    return;
-                }
-
-                PPQueryUsersColRootMatchingField(db, @"email", safeEmail, ^(NSDictionary * _Nullable emailRoot, NSError * _Nullable emailError) {
-                    if (emailError || emailRoot) {
-                        if (completion) completion(emailRoot, emailError);
-                        return;
-                    }
-
-                    PPQueryUsersColRootMatchingField(db, @"UserEmail", safeEmail, completion);
-                });
-            });
-        });
+        // Owner identity is the Firebase Auth UID. Missing profiles enter the
+        // existing onboarding flow; collection queries are staff-only in Infra.
+        if (completion) completion(snapshot.exists ? (snapshot.data ?: @{}) : nil, nil);
     }];
 }
 
 static BOOL PPShouldUseDebugAppCheckProvider(void) {
 #if TARGET_OS_SIMULATOR
     return YES;
-#else
+#elif DEBUG
+    // In Debug builds (e.g. running from Xcode on connected physical device),
+    // default to Debug provider unless explicitly forced to production App Attest.
     NSProcessInfo *processInfo = [NSProcessInfo processInfo];
     NSDictionary<NSString *, NSString *> *env = processInfo.environment ?: @{};
-    NSString *forceEnv = env[@"PP_FORCE_APPCHECK_DEBUG_PROVIDER"];
-    NSString *debugTokenEnv = env[@"FIRAAppCheckDebugToken"];
-    BOOL forceFromEnv = PPAppCheckTruthyString(forceEnv);
-    BOOL hasDebugTokenEnv = [debugTokenEnv isKindOfClass:NSString.class] && debugTokenEnv.length > 0;
-
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    id forceDefaultsValue = [defaults objectForKey:@"PPForceAppCheckDebugProvider"];
-    BOOL forceDefaultsEnabled = NO;
-    if ([forceDefaultsValue isKindOfClass:NSNumber.class]) {
-        forceDefaultsEnabled = [(NSNumber *)forceDefaultsValue boolValue];
-    } else if ([forceDefaultsValue isKindOfClass:NSString.class]) {
-        forceDefaultsEnabled = PPAppCheckTruthyString((NSString *)forceDefaultsValue);
+    if (PPAppCheckTruthyString(env[@"PP_FORCE_APPCHECK_APPACTEST_PROVIDER"])) {
+        return NO;
     }
-    return forceFromEnv || hasDebugTokenEnv || forceDefaultsEnabled;
+    return YES;
+#else
+    // Release builds always attest the real app, regardless of local defaults.
+    return NO;
 #endif
 }
 
@@ -503,6 +406,13 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
 @end
 
 
+@interface AppManager ()
+@property (nonatomic, assign) BOOL googleSignInAppCheckReady;
+@property (nonatomic, assign) BOOL googleSignInAppCheckConfiguring;
+@property (nonatomic, assign) NSUInteger googleSignInAppCheckGeneration;
+@property (nonatomic, strong) NSMutableArray *googleSignInAppCheckCompletions;
+@end
+
 @implementation AppManager
 
 - (void)pp_logAndProbeDebugAppCheckIfNeeded {
@@ -532,20 +442,58 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
     }];
 }
 
-- (void)pp_configureGoogleSignInAppCheckForDefaultApp {
-    FIRApp *defaultApp = [FIRApp defaultApp];
-    if (!defaultApp) {
+- (void)prepareGoogleSignInWithCompletion:(void (^)(NSError * _Nullable))callback {
+    if (![NSThread isMainThread]) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [self prepareGoogleSignInWithCompletion:callback]; });
         return;
     }
+    if (self.googleSignInAppCheckReady) {
+        if (callback) callback(nil);
+        return;
+    }
+    if (!self.googleSignInAppCheckCompletions) self.googleSignInAppCheckCompletions = [NSMutableArray array];
+    if (callback) [self.googleSignInAppCheckCompletions addObject:[callback copy]];
+    if (self.googleSignInAppCheckConfiguring) return;
+    self.googleSignInAppCheckConfiguring = YES;
+    NSUInteger generation = ++self.googleSignInAppCheckGeneration;
 
-    [GIDSignIn.sharedInstance configureWithCompletion:^(NSError * _Nullable error) {
-        if (error) {
-            DLog(@"[GoogleSignIn][AppCheck] App Check configuration failed: %@",
-                  error.localizedDescription ?: @"unknown error");
+    void (^completion)(NSError *) = ^(NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (self.googleSignInAppCheckGeneration != generation || !self.googleSignInAppCheckConfiguring) return;
+            self.googleSignInAppCheckConfiguring = NO;
+            self.googleSignInAppCheckReady = error == nil;
+            NSArray *callbacks = self.googleSignInAppCheckCompletions.copy;
+            [self.googleSignInAppCheckCompletions removeAllObjects];
+            if (error) DLog(@"[GoogleSignIn][AppCheck] Configuration failed (%@/%ld).", error.domain, (long)error.code);
+            for (void (^pending)(NSError *) in callbacks) pending(error);
+        });
+    };
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        if (self.googleSignInAppCheckGeneration == generation && self.googleSignInAppCheckConfiguring) {
+            completion([NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorTimedOut userInfo:nil]);
+        }
+    });
+    FIRApp *defaultApp = [FIRApp defaultApp];
+    if (!defaultApp) {
+        completion([NSError errorWithDomain:@"PurePetsPro.GoogleAppCheck" code:1 userInfo:nil]);
+        return;
+    }
+#if DEBUG || TARGET_OS_SIMULATOR
+    if (PPShouldUseDebugAppCheckProvider()) {
+        if (@available(iOS 14.0, *)) {
+            // Google Identity has its own App Check client. Firebase's provider
+            // factory alone does not configure it. The SDK owns the debug token.
+            NSString *apiKey = defaultApp.options.APIKey;
+            if (apiKey.length == 0) {
+                completion([NSError errorWithDomain:@"PurePetsPro.GoogleAppCheck" code:2 userInfo:nil]);
+                return;
+            }
+            [GIDSignIn.sharedInstance configureDebugProviderWithAPIKey:apiKey completion:completion];
             return;
         }
-        DLog(@"[GoogleSignIn][AppCheck] App Check configured for PurePetsPro.");
-    }];
+    }
+#endif
+    [GIDSignIn.sharedInstance configureWithCompletion:completion];
 }
 
 + (instancetype)shared {
@@ -585,14 +533,14 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
         if (![FIRApp defaultApp]) {
             [FIRApp configure];
             DLog(@"Firebase configured ✅");
-            [self pp_configureGoogleSignInAppCheckForDefaultApp];
+            [self prepareGoogleSignInWithCompletion:nil];
             [self pp_logAndProbeDebugAppCheckIfNeeded];
             
             [FUM startAuthListenerWithChangeBlock:^(FIRUser * _Nullable authUser, UserModel * _Nullable userModel) { }];
             
         } else {
             DLog(@"Firebase already configured, skipping");
-            [self pp_configureGoogleSignInAppCheckForDefaultApp];
+            [self prepareGoogleSignInWithCompletion:nil];
             [self pp_logAndProbeDebugAppCheckIfNeeded];
         }
     });
@@ -659,37 +607,26 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
               canAccessPro:(void(^)(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error))completion
 {
     NSString *safeUID = PPSafeString(uid);
-    if (safeUID.length == 0) {
+    if (safeUID.length == 0 || ![[FIRAuth auth].currentUser.uid isEqualToString:safeUID]) {
         if (completion) completion(NO, nil, nil);
         return;
     }
 
-    [self checkIfAdmin:^(BOOL isAdmin) {
-        if (isAdmin) {
-            if (completion) completion(YES, nil, nil);
+    PPFetchUsersColRootForAuthIdentity([FIRFirestore firestore], safeUID, ^(NSDictionary * _Nullable root, NSError * _Nullable error) {
+        if (![[FIRAuth auth].currentUser.uid isEqualToString:safeUID]) {
+            if (completion) completion(NO, nil, nil);
             return;
         }
+        if (error) {
+            if (completion) completion(NO, nil, error);
+            return;
+        }
+        if (completion) completion(PPUserDocAllowsProAccess(root), root, nil);
+    });
+}
 
-        FIRUser *authUser = [FIRAuth auth].currentUser;
-        NSString *authEmail =
-            [PPSafeString(authUser.uid) isEqualToString:safeUID]
-                ? PPSafeString(authUser.email)
-                : @"";
-
-        PPFetchUsersColRootForAuthIdentity([FIRFirestore firestore], safeUID, authEmail, ^(NSDictionary * _Nullable root, NSError * _Nullable error) {
-            if (error) {
-                if (completion) completion(NO, nil, error);
-                return;
-            }
-
-            if (![root isKindOfClass:NSDictionary.class] || root.count == 0) {
-                if (completion) completion(NO, nil, nil);
-                return;
-            }
-
-            if (completion) completion(PPUserDocAllowsProAccess(root), root, nil);
-        });
-    }];
++ (BOOL)isProAccountBlocked:(NSDictionary *)userDoc {
+    return PPProAccountIsBlocked(userDoc);
 }
 
 #pragma mark - MainKinds

@@ -429,44 +429,64 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
                             extra:(NSDictionary * _Nullable)extra
                        completion:(FUErrorBlock)completion
 {
-    self.ref = [self userDocumentRefForUID:user.uid];
+    // Bind every asynchronous operation to this identity. A singleton's mutable
+    // `ref` can change while a previous account's sign-in is still completing.
+    NSString *uid = user.uid;
+    FIRDocumentReference *ref = [self userDocumentRefForUID:uid];
+    NSMutableDictionary *profile = [@{
+        @"uid": uid,
+        @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp],
+        @"lastLoginAt": [FIRFieldValue fieldValueForServerTimestamp]
+    } mutableCopy];
+    if (user.email.length > 0) profile[@"email"] = user.email;
+    if (user.displayName.length > 0) profile[@"displayName"] = user.displayName;
+    if (user.photoURL.absoluteString.length > 0) profile[@"photoURL"] = user.photoURL.absoluteString;
+    // Infra's owner-profile allowlist. Identity, timestamps and authorization
+    // cannot be overridden by registration metadata.
+    for (NSString *key in @[@"UserName", @"displayName", @"FirstName", @"LastName", @"UserEmail", @"email",
+                            @"MobileNo", @"phoneNumber", @"UserAbout", @"UserImageName", @"UserImageUrl",
+                            @"photoURL", @"photoUrl", @"CountryID", @"CountryName", @"CountryDialCode",
+                            @"CountryIsoCode", @"shippingAddresses", @"profileCompleted", @"isAnonymousAuth",
+                            @"emailVerified", @"loginSource"]) {
+        if (extra[key]) profile[key] = extra[key];
+    }
+
     __weak typeof(self) weakSelf = self;
-    [self.ref getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable existingSnap, NSError * _Nullable readError) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self) { if (completion) completion(readError); return; }
-        if (readError) { if (completion) completion(readError); return; }
-
-        NSMutableDictionary *doc = [@{
-            @"uid": user.uid ?: @"",
-            @"email": user.email ?: [NSNull null],
-            @"displayName": user.displayName ?: [NSNull null],
-            @"photoURL": user.photoURL.absoluteString ?: [NSNull null],
-            @"providerIds": [self p_providerIDsForUser:user],
-            @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp],
-            @"lastLoginAt": [FIRFieldValue fieldValueForServerTimestamp]
-        } mutableCopy];
-        if (!existingSnap.exists) {
-            doc[@"createdAt"] = [FIRFieldValue fieldValueForServerTimestamp];
+    [self.db runTransactionWithBlock:^id(FIRTransaction *transaction, NSError **errorPointer) {
+        if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+            *errorPointer = [NSError errorWithDomain:FUErrorDomain code:1301 userInfo:nil];
+            return nil;
         }
-        if (extra.count) [doc addEntriesFromDictionary:extra];
+        FIRDocumentSnapshot *existing = [transaction getDocument:ref error:errorPointer];
+        if (!existing) return nil;
+        NSMutableDictionary *payload = profile.mutableCopy;
+        if (!existing.exists) payload[@"createdAt"] = [FIRFieldValue fieldValueForServerTimestamp];
+        [transaction setData:payload forDocument:ref merge:YES];
+        return nil;
+    } completion:^(id result, NSError *error) {
+        (void)result;
+        if (error) { if (completion) completion(error); return; }
+        if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+            if (completion) completion([NSError errorWithDomain:FUErrorDomain code:1301 userInfo:nil]);
+            return;
+        }
+        [ref getDocumentWithCompletion:^(FIRDocumentSnapshot *snap, NSError *readError) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+                if (completion) completion([NSError errorWithDomain:FUErrorDomain code:1301 userInfo:nil]);
+                return;
+            }
 
-        [self.ref setData:doc merge:YES completion:^(NSError * _Nullable error) {
-            if (error) { if (completion) completion(error); return; }
-            [weakSelf.ref getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snap, NSError * _Nullable e2) {
-                __strong typeof(weakSelf) self = weakSelf;
-                if (!self) { if (completion) completion(e2); return; }
-
-                if (snap.exists && snap.data) {
-                    FUUserDoc *d = [FUUserDoc new];
-                    d.uid         = user.uid;
-                    d.email       = FUString(snap[@"email"]) ?: user.email;
-                    d.displayName = FUString(snap[@"displayName"]) ?: user.displayName;
-                    d.photoURL    = FUURL(snap[@"photoURL"]) ?: user.photoURL;
-                    d.raw         = snap.data;
-                    self.currentUserDoc = d;
-                }
-                if (completion) completion(e2);
-            }];
+            if (self && snap.exists && snap.data) {
+                FUUserDoc *d = [FUUserDoc new];
+                d.uid         = uid;
+                d.email       = FUString(snap[@"email"]) ?: user.email;
+                d.displayName = FUString(snap[@"displayName"]) ?: user.displayName;
+                d.photoURL    = FUURL(snap[@"photoURL"]) ?: user.photoURL;
+                d.raw         = snap.data;
+                self.currentUserDoc = d;
+            }
+            if (completion) completion(readError);
         }];
     }];
 }

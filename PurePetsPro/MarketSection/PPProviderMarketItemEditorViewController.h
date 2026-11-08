@@ -8,6 +8,7 @@
 - (instancetype)initForCreate;
 
 @property (nonatomic, copy) void (^onSave)(void);
+@property (nonatomic, assign) NSInteger initialAccessKindType;
 
 // Private methods
 - (UIColor *)pp_canvasColor;
@@ -19,6 +20,12 @@
 - (void)pp_buildUI;
 - (void)pp_applyValues;
 - (void)pp_setupFormSections;
+- (UIView *)pp_cardSurface;
+- (UIView *)pp_variantStudioBlock;
+- (void)pp_refreshVariantStudioBlock;
+- (void)pp_openVariantStudio;
+- (void)pp_stageProductForOptionsAndOpenStudio;
+- (UIView *)pp_sectionHeader:(NSString *)title subtitle:(NSString *)subtitle icon:(NSString *)iconName;
 - (void)pp_pickImage;
 - (void)saveTapped;
 

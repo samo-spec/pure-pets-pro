@@ -249,6 +249,25 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         return;
     }
     
+    // Session restore must read the owner's document before any legacy lookup.
+    // Infra allows this GET but denies ordinary providers a UsersCol query.
+    if ([field isEqualToString:@"uid"] && [[FIRAuth auth].currentUser.uid isEqualToString:cleanValue]) {
+        FIRFirestoreSource source = serverFirst ? FIRFirestoreSourceDefault : FIRFirestoreSourceServer;
+        [[self _userDoc:cleanValue] getDocumentWithSource:source completion:^(FIRDocumentSnapshot *snapshot, NSError *error) {
+            if (![[FIRAuth auth].currentUser.uid isEqualToString:cleanValue]) {
+                if (completion) completion(nil, [NSError errorWithDomain:@"UserManager" code:1301 userInfo:nil]);
+                return;
+            }
+            if (error) {
+                if (completion) completion(nil, error);
+                return;
+            }
+            UserModel *user = snapshot.exists ? [[UserModel alloc] initWithSnapshot:snapshot] : nil;
+            if (completion) completion(user, nil);
+        }];
+        return;
+    }
+
     UserModel *restoredUser = [self p_readUserFromDisk:cleanValue];
     if(restoredUser)
     {

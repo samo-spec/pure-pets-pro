@@ -18,7 +18,11 @@ extension NSNotification.Name {
     public static let ppDeliveryOrdersDidChange = NSNotification.Name("PPDeliveryOrdersDidChangeNotification")
 }
 
-// MARK: - Driver Duty Status
+// MARK: - Driver Work State
+//
+// The marketplace delivery-provider flow has no backend availability record,
+// so this is a read-only projection of server-sourced orders, never a local
+// duty switch.
 
 public enum PPDriverDutyState: String, CaseIterable, Sendable {
     case onDuty = "on_duty"
@@ -28,38 +32,34 @@ public enum PPDriverDutyState: String, CaseIterable, Sendable {
     public var title: String {
         switch self {
         case .onDuty:
-            return Language.get("Deliv_Duty_OnDuty", alter: "متصل · جاهز للمهام")
+            return Language.get("Deliv_WorkState_Idle", alter: "لا توجد مهمة توصيل جارية")
         case .busyFlight:
             return Language.get("Deliv_Duty_BusyFlight", alter: "في مهمة توصيل")
         case .offDuty:
-            return Language.get("Deliv_Duty_OffDuty", alter: "غير متصل · استراحة")
+            return Language.get("Deliv_WorkState_Idle", alter: "لا توجد مهمة توصيل جارية")
         }
     }
 
     public var shortTitle: String {
         switch self {
-        case .onDuty:
-            return Language.get("Deliv_Duty_Online", alter: "متصل")
+        case .onDuty, .offDuty:
+            return Language.get("Deliv_WorkState_IdleShort", alter: "لا مهمة")
         case .busyFlight:
             return Language.get("Deliv_Duty_Active", alter: "نشط")
-        case .offDuty:
-            return Language.get("Deliv_Duty_Offline", alter: "استراحة")
         }
     }
 
     public var systemIcon: String {
         switch self {
-        case .onDuty: return "bolt.shield.fill"
+        case .onDuty, .offDuty: return "tray"
         case .busyFlight: return "location.north.line.fill"
-        case .offDuty: return "moon.zzz.fill"
         }
     }
 
     public var tintColor: Color {
         switch self {
-        case .onDuty: return AdminSurface.emerald
+        case .onDuty, .offDuty: return AdminSurface.secondaryText
         case .busyFlight: return AdminSurface.amber
-        case .offDuty: return AdminSurface.secondaryText.opacity(0.8)
         }
     }
 }
@@ -148,7 +148,6 @@ public enum PPDeliveryMissionPhase: Int, Comparable, Sendable {
 
 @MainActor
 public final class PPDeliveryDriverObservableState: ObservableObject {
-    @Published public var dutyState: PPDriverDutyState = .onDuty
     @Published public var selectedFilter: PPDriverFilter = .all
     @Published public var searchQuery: String = ""
     @Published public var allOrders: [PPDeliveryOrderModel] = []
@@ -197,16 +196,14 @@ public final class PPDeliveryDriverObservableState: ObservableObject {
         let rawOrders = PPDeliveryManager.shared().allOrders ?? []
         self.allOrders = rawOrders
         self.isLoading = false
-
-        // Automatically adapt duty state if there is an active flight
-        if activeMissionOrder != nil && dutyState != .offDuty {
-            dutyState = .busyFlight
-        } else if dutyState == .busyFlight && activeMissionOrder == nil {
-            dutyState = .onDuty
-        }
     }
 
     // MARK: - Computed Properties
+
+    /// Read-only work state derived from server-sourced orders.
+    public var dutyState: PPDriverDutyState {
+        activeMissionOrder != nil ? .busyFlight : .onDuty
+    }
 
     public var activeMissionOrder: PPDeliveryOrderModel? {
         // Find order in transit, or picked up, or assigned to current courier
@@ -263,36 +260,38 @@ public final class PPDeliveryDriverObservableState: ObservableObject {
         }
     }
 
+    /// Deliveries whose server `deliveredAt` falls on the current calendar day.
     public var todayCompletedCount: Int {
-        return allOrders.filter {
-            let s = $0.rawStatus
-            let d = $0.deliveryStatus
-            return s == PPOrderRawStatus.completed.rawValue ||
-                   s == PPOrderRawStatus.delivered.rawValue ||
-                   d == PPDeliveryStatus.completed.rawValue ||
-                   d == PPDeliveryStatus.delivered.rawValue
+        return allOrders.filter { order in
+            guard let deliveredAt = order.deliveredAt else { return false }
+            return Calendar.current.isDateInToday(deliveredAt) && isFinished(order)
         }.count
     }
 
-    public var todayTotalEarningsQAR: Double {
-        // Average driver delivery fee in Qatar is 25-35 QAR per order
-        let completed = todayCompletedCount
-        return Double(completed) * 28.5
+    /// Orders this provider is currently progressing (handover, transit, delivery).
+    public var inProgressCount: Int {
+        return allOrders.filter { order in
+            order.canConfirmPackageHandover() || order.canMarkInTransit() || order.canMarkDelivered()
+        }.count
     }
 
+    /// Cash totals of cash orders the server marked delivered today.
     public var todayCODCollectedQAR: Double {
         return allOrders
-            .filter {
-                let s = $0.rawStatus
-                let d = $0.deliveryStatus
-                let isCompleted = s == PPOrderRawStatus.completed.rawValue || d == PPDeliveryStatus.completed.rawValue
-                return isCompleted && $0.isCashOrder()
+            .filter { order in
+                guard let deliveredAt = order.deliveredAt else { return false }
+                return Calendar.current.isDateInToday(deliveredAt) && isFinished(order) && order.isCashOrder()
             }
             .reduce(0.0) { $0 + $1.totalAmount }
     }
 
-    public var onTimeScorePercentage: Int {
-        return 99 // High operational grade standard
+    private func isFinished(_ order: PPDeliveryOrderModel) -> Bool {
+        let s = order.rawStatus
+        let d = order.deliveryStatus
+        return s == PPOrderRawStatus.completed.rawValue ||
+               s == PPOrderRawStatus.delivered.rawValue ||
+               d == PPDeliveryStatus.completed.rawValue ||
+               d == PPDeliveryStatus.delivered.rawValue
     }
 
     // MARK: - Mission Phase Resolver
@@ -314,19 +313,6 @@ public final class PPDeliveryDriverObservableState: ObservableObject {
     }
 
     // MARK: - Operational Actions
-
-    public func toggleDuty() {
-        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
-        switch dutyState {
-        case .onDuty:
-            dutyState = .offDuty
-        case .busyFlight:
-            // Alert user they have an active order
-            UIImpactFeedbackGenerator(style: .heavy).impactOccurred()
-        case .offDuty:
-            dutyState = .onDuty
-        }
-    }
 
     public func acceptOrder(_ order: PPDeliveryOrderModel) {
         let orderId = order.orderId
@@ -452,6 +438,60 @@ public final class PPDeliveryDriverObservableState: ObservableObject {
     }
 
     // MARK: - Navigation & Communication Helpers
+
+    /// Collects cash without marking the order delivered (the order is
+    /// already delivered and only the cash step remains).
+    public func collectCash(_ order: PPDeliveryOrderModel) {
+        let orderId = order.orderId
+        guard !orderId.isEmpty else { return }
+        isExecutingAction = true
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+
+        PPDeliveryManager.shared().collectCashPayment(orderId, note: nil) { [weak self] success, message, error in
+            Task { @MainActor in
+                self?.isExecutingAction = false
+                if success {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    PPToast.toast(Language.get("Deliv_Toast_CashCollected", alter: "تم استلام المبلغ النقدي وتأكيد التسليم"))
+                    self?.refreshOrders()
+                } else {
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                    PPToast.toast(error?.localizedDescription ?? Language.get("Error", alter: "حدث خطأ"))
+                }
+            }
+        }
+    }
+
+    /// Closes a delivered order through the existing completion command.
+    public func completeOrder(_ order: PPDeliveryOrderModel) {
+        let orderId = order.orderId
+        guard !orderId.isEmpty else { return }
+        isExecutingAction = true
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+
+        PPDeliveryManager.shared().markOrderCompleted(orderId, note: nil) { [weak self] success, message, error in
+            Task { @MainActor in
+                self?.isExecutingAction = false
+                if success {
+                    UINotificationFeedbackGenerator().notificationOccurred(.success)
+                    PPToast.toast(Language.get("Deliv_Dossier_Toast_Completed", alter: nil))
+                    self?.refreshOrders()
+                } else {
+                    UINotificationFeedbackGenerator().notificationOccurred(.error)
+                    PPToast.toast(error?.localizedDescription ?? Language.get("Error", alter: "حدث خطأ"))
+                }
+            }
+        }
+    }
+
+    /// Fulfillment V1 orders act only from a live listener projection, the
+    /// same rule PPDeliveryOrderDetailViewController applies.
+    public func hasLiveActionProjection(_ order: PPDeliveryOrderModel) -> Bool {
+        guard order.fulfillmentVersion == 1 else { return true }
+        let liveRequest = order.deliveryStatus.lowercased() == PPDeliveryStatus.requested.rawValue &&
+            !order.deliveryRequestFulfillmentOrderIDs.isEmpty
+        return liveRequest || !order.assignedFulfillmentStatusesByID.isEmpty
+    }
 
     public func openAppleMapsNavigation(address: String?) {
         guard let address = address, !address.isEmpty else { return }

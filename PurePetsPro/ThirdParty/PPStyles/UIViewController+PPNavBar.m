@@ -223,9 +223,52 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
 
 #pragma mark - Swizzled implementations
 
+- (void)pp_applyPurePetsNavAppearance {
+    UINavigationBar *navBar = nil;
+    if ([self isKindOfClass:UINavigationController.class]) {
+        navBar = [(UINavigationController *)self navigationBar];
+    } else {
+        navBar = self.navigationController.navigationBar;
+    }
+    if (!navBar) return;
+
+    NSDictionary *titleAttrs = @{
+        NSFontAttributeName: [Styling fontBold:22],
+        NSForegroundColorAttributeName: PrimaryTextClr
+    };
+    NSDictionary *largeTitleAttrs = @{
+        NSFontAttributeName: [Styling fontBold:30],
+        NSForegroundColorAttributeName: PrimaryTextClr
+    };
+
+    if (@available(iOS 13.0, *)) {
+        UINavigationBarAppearance *settle = [[UINavigationBarAppearance alloc] init];
+        [settle configureWithTransparentBackground];
+        settle.backgroundColor = [UIColor clearColor];
+        settle.shadowColor = [UIColor clearColor];
+        settle.shadowImage = [[UIImage alloc] init];
+        settle.titleTextAttributes = titleAttrs;
+        settle.largeTitleTextAttributes = largeTitleAttrs;
+
+        navBar.standardAppearance = settle;
+        navBar.compactAppearance = settle;
+        navBar.scrollEdgeAppearance = settle;
+        navBar.tintColor = AppPrimaryClr;
+        navBar.translucent = YES;
+    } else {
+        navBar.barTintColor = [UIColor clearColor];
+        navBar.backgroundColor = [UIColor clearColor];
+        navBar.shadowImage = [[UIImage alloc] init];
+        [navBar setBackgroundImage:[[UIImage alloc] init] forBarMetrics:UIBarMetricsDefault];
+        navBar.tintColor = AppPrimaryClr;
+        navBar.titleTextAttributes = titleAttrs;
+    }
+}
+
 - (void)pp_swz_viewWillAppear:(BOOL)animated {
     // call original
     [self pp_swz_viewWillAppear:animated];
+    [self pp_applyPurePetsNavAppearance];
     [self pp_reattachNavBar];
 }
 
@@ -739,7 +782,7 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
     UILabel *lbl = [UILabel new];
     lbl.translatesAutoresizingMaskIntoConstraints = NO;
     lbl.text = title;
-    lbl.font = [Styling fontMedium:16];
+    lbl.font = [Styling fontBold:18];
     lbl.textColor = AppPrimaryClrDarker;
     lbl.textAlignment = NSTextAlignmentCenter;
     

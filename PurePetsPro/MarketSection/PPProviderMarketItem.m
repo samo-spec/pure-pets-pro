@@ -1,6 +1,18 @@
 #import "PPProviderMarketItem.h"
 #import "PetAccessory.h"
 
+// Firestore arrays can contain legacy nulls. Filter before bridging to Swift's
+// [String], where an unchecked element otherwise traps while opening the studio.
+static NSArray<NSString *> *PPMarketImageURLs(id value) {
+    NSMutableArray<NSString *> *urls = [NSMutableArray array];
+    for (id candidate in PPSafeArray(value)) {
+        if (![candidate isKindOfClass:NSString.class]) continue;
+        NSString *url = [candidate stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (url.length > 0 && ![urls containsObject:url]) [urls addObject:url];
+    }
+    return urls.copy;
+}
+
 @implementation PPProviderMarketItem
 
 + (instancetype)fromDictionary:(NSDictionary *)dict itemID:(NSString *)itemID {
@@ -10,7 +22,7 @@
     item.nameEn = PPSafeString(dict[@"nameEn"]);
     item.desc = PPSafeString(dict[@"desc"]);
     item.descEn = PPSafeString(dict[@"descEn"]);
-    item.imageURLsArray = PPSafeArray(dict[@"imageURLsArray"]);
+    item.imageURLsArray = PPMarketImageURLs(dict[@"imageURLsArray"]);
     item.price = PPSafeNumber(dict[@"price"]).doubleValue;
     item.finalPrice = PPSafeNumber(dict[@"finalPrice"]).doubleValue;
     item.quantity = PPSafeNumber(dict[@"quantity"]).integerValue;
@@ -54,7 +66,9 @@
         item.selectedOptions = [dict[@"selectedOptions"] copy];
     }
     if ([dict[@"selectedOptionsSnapshot"] isKindOfClass:[NSArray class]]) {
-        item.selectedOptionsSnapshot = [dict[@"selectedOptionsSnapshot"] copy];
+        item.selectedOptionsSnapshot = [dict[@"selectedOptionsSnapshot"] filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id candidate, NSDictionary *bindings) {
+            return [candidate isKindOfClass:NSDictionary.class];
+        }]];
     }
     item.variantCombinationKey = PPSafeString(dict[@"variantCombinationKey"]);
     item.variantAxis = PPSafeString(dict[@"variantAxis"]);
@@ -117,6 +131,8 @@
 }
 
 - (NSString *)kindLabel {
+    if (self.accessKindType == 3) return kLang(@"ProInventory_LivePets");
+    if (self.accessKindType == 4) return kLang(@"ProInventory_Medicines");
     return self.accessKindType == 2 ? kLang(@"Market_Food") : kLang(@"Market_Accessory");
 }
 
@@ -144,9 +160,10 @@
 - (NSString *)pos_variantColorName {
     if (!self.variantColorDictionary) return @"";
     BOOL isAr = [Language isRTL];
-    NSString *name = isAr ? self.variantColorDictionary[@"nameAr"] : self.variantColorDictionary[@"nameEn"];
+    NSString *name = PPSafeString(isAr ? self.variantColorDictionary[@"nameAr"] : self.variantColorDictionary[@"nameEn"]);
     if (!name || name.length == 0) {
-        name = self.variantColorDictionary[@"nameAr"] ?: self.variantColorDictionary[@"nameEn"];
+        name = PPSafeString(self.variantColorDictionary[@"nameAr"]);
+        if (name.length == 0) name = PPSafeString(self.variantColorDictionary[@"nameEn"]);
     }
     return name ?: @"";
 }
@@ -184,6 +201,7 @@
 
     if (self.selectedOptionsSnapshot.count > 0) {
         for (NSDictionary *opt in self.selectedOptionsSnapshot) {
+            if (![opt isKindOfClass:NSDictionary.class]) continue;
             NSString *val = @"";
             if ([opt[@"valueName"] isKindOfClass:[NSDictionary class]]) {
                 val = isAr ? opt[@"valueName"][@"ar"] : opt[@"valueName"][@"en"];
@@ -237,7 +255,7 @@
     acc.nameEn = self.nameEn;
     acc.desc = self.desc ?: @"";
     acc.descEn = self.descEn;
-    acc.imageURLsArray = self.imageURLsArray ?: @[];
+    acc.imageURLsArray = PPMarketImageURLs(self.imageURLsArray);
     acc.price = @(self.price);
     acc.quantity = self.quantity;
     acc.noStock = self.noStock || self.quantity <= 0;

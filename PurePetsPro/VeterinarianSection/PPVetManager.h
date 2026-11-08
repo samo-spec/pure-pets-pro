@@ -23,9 +23,13 @@ typedef void(^PPVetCountBlock)(NSInteger count);
 @interface PPVetMedicineModel : NSObject <NSCopying>
 @property (nonatomic, copy) NSString *medicineID;
 @property (nonatomic, copy) NSString *title;
+@property (nonatomic, copy, nullable) NSString *titleEn;
 @property (nonatomic, copy, readonly) NSString *title_lowercase;
 @property (nonatomic, copy) NSString *medicineDescription;
+@property (nonatomic, copy, nullable) NSString *medicineDescriptionEn;
 @property (nonatomic, copy) NSString *imageUrl;
+@property (nonatomic, copy) NSArray<NSString *> *imageURLsArray;
+@property (nonatomic, copy, nullable) NSArray<NSDictionary *> *imageMeta;
 @property (nonatomic, copy) NSString *blurHash;
 @property (nonatomic, copy) NSString *vetId;
 @property (nonatomic, copy) NSString *userId;
@@ -46,6 +50,8 @@ typedef void(^PPVetCountBlock)(NSInteger count);
 @property (nonatomic, assign) BOOL isVariant;
 @property (nonatomic, assign) BOOL isDefaultVariant;
 @property (nonatomic, assign) NSInteger variantSortOrder;
+@property (nonatomic, assign) NSInteger revision;
+@property (nonatomic, copy, nullable) NSDictionary<NSString *, id> *variantColorDictionary;
 @property (nonatomic, strong, nullable) NSDictionary<NSString *, id> *selectedOptions;
 @property (nonatomic, strong, nullable) NSArray<NSDictionary<NSString *, id> *> *selectedOptionsSnapshot;
 @property (nonatomic, copy, nullable) NSString *variantCombinationKey;
@@ -63,6 +69,8 @@ typedef void(^PPVetCountBlock)(NSInteger count);
 - (NSDictionary *)toDictionary;
 + (instancetype)fromDictionary:(NSDictionary *)dict withID:(NSString *)medicineID;
 - (PetAccessory *)asPetAccessory;
+- (void)applyVariantAccessory:(PetAccessory *)accessory;
+- (NSString *)variantOptionDescription;
 @end
 
 @interface PPVetManager : NSObject

@@ -7,6 +7,12 @@
 
 @interface PPProviderMarketItemEditorViewController () <UITextViewDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate, PHPickerViewControllerDelegate, UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout>
 
+- (UIView *)pp_cardSurface;
+- (void)pp_openVariantStudio;
+- (void)pp_refreshVariantStudioBlock;
+- (void)pp_applyValues;
+- (void)pp_updateHeroCardState;
+
 @property (nonatomic, strong) PPProviderMarketItem *editItem;
 @property (nonatomic, assign) BOOL isCreate;
 @property (nonatomic, strong) UIScrollView *scrollView;
@@ -1008,6 +1014,7 @@
 }
 
 - (void)pp_stageProductForOptionsAndOpenStudio {
+    if (!self.saveButton.enabled) return;
     NSString *name = [self.nameField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
     if (name.length == 0) {
         [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"Market_NameRequired")];
@@ -1075,6 +1082,7 @@
             self.editItem = [[PPProviderMarketItem alloc] init];
         }
         self.editItem.itemID = itemID;
+        self.editItem.revision = 1;
         self.editItem.name = name;
         self.editItem.nameEn = fields[@"nameEn"];
         self.editItem.desc = fields[@"desc"];
@@ -1103,6 +1111,7 @@
     host.onSaved = ^(PetAccessory *acc) {
         if (!acc) return;
         ws.editItem.productFamilyId = acc.productFamilyId;
+        ws.editItem.variantSchemaVersion = acc.variantSchemaVersion;
         ws.editItem.isVariant = acc.isVariant;
         ws.editItem.isDefaultVariant = acc.isDefaultVariant;
         ws.editItem.variantSortOrder = acc.variantSortOrder;
@@ -1114,11 +1123,22 @@
         ws.editItem.sku = acc.sku;
         ws.editItem.barcode = acc.barcode;
         if (acc.price != nil) ws.editItem.price = acc.price.doubleValue;
-        if (acc.wholesalePrice != nil) ws.editItem.wholesalePrice = acc.wholesalePrice;
-        if (acc.costPrice != nil) ws.editItem.costPrice = acc.costPrice;
+        if (acc.wholesalePrice != nil) ws.editItem.wholesalePrice = [acc.wholesalePrice isKindOfClass:[NSNumber class]] ? acc.wholesalePrice : @(acc.wholesalePrice.doubleValue);
+        if (acc.costPrice != nil) ws.editItem.costPrice = [acc.costPrice isKindOfClass:[NSNumber class]] ? acc.costPrice : @(acc.costPrice.doubleValue);
         ws.editItem.quantity = acc.quantity;
         ws.editItem.revision = acc.revision;
-        [ws pp_applyValues];
+        ws.editItem.noStock = acc.noStock;
+        ws.editItem.imageURLsArray = acc.imageURLsArray ?: @[];
+        // Update studio-owned fields only; names, descriptions and category can
+        // contain unsaved edits made before entering the studio.
+        ws.priceField.text = [NSString stringWithFormat:@"%.2f", ws.editItem.price];
+        ws.qtyField.text = [NSString stringWithFormat:@"%ld", (long)acc.quantity];
+        ws.skuField.text = acc.sku ?: @"";
+        ws.barcodeField.text = acc.barcode ?: @"";
+        ws.wholesalePriceField.text = acc.wholesalePrice ? [NSString stringWithFormat:@"%.2f", acc.wholesalePrice.doubleValue] : @"";
+        [ws.imageURLs setArray:ws.editItem.imageURLsArray];
+        [ws.imageCollectionView reloadData];
+        [ws pp_updateHeroCardState];
         [ws pp_refreshVariantStudioBlock];
     };
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:host];
@@ -1179,6 +1199,7 @@
     self.itemImageView.contentMode = UIViewContentModeCenter;
 
     if (self.isCreate) {
+        self.kindControl.selectedSegmentIndex = self.initialAccessKindType == 2 ? 1 : 0;
         [self pp_updateHeroCardState];
         return;
     }
@@ -1202,14 +1223,13 @@
     self.kindControl.selectedSegmentIndex = (self.editItem.accessKindType == 2) ? 1 : 0;
     [self updateMainKindPickerTitle];
     [self updateSubKindPickerTitle];
-    if (self.editItem.imageURLsArray.count > 0) {
-        [self.imageURLs addObjectsFromArray:self.editItem.imageURLsArray ?: @[]];
-        [self.imageCollectionView reloadData];
-    }
+    [self.imageURLs setArray:self.editItem.imageURLsArray ?: @[]];
+    [self.imageCollectionView reloadData];
     [self pp_updateHeroCardState];
 }
 
 - (void)saveTapped {
+    if (!self.saveButton.enabled) return;
     NSString *name = [self.nameField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
     if (name.length == 0) { [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"Market_NameRequired")]; return; }
     double price = self.priceField.text.doubleValue;
@@ -1264,11 +1284,14 @@
     FIRStorage *storage = [FIRStorage storage];
     NSString *uid = [FIRAuth auth].currentUser.uid ?: @"unknown";
     NSMutableArray *urls = [NSMutableArray array];
+    __block BOOL finished = NO; // Accessed only on the main queue.
+    NSInteger expectedImageCount = self.selectedImages.count;
     dispatch_group_t group = dispatch_group_create();
     for (NSInteger i = 0; i < self.selectedImages.count; i++) {
         dispatch_group_enter(group);
         UIImage *img = self.selectedImages[i];
         NSData *data = UIImageJPEGRepresentation(img, 0.8);
+        if (!data) { dispatch_group_leave(group); continue; }
         NSString *safeUID = uid ?: @"";
         NSString *fileName = [NSString stringWithFormat:@"%@_%ld.jpg", safeUID, (long)[[NSDate date] timeIntervalSince1970] * 1000 + i];
         NSString *path = [NSString stringWithFormat:@"marketplace_items/%@/images/%@", safeUID, fileName];
@@ -1293,9 +1316,16 @@
         }];
     }
     dispatch_group_notify(group, dispatch_get_main_queue(), ^{
+        if (finished) return;
+        finished = YES;
         [PPHUD dismiss];
         __strong typeof(ws) self = ws;
         if (!self) return;
+        if (urls.count != expectedImageCount) {
+            self.saveButton.enabled = YES;
+            [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"Market_UploadError")];
+            return;
+        }
         NSMutableDictionary *f = [fields mutableCopy];
         NSMutableArray *allURLs = [self.imageURLs mutableCopy];
         if (urls.count > 0) [allURLs addObjectsFromArray:urls];
@@ -1303,13 +1333,14 @@
         NSLog(@"[MarketEditor] save with %ld image URLs", (long)allURLs.count);
         [self performSave:f isCreate:create];
     });
-    // Safety: if group never completes (network hang), force save after 30s
+    // A timeout preserves the draft and never creates a second, image-less item.
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         __strong typeof(ws) self = ws;
-        if (!self || self.saveButton.enabled) return; // already saved
-        NSLog(@"[MarketEditor] upload timeout — saving without images");
+        if (!self || finished) return;
+        finished = YES;
+        self.saveButton.enabled = YES;
         [PPHUD dismiss];
-        [self performSave:fields isCreate:create];
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"Market_UploadError")];
     });
 }
 
@@ -1325,7 +1356,9 @@
             [self.navigationController popViewControllerAnimated:YES];
         }];
     } else {
-        [[PPProviderMarketplaceManager sharedManager] updateMarketItem:self.editItem.itemID fields:fields completion:^(BOOL ok, NSString *msg, NSError *err) {
+        NSMutableDictionary *update = [fields mutableCopy];
+        update[@"expectedRevision"] = @(self.editItem.revision);
+        [[PPProviderMarketplaceManager sharedManager] updateMarketItem:self.editItem.itemID fields:update completion:^(BOOL ok, NSString *msg, NSError *err) {
             self.saveButton.enabled = YES;
             if (!ok) { [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:msg ?: err.localizedDescription]; return; }
             [PPHUD showSuccess:kLang(@"Market_ItemSaved")];
@@ -1356,8 +1389,10 @@
     for (PHPickerResult *r in results) {
         dispatch_group_enter(group);
         [r.itemProvider loadObjectOfClass:UIImage.class completionHandler:^(UIImage *img, NSError *err) {
-            if (img) [self.selectedImages addObject:img];
-            dispatch_group_leave(group);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([img isKindOfClass:UIImage.class]) [self.selectedImages addObject:img];
+                dispatch_group_leave(group);
+            });
         }];
     }
     dispatch_group_notify(group, dispatch_get_main_queue(), ^{

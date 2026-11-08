@@ -66,6 +66,11 @@ typedef void(^PPDeliveryActionBlock)(BOOL success, NSString * _Nullable message,
 - (NSString *)providerDisplayNameForID:(NSString *)providerID;
 - (void)cacheProviderUser:(UserModel *)user forID:(NSString *)providerID;
 
+/// Names cached branches and, for a Pure Pets order with no pickup set, uses the
+/// branch whose stock the consumer app sells (Admin "iOS User App Stock", else
+/// the primary branch). A set pickup or a provider's order is left unchanged.
+- (void)applyPickupFallbackToOrder:(PPDeliveryOrderModel *)order;
+
 @end
 
 NS_ASSUME_NONNULL_END

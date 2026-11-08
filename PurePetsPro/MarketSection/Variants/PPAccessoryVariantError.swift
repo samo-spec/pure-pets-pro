@@ -261,7 +261,7 @@ import Foundation
             let base = Language.get(
                 "Variant_Error_ContractMismatchServer",
                 alter: "إصدار التطبيق غير متوافق مع الخادم. حدّث التطبيق."
-            ) ?? "إصدار التطبيق غير متوافق مع الخادم. حدّث التطبيق."
+            )
             let message = fields.isEmpty ? base : "\(base) (\(fields))"
             return (message, .fatal)
         case Code.selectionIncomplete:
@@ -342,7 +342,7 @@ import Foundation
                 .correctInput
             )
         default:
-            let defaultMessage = Language.get("Variant_Error_Unknown", alter: "تعذر حفظ الألوان.") ?? "تعذر حفظ الألوان."
+            let defaultMessage = Language.get("Variant_Error_Unknown", alter: "تعذر حفظ الألوان.")
             let message = fallback.isEmpty ? defaultMessage : fallback
             return (message, .fatal)
         }

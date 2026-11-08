@@ -145,8 +145,7 @@ static NSString *PPNotificationsInboxErrorSignature(NSError *error)
 /// fonts, so this screen previously ignored the user's text-size setting.
 static UIFont *PPNotificationsScaledFont(UIFont *base, UIFontTextStyle style)
 {
-    if (!base) { return nil; }
-    return [[UIFontMetrics metricsForTextStyle:style] scaledFontForFont:base];
+    return PPScaledFont(base, style);
 }
 
 - (void)viewDidLoad {

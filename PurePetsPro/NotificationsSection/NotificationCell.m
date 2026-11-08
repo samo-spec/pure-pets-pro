@@ -83,8 +83,7 @@ static BOOL PPNotificationBodyIsUntranslatedPassthrough(NotificationModel *model
 /// user's text-size preference apply.
 static UIFont *PPNotificationScaledFont(UIFont *base, UIFontTextStyle style)
 {
-    if (!base) { return nil; }
-    return [[UIFontMetrics metricsForTextStyle:style] scaledFontForFont:base];
+    return PPScaledFont(base, style);
 }
 
 /// One formatter for the whole screen instead of an allocation per `configure:`

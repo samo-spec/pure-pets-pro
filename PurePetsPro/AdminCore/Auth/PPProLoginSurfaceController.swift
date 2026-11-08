@@ -296,7 +296,7 @@ private struct PPPhoneNumberTextField: UIViewRepresentable {
         textField.keyboardType = .phonePad
         textField.textContentType = .telephoneNumber
         let baseFont = UIFont(name: "Beiruti-Medium", size: 17) ?? .systemFont(ofSize: 17, weight: .medium)
-        textField.font = UIFontMetrics(forTextStyle: .body).scaledFont(for: baseFont)
+        textField.font = Styling.scaledFont(for: baseFont, textStyle: .body) ?? baseFont
         textField.textAlignment = .left
         textField.semanticContentAttribute = .forceLeftToRight
         textField.adjustsFontForContentSizeCategory = true
@@ -316,7 +316,7 @@ private struct PPPhoneNumberTextField: UIViewRepresentable {
         uiView.textColor = UIColor.ppTextPrimary
         uiView.tintColor = UIColor.ppPrimary
         let baseFont = UIFont(name: "Beiruti-Medium", size: 17) ?? .systemFont(ofSize: 17, weight: .medium)
-        let scaledFont = UIFontMetrics(forTextStyle: .body).scaledFont(for: baseFont, compatibleWith: uiView.traitCollection)
+        let scaledFont = Styling.scaledFont(for: baseFont, textStyle: .body) ?? baseFont
         uiView.font = scaledFont
         uiView.attributedPlaceholder = NSAttributedString(
             string: placeholder,
@@ -1511,6 +1511,9 @@ final class PPProCommandCenterStore: ObservableObject {
     func commandCenterSurface(_ controller: PPProCommandCenterSurfaceController, didActivateRoute route: String)
     func commandCenterSurface(_ controller: PPProCommandCenterSurfaceController, didActivateActionTarget target: PPProCommandActionDescriptor)
     func commandCenterSurfaceDidRequestProfile(_ controller: PPProCommandCenterSurfaceController)
+    @objc optional func commandCenterSurfaceDidRequestLanguageChange(_ controller: PPProCommandCenterSurfaceController)
+    @objc optional func commandCenterSurfaceDidRequestLogout(_ controller: PPProCommandCenterSurfaceController)
+    @objc optional func commandCenterSurfaceDidRequestChangePhoto(_ controller: PPProCommandCenterSurfaceController)
 }
 
 @MainActor
@@ -1665,6 +1668,18 @@ public final class PPProCommandCenterSurfaceController: UIViewController {
             onProfile: { [weak self] in
                 guard let self else { return }
                 self.delegate?.commandCenterSurfaceDidRequestProfile(self)
+            },
+            onLanguage: { [weak self] in
+                guard let self else { return }
+                self.delegate?.commandCenterSurfaceDidRequestLanguageChange?(self)
+            },
+            onLogout: { [weak self] in
+                guard let self else { return }
+                self.delegate?.commandCenterSurfaceDidRequestLogout?(self)
+            },
+            onChangePhoto: { [weak self] in
+                guard let self else { return }
+                self.delegate?.commandCenterSurfaceDidRequestChangePhoto?(self)
             }
         )
 
@@ -5235,6 +5250,9 @@ struct PPProPulseView: View {
     let onActionTarget: (PPProCommandActionDescriptor) -> Void
     let onWorkspaceTarget: (PPProCommandActionDescriptor) -> Void
     let onProfile: () -> Void
+    var onLanguage: (() -> Void)? = nil
+    var onLogout: (() -> Void)? = nil
+    var onChangePhoto: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -5274,6 +5292,14 @@ struct PPProPulseView: View {
         snapshot.capabilities.contains { $0.id == "delivery" || $0.id == "deliveryCompany" } ||
         store.selectedCapabilityID == "delivery" ||
         store.selectedCapabilityID == "deliveryCompany"
+    }
+
+    /// The route comes from the membership-gated Objective-C snapshot. A
+    /// marketplace delivery feature alone is never treated as a fleet grant.
+    private var driverWorkspaceRoute: String? {
+        snapshot.capabilities.first {
+            $0.routeTag == "driverCockpit" || $0.routeTag == "deliveryCockpit"
+        }?.routeTag
     }
 
     // MARK: State ladder
@@ -5366,10 +5392,16 @@ struct PPProPulseView: View {
                     )
                 }
 
-                if hasDeliveryCapability {
-                    PPDeliveryDriverHomeControlSection {
-                        activate("delivery")
+                if let driverRoute = driverWorkspaceRoute {
+                    PPDriverHomeAvailabilitySection {
+                        activate(driverRoute)
                     }
+                    .id(PPDeliveryCompanyService.currentAccountUID())
+                    .padding(.horizontal, PPProPulseRhythm.screenMargin)
+                } else if hasDeliveryCapability {
+                    PPDeliveryHomeEntrySection(onOpenDriverCockpit: { activate("driverCockpit") },
+                                               onOpenProviderCockpit: { activate("delivery") })
+                    .id(PPDeliveryCompanyService.currentAccountUID())
                     .padding(.horizontal, PPProPulseRhythm.screenMargin)
                 }
 
@@ -5418,10 +5450,15 @@ struct PPProPulseView: View {
                         )
                     }
 
-                    if hasDeliveryCapability {
-                        PPDeliveryDriverHomeControlSection {
-                            activate("delivery")
+                    if let driverRoute = driverWorkspaceRoute {
+                        PPDriverHomeAvailabilitySection {
+                            activate(driverRoute)
                         }
+                        .id(PPDeliveryCompanyService.currentAccountUID())
+                    } else if hasDeliveryCapability {
+                        PPDeliveryHomeEntrySection(onOpenDriverCockpit: { activate("driverCockpit") },
+                                                   onOpenProviderCockpit: { activate("delivery") })
+                        .id(PPDeliveryCompanyService.currentAccountUID())
                     }
 
                     attentionBand
@@ -5455,34 +5492,144 @@ struct PPProPulseView: View {
 
     // MARK: Command bar — identity plus the scope's own counts
 
-    private var commandBar: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 12) {
-                // Operator avatar with live operational status aura
-                ZStack(alignment: .bottomTrailing) {
-                    PPProAvatarView(
-                        urlString: snapshot.avatarURLString,
-                        fallback: avatarInitials
-                    )
-                    .frame(width: 46, height: 46)
+    private var greetingGlyphName: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        if hour >= 5 && hour < 12 {
+            return "sun.max.fill"
+        } else if hour >= 12 && hour < 17 {
+            return "sun.horizon.fill"
+        } else {
+            return "moon.stars.fill"
+        }
+    }
 
-                    // Operational status pulse dot
-                    Circle()
-                        .fill(Color(red: 0.16, green: 0.78, blue: 0.48))
-                        .frame(width: 12, height: 12)
-                        .overlay(
-                            Circle()
-                                .stroke(palette.surfaceElevated, lineWidth: 2)
-                        )
-                        .shadow(color: Color(red: 0.16, green: 0.78, blue: 0.48).opacity(0.45), radius: 3)
+    private var avatarMenu: some View {
+        Menu {
+            Button {
+                onProfile()
+            } label: {
+                Label(
+                    localized("PulseCommand_Action_Profile", alter: isRTL ? "الملف الشخصي والإعدادات" : "Profile & Settings"),
+                    systemImage: "person.crop.circle"
+                )
+            }
+
+            if let onChangePhoto = onChangePhoto {
+                Button {
+                    onChangePhoto()
+                } label: {
+                    Label(
+                        localized("PulseCommand_Action_ChangePhoto", alter: isRTL ? "تغيير الصورة الشخصية" : "Change Profile Photo"),
+                        systemImage: "camera"
+                    )
                 }
-                .accessibilityHidden(true)
+            }
+
+            if let onLanguage = onLanguage {
+                Button {
+                    onLanguage()
+                } label: {
+                    Label(
+                        localized("PulseCommand_Action_Language", alter: isRTL ? "تغيير لغة التطبيق" : "Change App Language"),
+                        systemImage: "globe"
+                    )
+                }
+            }
+
+            Divider()
+
+            if let onLogout = onLogout {
+                Button(role: .destructive) {
+                    onLogout()
+                } label: {
+                    Label(
+                        localized("Logout", alter: isRTL ? "تسجيل الخروج" : "Log Out"),
+                        systemImage: "rectangle.portrait.and.arrow.right"
+                    )
+                }
+            }
+        } label: {
+            avatarContainer
+        }
+    }
+
+    private var avatarContainer: some View {
+        ZStack(alignment: .bottomTrailing) {
+            PPProAvatarView(
+                urlString: snapshot.avatarURLString,
+                fallback: avatarInitials
+            )
+            .frame(width: 48, height: 48)
+
+            // Operational status pulse dot with subtle animated halo
+            Circle()
+                .fill(Color(red: 0.16, green: 0.78, blue: 0.48))
+                .frame(width: 13, height: 13)
+                .overlay(
+                    Circle()
+                        .stroke(palette.surfaceElevated, lineWidth: 2)
+                )
+                .shadow(color: Color(red: 0.16, green: 0.78, blue: 0.48).opacity(0.45), radius: 3)
+        }
+        .contentShape(Circle())
+    }
+
+    private var headerActionCluster: some View {
+        HStack(spacing: 8) {
+            // Language Switcher Button
+            if let onLanguage = onLanguage {
+                Button(action: onLanguage) {
+                    Image(systemName: "globe")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(palette.accentText)
+                        .frame(width: 40, height: 40)
+                        .background(
+                            Circle().fill(palette.surface)
+                        )
+                        .overlay(
+                            Circle().stroke(palette.hairline, lineWidth: 0.8)
+                        )
+                        .shadow(color: palette.shadow, radius: 4, x: 0, y: 2)
+                }
+                .buttonStyle(PPProCommandPressStyle())
+                .accessibilityLabel(localized("PulseCommand_Action_Language", alter: isRTL ? "تغيير لغة التطبيق" : "Change Language"))
+            }
+
+            // Settings Button
+            Button(action: onProfile) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: PPProGlyph.medium, weight: .semibold))
+                    .foregroundStyle(palette.accentText)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        Circle().fill(palette.surface)
+                    )
+                    .overlay(
+                        Circle().stroke(palette.hairline, lineWidth: 0.8)
+                    )
+                    .shadow(color: palette.shadow, radius: 4, x: 0, y: 2)
+            }
+            .buttonStyle(PPProCommandPressStyle())
+            .accessibilityLabel(localized("Settings", alter: isRTL ? "الإعدادات" : "Settings"))
+        }
+    }
+
+    private var commandBar: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                avatarMenu
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(snapshot.greeting.isEmpty ? snapshot.workspaceEyebrow : snapshot.greeting)
-                        .font(PPProType.medium(12, relativeTo: .caption))
-                        .foregroundStyle(palette.secondary)
-                        .lineLimit(1)
+                    HStack(spacing: 4) {
+                        Image(systemName: greetingGlyphName)
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(palette.accent.opacity(0.85))
+
+                        Text(snapshot.greeting.isEmpty ? snapshot.workspaceEyebrow : snapshot.greeting)
+                            .font(PPProType.medium(12, relativeTo: .caption))
+                            .foregroundStyle(palette.secondary)
+                            .lineLimit(1)
+                    }
 
                     Text(snapshot.displayName.isEmpty ? localized("PulseCommand_BrandName", alter: "PurePets Pro") : snapshot.displayName)
                         .font(PPProType.bold(18, relativeTo: .title3))
@@ -5500,7 +5647,7 @@ struct PPProPulseView: View {
                         }
                         .foregroundStyle(palette.accentText)
                         .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
+                        .padding(.vertical, 2.5)
                         .background(
                             Capsule().fill(palette.accentSoft)
                         )
@@ -5511,7 +5658,7 @@ struct PPProPulseView: View {
                                 .monospacedDigit()
                                 .foregroundStyle(palette.secondary)
                                 .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
+                                .padding(.vertical, 2.5)
                                 .background(
                                     Capsule().fill(palette.surface)
                                 )
@@ -5524,27 +5671,11 @@ struct PPProPulseView: View {
 
                 Spacer(minLength: 0)
 
-                Button(action: onProfile) {
-                    Image(systemName: "gearshape.fill")
-                        .font(.system(size: PPProGlyph.medium, weight: .semibold))
-                        .foregroundStyle(palette.accentText)
-                        .frame(width: 42, height: 42)
-                        .background(
-                            Circle().fill(palette.surface)
-                        )
-                        .overlay(
-                            Circle().stroke(palette.hairline, lineWidth: 0.8)
-                        )
-                        .shadow(color: palette.shadow, radius: 4, x: 0, y: 2)
-                }
-                .buttonStyle(PPProCommandPressStyle())
-                .accessibilityLabel(localized("Settings"))
+                headerActionCluster
             }
 
             PPProVitalsStrip(
                 workspaceCount: scope.workspaceCount,
-                // The count of what is actually rendered below, not the global
-                // figure. See PPProVitalsStrip.
                 signalCount: scope.signals.count,
                 unreadCount: scope.unreadCount,
                 isScoped: scope.isScoped,

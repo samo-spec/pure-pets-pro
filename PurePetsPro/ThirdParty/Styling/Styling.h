@@ -46,6 +46,7 @@ NS_ASSUME_NONNULL_BEGIN
 + (UIFont *)fontBold:(CGFloat)size;
 + (UIFont *)fontMedium:(CGFloat)size;
 + (UIFont *)fontRegular:(CGFloat)size;
++ (UIFont * _Nullable)scaledFontForFont:(UIFont * _Nullable)base textStyle:(UIFontTextStyle)style;
 
 + (void)applyButtonTextStyle:(UIButton *)button
                         size:(CGFloat)pointSize

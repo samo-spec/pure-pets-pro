@@ -234,8 +234,11 @@ typedef NS_ENUM(NSInteger, FIRFunctionsErrorCode) {
     FIRFunctionsErrorCodeUnauthenticated = 16,
 };
 
+#ifndef PP_FIREBASE_FUNCTIONS_ERROR_CONSTANTS_DEFINED
+#define PP_FIREBASE_FUNCTIONS_ERROR_CONSTANTS_DEFINED
 static NSString * const FIRFunctionsErrorDomain = @"com.firebase.functions";
 static NSString * const FIRFunctionsErrorDetailsKey = @"details";
+#endif
 
 #ifndef PP_FIREBASE_STORAGE_TYPEDEFS_IMPORTED
 typedef NSString *FIRStorageHandle;
@@ -339,6 +342,12 @@ typedef NS_ENUM(NSInteger, FIRStorageTaskStatus) {
 + (FIRAuthCredential *)credentialWithIDToken:(NSString *)idToken
                                  accessToken:(NSString *)accessToken;
 @end
+#endif
+
+#ifndef PP_FIREBASE_FUNCTIONS_ERROR_CONSTANTS_DEFINED
+#define PP_FIREBASE_FUNCTIONS_ERROR_CONSTANTS_DEFINED
+static NSString * const FIRFunctionsErrorDomain = @"com.firebase.functions";
+static NSString * const FIRFunctionsErrorDetailsKey = @"details";
 #endif
 
 #if !defined(PP_FIREBASE_FUNCTIONS_TYPES_IMPORTED)

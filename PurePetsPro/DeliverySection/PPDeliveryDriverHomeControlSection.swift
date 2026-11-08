@@ -10,6 +10,199 @@
 
 import SwiftUI
 
+/// Compatibility entry for older Home capabilities. No provider order store
+/// exists until the authenticated account's delivery destination is resolved.
+@MainActor
+struct PPDeliveryHomeEntrySection: View {
+    private enum Phase: Equatable { case checking, driver, provider, failed }
+    @State private var phase = Phase.checking
+    @State private var generation = 0
+    let onOpenDriverCockpit: () -> Void
+    let onOpenProviderCockpit: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AdminSpacing.md) {
+            switch phase {
+            case .driver:
+                PPDriverHomeAvailabilitySection(onOpenCockpit: onOpenDriverCockpit)
+            case .provider:
+                PPDeliveryDriverHomeControlSection(onOpenCockpit: onOpenProviderCockpit)
+            case .checking, .failed:
+                VStack(alignment: .leading, spacing: AdminSpacing.md) {
+                    Label(ppDriverText("DriverCockpit_Title"), systemImage: "steeringwheel")
+                        .font(AdminType.headlineBold)
+                        .accessibilityAddTraits(.isHeader)
+                    if phase == .checking {
+                        ProgressView(ppDriverText("DriverCockpit_Loading_Tasks"))
+                    } else {
+                        Text(ppDriverText("DeliveryLogin_CheckFailed_Body"))
+                            .font(AdminType.subheadline)
+                            .foregroundStyle(AdminSurface.secondaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Button(ppDriverText("TryAgain"), action: resolveEntry)
+                            .font(AdminType.calloutBold)
+                            .frame(minHeight: AdminTouchTarget.minimum)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(AdminSpacing.base)
+                .background(RoundedRectangle(cornerRadius: AdminRadius.card).fill(AdminSurface.card))
+            }
+        }
+        .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
+        .onAppear(perform: resolveEntry)
+    }
+
+    private func resolveEntry() {
+        generation += 1
+        let requestGeneration = generation
+        let requestedUID = PPDeliveryCompanyService.currentAccountUID()
+        phase = .checking
+        PPDeliveryCompanyService.shared().resolveDriverCockpitRequirement { requiresDriverCockpit, error in
+            Task { @MainActor in
+                guard requestGeneration == generation,
+                      requestedUID == PPDeliveryCompanyService.currentAccountUID() else { return }
+                if error != nil { phase = .failed }
+                else { phase = requiresDriverCockpit ? .driver : .provider }
+            }
+        }
+    }
+}
+
+/// Company drivers use the same canonical state/commands as the dashboard.
+/// The marketplace provider presentation below remains its separate workflow.
+@MainActor
+struct PPDriverHomeAvailabilitySection: View {
+    @StateObject private var store = PPDriverCockpitStore(loadsTaskQueue: false)
+    let onOpenCockpit: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AdminSpacing.md) {
+            HStack(alignment: .top, spacing: AdminSpacing.sm) {
+                Label(ppDriverText("DriverCockpit_Title"), systemImage: "steeringwheel")
+                    .font(AdminType.headlineBold)
+                    .foregroundStyle(AdminSurface.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 0)
+                if store.isResolvingContexts || store.isRefreshing {
+                    ProgressView().accessibilityLabel(ppDriverText("DriverAvailability_CheckStatus"))
+                }
+            }
+
+            if let context = store.selectedContext {
+                if store.contexts.count > 1 {
+                    Menu {
+                        ForEach(store.contexts) { choice in
+                            Button {
+                                store.select(choice)
+                            } label: {
+                                if choice.id == context.id {
+                                    Label(contextName(choice), systemImage: "checkmark")
+                                } else {
+                                    Text(contextName(choice))
+                                }
+                            }
+                        }
+                    } label: {
+                        Label(contextName(context), systemImage: "chevron.up.chevron.down")
+                            .font(AdminType.calloutBold)
+                            .frame(minHeight: AdminTouchTarget.minimum, alignment: .leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .disabled(!store.canSwitchContext || store.isResolvingContexts)
+                    .accessibilityLabel(ppDriverText("DriverCockpit_SwitchWorkspace"))
+                    .accessibilityValue(contextName(context))
+                } else {
+                    Text(contextName(context))
+                        .font(AdminType.footnote)
+                        .foregroundStyle(AdminSurface.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if showsAvailabilityControl {
+                PPDriverAvailabilityControl(store: store)
+            } else {
+                Text(ppDriverText(stateMessageKey))
+                    .font(AdminType.subheadlineBold)
+                    .foregroundStyle(AdminSurface.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                if store.phase == .loadFailed || store.phase == .accessEnded {
+                    Button(ppDriverText("DriverAvailability_CheckStatus")) { store.resolveContexts() }
+                        .font(AdminType.calloutBold)
+                        .frame(minHeight: AdminTouchTarget.minimum)
+                        .disabled(store.isResolvingContexts)
+                }
+            }
+
+            if let notice = store.notice {
+                Text(notice.text)
+                    .font(AdminType.footnote)
+                    .foregroundStyle(AdminSurface.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                if store.uncertainCommand != nil {
+                    Button(ppDriverText("DriverAvailability_CheckStatus")) { store.refreshAvailability() }
+                        .frame(minHeight: AdminTouchTarget.minimum)
+                        .disabled(store.isSubmitting || store.isRefreshing || store.isResolvingContexts)
+                    Button(ppDriverText("DriverCockpit_RetrySafely")) { store.retryUncertainCommand() }
+                        .frame(minHeight: AdminTouchTarget.minimum)
+                        .disabled(store.isSubmitting || store.isVerifying)
+                }
+            }
+
+            Button(action: onOpenCockpit) {
+                HStack(spacing: AdminSpacing.sm) {
+                    Text(ppDriverText("DriverAvailability_OpenDashboard"))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: AdminSpacing.sm)
+                    Image(systemName: "chevron.forward").accessibilityHidden(true)
+                }
+                .font(AdminType.calloutBold)
+                .foregroundStyle(AdminSurface.primary)
+                .padding(.vertical, AdminSpacing.sm)
+                .frame(minHeight: AdminTouchTarget.comfortable)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(!store.canSwitchContext)
+            .accessibilityIdentifier("driver.availability.openDashboard")
+        }
+        .padding(AdminSpacing.base)
+        .background(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous).fill(AdminSurface.card))
+        .overlay(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous).stroke(AdminSurface.hairline, lineWidth: 0.5))
+        .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
+        .onAppear {
+            store.start(focus: nil)
+            store.setVisible(true)
+        }
+        .onDisappear { store.setVisible(false) }
+    }
+
+    private func contextName(_ context: PPDriverContext) -> String {
+        context.kind == .officialDriver ? ppDriverText("DriverCockpit_Context_Official")
+            : ppDriverFormat("DriverCockpit_Context_Partner_Format", ppDriverIsolated(context.companyName.isEmpty ? context.companyID : context.companyName))
+    }
+
+    private var showsAvailabilityControl: Bool {
+        if store.phase == .ready { return true }
+        if case .noWorkspace(let reason) = store.phase { return !reason.isEmpty }
+        return false
+    }
+
+    private var stateMessageKey: String {
+        switch store.phase {
+        case .resolving: return "DriverCockpit_Loading_Tasks"
+        case .choosingContext: return "DriverAvailability_ChooseWorkspace"
+        case .loadFailed: return "DriverCockpit_Presence_Unavailable"
+        case .signedOut: return "DriverCockpit_SignedOut_Body"
+        case .accessEnded: return "DriverCockpit_NoWorkspace_Body"
+        case .noWorkspace: return "DriverCockpit_NoWorkspace_Body"
+        case .ready: return "DriverAvailability_ChooseWorkspace"
+        }
+    }
+}
+
 // MARK: - Reusable Tactile Scale Touch Button Style
 
 public struct PPDeliveryTouchButtonStyle: ButtonStyle {
@@ -79,7 +272,7 @@ public struct PPDeliveryDriverHomeControlSection: View {
                     .fill(
                         RadialGradient(
                             colors: [
-                                state.dutyState.tintColor.opacity(state.dutyState == .offDuty ? 0.03 : 0.09),
+                                state.dutyState.tintColor.opacity(state.dutyState == .busyFlight ? 0.09 : 0.03),
                                 Color.clear
                             ],
                             center: isRTL ? .topLeading : .topTrailing,
@@ -125,7 +318,7 @@ public struct PPDeliveryDriverHomeControlSection: View {
             // Animated Status Orbital Beacon
             ZStack {
                 // Expanding concentric radar pulse wave (when on duty)
-                if state.dutyState != .offDuty && !reduceMotion {
+                if state.dutyState == .busyFlight && !reduceMotion {
                     Circle()
                         .stroke(state.dutyState.tintColor.opacity(0.25), lineWidth: 1.5)
                         .scaleEffect(radarPulse ? 1.4 : 0.9)
@@ -158,7 +351,7 @@ public struct PPDeliveryDriverHomeControlSection: View {
 
                     // Small alive status indicator
                     Circle()
-                        .fill(state.dutyState == .offDuty ? AdminSurface.secondaryText.opacity(0.4) : AdminSurface.emerald)
+                        .fill(state.dutyState == .busyFlight ? AdminSurface.amber : AdminSurface.secondaryText.opacity(0.4))
                         .frame(width: 7, height: 7)
                 }
 
@@ -170,34 +363,28 @@ public struct PPDeliveryDriverHomeControlSection: View {
 
             Spacer(minLength: 4)
 
-            // Tactile Duty Toggle Switch
-            Button(action: {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.72)) {
-                    state.toggleDuty()
-                }
-            }) {
-                HStack(spacing: 5) {
-                    Image(systemName: state.dutyState.systemIcon)
-                        .font(.system(size: 11, weight: .bold))
+            // Read-only work state: the marketplace flow has no backend
+            // availability record, so no local duty switch is offered.
+            HStack(spacing: 5) {
+                Image(systemName: state.dutyState.systemIcon)
+                    .font(.system(size: 11, weight: .bold))
 
-                    Text(state.dutyState.shortTitle)
-                        .font(PPBrandFont.bold(12))
-                }
-                .foregroundColor(state.dutyState.tintColor)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 6)
-                .background(
-                    Capsule()
-                        .fill(state.dutyState.tintColor.opacity(0.12))
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(state.dutyState.tintColor.opacity(0.28), lineWidth: 1)
-                )
+                Text(state.dutyState.shortTitle)
+                    .font(PPBrandFont.bold(12))
             }
-            .buttonStyle(PPDeliveryTouchButtonStyle(pressedScale: 0.92))
+            .foregroundColor(state.dutyState.tintColor)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 6)
+            .background(
+                Capsule()
+                    .fill(state.dutyState.tintColor.opacity(0.12))
+            )
+            .overlay(
+                Capsule()
+                    .stroke(state.dutyState.tintColor.opacity(0.28), lineWidth: 1)
+            )
+            .accessibilityElement(children: .combine)
             .accessibilityLabel(state.dutyState.title)
-            .accessibilityHint(Language.get("Deliv_Accessibility_ToggleDutyHint", alter: "اضغط للتبديل بين الاتصال والاستراحة"))
         }
     }
 
@@ -383,21 +570,21 @@ public struct PPDeliveryDriverHomeControlSection: View {
                 hasAlertBadge: !state.availableDispatches.isEmpty
             )
 
-            // Pod 2: Shift Earnings (أرباح الشيفت)
+            // Pod 2: In progress now (server-sourced orders)
             telemetryPod(
-                icon: "banknote.fill",
+                icon: "figure.walk.motion",
                 iconColor: AdminSurface.emerald,
-                value: String(format: "%.0f %@", state.todayTotalEarningsQAR, Language.get("QAR", alter: "ر.ق")),
-                title: Language.get("Deliv_Earnings", alter: "أرباح الشيفت"),
+                value: "\(state.inProgressCount)",
+                title: Language.get("Deliv_Metric_InProgress", alter: "قيد التنفيذ"),
                 hasAlertBadge: false
             )
 
-            // Pod 3: Completed Stops Today (تم تسليمها)
+            // Pod 3: Delivered today (server deliveredAt)
             telemetryPod(
                 icon: "checkmark.seal.fill",
                 iconColor: AdminSurface.primary,
                 value: "\(state.todayCompletedCount)",
-                title: Language.get("Deliv_StopsToday", alter: "تم تسليمها"),
+                title: Language.get("Deliv_Metric_DeliveredToday", alter: "سُلّمت اليوم"),
                 hasAlertBadge: false
             )
         }

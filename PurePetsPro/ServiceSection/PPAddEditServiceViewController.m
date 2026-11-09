@@ -961,14 +961,14 @@
 
     NSString *title = [self.titleField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (title.length == 0) {
-        [PPHUD showError:Language.isRTL ? @"يرجى كتابة عنوان الخدمة" : @"Please enter service title"];
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:Language.isRTL ? @"يرجى كتابة عنوان الخدمة" : @"Please enter service title"];
         [self.titleField becomeFirstResponder];
         return;
     }
 
     double price = [self.priceField.text doubleValue];
     if (price <= 0.0) {
-        [PPHUD showError:Language.isRTL ? @"يرجى إدخال سعر صالح للخدمة" : @"Please enter a valid price"];
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:Language.isRTL ? @"يرجى إدخال سعر صالح للخدمة" : @"Please enter a valid price"];
         [self.priceField becomeFirstResponder];
         return;
     }
@@ -997,7 +997,7 @@
         [[PPServiceManager sharedManager] updateService:model image:self.selectedImage completion:^(NSError * _Nullable error) {
             [PPHUD dismiss];
             if (error) {
-                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                [PPAlertHelper showErrorIn:weakSelf title:kLang(@"Error") subtitle:error.localizedDescription];
             } else {
                 [PPHUD showSuccess:Language.isRTL ? @"تم تحديث الخدمة بنجاح" : @"Service updated successfully"];
                 [weakSelf.navigationController popViewControllerAnimated:YES];
@@ -1007,7 +1007,7 @@
         [[PPServiceManager sharedManager] addService:model image:self.selectedImage completion:^(NSError * _Nullable error) {
             [PPHUD dismiss];
             if (error) {
-                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                [PPAlertHelper showErrorIn:weakSelf title:kLang(@"Error") subtitle:error.localizedDescription];
             } else {
                 [PPHUD showSuccess:Language.isRTL ? @"تم إنشاء ونشر الخدمة بنجاح!" : @"Service published successfully!"];
                 [weakSelf.navigationController popViewControllerAnimated:YES];
@@ -1059,6 +1059,47 @@
     btn.contentEdgeInsets = UIEdgeInsetsMake(8, 10, 8, 10);
     [btn addTarget:self action:@selector(inclusionToggled:) forControlEvents:UIControlEventTouchUpInside];
     return btn;
+}
+
+- (BOOL)pp_hasUnsavedChanges {
+    if (!self.serviceToEdit) {
+        return (self.titleField.text.length > 0 ||
+                self.priceField.text.length > 0 ||
+                self.descriptionView.text.length > 0 ||
+                self.selectedImage != nil);
+    }
+    if (![self.titleField.text isEqualToString:self.serviceToEdit.title ?: @""]) return YES;
+    if (![self.descriptionView.text isEqualToString:self.serviceToEdit.descriptionText ?: @""]) return YES;
+    if (self.selectedImage != nil) return YES;
+    if (fabs(self.priceField.text.doubleValue - self.serviceToEdit.price) > 0.001) return YES;
+    return NO;
+}
+
+- (void)pp_performBackNavigation {
+    if (self.navigationController && self.navigationController.viewControllers.count > 1) {
+        [self.navigationController popViewControllerAnimated:YES];
+    } else if (self.presentingViewController || self.navigationController.presentingViewController) {
+        [self dismissViewControllerAnimated:YES completion:nil];
+    }
+}
+
+- (void)onBack {
+    if ([self pp_hasUnsavedChanges]) {
+        __weak typeof(self) weakSelf = self;
+        [PPAlertHelper showConfirmationIn:self
+                                    title:[Language isRTL] ? @"تجاهل التغييرات؟" : @"Discard Changes?"
+                                 subtitle:[Language isRTL] ? @"لديك تعديلات غير محفوظة، هل أنت متأكد من مغادرة هذه الصفحة؟" : @"You have unsaved changes. Are you sure you want to discard them and exit?"
+                              placeholder:nil
+                            confirmButton:[Language isRTL] ? @"تجاهل وخروج" : @"Discard"
+                             cancelButton:[Language isRTL] ? @"متابعة التعديل" : @"Keep Editing"
+                                     icon:[UIImage systemImageNamed:@"exclamationmark.triangle.fill"]
+                             confirmBlock:^{
+            [weakSelf pp_performBackNavigation];
+        }
+                              cancelBlock:nil];
+    } else {
+        [self pp_performBackNavigation];
+    }
 }
 
 @end

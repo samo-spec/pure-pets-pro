@@ -4,6 +4,7 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @interface PPPharmacyMedicinesViewController : UIViewController
++ (NSString *)humanizedCategoryTitle:(NSString * _Nullable)rawCategory;
 @end
 
 @interface PPPharmacyQuickStockSheet : UIViewController

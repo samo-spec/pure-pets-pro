@@ -36,6 +36,10 @@
 @property (nonatomic, strong) UILabel *descriptionPlaceholder;
 @property (nonatomic, strong) UITextView *descriptionEnView;
 @property (nonatomic, strong) UILabel *descriptionEnPlaceholder;
+@property (nonatomic, strong) UISegmentedControl *descLanguageSegment;
+@property (nonatomic, strong) UIView *descArContainer;
+@property (nonatomic, strong) UIView *descEnContainer;
+@property (nonatomic, strong) UILabel *descCharCountLabel;
 
 @property (nonatomic, strong) UITextField *priceField;
 @property (nonatomic, strong) UITextField *wholesalePriceField;
@@ -698,54 +702,338 @@
     return self.imageCollectionView;
 }
 
+- (UIView *)pp_bilingualFieldRowWithBadge:(NSString *)badgeTitle placeholder:(NSString *)placeholder icon:(NSString *)iconName field:(UITextField * _Nullable __strong *)fieldPtr isAscii:(BOOL)isAscii {
+    UIView *container = [[UIView alloc] init];
+    container.translatesAutoresizingMaskIntoConstraints = NO;
+    container.backgroundColor = [self pp_canvasColor];
+    container.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    PPApplyContinuousCorners(container, PPCornerMedium);
+    container.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    container.layer.borderColor = [self pp_borderColor].CGColor;
+    [container.heightAnchor constraintEqualToConstant:58.0].active = YES;
+
+    UIView *badge = [[UIView alloc] init];
+    badge.translatesAutoresizingMaskIntoConstraints = NO;
+    badge.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.08];
+    PPApplyContinuousCorners(badge, 8.0);
+    [container addSubview:badge];
+
+    UILabel *badgeLabel = [[UILabel alloc] init];
+    badgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    badgeLabel.font = [Styling fontBold:11.0];
+    badgeLabel.textColor = [UIColor ppPrimary];
+    badgeLabel.text = badgeTitle;
+    [badge addSubview:badgeLabel];
+
+    UITextField *field = [[UITextField alloc] init];
+    field.translatesAutoresizingMaskIntoConstraints = NO;
+    field.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    field.textColor = PrimaryTextClr;
+    field.font = [Styling fontBold:15.0];
+    field.textAlignment = Language.alignmentForCurrentLanguage;
+    field.keyboardType = isAscii ? UIKeyboardTypeASCIICapable : UIKeyboardTypeDefault;
+    field.attributedPlaceholder = [[NSAttributedString alloc] initWithString:placeholder ?: @""
+                                                                   attributes:@{NSForegroundColorAttributeName : [SeconderyTextClr colorWithAlphaComponent:0.52]}];
+    PPEnableDynamicTypeForTextField(field, UIFontTextStyleBody);
+    [field addTarget:self action:@selector(pp_normalizeArabicDigitsForField:) forControlEvents:UIControlEventEditingChanged];
+    [container addSubview:field];
+    if (fieldPtr) *fieldPtr = field;
+
+    UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:iconName withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIImageSymbolWeightMedium]]];
+    icon.translatesAutoresizingMaskIntoConstraints = NO;
+    icon.tintColor = [AppPrimaryClr colorWithAlphaComponent:0.65];
+    icon.contentMode = UIViewContentModeScaleAspectFit;
+    [container addSubview:icon];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [badge.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:PPSpaceSM],
+        [badge.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
+        [badge.heightAnchor constraintEqualToConstant:28.0],
+
+        [badgeLabel.leadingAnchor constraintEqualToAnchor:badge.leadingAnchor constant:8.0],
+        [badgeLabel.trailingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:-8.0],
+        [badgeLabel.centerYAnchor constraintEqualToAnchor:badge.centerYAnchor],
+
+        [field.leadingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:PPSpaceSM],
+        [field.trailingAnchor constraintEqualToAnchor:icon.leadingAnchor constant:-PPSpaceSM],
+        [field.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [field.bottomAnchor constraintEqualToAnchor:container.bottomAnchor],
+
+        [icon.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-PPSpaceBase],
+        [icon.centerYAnchor constraintEqualToAnchor:container.centerYAnchor],
+        [icon.widthAnchor constraintEqualToConstant:20.0],
+        [icon.heightAnchor constraintEqualToConstant:20.0]
+    ]];
+
+    return container;
+}
+
+- (UIView *)pp_buildBilingualIdentityCard {
+    UIView *surface = [self pp_cardSurface];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = PPSpaceBase;
+    stack.layoutMarginsRelativeArrangement = YES;
+    stack.layoutMargins = UIEdgeInsetsMake(PPSpaceBase, PPSpaceBase, PPSpaceBase, PPSpaceBase);
+    stack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [surface addSubview:stack];
+
+    [stack addArrangedSubview:[self pp_sectionHeader:kLang(@"Market_SectionIdentity") subtitle:[Language isRTL] ? @"الاسم التجاري المعتمد لبطاقة العرض بالسوق" : @"Official bilingual product names" icon:@"info.circle.fill"]];
+
+    UIView *nameRow = [self pp_bilingualFieldRowWithBadge:[Language isRTL] ? @"عربي 🇶🇦" : @"AR 🇶🇦" placeholder:kLang(@"Market_NameReq") icon:@"square.and.pencil" field:&_nameField isAscii:NO];
+    [self.nameField addTarget:self action:@selector(pp_updateHeroCardState) forControlEvents:UIControlEventEditingChanged];
+    [stack addArrangedSubview:nameRow];
+
+    UIView *nameEnRow = [self pp_bilingualFieldRowWithBadge:[Language isRTL] ? @"EN 🇬🇧" : @"EN 🇬🇧" placeholder:kLang(@"Market_NameEn") icon:@"character.cursor.ibeam" field:&_nameEnField isAscii:YES];
+    [self.nameEnField addTarget:self action:@selector(pp_updateHeroCardState) forControlEvents:UIControlEventEditingChanged];
+    [stack addArrangedSubview:nameEnRow];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:surface.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:surface.bottomAnchor],
+    ]];
+
+    return surface;
+}
+
+- (UIView *)pp_buildDescriptionWorkshopCard {
+    UIView *surface = [self pp_cardSurface];
+
+    UIStackView *stack = [[UIStackView alloc] init];
+    stack.translatesAutoresizingMaskIntoConstraints = NO;
+    stack.axis = UILayoutConstraintAxisVertical;
+    stack.spacing = PPSpaceBase;
+    stack.layoutMarginsRelativeArrangement = YES;
+    stack.layoutMargins = UIEdgeInsetsMake(PPSpaceBase, PPSpaceBase, PPSpaceBase, PPSpaceBase);
+    stack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [surface addSubview:stack];
+
+    UIView *header = [self pp_sectionHeader:kLang(@"Description") subtitle:kLang(@"Market_DescriptionHint") icon:@"doc.text.fill"];
+    [stack addArrangedSubview:header];
+
+    // Language Segment Switcher
+    NSArray *items = @[
+        [Language isRTL] ? @"العربية 🇶🇦" : @"Arabic 🇶🇦",
+        [Language isRTL] ? @"الإنجليزية 🇬🇧" : @"English 🇬🇧"
+    ];
+    self.descLanguageSegment = [[UISegmentedControl alloc] initWithItems:items];
+    self.descLanguageSegment.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descLanguageSegment.selectedSegmentIndex = 0;
+    self.descLanguageSegment.backgroundColor = [self pp_canvasColor];
+    self.descLanguageSegment.selectedSegmentTintColor = [UIColor ppElevatedSurface];
+    NSDictionary *selAttr = @{
+        NSFontAttributeName: [Styling fontBold:13.0],
+        NSForegroundColorAttributeName: [UIColor ppPrimary]
+    };
+    NSDictionary *unselAttr = @{
+        NSFontAttributeName: [Styling fontMedium:12.5],
+        NSForegroundColorAttributeName: [UIColor ppTextSecondary]
+    };
+    [self.descLanguageSegment setTitleTextAttributes:selAttr forState:UIControlStateSelected];
+    [self.descLanguageSegment setTitleTextAttributes:unselAttr forState:UIControlStateNormal];
+    [self.descLanguageSegment addTarget:self action:@selector(descLanguageChanged:) forControlEvents:UIControlEventValueChanged];
+    [stack addArrangedSubview:self.descLanguageSegment];
+    [self.descLanguageSegment.heightAnchor constraintEqualToConstant:36.0].active = YES;
+
+    // Quick insertion prompt chips
+    UIScrollView *chipScroll = [[UIScrollView alloc] init];
+    chipScroll.translatesAutoresizingMaskIntoConstraints = NO;
+    chipScroll.showsHorizontalScrollIndicator = NO;
+    chipScroll.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [stack addArrangedSubview:chipScroll];
+    [chipScroll.heightAnchor constraintEqualToConstant:32.0].active = YES;
+
+    UIStackView *chipStack = [[UIStackView alloc] init];
+    chipStack.translatesAutoresizingMaskIntoConstraints = NO;
+    chipStack.axis = UILayoutConstraintAxisHorizontal;
+    chipStack.spacing = 8.0;
+    chipStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    [chipScroll addSubview:chipStack];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [chipStack.leadingAnchor constraintEqualToAnchor:chipScroll.leadingAnchor],
+        [chipStack.trailingAnchor constraintEqualToAnchor:chipScroll.trailingAnchor],
+        [chipStack.topAnchor constraintEqualToAnchor:chipScroll.topAnchor],
+        [chipStack.bottomAnchor constraintEqualToAnchor:chipScroll.bottomAnchor],
+        [chipStack.heightAnchor constraintEqualToAnchor:chipScroll.heightAnchor]
+    ]];
+
+    NSArray *chips = [Language isRTL] ? @[
+        @"المقاسات والأبعاد 📏",
+        @"طريقة الاستخدام 📋",
+        @"المميزات الرئيسية ✨",
+        @"المكونات والمواد 🔬"
+    ] : @[
+        @"Dimensions & Sizes 📏",
+        @"Usage Instructions 📋",
+        @"Key Highlights ✨",
+        @"Materials & Ingredients 🔬"
+    ];
+
+    for (NSString *chipText in chips) {
+        UIButton *btn = [UIButton buttonWithType:UIButtonTypeCustom];
+        btn.translatesAutoresizingMaskIntoConstraints = NO;
+        btn.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.06];
+        [btn setTitle:[NSString stringWithFormat:@"+ %@", chipText] forState:UIControlStateNormal];
+        [btn setTitleColor:[UIColor ppPrimary] forState:UIControlStateNormal];
+        btn.titleLabel.font = [Styling fontBold:11.5];
+        btn.contentEdgeInsets = UIEdgeInsetsMake(4, 10, 4, 10);
+        PPApplyContinuousCorners(btn, PPCornerPill);
+        btn.layer.borderWidth = 0.5;
+        btn.layer.borderColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.2].CGColor;
+        objc_setAssociatedObject(btn, "ChipTextKey", chipText, OBJC_ASSOCIATION_COPY_NONATOMIC);
+        [btn addTarget:self action:@selector(pp_quickChipTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [chipStack addArrangedSubview:btn];
+    }
+
+    // Arabic description view container
+    self.descArContainer = [[UIView alloc] init];
+    self.descArContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descriptionView = [self pp_textViewWithPlaceholder:kLang(@"Description") field:&_descriptionView placeholderLabel:&_descriptionPlaceholder];
+    self.descriptionView.keyboardType = UIKeyboardTypeDefault;
+    [self.descArContainer addSubview:self.descriptionView];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.descriptionView.topAnchor constraintEqualToAnchor:self.descArContainer.topAnchor],
+        [self.descriptionView.leadingAnchor constraintEqualToAnchor:self.descArContainer.leadingAnchor],
+        [self.descriptionView.trailingAnchor constraintEqualToAnchor:self.descArContainer.trailingAnchor],
+        [self.descriptionView.bottomAnchor constraintEqualToAnchor:self.descArContainer.bottomAnchor]
+    ]];
+    [stack addArrangedSubview:self.descArContainer];
+
+    // English description view container
+    self.descEnContainer = [[UIView alloc] init];
+    self.descEnContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descEnContainer.hidden = YES;
+    self.descriptionEnView = [self pp_textViewWithPlaceholder:kLang(@"Description (EN)") field:&_descriptionEnView placeholderLabel:&_descriptionEnPlaceholder];
+    self.descriptionEnView.keyboardType = UIKeyboardTypeASCIICapable;
+    [self.descEnContainer addSubview:self.descriptionEnView];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.descriptionEnView.topAnchor constraintEqualToAnchor:self.descEnContainer.topAnchor],
+        [self.descriptionEnView.leadingAnchor constraintEqualToAnchor:self.descEnContainer.leadingAnchor],
+        [self.descriptionEnView.trailingAnchor constraintEqualToAnchor:self.descEnContainer.trailingAnchor],
+        [self.descriptionEnView.bottomAnchor constraintEqualToAnchor:self.descEnContainer.bottomAnchor]
+    ]];
+    [stack addArrangedSubview:self.descEnContainer];
+
+    // Character count info row
+    self.descCharCountLabel = [[UILabel alloc] init];
+    self.descCharCountLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descCharCountLabel.font = [Styling fontRegular:11.5];
+    self.descCharCountLabel.textColor = [SeconderyTextClr colorWithAlphaComponent:0.6];
+    self.descCharCountLabel.textAlignment = [Language isRTL] ? NSTextAlignmentLeft : NSTextAlignmentRight;
+    self.descCharCountLabel.text = [Language isRTL] ? @"٠ حرف" : @"0 chars";
+    [stack addArrangedSubview:self.descCharCountLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [stack.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor],
+        [stack.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor],
+        [stack.topAnchor constraintEqualToAnchor:surface.topAnchor],
+        [stack.bottomAnchor constraintEqualToAnchor:surface.bottomAnchor],
+    ]];
+
+    return surface;
+}
+
+- (void)descLanguageChanged:(UISegmentedControl *)sender {
+    BOOL isArabic = (sender.selectedSegmentIndex == 0);
+    [UIView transitionWithView:self.descArContainer.superview duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
+        self.descArContainer.hidden = !isArabic;
+        self.descEnContainer.hidden = isArabic;
+    } completion:nil];
+    [self pp_updateDescriptionCharCount];
+}
+
+- (void)pp_quickChipTapped:(UIButton *)sender {
+    NSString *chip = objc_getAssociatedObject(sender, "ChipTextKey");
+    if (!chip) return;
+    [self pp_appendQuickChipText:chip];
+}
+
+- (void)pp_appendQuickChipText:(NSString *)chipText {
+    UITextView *activeView = (self.descLanguageSegment.selectedSegmentIndex == 0) ? self.descriptionView : self.descriptionEnView;
+    UILabel *activePlaceholder = (self.descLanguageSegment.selectedSegmentIndex == 0) ? self.descriptionPlaceholder : self.descriptionEnPlaceholder;
+    NSString *bullet = [NSString stringWithFormat:@"• %@: ", chipText];
+    if (activeView.text.length > 0) {
+        activeView.text = [activeView.text stringByAppendingFormat:@"\n%@", bullet];
+    } else {
+        activeView.text = bullet;
+    }
+    activePlaceholder.hidden = (activeView.text.length > 0);
+    [self pp_updateDescriptionCharCount];
+    [self pp_updateHeroCardState];
+    [PPFunc pp_playTapEffect];
+}
+
+- (void)pp_updateDescriptionCharCount {
+    UITextView *activeView = (self.descLanguageSegment.selectedSegmentIndex == 0) ? self.descriptionView : self.descriptionEnView;
+    NSInteger count = activeView.text.length;
+    self.descCharCountLabel.text = [Language isRTL] ? [NSString stringWithFormat:@"%ld حرف", (long)count] : [NSString stringWithFormat:@"%ld chars", (long)count];
+}
+
+- (void)textViewDidChange:(UITextView *)textView {
+    if (textView == self.descriptionView) {
+        self.descriptionPlaceholder.hidden = (textView.text.length > 0);
+    } else if (textView == self.descriptionEnView) {
+        self.descriptionEnPlaceholder.hidden = (textView.text.length > 0);
+    }
+    [self pp_updateDescriptionCharCount];
+    [self pp_updateHeroCardState];
+}
+
+- (BOOL)pp_hasUnsavedChanges {
+    if (self.isCreate) {
+        return (self.nameField.text.length > 0 ||
+                self.nameEnField.text.length > 0 ||
+                self.priceField.text.length > 0 ||
+                self.descriptionView.text.length > 0 ||
+                self.selectedImages.count > 0);
+    }
+    if (![self.nameField.text isEqualToString:self.editItem.name ?: @""]) return YES;
+    if (![self.nameEnField.text isEqualToString:self.editItem.nameEn ?: @""]) return YES;
+    if (![self.descriptionView.text isEqualToString:self.editItem.desc ?: @""]) return YES;
+    if (![self.descriptionEnView.text isEqualToString:self.editItem.descEn ?: @""]) return YES;
+    if (self.selectedImages.count > 0) return YES;
+    if (fabs(self.priceField.text.doubleValue - self.editItem.price) > 0.001) return YES;
+    return NO;
+}
+
+- (void)pp_performBackNavigation {
+    if (self.navigationController && self.navigationController.viewControllers.count > 1) {
+        [self.navigationController popViewControllerAnimated:YES];
+    } else if (self.presentingViewController || self.navigationController.presentingViewController) {
+        [self dismissViewControllerAnimated:YES completion:nil];
+    }
+}
+
+- (void)onBack {
+    if ([self pp_hasUnsavedChanges]) {
+        __weak typeof(self) weakSelf = self;
+        [PPAlertHelper showConfirmationIn:self
+                                    title:[Language isRTL] ? @"تجاهل التغييرات؟" : @"Discard Changes?"
+                                 subtitle:[Language isRTL] ? @"لديك تعديلات غير محفوظة، هل أنت متأكد من مغادرة هذه الصفحة؟" : @"You have unsaved changes. Are you sure you want to discard them and exit?"
+                              placeholder:nil
+                            confirmButton:[Language isRTL] ? @"تجاهل وخروج" : @"Discard"
+                             cancelButton:[Language isRTL] ? @"متابعة التعديل" : @"Keep Editing"
+                                     icon:[UIImage systemImageNamed:@"exclamationmark.triangle.fill"]
+                             confirmBlock:^{
+            [weakSelf pp_performBackNavigation];
+        }
+                              cancelBlock:nil];
+    } else {
+        [self pp_performBackNavigation];
+    }
+}
+
 - (void)pp_setupFormSections {
     if (!self.selectedImages) self.selectedImages = [NSMutableArray array];
     if (!self.imageURLs) self.imageURLs = [NSMutableArray array];
 
-    UIView *nameRow = [self pp_textFieldWithPlaceholder:kLang(@"Market_NameReq") icon:@"square.and.pencil" field:&_nameField];
-    self.nameField.keyboardType = UIKeyboardTypeDefault;
-    [self.nameField addTarget:self action:@selector(pp_updateHeroCardState) forControlEvents:UIControlEventEditingChanged];
-    UIView *nameEnRow = [self pp_textFieldWithPlaceholder:kLang(@"Market_NameEn") icon:@"character.cursor.ibeam" field:&_nameEnField];
-    self.nameEnField.keyboardType = UIKeyboardTypeASCIICapable;
-    [self.nameEnField addTarget:self action:@selector(pp_updateHeroCardState) forControlEvents:UIControlEventEditingChanged];
-
-    UIView *descBlock = [[UIView alloc] init];
-    descBlock.translatesAutoresizingMaskIntoConstraints = NO;
-    descBlock.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    PPStyleCardSurface(descBlock, PPCornerCard);
-    UIView *descHeader = [self pp_sectionHeader:kLang(@"Description") subtitle:kLang(@"Market_DescriptionHint") icon:@"doc.text.fill"];
-    self.descriptionView = [self pp_textViewWithPlaceholder:kLang(@"Description") field:&_descriptionView placeholderLabel:&_descriptionPlaceholder];
-    self.descriptionView.keyboardType = UIKeyboardTypeDefault;
-    [descBlock addSubview:descHeader];
-    [descBlock addSubview:self.descriptionView];
-    [NSLayoutConstraint activateConstraints:@[
-        [descHeader.topAnchor constraintEqualToAnchor:descBlock.topAnchor constant:PPSpaceBase],
-        [descHeader.leadingAnchor constraintEqualToAnchor:descBlock.leadingAnchor constant:PPSpaceBase],
-        [descHeader.trailingAnchor constraintEqualToAnchor:descBlock.trailingAnchor constant:-PPSpaceBase],
-        [self.descriptionView.topAnchor constraintEqualToAnchor:descHeader.bottomAnchor constant:PPSpaceBase],
-        [self.descriptionView.leadingAnchor constraintEqualToAnchor:descBlock.leadingAnchor constant:PPSpaceBase],
-        [self.descriptionView.trailingAnchor constraintEqualToAnchor:descBlock.trailingAnchor constant:-PPSpaceBase],
-        [self.descriptionView.bottomAnchor constraintEqualToAnchor:descBlock.bottomAnchor constant:-PPSpaceBase],
-    ]];
-
-    UIView *descEnBlock = [[UIView alloc] init];
-    descEnBlock.translatesAutoresizingMaskIntoConstraints = NO;
-    descEnBlock.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    PPStyleCardSurface(descEnBlock, PPCornerCard);
-    UIView *descEnHeader = [self pp_sectionHeader:kLang(@"Description (EN)") subtitle:@"" icon:@"doc.text.fill"];
-    self.descriptionEnView = [self pp_textViewWithPlaceholder:kLang(@"Description (EN)") field:&_descriptionEnView placeholderLabel:&_descriptionEnPlaceholder];
-    self.descriptionEnView.keyboardType = UIKeyboardTypeASCIICapable;
-    [descEnBlock addSubview:descEnHeader];
-    [descEnBlock addSubview:self.descriptionEnView];
-    [NSLayoutConstraint activateConstraints:@[
-        [descEnHeader.topAnchor constraintEqualToAnchor:descEnBlock.topAnchor constant:PPSpaceBase],
-        [descEnHeader.leadingAnchor constraintEqualToAnchor:descEnBlock.leadingAnchor constant:PPSpaceBase],
-        [descEnHeader.trailingAnchor constraintEqualToAnchor:descEnBlock.trailingAnchor constant:-PPSpaceBase],
-        [self.descriptionEnView.topAnchor constraintEqualToAnchor:descEnHeader.bottomAnchor constant:PPSpaceBase],
-        [self.descriptionEnView.leadingAnchor constraintEqualToAnchor:descEnBlock.leadingAnchor constant:PPSpaceBase],
-        [self.descriptionEnView.trailingAnchor constraintEqualToAnchor:descEnBlock.trailingAnchor constant:-PPSpaceBase],
-        [self.descriptionEnView.bottomAnchor constraintEqualToAnchor:descEnBlock.bottomAnchor constant:-PPSpaceBase],
-    ]];
+    UIView *identityBlock = [self pp_buildBilingualIdentityCard];
+    UIView *descWorkshopBlock = [self pp_buildDescriptionWorkshopCard];
 
     UIView *priceRow = [self pp_textFieldWithPlaceholder:kLang(@"Market_PriceReq") icon:@"banknote.fill" field:&_priceField];
     self.priceField.keyboardType = UIKeyboardTypeASCIICapableNumberPad;
@@ -840,9 +1128,8 @@
     UIView *discAmtRow = [self pp_textFieldWithPlaceholder:kLang(@"Market_DiscountAmt") icon:@"banknote.fill" field:&_discountAmtField];
     self.discountAmtField.keyboardType = UIKeyboardTypeASCIICapableNumberPad;
 
-    [self.contentStack addArrangedSubview:[self pp_sectionBlockWithTitle:kLang(@"Market_SectionIdentity") subtitle:@"" icon:@"info.circle.fill" views:@[nameRow, nameEnRow]]];
-    [self.contentStack addArrangedSubview:descBlock];
-    [self.contentStack addArrangedSubview:descEnBlock];
+    [self.contentStack addArrangedSubview:identityBlock];
+    [self.contentStack addArrangedSubview:descWorkshopBlock];
     [self.contentStack addArrangedSubview:[self pp_sectionBlockWithTitle:kLang(@"Market_SectionCommerce") subtitle:@"" icon:@"dollarsign.circle.fill" views:@[priceRow, wholesaleRow, qtyRow, skuRow, barcodeRow]]];
     [self.contentStack addArrangedSubview:[self pp_variantStudioBlock]];
     [self.contentStack addArrangedSubview:[self pp_sectionBlockWithTitle:kLang(@"Market_SectionClassification") subtitle:kLang(@"Market_CategoryPickerSubtitle") icon:@"pawprint.circle.fill" views:@[mainRow, subRow]]];
@@ -1208,6 +1495,9 @@
     self.nameEnField.text = self.editItem.nameEn;
     self.descriptionView.text = self.editItem.desc;
     self.descriptionEnView.text = self.editItem.descEn;
+    self.descriptionPlaceholder.hidden = (self.descriptionView.text.length > 0);
+    self.descriptionEnPlaceholder.hidden = (self.descriptionEnView.text.length > 0);
+    [self pp_updateDescriptionCharCount];
     self.priceField.text = self.editItem.price > 0 ? [NSString stringWithFormat:@"%.0f", self.editItem.price] : @"";
     self.qtyField.text = [NSString stringWithFormat:@"%ld", (long)self.editItem.quantity];
     self.skuField.text = self.editItem.sku ?: @"";

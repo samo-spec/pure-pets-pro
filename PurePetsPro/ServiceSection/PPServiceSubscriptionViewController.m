@@ -10,6 +10,7 @@
 #import "PPServiceSubscriptionViewController.h"
 #import "PPServiceModel.h"
 #import "PPFirebaseCompat.h"
+#import "PPAlertHelper.h"
 
 @interface PPServiceSubscriptionViewController ()
 @property (nonatomic, strong) PPServiceModel *service;
@@ -246,11 +247,10 @@
 
 - (void)upgradeTapped {
     [PPFunc pp_playTapEffect];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:kLang(@"Serv_Sub_Upgrade_Title")
-                                                                  message:kLang(@"Serv_Sub_Upgrade_Msg")
-                                                           preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:kLang(@"OK") style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    [PPAlertHelper showSuccessIn:self
+                           title:kLang(@"Serv_Sub_Upgrade_Title")
+                        subtitle:kLang(@"Serv_Sub_Upgrade_Msg")
+                        OKAction:nil];
 }
 
 #pragma mark - Helpers

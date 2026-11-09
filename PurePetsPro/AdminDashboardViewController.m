@@ -275,6 +275,7 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 - (BOOL)pp_canManageVets;
 - (BOOL)pp_canManagePharmacy;
 - (BOOL)pp_canManageMarketplace;
+- (BOOL)pp_canManageFulfillment;
 - (BOOL)pp_canManageAdoption;
 - (BOOL)pp_hasDeliveryCompanyWorkspaceForUser:(nullable UserModel *)user;
 - (BOOL)pp_hasNonDeliveryCompanyWorkspaceForUser:(nullable UserModel *)user;
@@ -815,6 +816,18 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
     return user.canAccessProviderMarketplaceFeature;
 }
 
+- (BOOL)pp_canManageFulfillment {
+    UserModel *user = [self pp_activeDashboardUser];
+    if (!user) return NO;
+    BOOL isStaffOrOfficial = [user.accountType isEqualToString:@"staff"] ||
+                             [user.accountType isEqualToString:@"official"] ||
+                             user.isAdmin || user.isSuperAdmin || user.isOwner ||
+                             [user.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
+                             [user.email.lowercaseString isEqualToString:@"admin@pure-pets.net"];
+    if (isStaffOrOfficial) return YES;
+    return [self pp_canManageServices] || [self pp_canManageMarketplace] || [self pp_canManagePharmacy];
+}
+
 - (BOOL)pp_hasDeliveryCompanyWorkspaceForUser:(UserModel *)user {
     return self.isDeliveryCompanyMode || user.canDeliveryCompanyFeature;
 }
@@ -823,7 +836,8 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
     if (!user) {
         return NO;
     }
-    return [self pp_canManageServices] ||
+    return [self pp_canManageFulfillment] ||
+           [self pp_canManageServices] ||
            [self pp_canManageMarketplace] ||
            [self pp_canManageDelivery] ||
            [self pp_canManageVets] ||
@@ -842,6 +856,9 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
         return workspaceTitles.copy;
     }
 
+    if ([self pp_canManageFulfillment]) {
+        [workspaceTitles addObject:kLang(@"Fulfillment_Title")];
+    }
     if ([self pp_canManageMarketplace]) {
         [workspaceTitles addObject:kLang(@"Market_Title")];
     }
@@ -1643,10 +1660,15 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (BOOL)pp_shouldObserveProviderFulfillmentForUser:(UserModel *)user {
-    // Inventory/service capabilities may also belong to staff. The owner feed
-    // is provider-only; official driver work retains its canonical workspace.
+    if (!user) return NO;
+    BOOL isStaffOrOfficial = [user.accountType isEqualToString:@"staff"] ||
+                             [user.accountType isEqualToString:@"official"] ||
+                             user.isAdmin || user.isSuperAdmin || user.isOwner ||
+                             [user.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
+                             [user.email.lowercaseString isEqualToString:@"admin@pure-pets.net"];
+    if (isStaffOrOfficial) return YES;
     return [user.accountType isEqualToString:@"user"] &&
-           ([self pp_canManageServices] || [self pp_canManageMarketplace]);
+           ([self pp_canManageServices] || [self pp_canManageMarketplace] || [self pp_canManagePharmacy]);
 }
 
 - (PPProCommandDataSource)pp_requiredCommandDataSourcesForUser:(UserModel *)user {
@@ -3565,14 +3587,14 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (NSInteger)pp_dashboardHeroFulfillmentActionCount {
-    if (!([self pp_canManageServices] || [self pp_canManageMarketplace])) {
+    if (![self pp_canManageFulfillment]) {
         return 0;
     }
     return (NSInteger)(self.fulfillmentQuickActionSignals ?: [NSSet set]).count;
 }
 
 - (NSInteger)pp_pendingOrdersCount {
-    if (!([self pp_canManageServices] || [self pp_canManageMarketplace])) {
+    if (![self pp_canManageFulfillment]) {
         return 0;
     }
     if (!self.pendingOrders) {
@@ -3735,7 +3757,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.dashboardSummaryLabel.hidden = NO;
 
     NSString *actionTitle = kLang(@"DashboardHero_CTA_Notifications");
-    if (fulfillmentCount > 0 && ([self pp_canManageServices] || [self pp_canManageMarketplace])) {
+    if (fulfillmentCount > 0 && [self pp_canManageFulfillment]) {
         actionTitle = kLang(@"DashboardHero_CTA_Fulfillment");
     } else if (deliveryCount > 0 && [self pp_canManageDelivery]) {
         actionTitle = kLang(@"DashboardHero_CTA_Delivery");
@@ -3794,7 +3816,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     NSInteger fulfillmentCount = [self pp_dashboardHeroFulfillmentActionCount];
     NSInteger deliveryCount = [self pp_dashboardHeroDeliveryActionCount];
     NSInteger deliveryCompanyCount = [self pp_dashboardHeroDeliveryCompanyActionCount];
-    BOOL canOpenFulfillment = [self pp_canManageServices] || [self pp_canManageMarketplace];
+    BOOL canOpenFulfillment = [self pp_canManageFulfillment];
     BOOL canOpenDelivery = [self pp_canManageDelivery];
 
     if (fulfillmentCount > 0 && canOpenFulfillment) {
@@ -4520,9 +4542,10 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
             if (!strongSelf) return;
             NSString *currentActionKind = [strongSelf pp_fulfillmentActionKindForModel:model];
             NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
-            BOOL ownsFulfillment = currentUID.length > 0 && [model.ownerID isEqualToString:currentUID] &&
-                [model.ownerType isEqualToString:@"partner"];
-            BOOL canManageFulfillment = [strongSelf pp_canManageServices] || [strongSelf pp_canManageMarketplace];
+            BOOL isOfficialPlatform = [PPFulfillmentManager isOfficialPlatformFulfillment:model forUID:currentUID];
+            BOOL ownsFulfillment = (currentUID.length > 0 && [model.ownerID isEqualToString:currentUID] &&
+                [model.ownerType isEqualToString:@"partner"]) || isOfficialPlatform;
+            BOOL canManageFulfillment = [strongSelf pp_canManageFulfillment];
             BOOL actionRemainsCurrent = opensDetailsOnly || [currentActionKind isEqualToString:target.actionKind];
             BOOL statusRemainsCurrent = opensDetailsOnly || target.expectedStatus.length == 0 ||
                 [model.status isEqualToString:target.expectedStatus];
@@ -4618,9 +4641,10 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
             NSString *rawAction = [target.actionKind substringFromIndex:@"fulfillment.".length];
             BOOL isSupportedQuickAction = [rawAction isEqualToString:@"reject"] || [rawAction isEqualToString:@"cancel_request"];
             NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
-            BOOL ownsFulfillment = currentUID.length > 0 && [model.ownerID isEqualToString:currentUID] &&
-                [model.ownerType isEqualToString:@"partner"];
-            BOOL canManageFulfillment = [self pp_canManageServices] || [self pp_canManageMarketplace];
+            BOOL isOfficialPlatform = [PPFulfillmentManager isOfficialPlatformFulfillment:model forUID:currentUID];
+            BOOL ownsFulfillment = (currentUID.length > 0 && [model.ownerID isEqualToString:currentUID] &&
+                [model.ownerType isEqualToString:@"partner"]) || isOfficialPlatform;
+            BOOL canManageFulfillment = [self pp_canManageFulfillment];
             BOOL statusRemainsCurrent = target.expectedStatus.length == 0 || [model.status isEqualToString:target.expectedStatus];
             if (error || !model || !isSupportedQuickAction || !ownsFulfillment || !canManageFulfillment ||
                 !statusRemainsCurrent || ![model.availableActions containsObject:rawAction]) {
@@ -4641,14 +4665,24 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
                     return;
                 }
                 [PPHUD showIndeterminateIn:self.view title:kLang(@"Fulfillment_Updating") subtitle:nil];
-                [[PPFulfillmentManager sharedManager] performTransitionAction:rawAction
-                                                               fulfillmentID:model.fulfillmentID
-                                                              expectedStatus:model.status
-                                                                   commandID:nil
-                                                                       note:note
-                                                                   completion:^(BOOL success, NSString *message, NSError *operationError) {
-                    [self pp_finishCommandCenterQuickActionWithSuccess:success message:message error:operationError];
-                }];
+                if (isOfficialPlatform) {
+                    [[PPFulfillmentManager sharedManager] performOfficialPlatformTransitionAction:rawAction
+                                                                                    fulfillmentID:model.fulfillmentID
+                                                                                   expectedStatus:model.status
+                                                                                             note:note.length ? note : @"Staff quick action"
+                                                                                       completion:^(BOOL success, NSString *message, NSError *operationError) {
+                        [self pp_finishCommandCenterQuickActionWithSuccess:success message:message error:operationError];
+                    }];
+                } else {
+                    [[PPFulfillmentManager sharedManager] performTransitionAction:rawAction
+                                                                   fulfillmentID:model.fulfillmentID
+                                                                  expectedStatus:model.status
+                                                                       commandID:nil
+                                                                            note:note
+                                                                      completion:^(BOOL success, NSString *message, NSError *operationError) {
+                        [self pp_finishCommandCenterQuickActionWithSuccess:success message:message error:operationError];
+                    }];
+                }
             }];
         }];
         return;
@@ -4829,8 +4863,9 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     BOOL canManageDelivery = [self pp_canManageDelivery];
     BOOL canManageVets = [self pp_canManageVets];
     BOOL canManageAdoption = [self pp_canManageAdoption];
+    BOOL canManageFulfillment = [self pp_canManageFulfillment];
     BOOL hasDeliveryCompany = [self pp_hasDeliveryCompanyWorkspaceForUser:user];
-    BOOL hasProviderWorkspace = hasDeliveryCompany || canManageServices || canManageMarketplace ||
+    BOOL hasProviderWorkspace = hasDeliveryCompany || canManageFulfillment || canManageServices || canManageMarketplace ||
         canManagePharmacy || canManageDelivery || canManageVets || canManageAdoption;
 
     NSInteger fulfillmentCount = [self pp_dashboardHeroFulfillmentActionCount];
@@ -4839,6 +4874,16 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     NSInteger operationalActionCount = fulfillmentCount + deliveryCount + deliveryCompanyCount;
 
     NSMutableArray<PPProCommandCapabilityDescriptor *> *capabilities = [NSMutableArray array];
+
+    if (canManageFulfillment) {
+        [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"fulfillment"
+                                                                   title:kLang(@"Fulfillment_Title")
+                                                                subtitle:kLang(@"Fulfillment_EmptySubtitle")
+                                                              symbolName:@"shippingbox.fill"
+                                                                routeTag:@"fulfillmentOrders"
+                                                             actionCount:fulfillmentCount
+                                                                readOnly:NO]];
+    }
 
     if (canManageMarketplace) {
         [capabilities addObject:[self pp_commandCapabilityWithIdentifier:@"marketplace"
@@ -4932,6 +4977,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
 
     if (fulfillmentCount > 0) {
         NSMutableArray<NSString *> *scope = [NSMutableArray array];
+        if (canManageFulfillment) [scope addObject:@"fulfillment"];
         if (canManageMarketplace) [scope addObject:@"marketplace"];
         if (canManageServices) [scope addObject:@"services"];
         PPProCommandSignalDescriptor *signal = [self pp_commandSignalWithIdentifier:@"fulfillment"
@@ -5267,6 +5313,11 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
             PPDeliveryCompanySetupViewController *vc = [[PPDeliveryCompanySetupViewController alloc] init];
             [self.navigationController pushViewController:vc animated:YES];
         }
+        return;
+    } else if ([route isEqualToString:@"fulfillmentOrders"]) {
+        [PPFunc pp_playTapEffect];
+        PPFulfillmentListViewController *vc = [[PPFulfillmentListViewController alloc] init];
+        [self.navigationController pushViewController:vc animated:YES];
         return;
     } else if ([route isEqualToString:@"profileSettings"]) {
         [self pp_openProfileSettings];

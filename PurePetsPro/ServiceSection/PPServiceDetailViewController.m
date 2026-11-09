@@ -13,6 +13,7 @@
 #import "PPServiceSubscriptionViewController.h"
 #import "PPServicesListViewController.h"
 #import "PPFirebaseCompat.h"
+#import "PPAlertHelper.h"
 
 @interface PPServiceDetailViewController ()
 @property (nonatomic, strong) PPServiceModel *service;
@@ -673,7 +674,7 @@
         [[PPServiceManager sharedManager] deleteService:weakSelf.service completion:^(NSError * _Nullable error) {
             [PPHUD dismiss];
             if (error) {
-                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                [PPAlertHelper showErrorIn:weakSelf title:kLang(@"Error") subtitle:error.localizedDescription];
             } else {
                 [PPHUD showSuccess:[Language isRTL] ? @"تم حذف الخدمة بنجاح" : @"Service deleted"];
                 [weakSelf.navigationController popViewControllerAnimated:YES];

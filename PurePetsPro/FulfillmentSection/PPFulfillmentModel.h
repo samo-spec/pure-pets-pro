@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 @interface PPFulfillmentModel : NSObject
 
@@ -28,5 +29,12 @@
 - (NSString *)nextActionForStatus;
 - (NSArray<NSString *> *)availableActions;
 - (BOOL)isTerminal;
+@property (nonatomic, assign) BOOL hasMoneyProjection;
++ (NSString *)normalizedStatusValue:(NSString *)status;
++ (NSString *)displayNameForStatus:(NSString *)status;
++ (NSString *)targetStatusForAction:(NSString *)action;
+- (NSInteger)lifecycleStageIndex;
+- (BOOL)requiresProviderAction;
+- (NSString *)waitingDescription;
 
 @end

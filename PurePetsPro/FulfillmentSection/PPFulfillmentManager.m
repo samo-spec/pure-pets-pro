@@ -150,7 +150,21 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
     // The official account is a staff identity, so it never passes the partner
     // account gate above. It owns every platform fulfillment; Firestore Rules
     // authorize that lane from its staff_users record.
-    BOOL officialLane = [self.uid isEqualToString:PPFulfillmentOfficialOwnerUID];
+    UserModel *activeUser = UsrMgr.currentUser ?: AppMgr.currentUser;
+    BOOL isStaffOrOfficial = [self.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
+                             [activeUser.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
+                             [PPSafeString(self.account[@"email"]).lowercaseString isEqualToString:@"admin@pure-pets.net"] ||
+                             [PPSafeString(self.account[@"UserEmail"]).lowercaseString isEqualToString:@"admin@pure-pets.net"] ||
+                             [activeUser.email.lowercaseString isEqualToString:@"admin@pure-pets.net"] ||
+                             [PPSafeString(self.account[@"accountType"]) isEqualToString:@"staff"] ||
+                             [PPSafeString(self.account[@"accountType"]) isEqualToString:@"official"] ||
+                             [PPSafeString(self.account[@"userType"]) isEqualToString:@"official"] ||
+                             [activeUser.accountType isEqualToString:@"staff"] ||
+                             [activeUser.accountType isEqualToString:@"official"] ||
+                             activeUser.isAdmin || activeUser.isSuperAdmin || activeUser.isOwner ||
+                             [self.account[@"isAdmin"] isEqual:@YES] ||
+                             [self.account[@"isSuperAdmin"] isEqual:@YES];
+    BOOL officialLane = isStaffOrOfficial;
     if (!active && !officialLane) { [self fail:nil]; return; }
     // Drop previously authorized rows while fresh authority queries settle.
     if (self.handler) self.handler(@[], nil, YES);
@@ -174,20 +188,20 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
     };
     if (officialLane) {
         FIRQuery *platform = [[[[[[self.db collectionWithPath:kColFulfillmentOrders]
-            queryWhereField:@"ownerID" isEqualTo:self.uid]
+            queryWhereField:@"ownerID" isEqualTo:PPFulfillmentOfficialOwnerUID]
             queryWhereField:@"ownerType" isEqualTo:@"platform"]
             queryWhereField:@"status" in:PPFulfillmentCanonicalStatuses()]
             queryOrderedByField:@"createdAt" descending:YES] queryLimitedTo:self.limit];
         listen(@"official-platform", platform);
     }
-    for (FIRDocumentSnapshot *profile in (active ? self.profiles : @[])) {
+    for (FIRDocumentSnapshot *profile in ((active || officialLane) ? self.profiles : @[])) {
         NSDictionary *data = profile.data;
         NSString *type = PPSafeString(data[@"providerType"]);
         NSDictionary *plan = PPSafeDict(data[@"planSnapshot"]);
         if (![PPSafeString(data[@"userId"]) isEqualToString:self.uid] ||
             ![PPSafeString(data[@"status"]) isEqualToString:@"active"] ||
             PPFulfillmentTrimmedString(data[@"planId"]).length == 0 ||
-            (plan[@"providerType"] && ![plan[@"providerType"] isEqual:type]) || ![self allowsProviderType:type]) continue;
+            (plan[@"providerType"] && ![plan[@"providerType"] isEqual:type]) || (!officialLane && ![self allowsProviderType:type])) continue;
         FIRQuery *query = [[[[[[[self.db collectionWithPath:kColFulfillmentOrders]
             queryWhereField:@"ownerID" isEqualTo:self.uid]
             queryWhereField:@"ownerType" isEqualTo:@"partner"]
@@ -325,18 +339,28 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 - (id<FIRListenerRegistration>)observeEventsForFulfillmentID:(NSString *)fulfillmentID
                                                      onChange:(void (^)(NSArray<NSDictionary *> *events))onChange {
     if (!onChange) return nil;
-    FIRDocumentReference *docRef = [self documentForID:fulfillmentID];
-    FIRQuery *q = [[[docRef collectionWithPath:@"events"] queryOrderedByField:@"createdAt" descending:YES] queryLimitedTo:50];
-    return [q addSnapshotListener:^(FIRQuerySnapshot *snap, NSError *error) {
+    return [self observeEventsForFulfillmentID:fulfillmentID stateHandler:^(NSArray<NSDictionary *> *events, NSError *error, BOOL fromCache) {
+        onChange(events ?: @[]);
+    }];
+}
+
+- (id<FIRListenerRegistration>)observeEventsForFulfillmentID:(NSString *)fulfillmentID
+                                              stateHandler:(void (^)(NSArray<NSDictionary *> *events, NSError *error, BOOL fromCache))stateHandler {
+    if (!stateHandler) return nil;
+    NSString *uid = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
+    if (!uid.length || !fulfillmentID.length) { stateHandler(@[], PPFulfillmentManagerError(401, nil), NO); return nil; }
+    FIRQuery *query = [[[[self documentForID:fulfillmentID] collectionWithPath:@"events"] queryOrderedByField:@"createdAt" descending:YES] queryLimitedTo:50];
+    return [query addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot *snapshot, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (error) { onChange(@[]); return; }
+            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+            if (error || !snapshot) { stateHandler(@[], error ?: PPFulfillmentManagerError(503, nil), NO); return; }
             NSMutableArray<NSDictionary *> *events = [NSMutableArray array];
-            for (FIRDocumentSnapshot *doc in snap.documents) {
+            for (FIRDocumentSnapshot *doc in snapshot.documents) {
                 NSMutableDictionary *entry = [PPSafeDict(doc.data) mutableCopy];
                 entry[@"eventId"] = doc.documentID;
-                [events addObject:[entry copy]];
+                [events addObject:entry.copy];
             }
-            onChange([events copy]);
+            stateHandler(events.copy, nil, snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites);
         });
     }];
 }
@@ -375,7 +399,7 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
                 return;
             }
             PPFulfillmentModel *model = [PPFulfillmentModel modelFromDictionary:snapshot.data fulfillmentID:snapshot.documentID];
-            if (stateHandler) stateHandler(model, nil, snapshot.metadata.isFromCache);
+            if (stateHandler) stateHandler(model, nil, snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites);
         });
     }];
 }
@@ -395,11 +419,11 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
         return;
     }
 
-    [[self documentForID:resolvedFulfillmentID] getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
+    [[self documentForID:resolvedFulfillmentID] getDocumentWithSource:FIRFirestoreSourceServer completion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:requestUID]) return;
-            if (error || !snapshot.exists || ![snapshot.data isKindOfClass:NSDictionary.class]) {
-                if (completion) completion(nil, error);
+            if (error || !snapshot.exists || ![snapshot.data isKindOfClass:NSDictionary.class] || snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites) {
+                if (completion) completion(nil, error ?: PPFulfillmentManagerError(503, kLang(@"ProFulfillment_ReadbackPending")));
                 return;
             }
             PPFulfillmentModel *model = [PPFulfillmentModel modelFromDictionary:snapshot.data fulfillmentID:snapshot.documentID];
@@ -448,7 +472,14 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
                                      completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
     NSString *requestUID = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
     NSString *resolvedNote = PPFulfillmentTrimmedString(note);
-    if (![requestUID isEqualToString:PPFulfillmentOfficialOwnerUID]) {
+    UserModel *user = UsrMgr.currentUser ?: AppMgr.currentUser;
+    BOOL isStaffOrOfficial = [requestUID isEqualToString:PPFulfillmentOfficialOwnerUID] ||
+                             [user.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
+                             [user.accountType isEqualToString:@"staff"] ||
+                             [user.accountType isEqualToString:@"official"] ||
+                             user.isAdmin || user.isSuperAdmin || user.isOwner ||
+                             [user.email.lowercaseString isEqualToString:@"admin@pure-pets.net"];
+    if (!isStaffOrOfficial) {
         NSError *error = PPFulfillmentManagerError(403, kLang(@"DeliveryStateChangedReload"));
         if (completion) completion(NO, error.localizedDescription, error);
         return;
@@ -473,10 +504,21 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 }
 
 + (BOOL)isOfficialPlatformFulfillment:(PPFulfillmentModel *)fulfillment forUID:(NSString *)uid {
+    if (![PPFulfillmentTrimmedString(fulfillment.ownerType).lowercaseString isEqualToString:@"platform"]) {
+        return NO;
+    }
     NSString *accountUID = PPFulfillmentTrimmedString(uid);
-    return [accountUID isEqualToString:PPFulfillmentOfficialOwnerUID] &&
-        [PPFulfillmentTrimmedString(fulfillment.ownerType).lowercaseString isEqualToString:@"platform"] &&
-        [PPFulfillmentTrimmedString(fulfillment.ownerID) isEqualToString:accountUID];
+    if ([accountUID isEqualToString:PPFulfillmentOfficialOwnerUID]) {
+        return YES;
+    }
+    UserModel *user = UsrMgr.currentUser ?: AppMgr.currentUser;
+    if (user && ([user.accountType isEqualToString:@"staff"] ||
+                 [user.accountType isEqualToString:@"official"] ||
+                 user.isAdmin || user.isSuperAdmin || user.isOwner ||
+                 [user.email.lowercaseString isEqualToString:@"admin@pure-pets.net"])) {
+        return YES;
+    }
+    return NO;
 }
 
 - (void)pp_performTransitionWithCallable:(NSString *)callableName
@@ -524,14 +566,28 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
             if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:requestUID]) return;
             if (error) {
                 NSString *msg = error.localizedDescription;
-                NSDictionary *details = error.userInfo[@"details"];
+                NSDictionary *details = error.userInfo[FIRFunctionsErrorDetailsKey];
                 if ([details isKindOfClass:[NSDictionary class]] && details[@"message"]) {
                     msg = details[@"message"];
                 }
                 if (completion) completion(NO, msg, error);
                 return;
             }
-            NSLog(@"PPLAB Pro provider fulfillment command accepted fulfillmentID=%@ action=%@ commandId=%@",
+            NSDictionary *receipt = [result.data isKindOfClass:NSDictionary.class] ? result.data : nil;
+            NSString *target = [PPFulfillmentModel targetStatusForAction:resolvedAction];
+            BOOL matches = [receipt[@"ok"] isKindOfClass:NSNumber.class] && [receipt[@"ok"] boolValue]
+                && [PPFulfillmentTrimmedString(receipt[@"fulfillmentID"]) isEqualToString:resolvedFulfillmentID]
+                && [PPFulfillmentTrimmedString(receipt[@"action"]) isEqualToString:resolvedAction]
+                && [PPFulfillmentTrimmedString(receipt[@"commandId"]) isEqualToString:resolvedCommandID]
+                && [PPFulfillmentTrimmedString(receipt[@"expectedStatus"]) isEqualToString:resolvedExpectedStatus]
+                && [PPFulfillmentTrimmedString(receipt[@"fromStatus"]) isEqualToString:resolvedExpectedStatus]
+                && target.length && [PPFulfillmentTrimmedString(receipt[@"toStatus"]) isEqualToString:target];
+            if (!matches) {
+                NSError *receiptError = PPFulfillmentManagerError(502, kLang(@"ProFulfillment_InvalidReceipt"));
+                if (completion) completion(NO, receiptError.localizedDescription, receiptError);
+                return;
+            }
+            NSLog(@"PPLAB Pro fulfillment receipt verified fulfillmentID=%@ action=%@ commandId=%@",
                   resolvedFulfillmentID, resolvedAction, resolvedCommandID);
             if (completion) completion(YES, nil, nil);
         });

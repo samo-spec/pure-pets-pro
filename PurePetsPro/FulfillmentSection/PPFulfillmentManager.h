@@ -33,6 +33,10 @@ FOUNDATION_EXPORT NSString * const PPFulfillmentOfficialOwnerUID;
 - (id<FIRListenerRegistration>)observeEventsForFulfillmentID:(NSString *)fulfillmentID
                                                      onChange:(void (^)(NSArray<NSDictionary *> *events))onChange;
 
+/// Keeps history failure/cache state distinct from an empty successful history.
+- (id<FIRListenerRegistration>)observeEventsForFulfillmentID:(NSString *)fulfillmentID
+                                              stateHandler:(void (^)(NSArray<NSDictionary *> *events, NSError *error, BOOL fromCache))stateHandler;
+
 /// Observes the authoritative child document used to gate detail actions.
 - (id<FIRListenerRegistration>)observeFulfillmentWithID:(NSString *)fulfillmentID
                                                 onChange:(void (^)(PPFulfillmentModel * _Nullable fulfillment,
@@ -45,7 +49,7 @@ FOUNDATION_EXPORT NSString * const PPFulfillmentOfficialOwnerUID;
                                                                      NSError * _Nullable error,
                                                                      BOOL fromCache))stateHandler;
 
-/// Fetches one current fulfillment record without creating a second listener.
+/// Fetches one server-only fulfillment record; cache/pending writes cannot confirm a command.
 - (void)fetchFulfillmentWithID:(NSString *)fulfillmentID
                      completion:(void (^)(PPFulfillmentModel * _Nullable fulfillment, NSError * _Nullable error))completion;
 

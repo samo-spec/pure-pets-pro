@@ -574,13 +574,13 @@
     [self.view endEditing:YES];
     NSString *title = [self.titleField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (title.length == 0) {
-        [PPHUD showError:kLang(@"Error") subtitle:Language.isRTL ? @"يرجى إدخال اسم المستحضر الطبي" : @"Please enter medicine title"];
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:Language.isRTL ? @"يرجى إدخال اسم المستحضر الطبي" : @"Please enter medicine title"];
         [self.titleField becomeFirstResponder];
         return;
     }
     double price = [self.priceField.text doubleValue];
     if (price <= 0) {
-        [PPHUD showError:kLang(@"Error") subtitle:Language.isRTL ? @"يرجى إدخال سعر صحيح للدواء" : @"Please enter valid price"];
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:Language.isRTL ? @"يرجى إدخال سعر صحيح للدواء" : @"Please enter valid price"];
         [self.priceField becomeFirstResponder];
         return;
     }
@@ -614,7 +614,7 @@
         if (!self) return;
         self.saveButton.enabled = YES;
         if (error) {
-            [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+            [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
             return;
         }
 
@@ -1027,13 +1027,13 @@
     
     NSString *title = [self.titleField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if (title.length == 0) {
-        [PPHUD showError:kLang(@"Error") subtitle:[Language isRTL] ? @"يرجى إدخال اسم المستحضر الطبي" : @"Please enter medicine title"];
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:[Language isRTL] ? @"يرجى إدخال اسم المستحضر الطبي" : @"Please enter medicine title"];
         return;
     }
     
     double price = [self.priceField.text doubleValue];
     if (price <= 0) {
-        [PPHUD showError:kLang(@"Error") subtitle:[Language isRTL] ? @"يرجى إدخال سعر صحيح للدواء" : @"Please enter valid price"];
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:[Language isRTL] ? @"يرجى إدخال سعر صحيح للدواء" : @"Please enter valid price"];
         return;
     }
     
@@ -1058,6 +1058,47 @@
     
     if (self.completion) {
         self.completion(edited, self.selectedImage);
+    }
+}
+
+- (BOOL)pp_hasUnsavedChanges {
+    if (!self.medicine) {
+        return (self.titleField.text.length > 0 ||
+                self.priceField.text.length > 0 ||
+                self.descTextView.text.length > 0 ||
+                self.selectedImage != nil);
+    }
+    if (![self.titleField.text isEqualToString:self.medicine.title ?: @""]) return YES;
+    if (![self.descTextView.text isEqualToString:self.medicine.medicineDescription ?: @""]) return YES;
+    if (self.selectedImage != nil) return YES;
+    if (fabs(self.priceField.text.doubleValue - self.medicine.price) > 0.001) return YES;
+    return NO;
+}
+
+- (void)pp_performBackNavigation {
+    if (self.navigationController && self.navigationController.viewControllers.count > 1) {
+        [self.navigationController popViewControllerAnimated:YES];
+    } else if (self.presentingViewController || self.navigationController.presentingViewController) {
+        [self dismissViewControllerAnimated:YES completion:nil];
+    }
+}
+
+- (void)onBack {
+    if ([self pp_hasUnsavedChanges]) {
+        __weak typeof(self) weakSelf = self;
+        [PPAlertHelper showConfirmationIn:self
+                                    title:[Language isRTL] ? @"تجاهل التغييرات؟" : @"Discard Changes?"
+                                 subtitle:[Language isRTL] ? @"لديك تعديلات غير محفوظة، هل أنت متأكد من مغادرة هذه الصفحة؟" : @"You have unsaved changes. Are you sure you want to discard them and exit?"
+                              placeholder:nil
+                            confirmButton:[Language isRTL] ? @"تجاهل وخروج" : @"Discard"
+                             cancelButton:[Language isRTL] ? @"متابعة التعديل" : @"Keep Editing"
+                                     icon:[UIImage systemImageNamed:@"exclamationmark.triangle.fill"]
+                             confirmBlock:^{
+            [weakSelf pp_performBackNavigation];
+        }
+                              cancelBlock:nil];
+    } else {
+        [self pp_performBackNavigation];
     }
 }
 

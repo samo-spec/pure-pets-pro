@@ -11,14 +11,18 @@
     m.ownerID = PPSafeString(dict[@"ownerID"]);
     m.ownerType = PPSafeString(dict[@"ownerType"]);
     m.fulfillmentMode = PPSafeString(dict[@"fulfillmentMode"]);
-    m.status = [PPSafeString(dict[@"status"]) lowercaseString];
-    m.currency = PPSafeString(dict[@"money"][@"currency"]) ?: @"QAR";
+    m.status = [self normalizedStatusValue:PPSafeString(dict[@"status"])];
 
     NSArray *items = PPSafeArray(dict[@"items"]);
     m.itemCount = items.count;
     m.items = items;
 
     NSDictionary *money = PPSafeDict(dict[@"money"]);
+    m.currency = [PPSafeString(money[@"currency"]) uppercaseString];
+    m.hasMoneyProjection = [money[@"subtotal"] isKindOfClass:NSNumber.class]
+        && [money[@"platformCommission"] isKindOfClass:NSNumber.class]
+        && [money[@"providerNet"] isKindOfClass:NSNumber.class]
+        && m.currency.length > 0;
     m.subtotal = PPSafeNumber(money[@"subtotal"]).doubleValue;
     m.platformCommission = PPSafeNumber(money[@"platformCommission"]).doubleValue;
     m.providerNet = PPSafeNumber(money[@"providerNet"]).doubleValue;
@@ -51,7 +55,15 @@
     return [terminalSet containsObject:self.status];
 }
 
++ (NSString *)normalizedStatusValue:(NSString *)status {
+    return [[status ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] lowercaseString];
+}
+
 - (NSString *)statusDisplayName {
+    return [PPFulfillmentModel displayNameForStatus:self.status];
+}
+
++ (NSString *)displayNameForStatus:(NSString *)status {
     static NSDictionary *map = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
@@ -75,7 +87,7 @@
             @"returned":           @"Fulfillment_Status_Returned",
         };
     });
-    NSString *key = map[self.status];
+    NSString *key = map[[self normalizedStatusValue:status]];
     return key.length > 0 ? kLang(key) : kLang(@"Fulfillment_Status_Unknown");
 }
 
@@ -107,6 +119,37 @@
     if ([s isEqualToString:@"delivery_assigned"])  return @[@"confirm_handover", @"cancel_request"];
     if ([s isEqualToString:@"awaiting_handover"])  return @[@"cancel_request"];
     return @[];
+}
+
++ (NSString *)targetStatusForAction:(NSString *)action {
+    // Infra provider actions; compatibility display aliases never authorize a transition.
+    NSDictionary *targets = @{@"accept": @"accepted", @"reject": @"rejected",
+        @"start_preparing": @"preparing", @"mark_ready": @"ready_for_pickup",
+        @"request_delivery": @"delivery_requested", @"confirm_handover": @"awaiting_handover",
+        @"cancel_request": @"cancelled"};
+    return targets[action];
+}
+
+- (NSInteger)lifecycleStageIndex {
+    NSArray<NSArray<NSString *> *> *groups = @[
+        @[@"new_request"], @[@"accepted", @"preparing"],
+        @[@"ready_for_pickup", @"delivery_requested"],
+        @[@"delivery_assigned", @"awaiting_handover", @"handed_over", @"in_transit"],
+        @[@"delivered", @"payment_pending", @"payment_confirmed"], @[@"completed"]];
+    for (NSUInteger i = 0; i < groups.count; i++) {
+        if ([groups[i] containsObject:self.status]) return (NSInteger)i;
+    }
+    return NSNotFound;
+}
+
+- (BOOL)requiresProviderAction { return self.nextActionForStatus.length > 0; }
+
+- (NSString *)waitingDescription {
+    if (self.isTerminal) return kLang(@"ProFulfillment_Closed");
+    if ([self.status isEqualToString:@"delivery_requested"]) return kLang(@"ProFulfillment_WaitingDriver");
+    if ([self.status isEqualToString:@"awaiting_handover"]) return kLang(@"ProFulfillment_WaitingHandover");
+    if ([@[@"handed_over", @"in_transit", @"delivered", @"payment_pending", @"payment_confirmed"] containsObject:self.status]) return kLang(@"ProFulfillment_ExternalProgress");
+    return kLang(@"ProFulfillment_NoProviderAction");
 }
 
 @end

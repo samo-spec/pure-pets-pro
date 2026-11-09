@@ -1615,12 +1615,19 @@ struct PPAccessoryVariantSection: View {
             dismiss(animated: true, completion: nil)
             return
         }
-        let alert = UIAlertController(title: Language.get("ProInventory_DiscardTitle", alter: "تجاهل التغييرات غير المحفوظة؟"), message: nil, preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: Language.get("Cancel", alter: "إلغاء"), style: .cancel))
-        alert.addAction(UIAlertAction(title: Language.get("Discard", alter: "تجاهل"), style: .destructive) { [weak self] _ in
-            self?.dismiss(animated: true, completion: nil)
-        })
-        present(alert, animated: true)
+        PPAlertHelper.showConfirmation(
+            in: self,
+            title: Language.get("ProInventory_DiscardTitle", alter: "تجاهل التغييرات غير المحفوظة؟"),
+            subtitle: Language
+                .isRTL() ? "لديك تعديلات غير محفوظة، هل أنت متأكد من الإلغاء؟" : "You have unsaved changes. Are you sure you want to discard them?",
+            confirmButton: Language.get("Discard", alter: "تجاهل"),
+            cancelButton: Language.get("Cancel", alter: "إلغاء"),
+            icon: UIImage(systemName: "exclamationmark.triangle.fill"),
+            confirmBlock: { [weak self] _, _ in
+                self?.dismiss(animated: true, completion: nil)
+            },
+            cancelBlock: nil
+        )
     }
 }
 

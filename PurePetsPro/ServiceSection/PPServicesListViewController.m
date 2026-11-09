@@ -355,7 +355,7 @@
     [[PPServiceManager sharedManager] updateService:self.service image:nil completion:^(NSError * _Nullable error) {
         [PPHUD dismiss];
         if (error) {
-            [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+            [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
         } else {
             [PPHUD showSuccess:[Language isRTL] ? @"تم تحديث التسعير بنجاح" : @"Pricing updated"];
             if (weakSelf.onUpdated) weakSelf.onUpdated();
@@ -1002,7 +1002,7 @@
 
             [strongSelf.refreshControl endRefreshing];
             if (error) {
-                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                [PPAlertHelper showErrorIn:strongSelf title:kLang(@"Error") subtitle:error.localizedDescription];
                 return;
             }
 
@@ -1351,7 +1351,7 @@
             service.isAvailable = !newState;
             [weakSelf.tableView reloadData];
             [weakSelf updateCockpitStats];
-            [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+            [PPAlertHelper showErrorIn:weakSelf title:kLang(@"Error") subtitle:error.localizedDescription];
         } else {
             NSString *msg = newState
                 ? ([Language isRTL] ? @"الخدمة متاحة للطلب الآن" : @"Service is live for bookings")
@@ -1412,7 +1412,7 @@
         [[PPServiceManager sharedManager] deleteService:service completion:^(NSError * _Nullable error) {
             [PPHUD dismiss];
             if (error) {
-                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                [PPAlertHelper showErrorIn:weakSelf title:kLang(@"Error") subtitle:error.localizedDescription];
             } else {
                 [PPHUD showSuccess:[Language isRTL] ? @"تم حذف الخدمة بنجاح" : @"Service deleted"];
                 [weakSelf startObservingServices];

@@ -280,78 +280,103 @@ struct PPItemEditorHeroPhoneDeck: View {
 
     // MARK: Media Tile with Camera Badge
     private var phoneMediaTile: some View {
-        ZStack(alignment: .bottomTrailing) {
-            // Main Image Container
-            ZStack {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .fill(Color(UIColor.ppPrimary).opacity(0.06))
-                    .frame(width: 90, height: 90)
+        Button(action: {
+            viewModel.triggerImagePick()
+        }) {
+            ZStack(alignment: .bottomTrailing) {
+                // Main Image Container
+                ZStack {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    Color(UIColor.ppPrimary).opacity(0.08),
+                                    Color(UIColor.ppPrimary).opacity(0.03)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                        .frame(width: 96, height: 96)
 
-                if let localImage = viewModel.snapshot.primaryImage {
-                    Image(uiImage: localImage)
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                        .frame(width: 90, height: 90)
-                        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                } else if let urlStr = viewModel.snapshot.primaryImageURL, !urlStr.isEmpty, let url = URL(string: urlStr) {
-                    AsyncImage(url: url) { phase in
-                        switch phase {
-                        case .success(let image):
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: 90, height: 90)
-                                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        case .failure:
-                            emptyIllustration
-                        case .empty:
-                            ProgressView()
-                                .progressViewStyle(CircularProgressViewStyle(tint: Color(UIColor.ppPrimary)))
-                        @unknown default:
-                            emptyIllustration
+                    if let localImage = viewModel.snapshot.primaryImage {
+                        Image(uiImage: localImage)
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                            .frame(width: 96, height: 96)
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    } else if let urlStr = viewModel.snapshot.primaryImageURL, !urlStr.isEmpty, let url = URL(string: urlStr) {
+                        AsyncImage(url: url) { phase in
+                            switch phase {
+                            case .success(let image):
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fill)
+                                    .frame(width: 96, height: 96)
+                                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            case .failure:
+                                emptyIllustration
+                            case .empty:
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: Color(UIColor.ppPrimary)))
+                            @unknown default:
+                                emptyIllustration
+                            }
                         }
+                        .frame(width: 96, height: 96)
+                    } else {
+                        emptyIllustration
                     }
-                    .frame(width: 90, height: 90)
-                } else {
-                    emptyIllustration
                 }
-            }
-            .overlay(
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .stroke(Color(UIColor.ppSurfaceBorder).opacity(0.7), lineWidth: 1)
-            )
-            .shadow(color: Color(UIColor.ppPrimary).opacity(0.12), radius: 8, x: 0, y: 4)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(
+                            viewModel.snapshot.primaryImage == nil && (viewModel.snapshot.primaryImageURL?.isEmpty ?? true)
+                            ? Color(UIColor.ppPrimary).opacity(0.32)
+                            : Color.white.opacity(0.55),
+                            style: StrokeStyle(lineWidth: 1.2, dash: viewModel.snapshot.primaryImage == nil && (viewModel.snapshot.primaryImageURL?.isEmpty ?? true) ? [4, 3] : [])
+                        )
+                )
+                .shadow(color: Color(UIColor.ppPrimary).opacity(0.14), radius: 10, x: 0, y: 5)
 
-            // Floating Camera Halo Badge
-            Button(action: {
-                viewModel.triggerImagePick()
-            }) {
+                // Floating Camera Halo Badge with High-Contrast Primary Circle
                 ZStack {
                     Circle()
                         .fill(Color(UIColor.ppElevatedSurface))
-                        .frame(width: 32, height: 32)
-                        .shadow(color: Color.black.opacity(0.12), radius: 4, x: 0, y: 2)
+                        .frame(width: 34, height: 34)
+                        .shadow(color: Color.black.opacity(0.16), radius: 4, x: 0, y: 2)
+
+                    Circle()
+                        .fill(Color(UIColor.ppPrimary))
+                        .frame(width: 28, height: 28)
 
                     Image(systemName: "camera.fill")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(Color(UIColor.ppPrimary))
+                        .foregroundColor(.white)
                 }
+                .offset(x: 4, y: 4)
             }
-            .buttonStyle(PhoneSpringButtonStyle())
-            .offset(x: 5, y: 5)
         }
+        .buttonStyle(PhoneSpringButtonStyle())
     }
 
     private var emptyIllustration: some View {
-        VStack(spacing: 4) {
-            Image(systemName: "bag.badge.plus")
-                .font(.system(size: 26, weight: .medium))
-                .foregroundColor(Color(UIColor.ppPrimary).opacity(0.55))
+        VStack(spacing: 5) {
+            ZStack {
+                Circle()
+                    .fill(Color(UIColor.ppPrimary).opacity(0.12))
+                    .frame(width: 38, height: 38)
+
+                Image(systemName: "photo.badge.plus")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(Color(UIColor.ppPrimary))
+            }
+
             Text(NSLocalizedString("Market_CoverBadge", comment: ""))
-                .font(Font.custom("Beiruti-Medium", size: 10, relativeTo: .caption2))
-                .foregroundColor(Color(UIColor.ppPrimary).opacity(0.7))
+                .font(Font.custom("Beiruti-Bold", size: 11, relativeTo: .caption2))
+                .foregroundColor(Color(UIColor.ppPrimary))
         }
-        .frame(width: 90, height: 90)
+        .frame(width: 96, height: 96)
     }
 
     // MARK: Phone Shimmer Skeleton

@@ -6134,7 +6134,7 @@ private struct PPProMoreView: View {
     private var operationalEntries: [MoreEntry] {
         let ids = Set(capabilities.map(\.id))
         let hasAnyWorkspace = !capabilities.isEmpty
-        let hasFulfillment = ids.contains("services") || ids.contains("marketplace")
+        let hasFulfillment = ids.contains("services") || ids.contains("marketplace") || ids.contains("fulfillment")
         var list: [MoreEntry] = []
 
         if hasAnyWorkspace {
@@ -6872,7 +6872,7 @@ private enum PPProMenuDomain: String, CaseIterable {
     /// back to `.workspace` so a future capability is still shown, never hidden.
     static func domain(forCapabilityID id: String) -> PPProMenuDomain {
         switch id {
-        case "marketplace": return .commerce
+        case "marketplace", "fulfillment": return .commerce
         case "pharmacy": return .pharmacy
         case "services": return .services
         case "veterinary": return .care

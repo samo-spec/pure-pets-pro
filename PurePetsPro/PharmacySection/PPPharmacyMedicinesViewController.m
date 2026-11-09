@@ -402,7 +402,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
             [self.spinner stopAnimating];
             
             if (error) {
-                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
                 return;
             }
             
@@ -803,7 +803,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     }
     
     self.titleLabel.text = self.medicine.title.length ? self.medicine.title : @"—";
-    self.categoryPillLabel.text = self.medicine.category.length ? self.medicine.category : kLang(@"Pharmacy_Category_Other");
+    self.categoryPillLabel.text = [PPPharmacyMedicinesViewController humanizedCategoryTitle:self.medicine.category];
     self.priceLabel.text = [NSString stringWithFormat:@"%.2f %@", self.medicine.price, self.medicine.currency ?: @"QAR"];
     
     BOOL isAvailable = self.medicine.isAvailable && (self.medicine.stockQuantity > 0) && self.medicine.isPublished && !self.medicine.isDisabled;
@@ -885,7 +885,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [PPHUD dismiss];
                 if (error) {
-                    [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                    [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
                     return;
                 }
                 [PPHUD showSuccess:kLang(@"Updated") subtitle:nil];
@@ -920,7 +920,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [PPHUD dismiss];
                 if (error) {
-                    [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                    [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
                     return;
                 }
                 [PPHUD showSuccess:kLang(@"Deleted") subtitle:nil];
@@ -1166,15 +1166,14 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
         [_medicineImageView.widthAnchor constraintEqualToConstant:90],
         [_medicineImageView.heightAnchor constraintEqualToConstant:90],
         
-        [_inImageBadge.bottomAnchor constraintEqualToAnchor:_medicineImageView.bottomAnchor constant:-4],
-        [_inImageBadge.leadingAnchor constraintEqualToAnchor:_medicineImageView.leadingAnchor constant:4],
-        [_inImageBadge.trailingAnchor constraintEqualToAnchor:_medicineImageView.trailingAnchor constant:-4],
-        [_inImageBadge.heightAnchor constraintEqualToConstant:20],
+        [_inImageBadge.topAnchor constraintEqualToAnchor:_medicineImageView.topAnchor constant:5],
+        [_inImageBadge.leadingAnchor constraintEqualToAnchor:_medicineImageView.leadingAnchor constant:5],
+        [_inImageBadge.heightAnchor constraintEqualToConstant:18],
         
         [_inImageBadgeLabel.topAnchor constraintEqualToAnchor:_inImageBadge.topAnchor],
         [_inImageBadgeLabel.bottomAnchor constraintEqualToAnchor:_inImageBadge.bottomAnchor],
-        [_inImageBadgeLabel.leadingAnchor constraintEqualToAnchor:_inImageBadge.leadingAnchor constant:2],
-        [_inImageBadgeLabel.trailingAnchor constraintEqualToAnchor:_inImageBadge.trailingAnchor constant:-2],
+        [_inImageBadgeLabel.leadingAnchor constraintEqualToAnchor:_inImageBadge.leadingAnchor constant:6],
+        [_inImageBadgeLabel.trailingAnchor constraintEqualToAnchor:_inImageBadge.trailingAnchor constant:-6],
         
         [_categoryPill.topAnchor constraintEqualToAnchor:_cardSurface.topAnchor constant:14],
         [_categoryPill.leadingAnchor constraintEqualToAnchor:_medicineImageView.trailingAnchor constant:12],
@@ -1228,7 +1227,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     _medicine = medicine;
     
     _titleLabel.text = medicine.title.length ? medicine.title : @"—";
-    _categoryLabel.text = medicine.category.length ? medicine.category : kLang(@"Pharmacy_Category_Other");
+    _categoryLabel.text = [PPPharmacyMedicinesViewController humanizedCategoryTitle:medicine.category];
     _priceLabel.text = [NSString stringWithFormat:@"%.2f %@", medicine.price, medicine.currency ?: @"QAR"];
     
     if (medicine.imageUrl.length > 0) {
@@ -1349,6 +1348,37 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
 @end
 
 @implementation PPPharmacyMedicinesViewController
+
++ (NSString *)humanizedCategoryTitle:(NSString * _Nullable)rawCategory {
+    if (!rawCategory || rawCategory.length == 0) {
+        return [Language isRTL] ? @"📦 أصناف عامة" : @"📦 General Items";
+    }
+    NSString *clean = [rawCategory stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *slug = [clean lowercaseString];
+
+    if ([slug isEqualToString:@"care_grooming"] || [slug isEqualToString:@"care & grooming"] || [slug isEqualToString:@"grooming"]) {
+        return [Language isRTL] ? @"🧼 عناية ونظافة" : @"🧼 Care & Grooming";
+    }
+    if ([slug isEqualToString:@"med_general"] || [slug isEqualToString:@"general medicine"] || [slug isEqualToString:@"medicine"] || [slug isEqualToString:@"medication"]) {
+        return [Language isRTL] ? @"💊 أدوية وعلاجات" : @"💊 General Medicine";
+    }
+    if ([slug isEqualToString:@"supplements"] || [slug isEqualToString:@"nutrition"] || [slug isEqualToString:@"vitamins"]) {
+        return [Language isRTL] ? @"🌿 مكملات وغذاء طبي" : @"🌿 Supplements";
+    }
+    if ([slug isEqualToString:@"hygiene"] || [slug isEqualToString:@"antiseptic"] || [slug isEqualToString:@"medical_supplies"]) {
+        return [Language isRTL] ? @"🩺 مطهرات ومستلزمات" : @"🩺 Hygiene & Supplies";
+    }
+    if ([slug isEqualToString:@"uncategorized"] || [slug isEqualToString:@"other"] || [slug isEqualToString:@"عام"]) {
+        return [Language isRTL] ? @"📦 أصناف عامة" : @"📦 General Supplies";
+    }
+
+    if ([clean rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"ابتثجحخدذرزسشصضطظعغفقكلمنهويءآأإةى"]].location != NSNotFound) {
+        return clean;
+    }
+
+    NSString *spaced = [clean stringByReplacingOccurrencesOfString:@"_" withString:@" "];
+    return [spaced capitalizedString];
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -1832,7 +1862,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
             [self.spinner stopAnimating];
             
             if (error) {
-                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
                 return;
             }
             
@@ -1878,10 +1908,10 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     
     // Default system filters
     NSArray *defaultFilters = @[
-        @{@"id": @(PPPharmacyFilterLensAll), @"title": [Language isRTL] ? @"الكل" : @"All"},
-        @{@"id": @(PPPharmacyFilterLensLowStock), @"title": [Language isRTL] ? @"تنبيه النواقص" : @"Low Stock"},
-        @{@"id": @(PPPharmacyFilterLensAvailable), @"title": [Language isRTL] ? @"متاح للطلب" : @"Available"},
-        @{@"id": @(PPPharmacyFilterLensUnavailable), @"title": [Language isRTL] ? @"غير متاح" : @"Hidden"}
+        @{@"id": @(PPPharmacyFilterLensAll), @"title": [Language isRTL] ? @"✨ الكل" : @"✨ All"},
+        @{@"id": @(PPPharmacyFilterLensLowStock), @"title": [Language isRTL] ? @"⚠️ تنبيه النواقص" : @"⚠️ Low Stock"},
+        @{@"id": @(PPPharmacyFilterLensAvailable), @"title": [Language isRTL] ? @"🟢 متاح للطلب" : @"🟢 Available"},
+        @{@"id": @(PPPharmacyFilterLensUnavailable), @"title": [Language isRTL] ? @"⏸️ غير متاح" : @"⏸️ Hidden"}
     ];
     
     for (NSDictionary *d in defaultFilters) {
@@ -1893,7 +1923,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
         [self.filterStackView addArrangedSubview:btn];
     }
     
-    // Dynamic Categories
+    // Dynamic Categories with Humanized Labels
     NSMutableSet<NSString *> *categorySet = [NSMutableSet set];
     for (PPVetMedicineModel *m in self.allMedicines) {
         if (m.category.length > 0) {
@@ -1903,7 +1933,8 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
     NSArray<NSString *> *sortedCategories = [categorySet.allObjects sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
     for (NSString *cat in sortedCategories) {
         BOOL isSelected = (self.currentLens == PPPharmacyFilterLensCategory && [self.selectedCategoryName isEqualToString:cat]);
-        UIButton *btn = [self makeFilterChipWithTitle:cat isSelected:isSelected];
+        NSString *displayTitle = [PPPharmacyMedicinesViewController humanizedCategoryTitle:cat];
+        UIButton *btn = [self makeFilterChipWithTitle:displayTitle isSelected:isSelected];
         btn.tag = PPPharmacyFilterLensCategory;
         objc_setAssociatedObject(btn, "CategoryNameKey", cat, OBJC_ASSOCIATION_COPY_NONATOMIC);
         [btn addTarget:self action:@selector(categoryChipTapped:) forControlEvents:UIControlEventTouchUpInside];
@@ -2123,7 +2154,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
                 medicine.isAvailable = oldAvailable;
                 [self updateCockpitMetrics];
                 [self.tableView reloadData];
-                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
             }
         });
     }];
@@ -2150,7 +2181,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [PPHUD dismiss];
                 if (error) {
-                    [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                    [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
                     return;
                 }
                 [PPHUD showSuccess:kLang(@"Updated") subtitle:kLang(@"Pharmacy_Added_Success")];
@@ -2201,7 +2232,7 @@ typedef NS_ENUM(NSInteger, PPPharmacyFilterLens) {
                 medicine.isAvailable = !medicine.isAvailable;
                 medicine.isPublished = medicine.isAvailable;
                 [self.tableView reloadData];
-                [PPHUD showError:kLang(@"Error") subtitle:error.localizedDescription];
+                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:error.localizedDescription];
                 return;
             }
             [self updateCockpitMetrics];

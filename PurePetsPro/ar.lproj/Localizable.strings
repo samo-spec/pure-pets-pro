@@ -4214,6 +4214,7 @@
 "QAR" = "ر.ق";
 
 /* Splash Screen (iOS Living Mark Pattern) */
+"AppName" = "Pure Pets Pro";
 "splash_product_promise" = "منصة الشركاء ومزودي الخدمات المتكاملة.";
 "splash_loading_title" = "تهيئة مساحة عملك";
 "splash_continue_title" = "لنبدأ العمل";

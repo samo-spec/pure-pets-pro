@@ -1015,8 +1015,8 @@ static const NSInteger PPSplashPhaseCount   = 3;
     NSInteger currentYear = [[NSCalendar currentCalendar] component:NSCalendarUnitYear fromDate:[NSDate date]];
 
     NSString *appName = kLang(@"AppName");
-    if (!appName.length) {
-        appName = Language.isRTL ? @"بيور بتس برو" : @"Pure Pets Pro";
+    if (!appName.length || [appName isEqualToString:@"AppName"]) {
+        appName = @"Pure Pets Pro";
     }
     self.brandLabel.text     = appName;
     self.subtitleLabel.text  = kLang(@"splash_product_promise");

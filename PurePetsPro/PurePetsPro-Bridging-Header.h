@@ -14,6 +14,7 @@
 #import "ThirdParty/PPStyles/PPToast.h"
 #import "BasicClasses/PetAccessory.h"
 #import "MarketSection/PPProviderMarketItem.h"
+#import "MarketSection/PPProviderMarketItemEditorViewController.h"
 #import "AdminCore/Security/PPStaffAuth.h"
 #import "AdminCore/Models/UserManager.h"
 #import "AdminCore/Models/UserModel.h"

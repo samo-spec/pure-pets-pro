@@ -51,6 +51,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (NSDictionary<NSString *, id> *)toFirestoreDictionary;
 
 @property (nonatomic, readonly, copy) NSString *kindLabel;
+@property (nonatomic, readonly) BOOL isLiveAnimal;
 @property (nonatomic, readonly, copy) NSString *stockLabel;
 @property (nonatomic, readonly, copy) NSString *visibilityLabel;
 

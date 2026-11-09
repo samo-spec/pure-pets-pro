@@ -36,6 +36,6 @@ The umbrella execution policy governs agent-run iOS verification when local docs
 
 When the umbrella brain is available, compare this repository HEAD with the recorded Pro snapshot and inspect only task-relevant changed ranges on mismatch.
 
-## NextGen V8 default native design owner
+## NextGen V9 default native design owner
 
-For Pro iOS visual, interaction, motion, layout, and accessibility redesign work, route to `swiftymax-nextgen-category-defining-v8` and its nine specialist engines, as established by the umbrella `docs/agent/maps/SKILL_ROUTING.md`. Preserve existing Objective-C/UIKit service ownership, provider identity, permission checks, Firebase contracts, navigation and project-brain governance. Backend mutations still route to Mission Control V3. Do not substitute a visual mock for native runtime evidence.
+For Pro iOS visual, interaction, motion, layout, and accessibility redesign work, route to `swiftymax-nextgen-category-defining-v9` and its nine specialist engines, as established by the umbrella `docs/agent/maps/SKILL_ROUTING.md`. NextGen V6, V7 and V8 are retired. Preserve existing Objective-C/UIKit service ownership, provider identity, permission checks, Firebase contracts, navigation and project-brain governance. Backend mutations still route to Mission Control V3. Do not substitute a visual mock for native runtime evidence.

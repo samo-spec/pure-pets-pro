@@ -136,6 +136,10 @@ static NSArray<NSString *> *PPMarketImageURLs(id value) {
     return self.accessKindType == 2 ? kLang(@"Market_Food") : kLang(@"Market_Accessory");
 }
 
+- (BOOL)isLiveAnimal {
+    return self.accessKindType == 3;
+}
+
 - (NSString *)stockLabel {
     if (self.noStock || self.quantity <= 0) return kLang(@"Market_OutOfStock");
     return [NSString stringWithFormat:@"%@ %ld", kLang(@"Market_InStock"), (long)self.quantity];

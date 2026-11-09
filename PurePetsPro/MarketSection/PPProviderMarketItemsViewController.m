@@ -3194,6 +3194,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 @property (nonatomic, strong) UILabel *inventoryEmptySubtitle;
 @property (nonatomic, strong) UIButton *inventoryEmptyAction;
 @property (nonatomic, assign) BOOL loadFailed;
+@property (nonatomic, strong) PPProviderMarketInventoryHostingController *nextgenCockpitVC;
 
 @end
 
@@ -3213,38 +3214,38 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     self.activeSort = PPProviderMarketSortNewest;
     self.inventoryKind = 1;
 
-    [self setupNavButtons];
-    [self setupInventoryCategories];
-    [self setupTableView];
-    [self buildEmptyState];
+    // NextGen V9 Reinvented Living Inventory Cockpit as Authoritative Primary View
+    self.nextgenCockpitVC = [[PPProviderMarketInventoryHostingController alloc] init];
+    [self addChildViewController:self.nextgenCockpitVC];
+    self.nextgenCockpitVC.view.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.nextgenCockpitVC.view];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.nextgenCockpitVC.view.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.nextgenCockpitVC.view.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.nextgenCockpitVC.view.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.nextgenCockpitVC.view.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    [self.nextgenCockpitVC didMoveToParentViewController:self];
+
+    __weak typeof(self) ws = self;
+    self.nextgenCockpitVC.onAddProductRequested = ^{
+        __strong typeof(ws) self = ws;
+        PPProviderMarketItemEditorViewController *editorVC = [[PPProviderMarketItemEditorViewController alloc] initForCreate];
+        [self.navigationController pushViewController:editorVC animated:YES];
+    };
+
     [self startListening];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [self.navigationController setNavigationBarHidden:YES animated:animated];
     [IQKeyboardManager sharedManager].enable = NO;
-    
-    // 1. Configure base navigation bar with title and back button
-    [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:kLang(@"Market_Title") showBack:YES];
-    self.navigationController.navigationBar.tintColor = [UIColor ppPrimary];
-    
-    // 2. Suppress legacy items so UIKit never lays out conflicting navigation content
-    self.navigationItem.rightBarButtonItems = nil;
-    self.navigationItem.leftBarButtonItems = nil;
-    
-    // 3. Attach both action buttons directly to PPNavBar's action stack (left in RTL, right in LTR)
-    [self pp_navBarRemoveButtonForKey:@"add"];
-    [self pp_navBarRemoveButtonForKey:@"branches"];
-    [self pp_navBarAddActionButton:self.addButton key:@"add"];
-    [self pp_navBarAddActionButton:self.branchesNavButton key:@"branches"];
-
-    if (self.hasLoaded && self.items.count > 0) {
-        [self.tableView reloadData];
-    }
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    [self.navigationController setNavigationBarHidden:NO animated:animated];
     [IQKeyboardManager sharedManager].enable = YES;
 }
 
@@ -3923,6 +3924,9 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 // MARK: - Filtering & Sorting Logic
 
 - (void)updateUI {
+    if (self.nextgenCockpitVC && self.items.count > 0) {
+        [self.nextgenCockpitVC updateWithItems:self.items];
+    }
     [self applyFilterAndSearch];
     [self updateTelemetryHUD];
 
@@ -4162,6 +4166,35 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
 }
 
 - (void)presentDetailInspectorForItem:(PPProviderMarketItem *)item {
+    if (!item) return;
+
+    Class detailHostClass = NSClassFromString(@"PPProviderMarketItemDetailHostingController");
+    if (detailHostClass) {
+        id host = [[detailHostClass alloc] initWithItem:item];
+        if (host && [host isKindOfClass:[UIViewController class]]) {
+            UIViewController *vc = (UIViewController *)host;
+            __weak typeof(self) ws = self;
+            [host setValue:^(PPProviderMarketItem *updatedItem) {
+                [ws updateUI];
+            } forKey:@"onSave"];
+
+            if (@available(iOS 15.0, *)) {
+                vc.modalPresentationStyle = UIModalPresentationPageSheet;
+                UISheetPresentationController *pres = vc.sheetPresentationController;
+                pres.detents = @[
+                    [UISheetPresentationControllerDetent mediumDetent],
+                    [UISheetPresentationControllerDetent largeDetent]
+                ];
+                pres.prefersGrabberVisible = YES;
+                pres.preferredCornerRadius = 28.0;
+            } else {
+                vc.modalPresentationStyle = UIModalPresentationFormSheet;
+            }
+            [self presentViewController:vc animated:YES completion:nil];
+            return;
+        }
+    }
+
     PPProviderMarketItemDetailSheet *sheet = [[PPProviderMarketItemDetailSheet alloc] initWithItem:item];
     __weak typeof(self) ws = self;
     sheet.onEditRequested = ^(PPProviderMarketItem *it) {

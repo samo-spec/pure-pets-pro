@@ -4185,6 +4185,7 @@
 "QAR" = "QAR";
 
 /* Splash Screen (iOS Living Mark Pattern) */
+"AppName" = "Pure Pets Pro";
 "splash_product_promise" = "Unified platform for partners & service providers.";
 "splash_loading_title" = "Preparing your workspace";
 "splash_continue_title" = "Let’s get started";

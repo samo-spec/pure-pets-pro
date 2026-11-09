@@ -252,6 +252,8 @@
 		F4B100010000000000000001 /* PPMarketplaceBranchesViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F4B200020000000000000002 /* PPMarketplaceBranchesViewController.m */; };
 		F4B100100000000000000001 /* PPMarketplaceBranchesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200100000000000000001 /* PPMarketplaceBranchesView.swift */; };
 		F4B100200000000000000001 /* PPItemEditorHeroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200200000000000000001 /* PPItemEditorHeroView.swift */; };
+		F4B10020000000000000000A /* PPProviderMarketInventoryReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000A /* PPProviderMarketInventoryReinventionView.swift */; };
+		F4B10020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */; };
 		F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000001 /* PPAdminDesignCompat.swift */; };
 		F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000002 /* PPAccessoryVariantError.swift */; };
 		F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */; };
@@ -761,6 +763,8 @@
 		F4B200020000000000000002 /* PPMarketplaceBranchesViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPMarketplaceBranchesViewController.m; sourceTree = "<group>"; };
 		F4B200100000000000000001 /* PPMarketplaceBranchesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPMarketplaceBranchesView.swift; sourceTree = "<group>"; };
 		F4B200200000000000000001 /* PPItemEditorHeroView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPItemEditorHeroView.swift; sourceTree = "<group>"; };
+		F4B20020000000000000000A /* PPProviderMarketInventoryReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderMarketInventoryReinventionView.swift; sourceTree = "<group>"; };
+		F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderMarketItemDetailReinventionView.swift; sourceTree = "<group>"; };
 		F4B200300000000000000001 /* PPAdminDesignCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdminDesignCompat.swift; sourceTree = "<group>"; };
 		F4B200300000000000000002 /* PPAccessoryVariantError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantError.swift; sourceTree = "<group>"; };
 		F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantMediaService.swift; sourceTree = "<group>"; };
@@ -1522,6 +1526,8 @@
 				F4B200020000000000000002 /* PPMarketplaceBranchesViewController.m */,
 				F4B200100000000000000001 /* PPMarketplaceBranchesView.swift */,
 				F4B200200000000000000001 /* PPItemEditorHeroView.swift */,
+				F4B20020000000000000000A /* PPProviderMarketInventoryReinventionView.swift */,
+				F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */,
 				F2CCF4562F8CA17F007FBAD4 /* PPProviderMarketItemsViewController.h */,
 				F2CCF4572F8CA17F007FBAD4 /* PPProviderMarketItemsViewController.m */,
 				F2CCF45A2F8CA17F007FBAD4 /* PPProviderMarketItemEditorViewController.h */,
@@ -2058,6 +2064,8 @@
 				F4B100010000000000000001 /* PPMarketplaceBranchesViewController.m in Sources */,
 				F4B100100000000000000001 /* PPMarketplaceBranchesView.swift in Sources */,
 				F4B100200000000000000001 /* PPItemEditorHeroView.swift in Sources */,
+				F4B10020000000000000000A /* PPProviderMarketInventoryReinventionView.swift in Sources */,
+				F4B10020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift in Sources */,
 				F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */,
 				F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */,
 				F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */,

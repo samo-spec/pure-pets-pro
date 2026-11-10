@@ -4,6 +4,264 @@
 #import "PPFulfillmentModel.h"
 #import "PPFulfillmentManager.h"
 #import "PPFirebaseCompat.h"
+#import <math.h>
+#import <CoreFoundation/CoreFoundation.h>
+
+// Presentation only: the controller supplies a canonical phase index and owns disclosure.
+static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
+    UILabel *label = [[UILabel alloc] init];
+    label.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody] scaledFontForFont:font];
+    label.adjustsFontForContentSizeCategory = YES;
+    label.numberOfLines = 0;
+    label.textColor = color;
+    label.textAlignment = Language.alignmentForCurrentLanguage;
+    return label;
+}
+
+@interface PPFulfillmentJourneyView : UIView
+@property (nonatomic, copy) void (^disclosureRequested)(void);
+@property (nonatomic, strong) UIStackView *route;
+@property (nonatomic, copy) NSArray<UIView *> *phaseRows;
+@property (nonatomic, strong) UIView *currentRow;
+@property (nonatomic, strong) UIView *currentNode;
+@property (nonatomic, strong) CAShapeLayer *currentRing;
+@property (nonatomic, strong) UIButton *disclosureButton;
+@property (nonatomic, strong) UILabel *historyHint;
+@property (nonatomic, strong) UIViewPropertyAnimator *disclosureAnimator;
+@property (nonatomic, strong) UIViewPropertyAnimator *arrivalAnimator;
+@property (nonatomic, weak) UIView *layoutHost;
+@property (nonatomic, assign) NSInteger currentIndex;
+@property (nonatomic, assign) BOOL expanded;
+@property (nonatomic, assign) BOOL disclosureTargetExpanded;
+- (instancetype)initWithTitles:(NSArray<NSString *> *)titles currentIndex:(NSInteger)index nextStep:(NSString *)nextStep expanded:(BOOL)expanded;
+- (void)setExpanded:(BOOL)expanded animated:(BOOL)animated;
+- (void)animateCurrentStage;
+- (void)stopAnimations;
+@end
+
+@implementation PPFulfillmentJourneyView
+
+- (instancetype)initWithTitles:(NSArray<NSString *> *)titles currentIndex:(NSInteger)index nextStep:(NSString *)nextStep expanded:(BOOL)expanded {
+    if ((self = [super initWithFrame:CGRectZero])) {
+        _currentIndex = index;
+        self.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+        self.translatesAutoresizingMaskIntoConstraints = NO;
+        UIStackView *body = [[UIStackView alloc] init];
+        body.axis = UILayoutConstraintAxisVertical;
+        body.spacing = 12;
+        body.semanticContentAttribute = self.semanticContentAttribute;
+        body.translatesAutoresizingMaskIntoConstraints = NO;
+        [self addSubview:body];
+        UILabel *counter = PPFulfillmentGrowingLabel([Styling fontMedium:13], [UIColor ppTextSecondary]);
+        counter.text = [NSString localizedStringWithFormat:kLang(@"ProFulfillment_JourneyPhaseIndex"), (long)(index + 1), (long)titles.count];
+        [body addArrangedSubview:counter];
+        _route = [[UIStackView alloc] init];
+        _route.axis = UILayoutConstraintAxisVertical;
+        _route.spacing = 0;
+        _route.semanticContentAttribute = self.semanticContentAttribute;
+        [body addArrangedSubview:_route];
+        NSArray<NSString *> *symbols = @[@"bell", @"shippingbox", @"cube.box", @"bicycle", @"creditcard", @"flag.checkered"];
+        NSMutableArray<UIView *> *rows = [NSMutableArray array];
+        for (NSUInteger i = 0; i < titles.count; i++) {
+            BOOL current = (NSInteger)i == index;
+            UIView *row = [[UIView alloc] init];
+            row.layer.cornerRadius = 18;
+            row.layer.cornerCurve = kCACornerCurveContinuous;
+            row.backgroundColor = current ? [[UIColor ppPrimary] colorWithAlphaComponent:0.07] : UIColor.clearColor;
+            row.isAccessibilityElement = YES;
+            row.accessibilityTraits = UIAccessibilityTraitStaticText;
+            row.accessibilityLabel = current ? [NSString stringWithFormat:kLang(@"ProFulfillment_JourneyCurrentLabel"), titles[i], nextStep ?: @""] : titles[i];
+            row.accessibilityIdentifier = [NSString stringWithFormat:@"fulfillment.phase.%lu", (unsigned long)i];
+            UIStackView *line = [[UIStackView alloc] init];
+            line.axis = UILayoutConstraintAxisHorizontal;
+            line.spacing = 12;
+            line.alignment = UIStackViewAlignmentFill;
+            line.semanticContentAttribute = self.semanticContentAttribute;
+            line.translatesAutoresizingMaskIntoConstraints = NO;
+            [row addSubview:line];
+            UIView *markerColumn = [[UIView alloc] init];
+            [markerColumn.widthAnchor constraintEqualToConstant:44].active = YES;
+            [markerColumn.heightAnchor constraintGreaterThanOrEqualToConstant:52].active = YES;
+            UIView *connector = [[UIView alloc] init];
+            connector.backgroundColor = [UIColor ppSurfaceBorder];
+            connector.translatesAutoresizingMaskIntoConstraints = NO;
+            [markerColumn addSubview:connector];
+            UIView *node = [[UIView alloc] init];
+            node.translatesAutoresizingMaskIntoConstraints = NO;
+            node.isAccessibilityElement = NO;
+            [markerColumn addSubview:node];
+            UIView *disc = [[UIView alloc] init];
+            disc.backgroundColor = current ? [UIColor ppPrimary] : [UIColor ppSecondarySurface];
+            disc.layer.cornerRadius = 16;
+            disc.translatesAutoresizingMaskIntoConstraints = NO;
+            [node addSubview:disc];
+            UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:symbols[MIN(i, symbols.count - 1)]]];
+            icon.tintColor = current ? UIColor.whiteColor : [UIColor ppTextSecondary];
+            icon.contentMode = UIViewContentModeScaleAspectFit;
+            icon.translatesAutoresizingMaskIntoConstraints = NO;
+            icon.isAccessibilityElement = NO;
+            [disc addSubview:icon];
+            [NSLayoutConstraint activateConstraints:@[
+                [node.widthAnchor constraintEqualToConstant:44], [node.heightAnchor constraintEqualToConstant:44],
+                [node.centerXAnchor constraintEqualToAnchor:markerColumn.centerXAnchor], [node.centerYAnchor constraintEqualToAnchor:markerColumn.centerYAnchor],
+                [disc.widthAnchor constraintEqualToConstant:32], [disc.heightAnchor constraintEqualToConstant:32],
+                [disc.centerXAnchor constraintEqualToAnchor:node.centerXAnchor], [disc.centerYAnchor constraintEqualToAnchor:node.centerYAnchor],
+                [icon.widthAnchor constraintEqualToConstant:16], [icon.heightAnchor constraintEqualToConstant:16],
+                [icon.centerXAnchor constraintEqualToAnchor:disc.centerXAnchor], [icon.centerYAnchor constraintEqualToAnchor:disc.centerYAnchor],
+                [connector.widthAnchor constraintEqualToConstant:1.5], [connector.centerXAnchor constraintEqualToAnchor:markerColumn.centerXAnchor],
+                [connector.topAnchor constraintEqualToAnchor:(i == 0 ? markerColumn.centerYAnchor : markerColumn.topAnchor)],
+                [connector.bottomAnchor constraintEqualToAnchor:(i == titles.count - 1 ? markerColumn.centerYAnchor : markerColumn.bottomAnchor)],
+            ]];
+            [line addArrangedSubview:markerColumn];
+            UIStackView *words = [[UIStackView alloc] init];
+            words.axis = UILayoutConstraintAxisVertical;
+            words.spacing = 5;
+            words.layoutMargins = UIEdgeInsetsMake(12, 0, 12, 0);
+            words.layoutMarginsRelativeArrangement = YES;
+            UILabel *title = PPFulfillmentGrowingLabel(current ? [Styling fontBold:20] : [Styling fontMedium:16], current ? [UIColor ppTextPrimary] : [UIColor ppTextSecondary]);
+            title.text = titles[i];
+            [words addArrangedSubview:title];
+            if (current) {
+                UILabel *detail = PPFulfillmentGrowingLabel([Styling fontRegular:14], [UIColor ppTextSecondary]);
+                detail.text = nextStep;
+                [words addArrangedSubview:detail];
+                self.currentRow = row;
+                self.currentNode = node;
+                self.currentRing = [CAShapeLayer layer];
+                self.currentRing.fillColor = UIColor.clearColor.CGColor;
+                self.currentRing.strokeColor = [UIColor ppPrimary].CGColor;
+                self.currentRing.lineWidth = 1.5;
+                self.currentRing.strokeEnd = 1;
+                [node.layer addSublayer:self.currentRing];
+            }
+            [line addArrangedSubview:words];
+            [NSLayoutConstraint activateConstraints:@[
+                [line.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:8],
+                [line.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-12],
+                [line.topAnchor constraintEqualToAnchor:row.topAnchor], [line.bottomAnchor constraintEqualToAnchor:row.bottomAnchor],
+            ]];
+            [self.route addArrangedSubview:row];
+            [rows addObject:row];
+        }
+        self.phaseRows = rows.copy;
+        self.disclosureButton = [UIButton buttonWithType:UIButtonTypeSystem];
+        self.disclosureButton.titleLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody] scaledFontForFont:[Styling fontBold:15]];
+        self.disclosureButton.titleLabel.adjustsFontForContentSizeCategory = YES;
+        self.disclosureButton.titleLabel.numberOfLines = 0;
+        self.disclosureButton.titleLabel.textAlignment = NSTextAlignmentCenter;
+        self.disclosureButton.semanticContentAttribute = self.semanticContentAttribute;
+        self.disclosureButton.contentEdgeInsets = UIEdgeInsetsMake(12, 14, 12, 14);
+        self.disclosureButton.layer.cornerRadius = 14;
+        self.disclosureButton.backgroundColor = [UIColor ppSecondarySurface];
+        [self.disclosureButton setTitleColor:[UIColor ppTextPrimary] forState:UIControlStateNormal];
+        [self.disclosureButton.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
+        self.disclosureButton.accessibilityIdentifier = @"fulfillment.phaseDisclosure";
+        [self.disclosureButton addTarget:self action:@selector(disclosureTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [body addArrangedSubview:self.disclosureButton];
+        self.historyHint = PPFulfillmentGrowingLabel([Styling fontRegular:13], [UIColor ppTextSecondary]);
+        self.historyHint.text = kLang(@"ProFulfillment_JourneyHistoryHint");
+        [body addArrangedSubview:self.historyHint];
+        [NSLayoutConstraint activateConstraints:@[
+            [body.leadingAnchor constraintEqualToAnchor:self.leadingAnchor], [body.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [body.topAnchor constraintEqualToAnchor:self.topAnchor], [body.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+        ]];
+        [self setExpanded:expanded animated:NO];
+    }
+    return self;
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    self.currentRing.frame = self.currentNode.bounds;
+    self.currentRing.path = [UIBezierPath bezierPathWithOvalInRect:CGRectInset(self.currentNode.bounds, 1.5, 1.5)].CGPath;
+}
+
+- (void)disclosureTapped:(UIButton *)sender { if (self.disclosureRequested) self.disclosureRequested(); }
+
+- (void)setExpanded:(BOOL)expanded animated:(BOOL)animated {
+    BOOL canAnimate = animated && self.window && !UIAccessibilityIsReduceMotionEnabled();
+    if (canAnimate && self.disclosureAnimator.state == UIViewAnimatingStateActive) {
+        self.expanded = expanded;
+        [self updateDisclosureTitle];
+        self.disclosureAnimator.reversed = expanded != self.disclosureTargetExpanded;
+        return;
+    }
+    [self stopAnimations];
+    self.expanded = expanded;
+    [self updateDisclosureTitle];
+    __weak UIView *layoutHost = self.layoutHost ?: self.superview;
+    [layoutHost layoutIfNeeded];
+    __weak typeof(self) weakSelf = self;
+    void (^updates)(void) = ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        [self applyDisclosureVisibility];
+        [layoutHost layoutIfNeeded];
+    };
+    if (!canAnimate) { updates(); return; }
+    self.disclosureTargetExpanded = expanded;
+    self.disclosureAnimator = [[UIViewPropertyAnimator alloc] initWithDuration:0.18 curve:UIViewAnimationCurveEaseInOut animations:updates];
+    [self.disclosureAnimator addCompletion:^(UIViewAnimatingPosition position) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        self.disclosureAnimator = nil;
+        [self settleDisclosureLayout];
+        UIAccessibilityPostNotification(UIAccessibilityLayoutChangedNotification, self.disclosureButton);
+    }];
+    [self.disclosureAnimator startAnimation];
+}
+
+- (void)updateDisclosureTitle {
+    [self.disclosureButton setTitle:kLang(self.expanded ? @"ProFulfillment_JourneyCollapse" : @"ProFulfillment_JourneyExpand") forState:UIControlStateNormal];
+    self.disclosureButton.accessibilityValue = kLang(self.expanded ? @"ProFulfillment_Expanded" : @"ProFulfillment_Collapsed");
+}
+
+- (void)applyDisclosureVisibility {
+    NSInteger first = MAX(0, MIN(self.currentIndex - 1, (NSInteger)self.phaseRows.count - 3));
+    for (NSUInteger i = 0; i < self.phaseRows.count; i++) self.phaseRows[i].hidden = !self.expanded && ((NSInteger)i < first || (NSInteger)i >= first + 3);
+    self.historyHint.hidden = !self.expanded;
+}
+
+- (void)settleDisclosureLayout {
+    [UIView performWithoutAnimation:^{
+        [self applyDisclosureVisibility];
+        [self updateDisclosureTitle];
+        [(self.layoutHost ?: self.superview) layoutIfNeeded];
+    }];
+}
+
+- (void)animateCurrentStage {
+    [self stopAnimations];
+    if (!self.window || UIAccessibilityIsReduceMotionEnabled()) return;
+    [self layoutIfNeeded];
+    self.currentRow.alpha = 0.45;
+    self.currentRow.transform = CGAffineTransformMakeTranslation(0, 5);
+    __weak typeof(self) weakSelf = self;
+    self.arrivalAnimator = [[UIViewPropertyAnimator alloc] initWithDuration:0.20 curve:UIViewAnimationCurveEaseOut animations:^{
+        weakSelf.currentRow.alpha = 1;
+        weakSelf.currentRow.transform = CGAffineTransformIdentity;
+    }];
+    [self.arrivalAnimator startAnimation];
+    CABasicAnimation *trace = [CABasicAnimation animationWithKeyPath:@"strokeEnd"];
+    trace.fromValue = @0; trace.toValue = @1; trace.duration = 0.20;
+    trace.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+    [self.currentRing addAnimation:trace forKey:@"pp.fulfillment.currentTrace"];
+}
+
+- (void)stopAnimations {
+    [self.disclosureAnimator stopAnimation:YES]; self.disclosureAnimator = nil;
+    [self.arrivalAnimator stopAnimation:YES]; self.arrivalAnimator = nil;
+    [self.currentRing removeAnimationForKey:@"pp.fulfillment.currentTrace"];
+    [self.currentRow.layer removeAllAnimations];
+    self.currentRow.alpha = 1;
+    self.currentRow.transform = CGAffineTransformIdentity;
+    [self settleDisclosureLayout];
+}
+
+- (void)didMoveToWindow { [super didMoveToWindow]; if (!self.window) [self stopAnimations]; }
+@end
+
+
 
 @interface PPFulfillmentDetailViewController ()
 @property (nonatomic, strong) PPFulfillmentModel *model;
@@ -19,7 +277,8 @@
 @property (nonatomic, copy) NSString *listenerUID;
 @property (nonatomic, assign) BOOL hasLiveFulfillmentState;
 @property (nonatomic, strong) NSLayoutConstraint *scrollBottomConstraint;
-@property (nonatomic, strong) UIStackView *phaseStack;
+@property (nonatomic, strong) PPFulfillmentJourneyView *journeyView;
+@property (nonatomic, copy) NSString *lastPresentedJourneyStatus;
 @property (nonatomic, assign) BOOL phasesExpanded;
 @property (nonatomic, assign) BOOL mayDisplayDossier;
 @property (nonatomic, copy) NSArray<NSDictionary *> *currentEvents;
@@ -36,8 +295,6 @@
 @property (nonatomic, assign) BOOL submitting;
 @property (nonatomic, assign) BOOL commandAccepted;
 @property (nonatomic, assign) NSUInteger operationGeneration;
-@property (nonatomic, strong) UIAlertController *reviewAlert;
-@property (nonatomic, strong) UIAlertAction *reviewConfirm;
 @property (nonatomic, assign) BOOL reviewRequiresNote;
 @property (nonatomic, strong) FIRAuthStateDidChangeListenerHandle authListener;
 - (void)observeFulfillment;
@@ -64,12 +321,16 @@
     self.view.backgroundColor = [UIColor ppBackground];
     self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     self.currentEvents = @[];
-    self.mayDisplayDossier = YES;
+    self.mayDisplayDossier = [self isOwnedModel:self.model uid:[FIRAuth auth].currentUser.uid ?: @""];
     self.liveMessage = kLang(@"ProFulfillment_CheckingOrder");
     [self buildScrollView];
     [self renderDossier];
     [self observeFulfillment];
     [self observeEvents];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(journeyMotionPreferenceChanged:) name:UIAccessibilityReduceMotionStatusDidChangeNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(stopJourneyMotion:) name:UIApplicationWillResignActiveNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(stopJourneyMotion:) name:UIApplicationDidEnterBackgroundNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(resumeJourneyMotion:) name:UIApplicationDidBecomeActiveNotification object:nil];
     NSString *entryUID = [FIRAuth auth].currentUser.uid ?: @"";
     __weak typeof(self) weakSelf = self;
     self.authListener = [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
@@ -79,15 +340,18 @@
         self.submitting = NO;
         self.hasLiveFulfillmentState = NO;
         self.mayDisplayDossier = NO;
+        self.operationMessage = nil;
         [self clearPendingIntent];
         [self.fulfillmentListener remove];
         [self.eventsListener remove];
         self.fulfillmentListenerGeneration++;
         self.eventsListenerGeneration++;
-        [self.reviewAlert dismissViewControllerAnimated:NO completion:nil];
-        self.reviewAlert = nil;
         [self.stack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
         self.currentEvents = @[];
+        self.eventsContainer = nil;
+        [self.journeyView stopAnimations];
+        self.journeyView = nil;
+        self.lastPresentedJourneyStatus = nil;
         self.liveMessage = kLang(@"ProFulfillment_OrderUnavailable");
         [self refreshActionBarFromLiveFulfillment];
     }];
@@ -98,9 +362,15 @@
     [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:kLang(@"Fulfillment_DetailTitle") showBack:YES];
 }
 
-- (void)viewDidAppear:(BOOL)animated { [super viewDidAppear:animated]; }
+- (void)viewDidAppear:(BOOL)animated {
+    [super viewDidAppear:animated];
+    [self animateJourneyIfNeeded];
+}
 
-- (void)viewDidDisappear:(BOOL)animated { [super viewDidDisappear:animated]; }
+- (void)viewDidDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
+    [self.journeyView stopAnimations];
+}
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
@@ -114,6 +384,8 @@
 
 - (void)renderDossier {
     CGPoint offset = self.scrollView.contentOffset;
+    [self.journeyView stopAnimations];
+    self.journeyView = nil;
     for (UIView *view in self.stack.arrangedSubviews.copy) {
         [self.stack removeArrangedSubview:view];
         [view removeFromSuperview];
@@ -129,6 +401,7 @@
     [self.view layoutIfNeeded];
     CGFloat maximum = MAX(-self.scrollView.adjustedContentInset.top, self.scrollView.contentSize.height - self.scrollView.bounds.size.height + self.scrollView.adjustedContentInset.bottom);
     self.scrollView.contentOffset = CGPointMake(offset.x, MIN(MAX(offset.y, -self.scrollView.adjustedContentInset.top), maximum));
+    [self animateJourneyIfNeeded];
 }
 
 #pragma mark - View Building
@@ -165,41 +438,45 @@
 
 - (void)buildHeroSection {
     UIView *surface = [self sectionSurface];
-    UIStackView *content = [self verticalStackWithSpacing:12];
+    UIStackView *content = [self verticalStackWithSpacing:16];
     [surface addSubview:content];
-    UILabel *reference = [self labelWithFont:[Styling fontBold:27] color:[UIColor ppTextPrimary] lines:0];
+    UILabel *reference = [self labelWithFont:[Styling fontBold:20] color:[UIColor ppTextPrimary] lines:0];
     reference.text = [self primaryOrderTitle];
     reference.accessibilityTraits = UIAccessibilityTraitHeader;
-    UILabel *status = [self labelWithFont:[Styling fontBold:20] color:self.model.statusColor lines:0];
+    [content addArrangedSubview:reference];
+    UIStackView *statusLine = [[UIStackView alloc] init];
+    statusLine.axis = UILayoutConstraintAxisHorizontal;
+    statusLine.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    UIStackView *statusCapsule = [[UIStackView alloc] init];
+    statusCapsule.layoutMargins = UIEdgeInsetsMake(7, 12, 7, 12);
+    statusCapsule.layoutMarginsRelativeArrangement = YES;
+    statusCapsule.backgroundColor = [self.model.statusColor colorWithAlphaComponent:0.10];
+    statusCapsule.layer.cornerRadius = 12;
+    [statusCapsule setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    UILabel *status = [self labelWithFont:[Styling fontBold:15] color:[UIColor ppTextPrimary] lines:0];
     status.text = self.model.statusDisplayName;
     status.accessibilityIdentifier = @"fulfillment.exactStatus";
-    UILabel *next = [self labelWithFont:[Styling fontRegular:16] color:[UIColor ppTextSecondary] lines:0];
-    next.text = self.model.requiresProviderAction
-        ? [NSString stringWithFormat:kLang(@"ProFulfillment_NextAction"), self.model.nextActionForStatus]
-        : self.model.waitingDescription;
-    for (UIView *view in @[reference, status, next]) [content addArrangedSubview:view];
+    [statusCapsule addArrangedSubview:status];
+    [statusLine addArrangedSubview:statusCapsule];
+    [statusLine addArrangedSubview:[[UIView alloc] init]];
+    [content addArrangedSubview:statusLine];
     NSInteger current = self.model.lifecycleStageIndex;
     if (current == NSNotFound) {
-        UILabel *exception = [self labelWithFont:[Styling fontMedium:15] color:[UIColor ppTextSecondary] lines:0];
-        exception.text = kLang(self.model.isTerminal ? @"ProFulfillment_ExceptionBranch" : @"ProFulfillment_UnknownState");
+        UILabel *exception = [self labelWithFont:[Styling fontMedium:16] color:[UIColor ppTextSecondary] lines:0];
+        exception.text = kLang(self.model.isTerminal ? @"ProFulfillment_JourneyExceptionHint" : @"ProFulfillment_UnknownState");
         [content addArrangedSubview:exception];
     } else {
-        UIButton *toggle = [self recoveryButton:kLang(self.phasesExpanded ? @"ProFulfillment_HidePhases" : @"ProFulfillment_ShowPhases") selector:@selector(togglePhases:)];
-        toggle.accessibilityValue = kLang(self.phasesExpanded ? @"ProFulfillment_Expanded" : @"ProFulfillment_Collapsed");
-        [content addArrangedSubview:toggle];
-        self.phaseStack = [self verticalStackWithSpacing:10];
-        self.phaseStack.hidden = !self.phasesExpanded;
         NSArray *keys = @[@"ProFulfillment_PhaseNew", @"ProFulfillment_PhasePreparation", @"ProFulfillment_PhaseReady", @"ProFulfillment_PhaseTransit", @"ProFulfillment_PhaseDelivered", @"ProFulfillment_PhaseCompleted"];
-        for (NSUInteger i = 0; i < keys.count; i++) {
-            BOOL selected = (NSInteger)i == current;
-            UILabel *phase = [self labelWithFont:(selected ? [Styling fontBold:16] : [Styling fontRegular:15]) color:(selected ? [UIColor ppPrimary] : [UIColor ppTextSecondary]) lines:0];
-            phase.text = selected ? [NSString stringWithFormat:kLang(@"ProFulfillment_CurrentPhase"), kLang(keys[i])] : kLang(keys[i]);
-            [self.phaseStack addArrangedSubview:phase];
-        }
-        UILabel *caption = [self labelWithFont:[Styling fontRegular:13] color:[UIColor ppTextSecondary] lines:0];
-        caption.text = kLang(@"ProFulfillment_PhasesCaption");
-        [self.phaseStack addArrangedSubview:caption];
-        [content addArrangedSubview:self.phaseStack];
+        NSMutableArray<NSString *> *titles = [NSMutableArray array];
+        for (NSString *key in keys) [titles addObject:kLang(key)];
+        NSString *nextStep = self.model.requiresProviderAction
+            ? [NSString stringWithFormat:kLang(@"ProFulfillment_NextAction"), self.model.nextActionForStatus]
+            : self.model.waitingDescription;
+        self.journeyView = [[PPFulfillmentJourneyView alloc] initWithTitles:titles currentIndex:current nextStep:nextStep expanded:self.phasesExpanded];
+        self.journeyView.layoutHost = self.scrollView;
+        __weak typeof(self) weakSelf = self;
+        self.journeyView.disclosureRequested = ^{ [weakSelf togglePhases:nil]; };
+        [content addArrangedSubview:self.journeyView];
     }
     [self pinContent:content toSurface:surface];
     [self.stack addArrangedSubview:surface];
@@ -207,10 +484,23 @@
 
 - (void)togglePhases:(UIButton *)sender {
     self.phasesExpanded = !self.phasesExpanded;
-    self.phaseStack.hidden = !self.phasesExpanded;
-    [sender setTitle:kLang(self.phasesExpanded ? @"ProFulfillment_HidePhases" : @"ProFulfillment_ShowPhases") forState:UIControlStateNormal];
-    sender.accessibilityValue = kLang(self.phasesExpanded ? @"ProFulfillment_Expanded" : @"ProFulfillment_Collapsed");
+    [self.journeyView setExpanded:self.phasesExpanded animated:YES];
 }
+
+- (void)animateJourneyIfNeeded {
+    if (!self.journeyView || !self.hasLiveFulfillmentState || !self.mayDisplayDossier || !self.view.window || UIApplication.sharedApplication.applicationState != UIApplicationStateActive) return;
+    BOOL changed = ![self.lastPresentedJourneyStatus isEqualToString:self.model.status];
+    self.lastPresentedJourneyStatus = self.model.status;
+    if (changed && !UIAccessibilityIsReduceMotionEnabled()) [self.journeyView animateCurrentStage];
+}
+
+- (void)journeyMotionPreferenceChanged:(NSNotification *)notification {
+    [self.journeyView stopAnimations];
+    // Current marker, labels and disclosure state carry the complete meaning without motion.
+}
+
+- (void)stopJourneyMotion:(NSNotification *)notification { [self.journeyView stopAnimations]; }
+- (void)resumeJourneyMotion:(NSNotification *)notification { [self animateJourneyIfNeeded]; }
 
 - (void)buildMoneySection {
     UIView *surface = [self sectionSurface];
@@ -252,22 +542,32 @@
 
 - (void)buildItemsSection {
     UIView *section = [self sectionSurface];
-    UIStackView *content = [self verticalStackWithSpacing:12];
+    UIStackView *content = [self verticalStackWithSpacing:18];
     [section addSubview:content];
-
-    [content addArrangedSubview:[self sectionTitle:[NSString stringWithFormat:@"%@ (%ld)", kLang(@"Fulfillment_Items"), (long)self.model.items.count]]];
-
+    UIStackView *heading = [[UIStackView alloc] init];
+    heading.axis = UILayoutConstraintAxisHorizontal;
+    heading.alignment = UIStackViewAlignmentFirstBaseline;
+    heading.spacing = 12;
+    heading.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    UILabel *title = [self sectionTitle:kLang(@"ProFulfillment_ManifestTitle")];
+    title.accessibilityTraits = UIAccessibilityTraitHeader;
+    [heading addArrangedSubview:title];
+    UILabel *count = [self labelWithFont:[Styling fontBold:17] color:[UIColor ppTextSecondary] lines:0];
+    count.text = [[self manifestNumberFormatter] stringFromNumber:@(self.model.items.count)];
+    count.accessibilityLabel = [NSString localizedStringWithFormat:kLang(@"ProFulfillment_ManifestCount"), (long)self.model.items.count];
+    [count setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [heading addArrangedSubview:count];
+    [content addArrangedSubview:heading];
     if (self.model.items.count == 0) {
-        UILabel *empty = [self labelWithFont:[Styling fontRegular:13] color:SeconderyTextClr lines:0];
+        UILabel *empty = [self labelWithFont:[Styling fontRegular:15] color:[UIColor ppTextSecondary] lines:0];
         empty.text = kLang(@"Fulfillment_NoItems");
         [content addArrangedSubview:empty];
     } else {
         for (NSInteger i = 0; i < self.model.items.count; i++) {
-            NSDictionary *item = PPSafeDict(self.model.items[i]);
-            [content addArrangedSubview:[self itemRow:item index:i]];
+            if (i > 0) { UIView *divider = [[UIView alloc] init]; divider.backgroundColor = [UIColor ppSurfaceBorder]; [divider.heightAnchor constraintEqualToConstant:1.0 / UIScreen.mainScreen.scale].active = YES; [content addArrangedSubview:divider]; }
+            [content addArrangedSubview:[self itemRow:PPSafeDict(self.model.items[i]) index:i]];
         }
     }
-
     [self pinContent:content toSurface:section];
     [self.stack addArrangedSubview:section];
 }
@@ -310,12 +610,21 @@
     [dockScroll addSubview:content];
     UILabel *state = [self labelWithFont:[Styling fontMedium:14] color:[UIColor ppTextSecondary] lines:0];
     state.text = self.submitting ? kLang(@"ProFulfillment_VerifyingAction") : (self.operationMessage.length ? self.operationMessage : self.liveMessage);
+    if (self.pendingAction.length && !self.commandAccepted && !self.submitting && !self.hasLiveFulfillmentState) {
+        state.text = [NSString stringWithFormat:@"%@\n%@", state.text ?: @"", kLang(@"ProFulfillment_RetryNeedsLive")];
+    }
     state.accessibilityIdentifier = @"fulfillment.commandState";
     if (state.text.length) [content addArrangedSubview:state];
     if (self.pendingAction.length) {
         if (!self.submitting) {
             [content addArrangedSubview:[self recoveryButton:kLang(@"ProFulfillment_RecheckResult") selector:@selector(recheckPending:)]];
-            if (!self.commandAccepted) [content addArrangedSubview:[self recoveryButton:kLang(@"ProFulfillment_RetrySameAction") selector:@selector(retryPending:)]];
+            if (!self.commandAccepted) {
+                UIButton *retry = [self recoveryButton:kLang(@"ProFulfillment_RetrySameAction") selector:@selector(retryPending:)];
+                retry.enabled = self.hasLiveFulfillmentState;
+                retry.alpha = retry.enabled ? 1.0 : 0.5;
+                if (!retry.enabled) retry.accessibilityHint = kLang(@"ProFulfillment_RetryNeedsLive");
+                [content addArrangedSubview:retry];
+            }
         }
     } else if (self.hasLiveFulfillmentState) {
         NSArray<NSString *> *actions = self.model.availableActions;
@@ -367,16 +676,30 @@
 
 - (void)showOtherActions:(UIButton *)sender {
     if (self.submitting || self.pendingAction.length || !self.hasLiveFulfillmentState) return;
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:kLang(@"ProFulfillment_OtherActions") message:self.model.statusDisplayName preferredStyle:UIAlertControllerStyleActionSheet];
-    __weak typeof(self) weakSelf = self;
+    NSMutableArray<NSString *> *secondaryActions = [NSMutableArray array];
+    NSMutableArray<NSString *> *actionTitles = [NSMutableArray array];
+    NSMutableArray<NSNumber *> *actionStyles = [NSMutableArray array];
+
     for (NSString *action in self.model.availableActions) {
         if (![action isEqualToString:@"reject"] && ![action isEqualToString:@"cancel_request"]) continue;
-        [sheet addAction:[UIAlertAction actionWithTitle:[self displayNameForAction:action] style:UIAlertActionStyleDestructive handler:^(UIAlertAction *choice) { [weakSelf dismissViewControllerAnimated:YES completion:^{ [weakSelf confirmAction:action]; }]; }]];
+        [secondaryActions addObject:action];
+        [actionTitles addObject:[self displayNameForAction:action]];
+        [actionStyles addObject:@(PPAlertActionStyleDestructive)];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:kLang(@"ProFulfillment_KeepOrder") style:UIAlertActionStyleCancel handler:nil]];
-    sheet.popoverPresentationController.sourceView = sender;
-    sheet.popoverPresentationController.sourceRect = sender.bounds;
-    [self presentViewController:sheet animated:YES completion:nil];
+    if (secondaryActions.count == 0) return;
+
+    __weak typeof(self) weakSelf = self;
+    [PPAlertHelper showActionSheetIn:self
+                               title:kLang(@"ProFulfillment_OtherActions")
+                            subtitle:self.model.statusDisplayName
+                             actions:actionTitles
+                        actionStyles:actionStyles
+                         cancelTitle:kLang(@"ProFulfillment_KeepOrder")
+                          completion:^(NSInteger index) {
+        if (index >= 0 && index < (NSInteger)secondaryActions.count) {
+            [weakSelf confirmAction:secondaryActions[index]];
+        }
+    }];
 }
 
 - (void)refreshOrder:(UIButton *)sender { [self observeFulfillment]; }
@@ -453,35 +776,27 @@
     return row;
 }
 
-- (UIView *)itemRow:(NSDictionary *)item index:(NSInteger)index {
-    UIStackView *row = [[UIStackView alloc] init];
-    row.axis = UILayoutConstraintAxisVertical;
-    row.spacing = 12;
-    row.alignment = UIStackViewAlignmentFill;
-    row.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+- (NSNumberFormatter *)manifestNumberFormatter {
+    NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:Language.isRTL ? @"ar_QA" : @"en_QA"];
+    formatter.numberStyle = NSNumberFormatterDecimalStyle;
+    formatter.maximumFractionDigits = 6;
+    return formatter;
+}
 
-    UILabel *ordinal = [self labelWithFont:[Styling fontBold:12] color:AppPrimaryClr lines:1];
-    ordinal.text = [NSString stringWithFormat:@"%ld", (long)(index + 1)];
-    ordinal.textAlignment = NSTextAlignmentCenter;
-    ordinal.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.1];
-    ordinal.layer.cornerRadius = 15;
-    ordinal.layer.cornerCurve = kCACornerCurveContinuous;
-    ordinal.clipsToBounds = YES;
+- (NSNumber *)manifestNumber:(id)value {
+    if ([value isKindOfClass:NSNumber.class]) {
+        if (CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()) return nil;
+        return isfinite([value doubleValue]) ? value : nil;
+    }
+    if (![value isKindOfClass:NSString.class] || ![value length]) return nil;
+    NSScanner *scanner = [NSScanner scannerWithString:value];
+    scanner.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    double number = 0;
+    return [scanner scanDouble:&number] && scanner.isAtEnd && isfinite(number) ? @(number) : nil;
+}
 
-
-    [row addArrangedSubview:ordinal];
-
-    UIStackView *infoStack = [[UIStackView alloc] init];
-    infoStack.axis = UILayoutConstraintAxisVertical;
-    infoStack.spacing = 3;
-    infoStack.alignment = UIStackViewAlignmentFill;
-    infoStack.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-
-    UILabel *name = [self labelWithFont:[Styling fontMedium:13] color:PrimaryTextClr lines:2];
-    NSString *fallback = [NSString stringWithFormat:@"%@ %ld", kLang(@"Fulfillment_Item"), (long)(index + 1)];
-    name.text = PPSafeString(item[@"name"]).length > 0 ? PPSafeString(item[@"name"]) : fallback;
-    [infoStack addArrangedSubview:name];
-
+- (NSString *)manifestVariantForItem:(NSDictionary *)item {
     NSString *variantDesc = PPSafeString(item[@"variantDescription"]);
     if (variantDesc.length == 0) {
         variantDesc = PPSafeString(item[@"variantTitle"]);
@@ -497,8 +812,8 @@
             if ([val isKindOfClass:[NSString class]] && [val length] > 0) {
                 [parts addObject:val];
             } else if ([val isKindOfClass:[NSDictionary class]]) {
-                NSString *nameAr = val[@"nameAr"];
-                NSString *nameEn = val[@"nameEn"];
+                NSString *nameAr = PPSafeString(val[@"nameAr"]);
+                NSString *nameEn = PPSafeString(val[@"nameEn"]);
                 NSString *str = Language.isRTL ? (nameAr.length ? nameAr : nameEn) : (nameEn.length ? nameEn : nameAr);
                 if (str.length > 0) [parts addObject:str];
             }
@@ -509,41 +824,84 @@
     }
     if (variantDesc.length == 0 && [item[@"variantColor"] isKindOfClass:[NSDictionary class]]) {
         NSDictionary *vc = item[@"variantColor"];
-        NSString *cName = Language.isRTL ? vc[@"nameAr"] : vc[@"nameEn"];
+        NSString *cName = PPSafeString(Language.isRTL ? vc[@"nameAr"] : vc[@"nameEn"]);
         if (cName.length > 0) variantDesc = cName;
     }
 
-    if (variantDesc.length > 0) {
-        UIView *chip = [[UIView alloc] init];
-        chip.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.08];
-        chip.layer.cornerRadius = 6;
-        chip.layer.cornerCurve = kCACornerCurveContinuous;
+    return variantDesc ?: @"";
+}
 
-        UILabel *chipLbl = [self labelWithFont:[Styling fontBold:11] color:AppPrimaryClr lines:1];
-        chipLbl.text = variantDesc;
-        chipLbl.translatesAutoresizingMaskIntoConstraints = NO;
-        [chip addSubview:chipLbl];
+- (UIView *)itemRow:(NSDictionary *)item index:(NSInteger)index {
+    UIStackView *row = [self verticalStackWithSpacing:14];
+    BOOL accessibleSize = UIContentSizeCategoryIsAccessibilityCategory(self.traitCollection.preferredContentSizeCategory);
+    UIStackView *identity = [[UIStackView alloc] init];
+    identity.axis = accessibleSize ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal;
+    identity.spacing = 12;
+    identity.alignment = accessibleSize ? UIStackViewAlignmentLeading : UIStackViewAlignmentTop;
+    identity.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    UIStackView *ordinalTile = [[UIStackView alloc] init];
+    ordinalTile.layoutMargins = UIEdgeInsetsMake(10, 12, 10, 12);
+    ordinalTile.layoutMarginsRelativeArrangement = YES;
+    ordinalTile.backgroundColor = [UIColor ppSecondarySurface];
+    ordinalTile.layer.cornerRadius = 14;
+    ordinalTile.accessibilityElementsHidden = YES;
+    [ordinalTile.widthAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
+    [ordinalTile.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
+    [ordinalTile setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    UILabel *ordinal = [self labelWithFont:[Styling fontBold:17] color:[UIColor ppPrimary] lines:0];
+    ordinal.text = [[self manifestNumberFormatter] stringFromNumber:@(index + 1)];
+    ordinal.textAlignment = NSTextAlignmentCenter;
+    [ordinalTile addArrangedSubview:ordinal];
+    [identity addArrangedSubview:ordinalTile];
+    UIStackView *words = [self verticalStackWithSpacing:6];
+    NSString *nameText = PPSafeString(item[@"name"]);
+    if (!nameText.length) nameText = [NSString stringWithFormat:@"%@ %@", kLang(@"Fulfillment_Item"), ordinal.text];
+    UILabel *name = [self labelWithFont:[Styling fontBold:18] color:[UIColor ppTextPrimary] lines:0];
+    name.text = nameText;
+    [words addArrangedSubview:name];
+    NSString *variant = [self manifestVariantForItem:item];
+    if (variant.length) { UILabel *label = [self labelWithFont:[Styling fontRegular:14] color:[UIColor ppTextSecondary] lines:0]; label.text = variant; [words addArrangedSubview:label]; }
+    [identity addArrangedSubview:words];
+    if (accessibleSize) [words.widthAnchor constraintEqualToAnchor:row.widthAnchor].active = YES;
+    [row addArrangedSubview:identity];
 
-        [NSLayoutConstraint activateConstraints:@[
-            [chipLbl.leadingAnchor constraintEqualToAnchor:chip.leadingAnchor constant:6],
-            [chipLbl.trailingAnchor constraintEqualToAnchor:chip.trailingAnchor constant:-6],
-            [chipLbl.topAnchor constraintEqualToAnchor:chip.topAnchor constant:2],
-            [chipLbl.bottomAnchor constraintEqualToAnchor:chip.bottomAnchor constant:-2],
-        ]];
-        [infoStack addArrangedSubview:chip];
-    }
-    [row addArrangedSubview:infoStack];
-
-
-    UILabel *price = [self labelWithFont:[Styling fontBold:12] color:SeconderyTextClr lines:1];
-    NSInteger qty = PPSafeNumber(item[@"quantity"]).integerValue;
-    if (qty <= 0) qty = PPSafeNumber(item[@"qty"]).integerValue;
-    if (qty <= 0) qty = 1;
-    double amount = PPSafeNumber(item[@"price"]).doubleValue;
-    price.text = [NSString localizedStringWithFormat:kLang(@"ProFulfillment_ItemQuantityPrice"), (long)qty, [self moneyString:amount]];
-    [price setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-    [row addArrangedSubview:price];
-
+    NSNumber *quantity = [self manifestNumber:item[@"quantity"]];
+    if (quantity.doubleValue <= 0) quantity = [self manifestNumber:item[@"qty"]];
+    if (quantity.doubleValue <= 0) quantity = nil;
+    NSString *quantityText = quantity ? [[self manifestNumberFormatter] stringFromNumber:quantity] : kLang(@"ProFulfillment_ManifestUnavailable");
+    NSNumber *price = [self manifestNumber:item[@"price"]];
+    NSString *priceText = price && price.doubleValue >= 0 && self.model.currency.length ? [self moneyString:price.doubleValue] : kLang(@"ProFulfillment_ManifestUnavailable");
+    UIStackView *metrics = [[UIStackView alloc] init];
+    metrics.axis = accessibleSize ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal;
+    metrics.spacing = 16;
+    metrics.alignment = accessibleSize ? UIStackViewAlignmentLeading : UIStackViewAlignmentCenter;
+    metrics.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    UIStackView *quantityMetric = [self verticalStackWithSpacing:3];
+    quantityMetric.layoutMargins = UIEdgeInsetsMake(8, 12, 8, 12);
+    quantityMetric.layoutMarginsRelativeArrangement = YES;
+    quantityMetric.backgroundColor = [[UIColor ppPrimary] colorWithAlphaComponent:0.07];
+    quantityMetric.layer.cornerRadius = 12;
+    [quantityMetric setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    UILabel *quantityTitle = [self labelWithFont:[Styling fontMedium:12] color:[UIColor ppTextSecondary] lines:0];
+    quantityTitle.text = kLang(@"ProFulfillment_ManifestQuantity");
+    UILabel *quantityValue = [self labelWithFont:[Styling fontBold:18] color:[UIColor ppTextPrimary] lines:0];
+    quantityValue.text = quantityText;
+    [quantityMetric addArrangedSubview:quantityTitle]; [quantityMetric addArrangedSubview:quantityValue];
+    [metrics addArrangedSubview:quantityMetric];
+    if (!accessibleSize) [metrics addArrangedSubview:[[UIView alloc] init]];
+    UIStackView *priceMetric = [self verticalStackWithSpacing:3];
+    UILabel *priceTitle = [self labelWithFont:[Styling fontMedium:12] color:[UIColor ppTextSecondary] lines:0];
+    priceTitle.text = kLang(@"ProFulfillment_ManifestUnitPrice");
+    UILabel *priceValue = [self labelWithFont:[Styling fontBold:20] color:[UIColor ppTextPrimary] lines:0];
+    priceValue.text = priceText;
+    [priceMetric addArrangedSubview:priceTitle]; [priceMetric addArrangedSubview:priceValue];
+    [metrics addArrangedSubview:priceMetric];
+    if (accessibleSize) [priceMetric.widthAnchor constraintEqualToAnchor:row.widthAnchor].active = YES;
+    [row addArrangedSubview:metrics];
+    row.isAccessibilityElement = YES;
+    row.accessibilityTraits = UIAccessibilityTraitStaticText;
+    row.accessibilityLabel = [@[nameText, variant, [NSString stringWithFormat:@"%@: %@", quantityTitle.text, quantityText], [NSString stringWithFormat:@"%@: %@", priceTitle.text, priceText]] componentsJoinedByString:@". "];
+    row.accessibilityIdentifier = [NSString stringWithFormat:@"fulfillment.manifest.%ld", (long)index];
     return row;
 }
 
@@ -616,6 +974,8 @@
             [self renderDossier];
         } else {
             self.mayDisplayDossier = NO;
+            [self.journeyView stopAnimations];
+            self.journeyView = nil;
             // Authorization loss removes the previously displayed private dossier.
             self.currentEvents = @[];
             for (UIView *view in self.stack.arrangedSubviews.copy) { [self.stack removeArrangedSubview:view]; [view removeFromSuperview]; }
@@ -687,6 +1047,7 @@
         [row addArrangedSubview:change];
     }
     NSString *note = PPSafeString(event[@"note"]);
+    if (!note.length) note = PPSafeString(PPSafeDict(event[@"metadata"])[@"note"]);
     if (note.length) { UILabel *label = [self labelWithFont:[Styling fontRegular:14] color:[UIColor ppTextSecondary] lines:0]; label.text = note; [row addArrangedSubview:label]; }
     UILabel *date = [self labelWithFont:[Styling fontRegular:13] color:[UIColor ppTextSecondary] lines:0];
     date.text = [self eventDateString:event[@"createdAt"]];
@@ -711,7 +1072,7 @@
         };
     });
     NSString *key = map[action];
-    return key.length > 0 ? kLang(key) : action;
+    return key.length > 0 ? kLang(key) : kLang(@"ProFulfillment_StatusUpdate");
 }
 
 - (NSString *)displayNameForStatusValue:(NSString *)status { return [PPFulfillmentModel displayNameForStatus:status]; }
@@ -734,50 +1095,57 @@
     NSString *message = [NSString stringWithFormat:kLang(@"ProFulfillment_ReviewTransition"), self.model.statusDisplayName, [PPFulfillmentModel displayNameForStatus:target]];
     if ([action isEqualToString:@"confirm_handover"]) message = [message stringByAppendingFormat:@"\n\n%@", kLang(@"ProFulfillment_HandoverReview")];
     if (official) message = [message stringByAppendingFormat:@"\n\n%@", kLang(@"Fulfillment_StaffNoteMessage")];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:[self displayNameForAction:action] message:message preferredStyle:UIAlertControllerStyleAlert];
-    self.reviewAlert = alert;
-    __weak typeof(self) weakSelf = self;
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *field) {
-        field.placeholder = kLang(official ? @"Fulfillment_StaffNotePlaceholder" : @"Fulfillment_NoteOptional");
-        field.textAlignment = Language.alignmentForCurrentLanguage;
-        field.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-        field.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleBody] scaledFontForFont:[Styling fontRegular:17]];
-        field.adjustsFontForContentSizeCategory = YES;
-        [field addTarget:weakSelf action:@selector(reviewNoteChanged:) forControlEvents:UIControlEventEditingChanged];
-    }];
-    [alert addAction:[UIAlertAction actionWithTitle:kLang(@"ProFulfillment_KeepOrder") style:UIAlertActionStyleCancel handler:^(UIAlertAction *choice) { weakSelf.reviewAlert = nil; weakSelf.reviewConfirm = nil; }]];
+
     BOOL destructive = [action isEqualToString:@"reject"] || [action isEqualToString:@"cancel_request"];
-    UIAlertAction *confirm = [UIAlertAction actionWithTitle:[self displayNameForAction:action] style:(destructive ? UIAlertActionStyleDestructive : UIAlertActionStyleDefault) handler:^(UIAlertAction *choice) {
+    NSString *placeholder = kLang(official ? @"Fulfillment_StaffNotePlaceholder" : @"Fulfillment_NoteOptional");
+    NSString *confirmTitle = [self displayNameForAction:action];
+    NSString *cancelTitle = kLang(@"ProFulfillment_KeepOrder");
+
+    __weak typeof(self) weakSelf = self;
+    [PPAlertHelper showTextFieldAlertIn:self
+                                  title:confirmTitle
+                               subtitle:message
+                            placeholder:placeholder
+                            initialText:nil
+                            confirmText:confirmTitle
+                             cancelText:cancelTitle
+                            destructive:destructive
+                             completion:^(NSString * _Nullable text, BOOL didConfirm) {
+        if (!didConfirm) return;
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
-        NSString *note = [self.reviewAlert.textFields.firstObject.text ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        self.reviewAlert = nil; self.reviewConfirm = nil;
+        NSString *note = [text ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] || !self.hasLiveFulfillmentState || ![self.model.fulfillmentID isEqualToString:fulfillmentID] || ![self.model.status isEqualToString:source] || ![self.model.availableActions containsObject:action]) {
             self.operationMessage = kLang(@"ProFulfillment_StateChanged");
             [self observeFulfillment];
             return;
         }
-        if ((official && note.length < 3) || note.length > 512) return;
-        self.pendingAction = action; self.pendingFromStatus = source; self.pendingTargetStatus = target;
-        self.pendingNote = note; self.pendingUID = uid; self.commandAccepted = NO;
+        if (official && note.length < 3) {
+            [PPAlertHelper showErrorIn:self
+                                 title:kLang(@"Error")
+                              subtitle:kLang(@"Fulfillment_StaffNotePlaceholder")];
+            return;
+        }
+        if (note.length > 512) return;
+        self.pendingAction = action;
+        self.pendingFromStatus = source;
+        self.pendingTargetStatus = target;
+        self.pendingNote = note;
+        self.pendingUID = uid;
+        self.commandAccepted = NO;
         [self executeAction:action note:note];
     }];
-    self.reviewConfirm = confirm;
-    confirm.enabled = !official;
-    [alert addAction:confirm];
-    alert.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)reviewNoteChanged:(UITextField *)field {
-    NSUInteger length = [field.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet].length;
-    self.reviewConfirm.enabled = length <= 512 && (!self.reviewRequiresNote || length >= 3);
 }
 
 - (void)executeAction:(NSString *)action note:(NSString *)note {
     if (self.submitting || !self.pendingAction.length || ![action isEqualToString:self.pendingAction] || ![note ?: @"" isEqualToString:self.pendingNote ?: @""]) return;
     NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
-    if (![uid isEqualToString:self.pendingUID] || !self.hasLiveFulfillmentState || ![self isOwnedModel:self.model uid:uid]) return;
+    if (![uid isEqualToString:self.pendingUID] || ![self isOwnedModel:self.model uid:uid]) return;
+    if (!self.hasLiveFulfillmentState) {
+        self.operationMessage = kLang(@"ProFulfillment_RetryNeedsLive");
+        [self refreshActionBarFromLiveFulfillment];
+        return;
+    }
     self.submitting = YES;
     self.operationMessage = nil;
     NSUInteger generation = ++self.operationGeneration;
@@ -788,15 +1156,24 @@
         if (!self || generation != self.operationGeneration || ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:self.pendingUID]) return;
         self.submitting = NO;
         if (!success) {
-            BOOL conflict = error.code == FIRFunctionsErrorCodeFailedPrecondition || error.code == FIRFunctionsErrorCodeAborted || error.code == 409;
-            BOOL denied = error.code == FIRFunctionsErrorCodePermissionDenied || error.code == FIRFunctionsErrorCodeUnauthenticated || error.code == FIRFunctionsErrorCodeInvalidArgument;
-            if (conflict || denied) {
+            BOOL callableError = [error.domain isEqualToString:FIRFunctionsErrorDomain];
+            NSString *serverMessage = [message ?: error.localizedDescription ?: @"" lowercaseString];
+            BOOL staleStatus = (callableError && error.code == FIRFunctionsErrorCodeFailedPrecondition &&
+                [serverMessage containsString:@"fulfillment status changed"]);
+            BOOL localConflict = [error.domain isEqualToString:@"PurePetsPro.Fulfillment"] && error.code == 409;
+            BOOL localRejection = [error.domain isEqualToString:@"PPFulfillmentManager"] &&
+                [@[@400, @401, @403, @404, @422] containsObject:@(error.code)];
+            BOOL definitiveRejection = callableError && [@[@(FIRFunctionsErrorCodeFailedPrecondition),
+                @(FIRFunctionsErrorCodePermissionDenied), @(FIRFunctionsErrorCodeUnauthenticated),
+                @(FIRFunctionsErrorCodeInvalidArgument), @(FIRFunctionsErrorCodeNotFound),
+                @(FIRFunctionsErrorCodeAlreadyExists)] containsObject:@(error.code)];
+            if (staleStatus || localConflict || localRejection || definitiveRejection) {
                 [self clearPendingIntent];
-                self.operationMessage = kLang(conflict ? @"ProFulfillment_StateChanged" : @"ProFulfillment_ActionDenied");
+                self.operationMessage = staleStatus || localConflict ? kLang(@"ProFulfillment_StateChanged") : (localRejection ? kLang(@"ProFulfillment_ActionDenied") : [self blockerMessageForError:error serverMessage:serverMessage]);
                 [self observeFulfillment];
             } else {
                 // Preserve the frozen source/action/note. Manager derives the same durable intent ID on retry.
-                self.operationMessage = kLang(@"ProFulfillment_ActionUncertain");
+                self.operationMessage = kLang([error.domain isEqualToString:@"PPFulfillmentManager"] && error.code == 502 ? @"ProFulfillment_InvalidReceipt" : @"ProFulfillment_ActionUncertain");
                 [self refreshActionBarFromLiveFulfillment];
             }
             return;
@@ -804,6 +1181,28 @@
         self.commandAccepted = YES;
         [self verifyPendingIntent];
     }];
+}
+
+- (NSString *)blockerMessageForError:(NSError *)error serverMessage:(NSString *)serverMessage {
+    NSDictionary *details = PPSafeDict(error.userInfo[FIRFunctionsErrorDetailsKey]);
+    NSString *domainCode = PPSafeString(details[@"domainCode"]);
+    // These codes belong to Infra's cancellation engine, not to a local status machine.
+    NSDictionary<NSString *, NSString *> *reasons = @{
+        @"FULFILLMENT_RETURN_REQUIRED": @"ProFulfillment_ReturnRequired",
+        @"FULFILLMENT_RESERVATION_REVIEW_REQUIRED": @"ProFulfillment_ReservationReview",
+        @"FULFILLMENT_CANCELLATION_REVIEW_REQUIRED": @"ProFulfillment_CancellationReview",
+        @"FULFILLMENT_CASH_RECONCILIATION_REQUIRED": @"ProFulfillment_CashReview",
+        @"FULFILLMENT_DELIVERY_EVIDENCE_REQUIRED": @"ProFulfillment_DeliveryEvidenceRequired"
+    };
+    NSString *key = reasons[domainCode];
+    if (key.length) return kLang(key);
+    // Released provider preconditions predate domain codes; match only their known messages.
+    if ([serverMessage containsString:@"payment must be confirmed"]) return kLang(@"ProFulfillment_PaymentRequired");
+    if ([serverMessage containsString:@"no delivery driver has been assigned"]) return kLang(@"ProFulfillment_DriverRequired");
+    if ([serverMessage containsString:@"fulfillmentversion 1"] || [serverMessage containsString:@"parent order"] || [serverMessage containsString:@"parent projection"]) return kLang(@"ProFulfillment_OrderReviewRequired");
+    if (error.code == FIRFunctionsErrorCodePermissionDenied || error.code == FIRFunctionsErrorCodeUnauthenticated) return kLang(@"ProFulfillment_ActionDenied");
+    if (error.code == FIRFunctionsErrorCodeNotFound) return kLang(@"ProFulfillment_OrderUnavailable");
+    return kLang(@"ProFulfillment_ActionBlocked");
 }
 
 - (void)clearPendingIntent {
@@ -1052,10 +1451,11 @@
     UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, self.operationMessage);
 }
 
-#pragma mark - Motion
+#pragma mark - Cleanup
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [self.journeyView stopAnimations];
     if (self.authListener) [[FIRAuth auth] removeAuthStateDidChangeListener:self.authListener];
     self.operationGeneration++;
     self.fulfillmentListenerGeneration += 1;

@@ -111,7 +111,7 @@ public final class PPItemDetailReinventionViewModel: ObservableObject {
 
     public func commitSave() {
         isSaving = true
-        triggerHaptic(.success)
+        triggerNotificationHaptic(.success)
 
         var updated = item
         updated.stock = stockCount
@@ -142,7 +142,7 @@ public final class PPItemDetailReinventionViewModel: ObservableObject {
         UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
 
-    public func triggerHaptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+    public func triggerNotificationHaptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
         UINotificationFeedbackGenerator().notificationOccurred(type)
     }
 
@@ -809,9 +809,10 @@ public struct PPProviderMarketItemDetailReinventionView: View {
                 // Barcode Preview Graphic
                 HStack(spacing: 2) {
                     ForEach(0..<18) { idx in
+                        let barWidth: CGFloat = (idx % 3 == 0) ? 3.0 : ((idx % 2 == 0) ? 1.5 : 2.0)
                         Rectangle()
                             .fill(Color(red: 0.15, green: 0.18, blue: 0.22))
-                            .frame(width: (idx % 3 == 0) ? 3 : ((idx % 2 == 0) ? 1.5 : 2), height: 32)
+                            .frame(width: barWidth, height: 32)
                     }
                 }
                 .padding(.horizontal, 10)

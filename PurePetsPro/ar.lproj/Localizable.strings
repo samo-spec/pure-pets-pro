@@ -4630,3 +4630,26 @@
 "ProFulfillment_CachedHistory" = "سجل محفوظ · حدّث للتحقّق من التغييرات الجديدة.";
 "ProFulfillment_HistoryCaption" = "آخر 50 حدثًا مسجّلًا، الأحدث أولًا.";
 "ProFulfillment_RefreshHistory" = "تحديث سجل الطلب";
+"ProFulfillment_RetryNeedsLive" = "تحقّق من نتيجة الطلب عبر الخادم قبل إعادة محاولة الإجراء.";
+"ProFulfillment_PaymentRequired" = "يجب تأكيد الدفع قبل هذا الإجراء. اطلب من فريق المدفوعات مراجعة الطلب.";
+"ProFulfillment_DriverRequired" = "يجب تعيين مندوب قبل تأكيد التسليم. حدّث بعد تعيينه.";
+"ProFulfillment_ReturnRequired" = "سُلّمت هذه العناصر بالفعل. اطلب من فريق العمليات استخدام مسار الإرجاع.";
+"ProFulfillment_ReservationReview" = "يتطلب هذا الإلغاء مراجعة حجز الطلب كاملًا. اطلب من فريق العمليات مراجعته.";
+"ProFulfillment_CancellationReview" = "الإلغاء متوقف حتى مراجعة توزيع المخزون. اطلب من فريق العمليات تسويته.";
+"ProFulfillment_CashReview" = "يحتاج التحصيل النقدي إلى تسوية قبل هذا الإجراء. اطلب من فريق المدفوعات مراجعته.";
+"ProFulfillment_DeliveryEvidenceRequired" = "يلزم إثبات التوصيل أو الاستلام. اطلب من فريق التوصيل المختص مراجعة الطلب.";
+"ProFulfillment_OrderReviewRequired" = "يحتاج الطلب إلى مراجعة فريق العمليات قبل متابعة هذا الإجراء.";
+"ProFulfillment_ActionBlocked" = "أوقف الخادم هذا الإجراء للطلب الحالي. راجع آخر تفاصيله أو اطلب مساعدة فريق العمليات.";
+
+/* Order journey and item manifest. */
+"ProFulfillment_JourneyPhaseIndex" = "المرحلة %ld من %ld";
+"ProFulfillment_JourneyCurrentLabel" = "الحالية: %@. %@";
+"ProFulfillment_JourneyHistoryHint" = "تظهر التحديثات المسجّلة في سجل الطلب.";
+"ProFulfillment_JourneyExpand" = "عرض مسار الطلب كاملًا";
+"ProFulfillment_JourneyCollapse" = "عرض المراحل القريبة";
+"ProFulfillment_JourneyExceptionHint" = "راجع سجل الطلب لمعرفة التفاصيل.";
+"ProFulfillment_ManifestTitle" = "عناصر الطلب";
+"ProFulfillment_ManifestCount" = "عدد العناصر: %ld";
+"ProFulfillment_ManifestUnavailable" = "غير متاح";
+"ProFulfillment_ManifestQuantity" = "الكمية";
+"ProFulfillment_ManifestUnitPrice" = "سعر الوحدة";

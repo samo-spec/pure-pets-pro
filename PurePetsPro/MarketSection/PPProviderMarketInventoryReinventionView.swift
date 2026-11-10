@@ -357,7 +357,7 @@ public final class PPInventoryCockpitViewModel: ObservableObject {
             items[idx].originalPrice = nil
         }
         items[idx].updatedAt = Date()
-        triggerHaptic(.success)
+        triggerNotificationHaptic(.success)
     }
 
     public func duplicateItem(_ item: PPInventoryItemModel) {
@@ -382,14 +382,14 @@ public final class PPInventoryCockpitViewModel: ObservableObject {
             requiresPrescription: item.requiresPrescription
         )
         items.insert(copy, at: 0)
-        triggerHaptic(.success)
+        triggerNotificationHaptic(.success)
         showBanner("تم إنشاء نسخة من المنتج بنجاح")
     }
 
     public func deleteItem(by id: String) {
         items.removeAll(where: { $0.id == id })
         selectedItemIDs.remove(id)
-        triggerHaptic(.warning)
+        triggerNotificationHaptic(.warning)
         showBanner("تم حذف العنصر من الكتالوج")
     }
 
@@ -397,7 +397,7 @@ public final class PPInventoryCockpitViewModel: ObservableObject {
         if let idx = items.firstIndex(where: { $0.id == updated.id }) {
             items[idx] = updated
         }
-        triggerHaptic(.success)
+        triggerNotificationHaptic(.success)
         let isRTL = Language.isRTL()
         showBanner(isRTL ? "تم تحديث بيانات المنتج ومزامنتها بنجاح" : "Product details updated successfully")
     }
@@ -430,7 +430,7 @@ public final class PPInventoryCockpitViewModel: ObservableObject {
                 items[idx].isListedInApp = listed
             }
         }
-        triggerHaptic(.success)
+        triggerNotificationHaptic(.success)
         showBanner(listed ? "تم تفعيل العناصر المحددة في المتجر" : "تم إخفاء العناصر المحددة")
         deselectAll()
         isBatchMode = false
@@ -442,7 +442,7 @@ public final class PPInventoryCockpitViewModel: ObservableObject {
                 items[idx].stock += addUnits
             }
         }
-        triggerHaptic(.success)
+        triggerNotificationHaptic(.success)
         showBanner("تمت إضافة \(addUnits) وحدة للعناصر المحددة")
         deselectAll()
         isBatchMode = false
@@ -452,7 +452,7 @@ public final class PPInventoryCockpitViewModel: ObservableObject {
         items.removeAll(where: { selectedItemIDs.contains($0.id) })
         deselectAll()
         isBatchMode = false
-        triggerHaptic(.warning)
+        triggerNotificationHaptic(.warning)
         showBanner("تم حذف العناصر المحددة")
     }
 
@@ -476,7 +476,7 @@ public final class PPInventoryCockpitViewModel: ObservableObject {
         UIImpactFeedbackGenerator(style: style).impactOccurred()
     }
 
-    private func triggerHaptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
+    private func triggerNotificationHaptic(_ type: UINotificationFeedbackGenerator.FeedbackType) {
         UINotificationFeedbackGenerator().notificationOccurred(type)
     }
 

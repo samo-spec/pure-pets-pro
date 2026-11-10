@@ -43,7 +43,8 @@ FOUNDATION_EXPORT NSString * const PPFulfillmentOfficialOwnerUID;
                                                                      NSError * _Nullable error))onChange;
 
 /// Metadata-aware child observer. Callers that expose transition controls must
-/// wait for `fromCache == NO` before enabling an action.
+/// wait for `fromCache == NO` before enabling an action. This flag also includes
+/// snapshots with pending local writes, which cannot confirm server state.
 - (id<FIRListenerRegistration>)observeFulfillmentWithID:(NSString *)fulfillmentID
                                             stateHandler:(void (^)(PPFulfillmentModel * _Nullable fulfillment,
                                                                      NSError * _Nullable error,

@@ -4601,3 +4601,26 @@
 "ProFulfillment_CachedHistory" = "Saved history · refresh to check for new changes.";
 "ProFulfillment_HistoryCaption" = "Latest 50 recorded events, newest first.";
 "ProFulfillment_RefreshHistory" = "Refresh order history";
+"ProFulfillment_RetryNeedsLive" = "Refresh the order result from the server before retrying this action.";
+"ProFulfillment_PaymentRequired" = "Payment must be confirmed before this action. Ask the payments team to review the order.";
+"ProFulfillment_DriverRequired" = "A driver must be assigned before confirming handover. Refresh after assignment.";
+"ProFulfillment_ReturnRequired" = "These items have already been handed over. Ask the operations team to use the return workflow.";
+"ProFulfillment_ReservationReview" = "This cancellation needs a review of the whole order reservation. Ask the operations team to review it.";
+"ProFulfillment_CancellationReview" = "Cancellation is blocked until the inventory allocation is reviewed. Ask the operations team to reconcile it.";
+"ProFulfillment_CashReview" = "Cash collection needs reconciliation before this action. Ask the payments team to review it.";
+"ProFulfillment_DeliveryEvidenceRequired" = "Delivery or handover evidence is required. Ask the responsible delivery team to review the order.";
+"ProFulfillment_OrderReviewRequired" = "The order needs an operations review before this action can continue.";
+"ProFulfillment_ActionBlocked" = "The server has blocked this action for the current order. Review its latest details or ask the operations team for help.";
+
+/* Order journey and item manifest. */
+"ProFulfillment_JourneyPhaseIndex" = "Phase %ld of %ld";
+"ProFulfillment_JourneyCurrentLabel" = "Current: %@. %@";
+"ProFulfillment_JourneyHistoryHint" = "Recorded changes are available in the order history.";
+"ProFulfillment_JourneyExpand" = "View the full route";
+"ProFulfillment_JourneyCollapse" = "Show nearby stages";
+"ProFulfillment_JourneyExceptionHint" = "Check the order history for the recorded details.";
+"ProFulfillment_ManifestTitle" = "Order items";
+"ProFulfillment_ManifestCount" = "Item count: %ld";
+"ProFulfillment_ManifestUnavailable" = "Unavailable";
+"ProFulfillment_ManifestQuantity" = "Quantity";
+"ProFulfillment_ManifestUnitPrice" = "Unit price";

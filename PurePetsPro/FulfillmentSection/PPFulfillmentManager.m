@@ -567,8 +567,8 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
             if (error) {
                 NSString *msg = error.localizedDescription;
                 NSDictionary *details = error.userInfo[FIRFunctionsErrorDetailsKey];
-                if ([details isKindOfClass:[NSDictionary class]] && details[@"message"]) {
-                    msg = details[@"message"];
+                if ([details isKindOfClass:[NSDictionary class]] && PPSafeString(details[@"message"]).length) {
+                    msg = PPSafeString(details[@"message"]);
                 }
                 if (completion) completion(NO, msg, error);
                 return;

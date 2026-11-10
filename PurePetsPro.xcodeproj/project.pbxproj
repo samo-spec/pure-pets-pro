@@ -254,6 +254,7 @@
 		F4B100200000000000000001 /* PPItemEditorHeroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200200000000000000001 /* PPItemEditorHeroView.swift */; };
 		F4B10020000000000000000A /* PPProviderMarketInventoryReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000A /* PPProviderMarketInventoryReinventionView.swift */; };
 		F4B10020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */; };
+		F4B10020000000000000000C /* PPProviderServicesReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000C /* PPProviderServicesReinventionView.swift */; };
 		F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000001 /* PPAdminDesignCompat.swift */; };
 		F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000002 /* PPAccessoryVariantError.swift */; };
 		F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */; };
@@ -765,6 +766,7 @@
 		F4B200200000000000000001 /* PPItemEditorHeroView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPItemEditorHeroView.swift; sourceTree = "<group>"; };
 		F4B20020000000000000000A /* PPProviderMarketInventoryReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderMarketInventoryReinventionView.swift; sourceTree = "<group>"; };
 		F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderMarketItemDetailReinventionView.swift; sourceTree = "<group>"; };
+		F4B20020000000000000000C /* PPProviderServicesReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderServicesReinventionView.swift; sourceTree = "<group>"; };
 		F4B200300000000000000001 /* PPAdminDesignCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdminDesignCompat.swift; sourceTree = "<group>"; };
 		F4B200300000000000000002 /* PPAccessoryVariantError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantError.swift; sourceTree = "<group>"; };
 		F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantMediaService.swift; sourceTree = "<group>"; };
@@ -1492,6 +1494,7 @@
 				F2CCF4852F8CA17F007FBAD4 /* PPServiceScheduleViewController.m */,
 				F2CCF4872F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.h */,
 				F2CCF4882F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m */,
+				F4B20020000000000000000C /* PPProviderServicesReinventionView.swift */,
 			);
 			path = ServiceSection;
 			sourceTree = "<group>";
@@ -2066,6 +2069,7 @@
 				F4B100200000000000000001 /* PPItemEditorHeroView.swift in Sources */,
 				F4B10020000000000000000A /* PPProviderMarketInventoryReinventionView.swift in Sources */,
 				F4B10020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift in Sources */,
+				F4B10020000000000000000C /* PPProviderServicesReinventionView.swift in Sources */,
 				F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */,
 				F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */,
 				F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */,

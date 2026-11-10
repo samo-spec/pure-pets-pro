@@ -414,6 +414,7 @@
 @property (nonatomic, copy) NSString *searchQuery;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> serviceListener;
 @property (nonatomic, assign) BOOL hasPermission;
+@property (nonatomic, strong) PPProviderServicesHostingController *nextgenServicesCockpitVC;
 
 @end
 
@@ -437,12 +438,58 @@
     [self setupCockpitHeader];
     [self setupFloatingOperatingDock];
     [self setupCinematicEmptyState];
+
+    // NextGen V9 Reinvented Living Service Command Center & Cockpit
+    self.nextgenServicesCockpitVC = [[PPProviderServicesHostingController alloc] init];
+    [self addChildViewController:self.nextgenServicesCockpitVC];
+    self.nextgenServicesCockpitVC.view.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.nextgenServicesCockpitVC.view];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.nextgenServicesCockpitVC.view.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.nextgenServicesCockpitVC.view.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.nextgenServicesCockpitVC.view.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.nextgenServicesCockpitVC.view.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    [self.nextgenServicesCockpitVC didMoveToParentViewController:self];
+
+    __weak typeof(self) ws = self;
+    self.nextgenServicesCockpitVC.onDismissRequested = ^{
+        __strong typeof(ws) self = ws;
+        [self.navigationController popViewControllerAnimated:YES];
+    };
+    self.nextgenServicesCockpitVC.onAddServiceRequested = ^{
+        __strong typeof(ws) self = ws;
+        [self addServiceTapped];
+    };
+    self.nextgenServicesCockpitVC.onEditServiceRequested = ^(PPServiceModel *model) {
+        __strong typeof(ws) self = ws;
+        PPAddEditServiceViewController *vc = [[PPAddEditServiceViewController alloc] initWithService:model];
+        [self.navigationController pushViewController:vc animated:YES];
+    };
+    self.nextgenServicesCockpitVC.onServiceDetailRequested = ^(PPServiceModel *model) {
+        __strong typeof(ws) self = ws;
+        [self openDetailsForService:model];
+    };
+    self.nextgenServicesCockpitVC.onOpenScheduleRequested = ^{
+        __strong typeof(ws) self = ws;
+        [self openScheduleMatrix];
+    };
+    self.nextgenServicesCockpitVC.onOpenTemplatePickerRequested = ^{
+        __strong typeof(ws) self = ws;
+        [self openTemplatePicker];
+    };
+
     [self startObservingServices];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    [self setupNavigation];
+    [self.navigationController setNavigationBarHidden:YES animated:animated];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [self.navigationController setNavigationBarHidden:NO animated:animated];
 }
 
 - (void)dealloc {
@@ -1007,6 +1054,7 @@
             }
 
             strongSelf.allServices = [NSMutableArray arrayWithArray:services ?: @[]];
+            [strongSelf.nextgenServicesCockpitVC updateWithServices:strongSelf.allServices];
             [strongSelf updateCockpitStats];
             [strongSelf applyFilterAndReload];
         });

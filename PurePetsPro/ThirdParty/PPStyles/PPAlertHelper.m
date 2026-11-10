@@ -41,13 +41,6 @@ static NSString *PPAlertTrimmedText(NSString *value) {
         : @"";
 }
 
-typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
-    PPAlertActionStylePrimary = 0,
-    PPAlertActionStyleSecondary,
-    PPAlertActionStyleDestructive,
-    PPAlertActionStyleCancel
-};
-
 // MARK: - Action Item Model
 
 @interface PPAlertActionItem : NSObject
@@ -1001,18 +994,103 @@ typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
              confirmText:(NSString * _Nullable)confirmText
               cancelText:(NSString * _Nullable)cancelText
              completion:(AlertCompletionBlock)completion {
-    [self showTextPromptIn:vc
-                     title:title
-                  subtitle:subtitle
-               placeholder:placeholder
-               initialText:initialText
-               confirmText:confirmText
-                cancelText:cancelText
-               secureEntry:NO
-              keyboardType:UIKeyboardTypeDefault
-                completion:^(NSString * _Nullable text) {
-        if (completion) completion(text, (text != nil));
-    }];
+    [self showTextFieldAlertIn:vc
+                         title:title
+                      subtitle:subtitle
+                   placeholder:placeholder
+                   initialText:initialText
+                   confirmText:confirmText
+                    cancelText:cancelText
+                   destructive:NO
+                    completion:completion];
+}
+
++ (void)showTextFieldAlertIn:(UIViewController * _Nullable)vc
+                       title:(NSString *)title
+                    subtitle:(NSString * _Nullable)subtitle
+                 placeholder:(NSString * _Nullable)placeholder
+                 initialText:(NSString * _Nullable)initialText
+                 confirmText:(NSString * _Nullable)confirmText
+                  cancelText:(NSString * _Nullable)cancelText
+                 destructive:(BOOL)destructive
+                  completion:(AlertCompletionBlock)completion {
+    NSMutableArray<PPAlertActionItem *> *actions = [NSMutableArray array];
+
+    if (cancelText.length > 0) {
+        [actions addObject:[PPAlertActionItem itemWithTitle:cancelText
+                                                      style:PPAlertActionStyleCancel
+                                                 completion:^(__unused NSString * _Nullable text, __unused BOOL didConfirm) {
+            if (completion) completion(nil, NO);
+        } simpleCompletion:nil]];
+    }
+
+    NSString *safeConfirmText = confirmText.length ? confirmText : (kLang(@"OK") ?: @"OK");
+    PPAlertActionStyle confirmStyle = destructive ? PPAlertActionStyleDestructive : PPAlertActionStylePrimary;
+    [actions addObject:[PPAlertActionItem itemWithTitle:safeConfirmText
+                                                  style:confirmStyle
+                                             completion:^(NSString * _Nullable text, __unused BOOL didConfirm) {
+        if (completion) completion(text, YES);
+    } simpleCompletion:nil]];
+
+    UIImage *icon = destructive ? [UIImage systemImageNamed:@"exclamationmark.triangle.fill"] : [UIImage systemImageNamed:@"square.and.pencil.circle.fill"];
+
+    PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeTextInput
+                                             title:title
+                                          subtitle:subtitle ?: @""
+                                              icon:icon
+                                           actions:actions
+                                       placeholder:placeholder
+                                       initialText:initialText
+                                       secureEntry:NO
+                                      keyboardType:UIKeyboardTypeDefault
+                      shouldDismissOnBackgroundTap:(cancelText.length > 0)];
+    [alert showInViewController:vc];
+}
+
++ (void)showActionSheetIn:(UIViewController * _Nullable)vc
+                    title:(NSString *)title
+                 subtitle:(NSString * _Nullable)subtitle
+                  actions:(NSArray<NSString *> *)actionTitles
+             actionStyles:(NSArray<NSNumber *> * _Nullable)actionStyles
+              cancelTitle:(NSString *)cancelTitle
+               completion:(void(^ _Nullable)(NSInteger index))completion {
+    NSMutableArray<PPAlertActionItem *> *actions = [NSMutableArray array];
+
+    for (NSInteger idx = 0; idx < actionTitles.count; idx++) {
+        NSString *actionTitle = actionTitles[idx];
+        if (!actionTitle.length) continue;
+        PPAlertActionStyle style = PPAlertActionStylePrimary;
+        if (actionStyles && idx < actionStyles.count) {
+            style = (PPAlertActionStyle)[actionStyles[idx] integerValue];
+        }
+        [actions addObject:[PPAlertActionItem itemWithTitle:actionTitle
+                                                      style:style
+                                                 completion:nil
+                                           simpleCompletion:^{
+            if (completion) completion(idx);
+        }]];
+    }
+
+    if (cancelTitle.length > 0) {
+        [actions addObject:[PPAlertActionItem itemWithTitle:cancelTitle
+                                                      style:PPAlertActionStyleCancel
+                                                 completion:nil
+                                           simpleCompletion:^{
+            if (completion) completion(-1);
+        }]];
+    }
+
+    PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeConfirmation
+                                             title:title
+                                          subtitle:subtitle ?: @""
+                                              icon:[UIImage systemImageNamed:@"slider.horizontal.3"]
+                                           actions:actions
+                                       placeholder:nil
+                                       initialText:nil
+                                       secureEntry:NO
+                                      keyboardType:UIKeyboardTypeDefault
+                      shouldDismissOnBackgroundTap:(cancelTitle.length > 0)];
+    [alert showInViewController:vc];
 }
 
 + (void)showTextPromptIn:(UIViewController *)vc

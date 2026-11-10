@@ -11,6 +11,14 @@ typedef NS_ENUM(NSInteger, PPAlertType) {
     PPAlertTypeConfirmation,
     PPAlertTypeTextInput
 };
+
+typedef NS_ENUM(NSInteger, PPAlertActionStyle) {
+    PPAlertActionStylePrimary = 0,
+    PPAlertActionStyleSecondary,
+    PPAlertActionStyleDestructive,
+    PPAlertActionStyleCancel
+};
+
 typedef void (^AlertCompletionBlock)(NSString * _Nullable text, BOOL didConfirm);
 typedef void (^PPAlertSimpleActionBlock)(void);
 @interface PPAlert : UIView
@@ -74,6 +82,25 @@ typedef void (^PPAlertSimpleActionBlock)(void);
                cancelText:(NSString * _Nullable)cancelText
               completion:(AlertCompletionBlock)completion
     NS_SWIFT_NAME(showTextField(in:title:subtitle:placeholder:initialText:confirmText:cancelText:completion:));
+
++ (void)showTextFieldAlertIn:(UIViewController * _Nullable)vc
+                       title:(NSString *)title
+                    subtitle:(NSString * _Nullable)subtitle
+                 placeholder:(NSString * _Nullable)placeholder
+                 initialText:(NSString * _Nullable)initialText
+                 confirmText:(NSString * _Nullable)confirmText
+                  cancelText:(NSString * _Nullable)cancelText
+                 destructive:(BOOL)destructive
+                  completion:(AlertCompletionBlock)completion
+    NS_SWIFT_NAME(showTextField(in:title:subtitle:placeholder:initialText:confirmText:cancelText:destructive:completion:));
+
++ (void)showActionSheetIn:(UIViewController * _Nullable)vc
+                    title:(NSString *)title
+                 subtitle:(NSString * _Nullable)subtitle
+                  actions:(NSArray<NSString *> *)actionTitles
+             actionStyles:(NSArray<NSNumber *> * _Nullable)actionStyles
+              cancelTitle:(NSString *)cancelTitle
+               completion:(void(^ _Nullable)(NSInteger index))completion;
 
 + (void)showSuccessIn:(UIViewController * _Nullable)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle
     NS_SWIFT_NAME(showSuccess(in:title:subtitle:));

@@ -291,6 +291,38 @@ struct PPDriverTask: Sendable, Identifiable, Equatable {
     static func key(authority: String, taskID: String) -> String { "\(authority):\(taskID)" }
 }
 
+/// Shared presentation safety for Home and the cockpit. The backend remains
+/// authoritative; unsupported proof and unknown cash amounts cannot be skipped
+/// by choosing the more compact Home surface.
+func ppDriverActionBlockKey(_ action: PPDriverTaskAction, task: PPDriverTask,
+                            canSelfAcceptOrders: Bool) -> String? {
+    if action.code == "CLAIM" && !canSelfAcceptOrders {
+        return "Delivery_Driver_Acceptance_Managed"
+    }
+    if action.code == "DELIVER" && task.authority != .fulfillmentV1 &&
+        (task.proof.photoRequired || task.proof.signatureRequired) {
+        return "DriverCockpit_Blocked_Proof"
+    }
+    let cashNeeded = action.code == "CONFIRM_PAYMENT" ||
+        (action.code == "DELIVER" && task.authority != .fulfillmentV1 &&
+         task.cash?.required == true && task.cash?.collected != true)
+    if cashNeeded && ((task.cash?.amount ?? 0) <= 0 ||
+        (action.code == "CONFIRM_PAYMENT" && (task.cash?.currency.count ?? 0) != 3)) {
+        return "DriverCockpit_Blocked_Cash"
+    }
+    return nil
+}
+
+/// A confirmation captures the observed revision. A later refresh, reassignment,
+/// or projected-action change invalidates that intent before the command writer.
+func ppDriverActionSnapshotMatches(_ snapshot: PPDriverTask, current: PPDriverTask,
+                                   action: PPDriverTaskAction) -> Bool {
+    snapshot.id == current.id && snapshot.companyID == current.companyID &&
+        snapshot.status == current.status && snapshot.revision == current.revision &&
+        snapshot.mine == current.mine && snapshot.proof == current.proof && snapshot.cash == current.cash &&
+        !current.isTerminal && current.actions.contains(action)
+}
+
 struct PPDriverFocusRequest: Sendable, Equatable {
     let taskID: String
     let authority: String
@@ -325,9 +357,13 @@ struct PPDriverNotice: Sendable, Equatable, Identifiable {
 // MARK: - Parsing
 
 func ppParseDriverAddress(_ value: Any?) -> PPDriverAddress {
+    if let rawString = value as? String, !rawString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let clean = rawString.trimmingCharacters(in: .whitespacesAndNewlines)
+        return PPDriverAddress(primary: clean, secondary: "", mapQuery: clean, phone: "")
+    }
     let source = cpDict(value)
     var primary = ""
-    for key in ["formattedAddress", "fullAddress", "address", "addressLine1", "label"] {
+    for key in ["formattedAddress", "fullAddress", "address", "addressLine1", "locationName", "locatioName", "label"] {
         let candidate = cpString(source[key])
         if !candidate.isEmpty { primary = candidate; break }
     }
@@ -340,11 +376,15 @@ func ppParseDriverAddress(_ value: Any?) -> PPDriverAddress {
         primary = parts.joined(separator: " · ")
     }
     var areaParts: [String] = []
-    for key in ["area", "city"] {
+    for key in ["area", "city", "country"] {
         let part = cpString(source[key])
         if !part.isEmpty && !areaParts.contains(part) && !primary.contains(part) { areaParts.append(part) }
     }
-    let secondary = areaParts.joined(separator: " · ")
+    var secondary = areaParts.joined(separator: " · ")
+    if primary.isEmpty && !secondary.isEmpty {
+        primary = secondary
+        secondary = ""
+    }
     var mapQuery = [primary, secondary].filter { !$0.isEmpty }.joined(separator: ", ")
     if let latitude = cpDouble(source["latitude"] ?? source["lat"]),
        let longitude = cpDouble(source["longitude"] ?? source["lng"]),
@@ -356,11 +396,15 @@ func ppParseDriverAddress(_ value: Any?) -> PPDriverAddress {
     let names = cpDict(source["branchName"])
     let nameAr = cpString(names["ar"]), nameEn = cpString(names["en"])
     let branchName = Language.isRTL() ? (nameAr.isEmpty ? nameEn : nameAr) : (nameEn.isEmpty ? nameAr : nameEn)
-    if !branchName.isEmpty && branchName != primary {
-        return PPDriverAddress(primary: branchName,
-                               secondary: [primary, secondary].filter { !$0.isEmpty }.joined(separator: " · "),
-                               mapQuery: mapQuery.isEmpty ? branchName : mapQuery,
-                               phone: phone.contains("*") ? "" : phone)
+    if !branchName.isEmpty {
+        if primary.isEmpty {
+            primary = branchName
+        } else if branchName != primary {
+            return PPDriverAddress(primary: branchName,
+                                   secondary: [primary, secondary].filter { !$0.isEmpty }.joined(separator: " · "),
+                                   mapQuery: mapQuery.isEmpty ? branchName : mapQuery,
+                                   phone: phone.contains("*") ? "" : phone)
+        }
     }
     return PPDriverAddress(primary: primary, secondary: secondary, mapQuery: mapQuery,
                            phone: phone.contains("*") ? "" : phone)
@@ -780,6 +824,7 @@ final class PPDriverCockpitStore: ObservableObject {
 
     let boundUID: String
     private let loadsTaskQueue: Bool
+    private let loadsOffers: Bool
     private let service = PPDeliveryCompanyService.shared()
     private var started = false
     private var isVisible = false
@@ -795,12 +840,14 @@ final class PPDriverCockpitStore: ObservableObject {
     private var refreshTimer: Timer?
     private var observerTokens: [NSObjectProtocol] = []
     private var acceptanceObservation: NSObject?
+    private var acceptanceObservationGeneration = 0
     private var acceptanceObservationNeedsRetry = false
     @Published private var liveSelfAcceptance: Bool?
 
-    init(loadsTaskQueue: Bool = true) {
+    init(loadsTaskQueue: Bool = true, loadsOffers: Bool = true) {
         boundUID = PPDeliveryCompanyService.currentAccountUID()
         self.loadsTaskQueue = loadsTaskQueue
+        self.loadsOffers = loadsOffers
     }
 
     // MARK: Derived state
@@ -1018,6 +1065,13 @@ final class PPDriverCockpitStore: ObservableObject {
             refreshQueued = true
             return
         }
+        // Only a read started after the uncertain result may verify it. Keep
+        // the command itself until authoritative progress is observed, so a
+        // status check cannot replace its idempotency key with a new one.
+        if !isSubmitting, pendingVerification == nil, let command = uncertainCommand {
+            pendingVerification = command
+            isVerifying = true
+        }
         isRefreshing = true
         listGeneration += 1
         let generation = listGeneration
@@ -1106,7 +1160,7 @@ final class PPDriverCockpitStore: ObservableObject {
                 self.finishRefresh(failure: error)
             case .success(let page):
                 self.officialAvailability = page.availability.first(where: { $0.companyID == context.companyID }) ?? page.availability.first
-                guard self.canSelfAcceptOrders else {
+                guard self.loadsOffers && self.canSelfAcceptOrders else {
                     self.reconcile(active: ppDriverUniqueTasks(page.tasks).filter { $0.mine && !$0.isTerminal },
                                    offers: [], history: nil)
                     self.finishRefresh(failure: nil)
@@ -1146,7 +1200,7 @@ final class PPDriverCockpitStore: ObservableObject {
             case .success(let page):
                 self.partnerCursor = page.nextPageToken
                 self.canLoadMoreActive = page.nextPageToken != nil
-                guard self.canSelfAcceptOrders else {
+                guard self.loadsOffers && self.canSelfAcceptOrders else {
                     self.reconcile(active: page.active.filter { $0.mine }, offers: [], history: nil)
                     self.finishRefresh(failure: nil)
                     return
@@ -1373,10 +1427,27 @@ final class PPDriverCockpitStore: ObservableObject {
 
     // MARK: Commands
 
-    func perform(_ action: PPDriverTaskAction, on task: PPDriverTask, inputs: PPDriverCommandInputs = PPDriverCommandInputs()) {
+    func canPerformCurrentAction(_ action: PPDriverTaskAction, on task: PPDriverTask,
+                                 contextID: String? = nil) -> Bool {
+        guard canSwitchContext, phase == .ready, isSameAccount(), !isStale,
+              !isRefreshing, !isResolvingContexts,
+              contextID == nil || contextID == selectedContext?.id,
+              let current = activeTasks.first(where: { $0.id == task.id }) ?? offers.first(where: { $0.id == task.id })
+        else { return false }
+        return ppDriverActionSnapshotMatches(task, current: current, action: action) &&
+            ppDriverActionBlockKey(action, task: current, canSelfAcceptOrders: canSelfAcceptOrders) == nil
+    }
+
+    func perform(_ action: PPDriverTaskAction, on task: PPDriverTask,
+                 inputs: PPDriverCommandInputs = PPDriverCommandInputs(), contextID: String? = nil) {
         guard canSwitchContext, phase == .ready else { return }
         guard action.code != "CLAIM" || canSelfAcceptOrders else {
             announce("Delivery_Driver_Acceptance_Managed")
+            refreshAll()
+            return
+        }
+        guard canPerformCurrentAction(action, on: task, contextID: contextID) else {
+            announce("DriverCockpit_Notice_Changed")
             refreshAll()
             return
         }
@@ -1389,13 +1460,16 @@ final class PPDriverCockpitStore: ObservableObject {
     }
 
     func retryUncertainCommand() {
-        guard let command = uncertainCommand, !isSubmitting else { return }
+        guard let command = uncertainCommand, !isSubmitting, !isVerifying, isSameAccount() else { return }
         send(command, isRetry: true)
     }
 
     func discardUncertainCommand() {
-        uncertainCommand = nil
-        notice = nil
+        checkUncertainCommandStatus()
+    }
+
+    func checkUncertainCommandStatus() {
+        guard uncertainCommand != nil, !isSubmitting, !isVerifying, isSameAccount() else { return }
         refreshAll()
     }
 
@@ -1427,7 +1501,10 @@ final class PPDriverCockpitStore: ObservableObject {
                 let text = command.successText
                 self.notice = PPDriverNotice(tone: .success, text: text)
                 UIAccessibility.post(notification: .announcement, argument: text)
-                if command.kind == .availability && self.selectedContext?.kind == .partnerDriver {
+                // Partner membership carries the workload count. Refresh that
+                // projection after task completion too, so Home does not keep
+                // the previous workload after its last assigned task closes.
+                if self.selectedContext?.kind == .partnerDriver {
                     self.resolveContexts()
                 } else {
                     self.refresh()
@@ -1449,6 +1526,7 @@ final class PPDriverCockpitStore: ObservableObject {
             uncertainCommand = command
             UINotificationFeedbackGenerator().notificationOccurred(.warning)
             notice = PPDriverNotice(tone: .warning, text: ppDriverText("DriverCockpit_Notice_Unconfirmed"))
+            refreshAll()
             return
         case .changed, .notEligible:
             uncertainCommand = nil
@@ -1506,8 +1584,8 @@ final class PPDriverCockpitStore: ObservableObject {
         case .task:
             let expected = PPDriverStage(status: command.expectedState)
             if let task = activeTasks.first(where: { $0.id == command.taskKey }) ?? offers.first(where: { $0.id == command.taskKey }) {
-                reportVerification(confirmed: ppDriverStageProgressed(task.stage, from: expected) ||
-                                   (command.actionCode == "CLAIM" && task.mine),
+                reportVerification(confirmed: task.mine && (ppDriverStageProgressed(task.stage, from: expected) ||
+                                   command.actionCode == "CLAIM"),
                                    endedStatus: nil)
             } else {
                 verifyWithFreshRead(command, expected: expected)
@@ -1541,6 +1619,14 @@ final class PPDriverCockpitStore: ObservableObject {
                                     unconfirmedKey: String = "DriverCockpit_Notice_Changed") {
         pendingVerification = nil
         isVerifying = false
+        if confirmed || endedStatus != nil {
+            uncertainCommand = nil
+        } else if uncertainCommand != nil {
+            // An unchanged status cannot prove that a timed-out command will
+            // never commit. Retain the exact retry, with visible recovery.
+            notice = PPDriverNotice(tone: .warning, text: ppDriverText("DriverCockpit_Notice_Unconfirmed"))
+            return
+        }
         let key: String
         if confirmed {
             key = "DriverCockpit_Notice_Confirmed"
@@ -1626,13 +1712,16 @@ final class PPDriverCockpitStore: ObservableObject {
     }
 
     private func observeAcceptancePolicy() {
+        acceptanceObservationGeneration += 1
+        let generation = acceptanceObservationGeneration
         acceptanceObservation = nil
         acceptanceObservationNeedsRetry = false
         guard isVisible, let context = selectedContext, isSameAccount() else { return }
         acceptanceObservation = service.observeOwnDriverAcceptance(companyID: context.companyID) { [weak self] allowed, error in
             let confirmed = error == nil
             Task { @MainActor in
-                guard let self, self.isVisible, self.isSameAccount(), self.selectedContext?.id == context.id else { return }
+                guard let self, generation == self.acceptanceObservationGeneration,
+                      self.isVisible, self.isSameAccount(), self.selectedContext?.id == context.id else { return }
                 let changed = self.canSelfAcceptOrders != allowed
                 self.acceptanceObservationNeedsRetry = !confirmed
                 self.liveSelfAcceptance = allowed

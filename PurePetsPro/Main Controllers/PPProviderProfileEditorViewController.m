@@ -11,6 +11,7 @@
 #import "Styling.h"
 #import "TOCropViewController.h"
 #import "CitiesManager.h"
+#import "PurePetsPro-Swift.h"
 
 typedef NS_ENUM(NSInteger, PPProviderProfileEditorPickerMode) {
     PPProviderProfileEditorPickerModeNone = 0,
@@ -436,6 +437,7 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
 
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> providerStateListener;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> userDocumentListener;
+@property (nonatomic, strong) PPProviderProfileEditorHostController *hostingController;
 
 @end
 
@@ -471,11 +473,57 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
     [self pp_startListening];
     [self pp_refreshPreview];
     [self pp_updateSaveState];
+
+    __weak typeof(self) weakSelf = self;
+    PPProviderProfileEditorSnapshot *snapshot = [self pp_currentSnapshot];
+    self.hostingController = [PPProviderProfileEditorHostingBridge makeViewControllerWithSnapshot:snapshot
+                                                                                           onSave:^(NSString *displayName, NSString *phone, NSString *cityID, NSString *avatarURL, NSArray<NSString *> *coverURLs) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf pp_saveWithDisplayName:displayName phone:phone cityID:cityID avatarURL:avatarURL coverURLs:coverURLs];
+    }
+                                                                                    onChangeAvatar:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf pp_changeAvatarTapped];
+    }
+                                                                                       onAddCover:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf pp_addCoverTapped];
+    }
+                                                                                    onRemoveCover:^(NSInteger index) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf pp_removeCoverAtIndex:index];
+    }
+                                                                                     onChangeCity:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf pp_changeCityTapped];
+    }
+                                                                                        onDismiss:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf.navigationController popViewControllerAnimated:YES];
+    }];
+
+    [self addChildViewController:self.hostingController];
+    [self.view addSubview:self.hostingController.view];
+    self.hostingController.view.translatesAutoresizingMaskIntoConstraints = NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [self.hostingController.view.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.hostingController.view.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.hostingController.view.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.hostingController.view.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    [self.hostingController didMoveToParentViewController:self];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    
+    self.navigationController.navigationBarHidden = YES;
+    [self.hostingController updateSnapshot:[self pp_currentSnapshot]];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -932,8 +980,9 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
 - (void)pp_applyProviderState:(PPProviderOnboardingState *)state {
     PPProviderProfile *profile = [self pp_primaryProfileFromState:state];
     if (!profile) {
-        self.statusLabel.text = kLang(@"ProviderProfileEditor_NoProfile");
+        self.statusLabel.text = kLang(@"ProviderProfileEditor_SetupNotice");
         [self pp_updateSaveState];
+        [self.hostingController updateSnapshot:[self pp_currentSnapshot]];
         return;
     }
 
@@ -967,6 +1016,7 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
     [self.coverCollectionView reloadData];
     [self pp_refreshPreview];
     [self pp_updateSaveState];
+    [self.hostingController updateSnapshot:[self pp_currentSnapshot]];
 }
 
 - (void)pp_applyUserDocument:(NSDictionary *)data {
@@ -996,6 +1046,7 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
     [self.coverCollectionView reloadData];
     [self pp_refreshPreview];
     [self pp_updateSaveState];
+    [self.hostingController updateSnapshot:[self pp_currentSnapshot]];
 }
 
 - (PPProviderProfile *)pp_primaryProfileFromState:(PPProviderOnboardingState *)state {
@@ -1015,6 +1066,145 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
         if (profile) return profile;
     }
     return nil;
+}
+
+#pragma mark - SwiftUI Snapshot & Direct Save
+
+- (PPProviderProfileEditorSnapshot *)pp_currentSnapshot {
+    UserModel *user = UsrMgr.currentUser;
+    NSString *displayName = self.displayNameField.text.length ? self.displayNameField.text : ([user PPBestDisplayName] ?: @"");
+    NSString *phone = self.phoneField.text.length ? self.phoneField.text : (user.MobileNo ?: @"");
+    NSString *cityID = self.selectedCityID ?: @"";
+    NSString *cityTitle = [self pp_localizedCityTitleForID:cityID];
+    NSString *providerTypeTitle = [PPProviderApplicationManager localizedTitleForProviderType:self.providerType];
+    BOOL hasActiveProfile = (self.providerType != PPProviderTypeUnspecified);
+    NSString *statusTitle = self.statusLabel.text ?: @"";
+
+    return [[PPProviderProfileEditorSnapshot alloc] initWithDisplayName:displayName ?: @""
+                                                                  phone:phone ?: @""
+                                                                 cityID:cityID ?: @""
+                                                              cityTitle:cityTitle ?: @""
+                                                      providerTypeTitle:providerTypeTitle ?: @""
+                                                              avatarURL:self.currentAvatarURLString.length ? self.currentAvatarURLString : nil
+                                                              coverURLs:self.coverImageURLs.copy ?: @[]
+                                                       hasActiveProfile:hasActiveProfile
+                                                            statusTitle:statusTitle ?: @""];
+}
+
+- (NSString *)pp_localizedCityTitleForID:(NSString *)cityID {
+    if (cityID.length == 0) return @"";
+    for (NSDictionary *option in PPProviderProfileEditorCityOptions()) {
+        if ([PPSafeString(option[@"value"]) isEqualToString:cityID]) {
+            return PPSafeString(option[@"titleKey"]);
+        }
+    }
+    return @"";
+}
+
+- (void)pp_removeCoverAtIndex:(NSInteger)index {
+    if (index >= 0 && index < self.coverImageURLs.count) {
+        [self.coverImageURLs removeObjectAtIndex:index];
+        [self.coverCollectionView reloadData];
+        [self pp_refreshPreview];
+        [self pp_updateSaveState];
+        [self.hostingController updateSnapshot:[self pp_currentSnapshot]];
+    }
+}
+
+- (void)pp_saveWithDisplayName:(NSString *)displayName
+                         phone:(NSString *)phone
+                        cityID:(NSString *)cityID
+                     avatarURL:(NSString *)avatarURL
+                     coverURLs:(NSArray<NSString *> *)coverURLs {
+    self.displayNameField.text = displayName;
+    self.phoneField.text = phone;
+    self.selectedCityID = cityID;
+    if (avatarURL.length > 0) self.currentAvatarURLString = avatarURL;
+    if (coverURLs) {
+        [self.coverImageURLs removeAllObjects];
+        [self.coverImageURLs addObjectsFromArray:coverURLs];
+    }
+
+    if (self.providerType != PPProviderTypeUnspecified) {
+        [self pp_saveTapped];
+    } else {
+        [self pp_saveDirectToUserCollection];
+    }
+}
+
+- (void)pp_saveDirectToUserCollection {
+    NSString *uid = [self pp_currentAuthUID];
+    UserModel *user = UsrMgr.currentUser;
+    if (uid.length == 0 || !user) {
+        [self.hostingController didFinishSaving];
+        [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"ProviderProfileEditor_SessionExpired")];
+        return;
+    }
+
+    self.isSaving = YES;
+    [PPHUD showIndeterminateIn:self.view title:kLang(@"ProviderProfileEditor_Saving") subtitle:nil];
+
+    NSString *displayName = PPSafeString(self.displayNameField.text);
+    NSString *phone = PPSafeString(self.phoneField.text);
+    NSString *city = PPSafeString(self.selectedCityID);
+    NSArray *covers = self.coverImageURLs.copy ?: @[];
+    NSString *avatar = PPSafeString(self.currentAvatarURLString);
+
+    if (displayName.length > 0) {
+        user.displayName = displayName;
+        user.UserName = displayName;
+    }
+    if (phone.length > 0) {
+        user.MobileNo = phone;
+    }
+    if (avatar.length > 0) {
+        user.photoURL = avatar;
+        user.UserImageUrl = [NSURL URLWithString:avatar];
+    }
+    [UsrMgr p_cacheUser:user];
+
+    NSMutableDictionary *patch = [NSMutableDictionary dictionary];
+    if (displayName.length > 0) {
+        patch[@"displayName"] = displayName;
+        patch[@"UserName"] = displayName;
+    }
+    if (phone.length > 0) {
+        patch[@"MobileNo"] = phone;
+    }
+    if (city.length > 0) {
+        patch[@"city"] = city;
+    }
+    if (avatar.length > 0) {
+        patch[@"UserImageUrl"] = avatar;
+        patch[@"photoURL"] = avatar;
+    }
+    patch[@"coverImageUrls"] = covers;
+    patch[@"updatedAt"] = [FIRFieldValue fieldValueForServerTimestamp];
+
+    FIRDocumentReference *userRef = [[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:uid];
+    __weak typeof(self) weakSelf = self;
+    [userRef setData:patch merge:YES completion:^(NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            strongSelf.isSaving = NO;
+            [PPHUD dismiss];
+            [strongSelf.hostingController didFinishSaving];
+            if (error) {
+                [PPAlertHelper showErrorIn:strongSelf title:kLang(@"Error") subtitle:error.localizedDescription];
+            } else {
+                [user SYNC:nil];
+                strongSelf.originalDisplayName = displayName;
+                strongSelf.originalPhone = phone;
+                strongSelf.originalCityID = city;
+                strongSelf.originalAvatarURLString = avatar;
+                strongSelf.originalCoverImageURLs = covers;
+                strongSelf.statusLabel.text = kLang(@"ProviderProfileEditor_SavedHint");
+                [strongSelf.hostingController updateSnapshot:[strongSelf pp_currentSnapshot]];
+                [PPToast toast:kLang(@"ProfileUpdated") style:PPToastStyleSuccess haptic:YES duration:1.8];
+            }
+        });
+    }];
 }
 
 #pragma mark - Actions
@@ -1214,6 +1404,8 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
     self.statusLabel.text = kLang(@"ProviderProfileEditor_SavedHint");
     [self pp_refreshPreview];
     [self pp_updateSaveState];
+    [self.hostingController didFinishSaving];
+    [self.hostingController updateSnapshot:[self pp_currentSnapshot]];
     [PPToast toast:kLang(@"ProviderProfileEditor_Saved") style:PPToastStyleSuccess haptic:YES duration:1.7];
 }
 
@@ -1228,7 +1420,9 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
     self.isSaving = NO;
     [PPHUD dismiss];
     self.hasUploadFailure = YES;
+    [self.hostingController didFinishSaving];
     [self pp_updateSaveState];
+    [self.hostingController updateSnapshot:[self pp_currentSnapshot]];
     [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:[self pp_friendlyFunctionsError:error]];
 }
 
@@ -1293,7 +1487,7 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
 
 - (void)pp_updateSaveState {
     BOOL hasChanges = [self pp_hasPendingChanges];
-    BOOL disabled = self.isSaving || self.isUploadingAvatar || self.isUploadingCovers || self.providerType == PPProviderTypeUnspecified;
+    BOOL disabled = self.isSaving || self.isUploadingAvatar || self.isUploadingCovers;
     self.saveButton.enabled = hasChanges && !disabled;
     self.saveButton.alpha = self.saveButton.enabled ? 1.0 : 0.56;
     self.saveButton.backgroundColor = self.saveButton.enabled
@@ -1309,8 +1503,9 @@ static NSString *PPProviderProfileEditorLocalizedCityTitle(NSString *cityID) {
     } else if (hasChanges) {
         self.statusLabel.text = kLang(@"ProviderProfileEditor_UnsavedHint");
     } else if (self.providerType == PPProviderTypeUnspecified) {
-        self.statusLabel.text = kLang(@"ProviderProfileEditor_NoProfile");
+        self.statusLabel.text = kLang(@"ProviderProfileEditor_SetupNotice");
     }
+    [self.hostingController updateSnapshot:[self pp_currentSnapshot]];
 }
 
 - (BOOL)pp_hasPendingChanges {

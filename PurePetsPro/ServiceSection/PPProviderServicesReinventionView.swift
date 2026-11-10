@@ -24,7 +24,7 @@ import UIKit
 
 // MARK: - Taxonomy & Category Mapping
 
-public enum PPServiceCategoryKind: String, CaseIterable, Identifiable {
+public enum PPServiceCategoryKind: String, CaseIterable, Identifiable, Equatable, Hashable {
     case all = "all"
     case grooming = "grooming"
     case training = "training"
@@ -33,6 +33,14 @@ public enum PPServiceCategoryKind: String, CaseIterable, Identifiable {
     case paused = "paused"
 
     public var id: String { rawValue }
+
+    public static func == (lhs: PPServiceCategoryKind, rhs: PPServiceCategoryKind) -> Bool {
+        lhs.rawValue == rhs.rawValue
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(rawValue)
+    }
 
     public func title(isRTL: Bool) -> String {
         switch self {
@@ -156,6 +164,7 @@ public struct PPServiceBookingDisplayModel: Identifiable, Equatable {
 
 // MARK: - Cockpit Observable Store
 
+@MainActor
 public final class PPServiceCockpitStore: ObservableObject {
     @Published public var services: [PPServiceItemDisplayModel] = []
     @Published public var bookings: [PPServiceBookingDisplayModel] = []
@@ -390,7 +399,7 @@ public final class PPServiceCockpitStore: ObservableObject {
             }
             model.price = newPrice
             model.isAvailable = newAvailable
-            PPServiceManager.shared().update(model, image: nil) { updateError in
+            PPServiceManager.shared().updateService(model, image: nil) { updateError in
                 DispatchQueue.main.async {
                     if let err = updateError {
                         self?.showToast(Language.isRTL() ? "خطأ: \(err.localizedDescription)" : "Error updating price")
@@ -712,7 +721,7 @@ public struct PPProviderServicesReinventionView: View {
             // Horizon 0: Service Offers & Pricing
             Button {
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                    UIImpactFeedbackGenerator(style: .selectionChanged).selectionChanged()
+                    UISelectionFeedbackGenerator().selectionChanged()
                     store.selectedHorizon = 0
                 }
             } label: {
@@ -737,7 +746,7 @@ public struct PPProviderServicesReinventionView: View {
             // Horizon 1: Live Floor & Bookings
             Button {
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.8)) {
-                    UIImpactFeedbackGenerator(style: .selectionChanged).selectionChanged()
+                    UISelectionFeedbackGenerator().selectionChanged()
                     store.selectedHorizon = 1
                 }
             } label: {
@@ -930,7 +939,7 @@ public struct PPProviderServicesReinventionView: View {
                     let isSelected = store.selectedCategory == cat
                     Button {
                         withAnimation(.spring(response: 0.28, dampingFraction: 0.75)) {
-                            UIImpactFeedbackGenerator(style: .selectionChanged).selectionChanged()
+                            UISelectionFeedbackGenerator().selectionChanged()
                             store.selectedCategory = cat
                         }
                     } label: {
@@ -1004,7 +1013,7 @@ public struct PPProviderServicesReinventionView: View {
                         let isSelected = store.selectedBookingLane == laneKey
                         Button {
                             withAnimation(.spring()) {
-                                UIImpactFeedbackGenerator(style: .selectionChanged).selectionChanged()
+                                UISelectionFeedbackGenerator().selectionChanged()
                                 store.selectedBookingLane = laneKey
                             }
                         } label: {

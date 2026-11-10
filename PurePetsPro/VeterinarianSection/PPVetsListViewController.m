@@ -33,53 +33,73 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 - (void)setCount:(NSInteger)count;
 @end
 
-@implementation _PPVetFilterChip
+@implementation _PPVetFilterChip {
+    UIStackView *_contentStack;
+    NSLayoutConstraint *_badgeWidthConstraint;
+}
 
 - (instancetype)initWithTitle:(NSString *)title {
     if (self = [super init]) {
         self.translatesAutoresizingMaskIntoConstraints = NO;
-        self.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.06];
-        PPApplyContinuousCorners(self, PPCornerPill);
+        self.clipsToBounds = YES;
+        self.layer.cornerRadius = 13.0;
+        if (@available(iOS 13.0, *)) {
+            self.layer.cornerCurve = kCACornerCurveContinuous;
+        }
         self.layer.borderWidth = 1.0;
-        self.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.5].CGColor;
+        self.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.75].CGColor;
+        self.backgroundColor = [UIColor ppElevatedSurface];
 
         _titleLabel = [UILabel new];
         _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         _titleLabel.font = [Styling fontMedium:13.0];
         _titleLabel.textColor = SeconderyTextClr;
         _titleLabel.text = title;
+        _titleLabel.textAlignment = NSTextAlignmentCenter;
         _titleLabel.userInteractionEnabled = NO;
         PPEnableDynamicType(_titleLabel, UIFontTextStyleSubheadline);
-        [self addSubview:_titleLabel];
 
         _countBadge = [UIView new];
         _countBadge.translatesAutoresizingMaskIntoConstraints = NO;
         _countBadge.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.10];
-        PPApplyContinuousCorners(_countBadge, PPCornerPill);
+        _countBadge.layer.cornerRadius = 10.0;
+        _countBadge.clipsToBounds = YES;
         _countBadge.userInteractionEnabled = NO;
-        [self addSubview:_countBadge];
 
         _countLabel = [UILabel new];
         _countLabel.translatesAutoresizingMaskIntoConstraints = NO;
         _countLabel.font = [Styling fontBold:11.5];
         _countLabel.textColor = SeconderyTextClr;
         _countLabel.textAlignment = NSTextAlignmentCenter;
+        _countLabel.text = @"0";
         _countLabel.userInteractionEnabled = NO;
         PPEnableDynamicType(_countLabel, UIFontTextStyleCaption1);
         [_countBadge addSubview:_countLabel];
 
+        _contentStack = [[UIStackView alloc] initWithArrangedSubviews:@[_titleLabel, _countBadge]];
+        _contentStack.translatesAutoresizingMaskIntoConstraints = NO;
+        _contentStack.axis = UILayoutConstraintAxisHorizontal;
+        _contentStack.alignment = UIStackViewAlignmentCenter;
+        _contentStack.spacing = 6.0;
+        _contentStack.userInteractionEnabled = NO;
+        _contentStack.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
+        [self addSubview:_contentStack];
+
+        _badgeWidthConstraint = [_countBadge.widthAnchor constraintGreaterThanOrEqualToConstant:20.0];
+
         [NSLayoutConstraint activateConstraints:@[
-            [self.heightAnchor constraintGreaterThanOrEqualToConstant:44.0],
-            [_titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:14.0],
-            [_titleLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+            [self.heightAnchor constraintEqualToConstant:42.0],
 
-            [_countBadge.leadingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor constant:8.0],
-            [_countBadge.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-10.0],
-            [_countBadge.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
-            [_countBadge.heightAnchor constraintEqualToConstant:22.0],
+            [_contentStack.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
+            [_contentStack.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+            [_contentStack.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.leadingAnchor constant:6.0],
+            [_contentStack.trailingAnchor constraintLessThanOrEqualToAnchor:self.trailingAnchor constant:-6.0],
 
-            [_countLabel.leadingAnchor constraintEqualToAnchor:_countBadge.leadingAnchor constant:7.0],
-            [_countLabel.trailingAnchor constraintEqualToAnchor:_countBadge.trailingAnchor constant:-7.0],
+            [_countBadge.heightAnchor constraintEqualToConstant:20.0],
+            _badgeWidthConstraint,
+
+            [_countLabel.leadingAnchor constraintEqualToAnchor:_countBadge.leadingAnchor constant:6.0],
+            [_countLabel.trailingAnchor constraintEqualToAnchor:_countBadge.trailingAnchor constant:-6.0],
             [_countLabel.centerYAnchor constraintEqualToAnchor:_countBadge.centerYAnchor],
         ]];
 
@@ -106,8 +126,8 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
             self.countBadge.backgroundColor = AppPrimaryClr;
             self.countLabel.textColor = UIColor.whiteColor;
         } else {
-            self.backgroundColor = [SeconderyTextClr colorWithAlphaComponent:0.06];
-            self.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.5].CGColor;
+            self.backgroundColor = [UIColor ppElevatedSurface];
+            self.layer.borderColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.75].CGColor;
             self.layer.borderWidth = 1.0;
             self.titleLabel.textColor = SeconderyTextClr;
             self.titleLabel.font = [Styling fontMedium:13.0];
@@ -361,8 +381,8 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [super traitCollectionDidChange:previousTraitCollection];
     if ([self.traitCollection hasDifferentColorAppearanceComparedToTraitCollection:previousTraitCollection]) {
         self.view.backgroundColor = [self pp_canvasColor];
-        self.heroSurfaceView.backgroundColor = UIColor.clearColor;
-        self.heroSurfaceView.layer.borderColor = UIColor.clearColor.CGColor;
+        self.heroSurfaceView.backgroundColor = [self pp_surfaceColor];
+        self.heroSurfaceView.layer.borderColor = [self pp_borderColor].CGColor;
         self.inspectorContainer.backgroundColor = [self pp_surfaceColor];
         self.inspectorContainer.layer.borderColor = [self pp_borderColor].CGColor;
         PPApplyElevatedShadow(self.inspectorContainer);
@@ -391,47 +411,87 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     [self.listener remove];
 }
 
-#pragma mark - NextGen V8: clinical roster introduction
+#pragma mark - NextGen V9: clinical roster introduction
 
 - (void)setupTitleHeader {
     BOOL rtl = Language.isRTL;
     NSTextAlignment align = rtl ? NSTextAlignmentRight : NSTextAlignmentLeft;
-    CGFloat margin = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) ? 20.0 : 18.0;
+    CGFloat margin = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) ? 20.0 : 16.0;
 
     self.heroSurfaceView = [UIView new];
     self.heroSurfaceView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.heroSurfaceView.backgroundColor = UIColor.clearColor;
+    self.heroSurfaceView.backgroundColor = [self pp_surfaceColor];
+    PPApplyContinuousCorners(self.heroSurfaceView, 18.0);
+    self.heroSurfaceView.layer.borderWidth = 1.0 / UIScreen.mainScreen.scale;
+    self.heroSurfaceView.layer.borderColor = [self pp_borderColor].CGColor;
+    self.heroSurfaceView.layer.shadowColor = [UIColor.blackColor colorWithAlphaComponent:0.04].CGColor;
+    self.heroSurfaceView.layer.shadowOffset = CGSizeMake(0, 3);
+    self.heroSurfaceView.layer.shadowRadius = 8.0;
+    self.heroSurfaceView.layer.shadowOpacity = 1.0;
     [self.masterContainer addSubview:self.heroSurfaceView];
 
-    UIView *accentBar = [UIView new];
-    accentBar.translatesAutoresizingMaskIntoConstraints = NO;
-    accentBar.backgroundColor = AppPrimaryClr;
-    PPApplyContinuousCorners(accentBar, 2.0);
-    [self.heroSurfaceView addSubview:accentBar];
+    // Clinical identity pill
+    UIView *badgeContainer = [UIView new];
+    badgeContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    badgeContainer.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
+    PPApplyContinuousCorners(badgeContainer, 8.0);
+    badgeContainer.clipsToBounds = YES;
+    [self.heroSurfaceView addSubview:badgeContainer];
+
+    UIImageSymbolConfiguration *badgeSymConfig = [UIImageSymbolConfiguration configurationWithPointSize:11.5 weight:UIImageSymbolWeightBold];
+    UIImageView *badgeIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"stethoscope" withConfiguration:badgeSymConfig]];
+    badgeIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    badgeIcon.tintColor = AppPrimaryClr;
+    badgeIcon.contentMode = UIViewContentModeScaleAspectFit;
+    [badgeContainer addSubview:badgeIcon];
 
     self.eyebrowLabel = [UILabel new];
     self.eyebrowLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.eyebrowLabel.text = kLang(@"Vet_Section_Title");
-    self.eyebrowLabel.font = [Styling fontMedium:12.5];
+    self.eyebrowLabel.text = [Language isRTL] ? @"العيادة البيطرية" : @"Veterinary Clinic";
+    self.eyebrowLabel.font = [Styling fontBold:11.5];
     self.eyebrowLabel.textColor = AppPrimaryClr;
     self.eyebrowLabel.textAlignment = align;
     PPEnableDynamicType(self.eyebrowLabel, UIFontTextStyleCaption1);
-    [self.heroSurfaceView addSubview:self.eyebrowLabel];
+    [badgeContainer addSubview:self.eyebrowLabel];
 
+    // Live Duty Indicator (Green Beacon)
+    UIView *liveDutyView = [UIView new];
+    liveDutyView.translatesAutoresizingMaskIntoConstraints = NO;
+    liveDutyView.backgroundColor = [[UIColor ppSuccess] colorWithAlphaComponent:0.10];
+    PPApplyContinuousCorners(liveDutyView, 8.0);
+    liveDutyView.clipsToBounds = YES;
+    [self.heroSurfaceView addSubview:liveDutyView];
+
+    UIView *liveDot = [UIView new];
+    liveDot.translatesAutoresizingMaskIntoConstraints = NO;
+    liveDot.backgroundColor = [UIColor ppSuccess];
+    liveDot.layer.cornerRadius = 3.5;
+    liveDot.clipsToBounds = YES;
+    [liveDutyView addSubview:liveDot];
+
+    UILabel *liveDutyLabel = [UILabel new];
+    liveDutyLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    liveDutyLabel.text = [Language isRTL] ? @"الخدمة نشطة" : @"Duty Active";
+    liveDutyLabel.font = [Styling fontBold:11.0];
+    liveDutyLabel.textColor = [UIColor ppSuccess];
+    [liveDutyView addSubview:liveDutyLabel];
+
+    // Title: "الفريق البيطري"
     self.titleLabel = [UILabel new];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.text = kLang(@"Vet_Roster_Title");
-    self.titleLabel.font = [Styling fontBold:28];
+    self.titleLabel.font = [Styling fontBold:22.0];
     self.titleLabel.textColor = PrimaryTextClr;
     self.titleLabel.textAlignment = align;
     self.titleLabel.numberOfLines = 2;
-    PPEnableDynamicType(self.titleLabel, UIFontTextStyleTitle1);
+    PPEnableDynamicType(self.titleLabel, UIFontTextStyleTitle2);
     [self.heroSurfaceView addSubview:self.titleLabel];
 
+    // Meta summary: "الإجمالي 3 · النشط 3"
     self.metaLabel = [UILabel new];
     self.metaLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.metaLabel.textColor = SeconderyTextClr;
-    self.metaLabel.font = [Styling fontMedium:13];
+    self.metaLabel.font = [Styling fontMedium:12.5];
     self.metaLabel.textAlignment = align;
     self.metaLabel.numberOfLines = 0;
     self.metaLabel.text = kLang(@"Vet_Roster_Empty_Summary");
@@ -443,20 +503,45 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         [self.heroSurfaceView.topAnchor constraintEqualToAnchor:safe.topAnchor constant:8.0],
         [self.heroSurfaceView.leadingAnchor constraintEqualToAnchor:self.masterContainer.leadingAnchor constant:margin],
         [self.heroSurfaceView.trailingAnchor constraintEqualToAnchor:self.masterContainer.trailingAnchor constant:-margin],
-        [accentBar.topAnchor constraintEqualToAnchor:self.heroSurfaceView.topAnchor constant:10.0],
-        [accentBar.leadingAnchor constraintEqualToAnchor:self.heroSurfaceView.leadingAnchor],
-        [accentBar.widthAnchor constraintEqualToConstant:34.0],
-        [accentBar.heightAnchor constraintEqualToConstant:4.0],
-        [self.eyebrowLabel.topAnchor constraintEqualToAnchor:accentBar.bottomAnchor constant:8.0],
-        [self.eyebrowLabel.leadingAnchor constraintEqualToAnchor:self.heroSurfaceView.leadingAnchor],
-        [self.eyebrowLabel.trailingAnchor constraintEqualToAnchor:self.heroSurfaceView.trailingAnchor],
-        [self.titleLabel.topAnchor constraintEqualToAnchor:self.eyebrowLabel.bottomAnchor constant:4.0],
-        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.eyebrowLabel.leadingAnchor],
-        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.eyebrowLabel.trailingAnchor],
-        [self.metaLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:6.0],
-        [self.metaLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
-        [self.metaLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
-        [self.metaLabel.bottomAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:-10.0],
+
+        // Badge Container (leading)
+        [badgeContainer.topAnchor constraintEqualToAnchor:self.heroSurfaceView.topAnchor constant:12.0],
+        [badgeContainer.leadingAnchor constraintEqualToAnchor:self.heroSurfaceView.leadingAnchor constant:14.0],
+        [badgeContainer.heightAnchor constraintEqualToConstant:24.0],
+
+        [badgeIcon.leadingAnchor constraintEqualToAnchor:badgeContainer.leadingAnchor constant:8.0],
+        [badgeIcon.centerYAnchor constraintEqualToAnchor:badgeContainer.centerYAnchor],
+        [badgeIcon.widthAnchor constraintEqualToConstant:14.0],
+        [badgeIcon.heightAnchor constraintEqualToConstant:14.0],
+
+        [self.eyebrowLabel.leadingAnchor constraintEqualToAnchor:badgeIcon.trailingAnchor constant:5.0],
+        [self.eyebrowLabel.trailingAnchor constraintEqualToAnchor:badgeContainer.trailingAnchor constant:-8.0],
+        [self.eyebrowLabel.centerYAnchor constraintEqualToAnchor:badgeContainer.centerYAnchor],
+
+        // Live Duty Beacon (trailing)
+        [liveDutyView.topAnchor constraintEqualToAnchor:self.heroSurfaceView.topAnchor constant:12.0],
+        [liveDutyView.trailingAnchor constraintEqualToAnchor:self.heroSurfaceView.trailingAnchor constant:-14.0],
+        [liveDutyView.heightAnchor constraintEqualToConstant:24.0],
+
+        [liveDot.leadingAnchor constraintEqualToAnchor:liveDutyView.leadingAnchor constant:8.0],
+        [liveDot.centerYAnchor constraintEqualToAnchor:liveDutyView.centerYAnchor],
+        [liveDot.widthAnchor constraintEqualToConstant:7.0],
+        [liveDot.heightAnchor constraintEqualToConstant:7.0],
+
+        [liveDutyLabel.leadingAnchor constraintEqualToAnchor:liveDot.trailingAnchor constant:5.0],
+        [liveDutyLabel.trailingAnchor constraintEqualToAnchor:liveDutyView.trailingAnchor constant:-8.0],
+        [liveDutyLabel.centerYAnchor constraintEqualToAnchor:liveDutyView.centerYAnchor],
+
+        // Title
+        [self.titleLabel.topAnchor constraintEqualToAnchor:badgeContainer.bottomAnchor constant:10.0],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.heroSurfaceView.leadingAnchor constant:14.0],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.heroSurfaceView.trailingAnchor constant:-14.0],
+
+        // Meta summary
+        [self.metaLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:4.0],
+        [self.metaLabel.leadingAnchor constraintEqualToAnchor:self.heroSurfaceView.leadingAnchor constant:14.0],
+        [self.metaLabel.trailingAnchor constraintEqualToAnchor:self.heroSurfaceView.trailingAnchor constant:-14.0],
+        [self.metaLabel.bottomAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:-12.0],
     ]];
     [self pp_applyHeroTitleLineLimitForTextSize];
 }
@@ -488,7 +573,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
 
     CGFloat hMargin = (UI_USER_INTERFACE_IDIOM() == UIUserInterfaceIdiomPad) ? 20.0 : 16.0;
     [NSLayoutConstraint activateConstraints:@[
-        [stack.topAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:8],
+        [stack.topAnchor constraintEqualToAnchor:self.heroSurfaceView.bottomAnchor constant:12.0],
         [stack.leadingAnchor constraintEqualToAnchor:self.masterContainer.leadingAnchor constant:hMargin],
         [stack.trailingAnchor constraintEqualToAnchor:self.masterContainer.trailingAnchor constant:-hMargin],
     ]];
@@ -533,11 +618,21 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     sv.cornerRadius = 14.0;
     sv.blurEnabled = NO;
     sv.shadowEnabled = NO;
-    sv.strokeColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.70];
-    sv.textField.placeholder = kLang(@"Vet_Search_Placeholder") ?: ([Language isRTL] ? @"البحث بالاسم أو التخصص..." : @"Search by name or specialty...");
+    sv.strokeColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.75];
+    sv.textField.placeholder = kLang(@"Vet_Search_Placeholder") ?: ([Language isRTL] ? @"ابحث باسم الطبيب، التخصص، أو الهاتف..." : @"Search by name, specialty, or phone...");
+    sv.textField.font = [Styling fontRegular:13.5];
     sv.backgroundColor = [UIColor ppElevatedSurface];
     sv.showsPrimaryButton = NO;
     sv.contentInsets = UIEdgeInsetsMake(6, 14, 6, 14);
+
+    UIImageSymbolConfiguration *symConfig = [UIImageSymbolConfiguration configurationWithPointSize:14.0 weight:UIImageSymbolWeightMedium];
+    UIImageView *magIcon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"magnifyingglass" withConfiguration:symConfig]];
+    magIcon.tintColor = [SeconderyTextClr colorWithAlphaComponent:0.8];
+    magIcon.contentMode = UIViewContentModeCenter;
+    magIcon.frame = CGRectMake(0, 0, 26, 20);
+    sv.textField.leftView = magIcon;
+    sv.textField.leftViewMode = UITextFieldViewModeAlways;
+
     PPEnableDynamicTypeForTextField(sv.textField, UIFontTextStyleBody);
     [self.masterContainer addSubview:sv];
     self.searchView = sv;
@@ -547,7 +642,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
         [sv.topAnchor constraintEqualToAnchor:self.filterStack.bottomAnchor constant:10.0],
         [sv.leadingAnchor constraintEqualToAnchor:self.masterContainer.leadingAnchor constant:hMargin],
         [sv.trailingAnchor constraintEqualToAnchor:self.masterContainer.trailingAnchor constant:-hMargin],
-        [sv.heightAnchor constraintGreaterThanOrEqualToConstant:46.0],
+        [sv.heightAnchor constraintEqualToConstant:46.0],
     ]];
 }
 

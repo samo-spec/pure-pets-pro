@@ -15,6 +15,7 @@
 		581500F3F2D98A60E69551A6 /* QBSlomoIconView.m in Sources */ = {isa = PBXBuildFile; fileRef = 38AB14AA34F486C60429D7F7 /* QBSlomoIconView.m */; };
 		6354F03D931845639C592CFF /* PPProRootTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC6A2BB459BAE2B8EAA /* PPProRootTabBarController.swift */; };
 		F5A0B3013005000100A0B301 /* PPProProfileSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC7A2BB459BAE2B8EAB /* PPProProfileSettingsView.swift */; };
+		F5A0B3023005000200A0B302 /* PPProviderProfileEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC8A2BB459BAE2B8EAC /* PPProviderProfileEditorView.swift */; };
 		66213DB3EE11415A8153A6AA /* PPAddEditVetViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 2C97DB99BC4542DD8F31D494 /* PPAddEditVetViewController.m */; };
 		6C65E6AFB8534ED2B64E8AC0 /* PPVetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 35927158F3DE4461BAA4F526 /* PPVetManager.m */; };
 		86200C95A3CA4EA2AD869767 /* PPVetDetailViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = CEFE7BC8BF5E4D1DA7960E4A /* PPVetDetailViewController.m */; };
@@ -255,6 +256,7 @@
 		F4B10020000000000000000A /* PPProviderMarketInventoryReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000A /* PPProviderMarketInventoryReinventionView.swift */; };
 		F4B10020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */; };
 		F4B10020000000000000000C /* PPProviderServicesReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000C /* PPProviderServicesReinventionView.swift */; };
+		F4B10020000000000000000D /* PPAddEditVetStudioScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000D /* PPAddEditVetStudioScreen.swift */; };
 		F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000001 /* PPAdminDesignCompat.swift */; };
 		F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000002 /* PPAccessoryVariantError.swift */; };
 		F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */; };
@@ -329,6 +331,7 @@
 		A1E5604CF63D542D8056E8CC /* QBSlomoIconView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = QBSlomoIconView.h; sourceTree = "<group>"; };
 		A6DA4CC6A2BB459BAE2B8EAA /* PPProRootTabBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProRootTabBarController.swift; sourceTree = "<group>"; };
 		A6DA4CC7A2BB459BAE2B8EAB /* PPProProfileSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProProfileSettingsView.swift; sourceTree = "<group>"; };
+		A6DA4CC8A2BB459BAE2B8EAC /* PPProviderProfileEditorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderProfileEditorView.swift; sourceTree = "<group>"; };
 		B4B25A3F0AC9C2AC1635B8EF /* PPImageCollectionRow.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPImageCollectionRow.h; sourceTree = "<group>"; };
 		B7D4E5F62A1B4C6D8E9F0011 /* PPFirebaseCompat.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPFirebaseCompat.h; sourceTree = "<group>"; };
 		C1A000010000000000000102 /* PPAdminWebAppViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPAdminWebAppViewController.h; sourceTree = "<group>"; };
@@ -767,6 +770,7 @@
 		F4B20020000000000000000A /* PPProviderMarketInventoryReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderMarketInventoryReinventionView.swift; sourceTree = "<group>"; };
 		F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderMarketItemDetailReinventionView.swift; sourceTree = "<group>"; };
 		F4B20020000000000000000C /* PPProviderServicesReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderServicesReinventionView.swift; sourceTree = "<group>"; };
+		F4B20020000000000000000D /* PPAddEditVetStudioScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAddEditVetStudioScreen.swift; sourceTree = "<group>"; };
 		F4B200300000000000000001 /* PPAdminDesignCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdminDesignCompat.swift; sourceTree = "<group>"; };
 		F4B200300000000000000002 /* PPAccessoryVariantError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantError.swift; sourceTree = "<group>"; };
 		F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantMediaService.swift; sourceTree = "<group>"; };
@@ -947,6 +951,7 @@
 				F20B38632E61FE8F007465EE /* SplashViewController.m */,
 				A6DA4CC6A2BB459BAE2B8EAA /* PPProRootTabBarController.swift */,
 				A6DA4CC7A2BB459BAE2B8EAB /* PPProProfileSettingsView.swift */,
+				A6DA4CC8A2BB459BAE2B8EAC /* PPProviderProfileEditorView.swift */,
 			);
 			path = "Main Controllers";
 			sourceTree = "<group>";
@@ -1761,6 +1766,7 @@
 				CEFE7BC8BF5E4D1DA7960E4A /* PPVetDetailViewController.m */,
 				45D8EF9E5C16403AA9701DB1 /* PPVetSubscriptionViewController.h */,
 				EF6EFC6E14664F16AB54D315 /* PPVetSubscriptionViewController.m */,
+				F4B20020000000000000000D /* PPAddEditVetStudioScreen.swift */,
 			);
 			path = VeterinarianSection;
 			sourceTree = "<group>";
@@ -1960,6 +1966,7 @@
 			files = (
 				6354F03D931845639C592CFF /* PPProRootTabBarController.swift in Sources */,
 				F5A0B3013005000100A0B301 /* PPProProfileSettingsView.swift in Sources */,
+				F5A0B3023005000200A0B302 /* PPProviderProfileEditorView.swift in Sources */,
 				F5A0B1013005000100A0B101 /* PPHero.swift in Sources */,
 				F5A0B2013005000100A0B201 /* PPProQuickActionsDeck.swift in Sources */,
 				D7B2A0022F9C4C1B00000002 /* PPDesignTokens.m in Sources */,
@@ -2070,6 +2077,7 @@
 				F4B10020000000000000000A /* PPProviderMarketInventoryReinventionView.swift in Sources */,
 				F4B10020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift in Sources */,
 				F4B10020000000000000000C /* PPProviderServicesReinventionView.swift in Sources */,
+				F4B10020000000000000000D /* PPAddEditVetStudioScreen.swift in Sources */,
 				F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */,
 				F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */,
 				F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */,
@@ -2276,7 +2284,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = PurePetsPro/PurePetsPro.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEFINES_MODULE = YES;
 				DEVELOPMENT_TEAM = 9J4UK6N4AU;
@@ -2361,7 +2369,7 @@
 				CLANG_ENABLE_MODULES = YES;
 				CODE_SIGN_ENTITLEMENTS = "PurePetsPro/PurePetsPro Release.entitlements";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEFINES_MODULE = YES;
 				DEVELOPMENT_TEAM = 9J4UK6N4AU;
@@ -2565,7 +2573,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 9J4UK6N4AU;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = arm64;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -2607,7 +2615,7 @@
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 9J4UK6N4AU;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = arm64;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -2648,7 +2656,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 9J4UK6N4AU;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = arm64;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -2688,7 +2696,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 9;
+				CURRENT_PROJECT_VERSION = 10;
 				DEVELOPMENT_TEAM = 9J4UK6N4AU;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = arm64;
 				GENERATE_INFOPLIST_FILE = YES;

@@ -2811,6 +2811,18 @@
 "ProfileSettings_LanguageArabic" = "العربية";
 "ProfileSettings_LanguageSheetSubtitle" = "اختر اللغة المستخدمة عبر تطبيق Pure Pets Pro.";
 "ProviderProfileEditor_Title" = "ملف المزود";
+"ProviderProfileEditor_Subtitle" = "تخصيص الهوية التجارية والوسائط للظهور أمام العملاء";
+"ProviderProfileEditor_CoverCountFormat" = "%lu من 5 صور غلاف";
+"ProviderProfileEditor_AddCoverButton" = "إضافة غلاف";
+"ProviderProfileEditor_SaveButton" = "حفظ التعديلات";
+"ProviderProfileEditor_StatusActive" = "ملف المزود معتمد ومفعل للظهور العام للعملاء.";
+"ProviderProfileEditor_StatusDraft" = "تجهيز الهوية التجارية · يتم حفظ التعديلات في حسابك وتطبيقها تلقائيًا.";
+"ProviderProfileEditor_ConsumerPreviewTitle" = "معاينة البطاقة في تطبيق المستخدمين";
+"ProviderProfileEditor_StoreName" = "اسم المنشأة / العلامة التجارية";
+"ProviderProfileEditor_StorePhone" = "رقم هاتف المنشأة والتواصل";
+"ProviderProfileEditor_ChooseCity" = "اختر المدينة";
+"ProviderProfileEditor_SetupNotice" = "تجهيز الهوية التجارية · يتم حفظ التعديلات في حسابك وتطبيقها تلقائيًا.";
+"ProfileSettings_VerifiedStore" = "مزود معتمد · بيور بتس قطر";
 "ProviderProfileEditor_HeroSubtitle" = "صقل التفاصيل العامة التي يتعرّف عليها العملاء أولاً عبر حضورك كمزود.";
 "ProviderProfileEditor_IdentitySection" = "الهوية";
 "ProviderProfileEditor_IdentitySubtitle" = "حافظ على الأساسيات نظيفة وموثوقة وجاهزة للملف العام.";
@@ -4528,6 +4540,10 @@
 "DriverHome_ActiveCount_Format" = "توصيلات جارية: %@";
 "DriverHome_Attention" = "تحتاج إلى متابعتك. افتح للمراجعة.";
 "DriverHome_Restricted" = "إسناد التوصيلات الجديدة مقيّد";
+"DriverHome_ActiveDelivery" = "توصيلتك الجارية";
+"DriverHome_ChooseDelivery" = "اختر توصيلتك المسندة";
+"DriverHome_CheckAssigned" = "تحقق من توصيلاتك المسندة قبل تغيير حالة التوفر.";
+"DriverHome_ProgressHint" = "مراحل التوصيل مجمّعة. تظهر الحالة الحالية أعلاه.";
 
 /* قائمة الفريق البيطري V8 */
 "Vet_Roster_Title" = "الفريق البيطري";
@@ -4560,9 +4576,17 @@
 "Vet_Roster_Fee_Label" = "رسوم الاستشارة";
 
 /* طلبات بيور بتس الرسمية في قسم التنفيذ */
-"Fulfillment_StaffNoteMessage" = "طلبات بيور بتس الرسمية تحتاج إلى ملاحظة تُحفظ في سجل التدقيق.";
-"Fulfillment_StaffNotePlaceholder" = "ملاحظة (3 أحرف على الأقل)";
+"Fulfillment_StaffNoteMessage" = "ملاحظة الطلب تُحفظ في سجل التدقيق (اختياري - يتم التوليد تلقائيًا عند ترك الحقل فارغًا).";
+"Fulfillment_StaffNotePlaceholder" = "أضف ملاحظة (اختياري)";
 "Fulfillment_StaffNoteTooShort" = "اكتب ملاحظة من 3 أحرف على الأقل.";
+"Fulfillment_AutoNote_start_preparing" = "تم بدء تجهيز وتحضير الطلب في المتجر";
+"Fulfillment_AutoNote_mark_ready" = "تم تجهيز وتغليف الطلب وجاهز للاستلام";
+"Fulfillment_AutoNote_request_delivery" = "تم طلب مندوب لتوصيل الشحنة";
+"Fulfillment_AutoNote_confirm_handover" = "تم تسليم الطلب بنجاح إلى مندوب التوصيل";
+"Fulfillment_AutoNote_accept" = "تم قبول وتأكيد استلام الطلب";
+"Fulfillment_AutoNote_reject" = "تم تعذر تجهيز الطلب من قبل المتجر";
+"Fulfillment_AutoNote_cancel_request" = "تم إلغاء الطلب من قبل المتجر";
+"Fulfillment_AutoNote_default" = "تحديث حالة الطلب إلى %@";
 
 /* Provider fulfillment work queue and verified command review. */
 "ProFulfillment_QueueTitle" = "طلبات تنتظر خطوتك";

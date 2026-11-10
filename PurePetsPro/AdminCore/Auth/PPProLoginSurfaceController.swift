@@ -1452,6 +1452,51 @@ private extension PPProCommandCenterSnapshotDescriptor {
     }
 }
 
+/// Home-only grouping. These identifiers never become route or permission grants.
+struct PPProWorkspaceLens: Identifiable, Equatable {
+    static let deliveryID = "deliveryWorkspace"
+    let id: String
+    let title: String
+    let symbolName: String
+    let actionCount: Int
+    let isReadOnly: Bool
+
+    static func isDelivery(_ capability: PPProCommandCapability) -> Bool {
+        ["delivery", "deliveryCompany", "driverCockpit"].contains(capability.id) ||
+        ["delivery", "deliveryCompany", "deliveryCockpit", "driverCockpit"].contains(capability.routeTag)
+    }
+
+    static func capabilityIDs(for lensID: String, in snapshot: PPProCommandCenterSnapshot) -> Set<String> {
+        if lensID == "all" { return Set(snapshot.capabilities.map(\.id)) }
+        if lensID == deliveryID || snapshot.capabilities.contains(where: { $0.id == lensID && isDelivery($0) }) {
+            return Set(snapshot.capabilities.filter(isDelivery).map(\.id))
+        }
+        return Set(snapshot.capabilities.filter { $0.id == lensID }.map(\.id))
+    }
+
+    static func lenses(in snapshot: PPProCommandCenterSnapshot) -> [Self] {
+        let delivery = snapshot.capabilities.filter(isDelivery)
+        var result: [Self] = []
+        if !delivery.isEmpty {
+            let ids = Set(delivery.map(\.id))
+            // Signals are the work identity; multiple doors may describe the same work.
+            var counted = Set<String>()
+            let count = snapshot.signals.reduce(0) { total, signal in
+                guard !ids.isDisjoint(with: signal.capabilityIDs), counted.insert(signal.id).inserted else { return total }
+                return total + max(signal.badgeCount, 0)
+            }
+            result.append(Self(id: deliveryID, title: Language.get("DeliverySection", alter: nil),
+                               symbolName: "truck.box", actionCount: count,
+                               isReadOnly: delivery.allSatisfy(\.isReadOnly)))
+        }
+        result += snapshot.capabilities.filter { !isDelivery($0) }.map {
+            Self(id: $0.id, title: $0.title, symbolName: $0.symbolName,
+                 actionCount: $0.actionCount, isReadOnly: $0.isReadOnly)
+        }
+        return result
+    }
+}
+
 @MainActor
 final class PPProCommandCenterStore: ObservableObject {
     @Published private(set) var snapshot: PPProCommandCenterSnapshot = .placeholder
@@ -1468,7 +1513,8 @@ final class PPProCommandCenterStore: ObservableObject {
     func apply(_ snapshot: PPProCommandCenterSnapshot) {
         self.snapshot = snapshot
         if selectedCapabilityID != "all",
-           !snapshot.capabilities.contains(where: { $0.id == selectedCapabilityID }) {
+           !snapshot.capabilities.contains(where: { $0.id == selectedCapabilityID }),
+           !workspaceLenses.contains(where: { $0.id == selectedCapabilityID }) {
             selectedCapabilityID = "all"
         }
         if let focusedSignalID,
@@ -1481,13 +1527,23 @@ final class PPProCommandCenterStore: ObservableObject {
         snapshot.capabilities.first(where: { $0.id == selectedCapabilityID })
     }
 
+    var workspaceLenses: [PPProWorkspaceLens] { PPProWorkspaceLens.lenses(in: snapshot) }
+
+    var selectedWorkspaceID: String {
+        if let selectedCapability, PPProWorkspaceLens.isDelivery(selectedCapability) {
+            return PPProWorkspaceLens.deliveryID
+        }
+        return selectedCapabilityID
+    }
+
     var visibleSignals: [PPProCommandSignal] {
         let source: [PPProCommandSignal]
         if selectedCapabilityID == "all" {
             source = snapshot.signals
         } else {
+            let ids = PPProWorkspaceLens.capabilityIDs(for: selectedWorkspaceID, in: snapshot)
             source = snapshot.signals.filter {
-                $0.capabilityIDs.isEmpty || $0.capabilityIDs.contains(selectedCapabilityID)
+                $0.capabilityIDs.isEmpty || !ids.isDisjoint(with: $0.capabilityIDs)
             }
         }
         return source.sorted(by: Self.signalSort)
@@ -3455,6 +3511,7 @@ enum PPProPulseRhythm {
 /// so the redesign feels continuous with the login surface.
 enum PPProMotion {
     static let press = Animation.easeOut(duration: 0.12)
+    static let workspaceShift = Animation.spring(response: 0.28, dampingFraction: 0.90)
     static let lensSwap = Animation.spring(response: 0.40, dampingFraction: 0.88)
     static let dockMorph = Animation.spring(response: 0.38, dampingFraction: 0.84)
     static let stageChange = Animation.spring(response: 0.46, dampingFraction: 0.86)
@@ -3613,7 +3670,8 @@ struct PPProPulseScope {
 
         var active: [PPProCommandCapability] = []
         var idle: [PPProCommandCapability] = []
-        for capability in snapshot.capabilities {
+        let visibleIDs = PPProWorkspaceLens.capabilityIDs(for: lensID, in: snapshot)
+        for capability in snapshot.capabilities where visibleIDs.contains(capability.id) {
             // The focused capability is always promoted, so choosing a lens has
             // a visible effect on this band instead of none.
             if capability.actionCount > 0 || ownedWeight(capability) > 0 || capability.id == lensID {
@@ -3770,7 +3828,7 @@ private struct PPProHomeControlStyle: ButtonStyle {
 
 /// All stays reachable while the permitted workspace titles scroll independently.
 private struct PPProLensRail: View {
-    let capabilities: [PPProCommandCapability]
+    let workspaces: [PPProWorkspaceLens]
     let selectedID: String
     let palette: PPProPalette
     let isRTL: Bool
@@ -3778,6 +3836,7 @@ private struct PPProLensRail: View {
     let onSelect: (String) -> Void
 
     @Environment(\.sizeCategory) private var sizeCategory
+    @Namespace private var selectionNamespace
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -3789,7 +3848,7 @@ private struct PPProLensRail: View {
             if sizeCategory.isAccessibilityCategory {
                 VStack(alignment: .leading, spacing: 4) {
                     allButton(expanded: true)
-                    ForEach(capabilities) { capability in
+                    ForEach(workspaces) { capability in
                         workspaceButton(capability, expanded: true)
                     }
                 }
@@ -3802,7 +3861,7 @@ private struct PPProLensRail: View {
                     ScrollViewReader { proxy in
                         ScrollView(.horizontal, showsIndicators: true) {
                             HStack(spacing: 4) {
-                                ForEach(capabilities) { capability in
+                                ForEach(workspaces) { capability in
                                     workspaceButton(capability, expanded: false)
                                         .id(capability.id)
                                 }
@@ -3810,7 +3869,7 @@ private struct PPProLensRail: View {
                             .padding(.bottom, 4)
                         }
                         .onAppear { revealSelection(using: proxy) }
-                        .onChange(of: selectedID) { _, _ in revealSelection(using: proxy) }
+                        .onChange(of: selectedID) { _, _ in revealSelection(using: proxy, animated: true) }
                         .onChange(of: isRTL) { _, _ in revealSelection(using: proxy) }
                     }
                 }
@@ -3828,7 +3887,7 @@ private struct PPProLensRail: View {
                     symbol: "square.grid.2x2", count: 0, isReadOnly: false, expanded: expanded)
     }
 
-    private func workspaceButton(_ capability: PPProCommandCapability, expanded: Bool) -> some View {
+    private func workspaceButton(_ capability: PPProWorkspaceLens, expanded: Bool) -> some View {
         scopeButton(id: capability.id, title: capability.title, symbol: capability.symbolName,
                     count: capability.actionCount, isReadOnly: capability.isReadOnly, expanded: expanded)
     }
@@ -3866,13 +3925,23 @@ private struct PPProLensRail: View {
                 .frame(minHeight: 44)
                 .frame(maxWidth: expanded ? .infinity : nil, alignment: .leading)
                 Rectangle()
-                    .fill(selected ? palette.accent : .clear)
+                    .fill(.clear)
                     .frame(height: 2)
                     .padding(.horizontal, 10)
                     .accessibilityHidden(true)
             }
-            .background(selected ? palette.accentSoft : .clear,
-                        in: RoundedRectangle(cornerRadius: PPProRadius.chip, style: .continuous))
+            .background {
+                if selected {
+                    RoundedRectangle(cornerRadius: PPProRadius.chip, style: .continuous)
+                        .fill(palette.accentSoft)
+                        .overlay(alignment: .bottom) {
+                            Rectangle().fill(palette.accent).frame(height: 2)
+                                .padding(.horizontal, 10)
+                        }
+                        .matchedGeometryEffect(id: "workspaceSelection", in: selectionNamespace)
+                        .accessibilityHidden(true)
+                }
+            }
             .contentShape(Rectangle())
         }
         .buttonStyle(PPProHomeControlStyle())
@@ -3883,11 +3952,11 @@ private struct PPProLensRail: View {
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
-    private func revealSelection(using proxy: ScrollViewProxy) {
-        guard selectedID != "all", capabilities.contains(where: { $0.id == selectedID }) else { return }
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) { proxy.scrollTo(selectedID, anchor: .center) }
+    private func revealSelection(using proxy: ScrollViewProxy, animated: Bool = false) {
+        guard selectedID != "all", workspaces.contains(where: { $0.id == selectedID }) else { return }
+        withAnimation(animated && !reduceMotion ? PPProMotion.workspaceShift : nil) {
+            proxy.scrollTo(selectedID, anchor: .center)
+        }
     }
 }
 
@@ -5246,8 +5315,13 @@ struct PPProPulseView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.sizeCategory) private var sizeCategory
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var appeared = false
+    @State private var isOnScreen = false
+    // Above the size-class branches: changing tabs or rotating cannot discard
+    // a delivery command whose outcome still needs verification.
+    @State private var driverHomeStore: PPDriverCockpitStore?
     /// Set once the first-paint spinner has been up long enough that leaving it
     /// there would be dishonest. See `phase`.
     @State private var bootStalled = false
@@ -5271,15 +5345,38 @@ struct PPProPulseView: View {
     private var scope: PPProPulseScope {
         PPProPulseScope(
             snapshot: snapshot,
-            lensID: store.selectedCapabilityID,
+            lensID: store.selectedWorkspaceID,
             scopedSignals: store.visibleSignals
         )
     }
 
     private var hasDeliveryCapability: Bool {
-        snapshot.capabilities.contains { $0.id == "delivery" || $0.id == "deliveryCompany" } ||
-        store.selectedCapabilityID == "delivery" ||
-        store.selectedCapabilityID == "deliveryCompany"
+        snapshot.capabilities.contains(where: PPProWorkspaceLens.isDelivery)
+    }
+
+    private var showsDeliverySection: Bool {
+        hasDeliveryCapability && (store.selectedWorkspaceID == "all" ||
+                                 store.selectedWorkspaceID == PPProWorkspaceLens.deliveryID)
+    }
+
+    private var showsWorkspaceRail: Bool { store.workspaceLenses.count > 1 || hasDeliveryCapability }
+    private var workspaceAnimation: Animation? {
+        reduceMotion || !isOnScreen || scenePhase != .active ? nil : PPProMotion.workspaceShift
+    }
+
+    private enum HomeSection: String, Hashable { case delivery, attention, workspaces }
+    private var sectionOrder: [HomeSection] {
+        store.selectedWorkspaceID == PPProWorkspaceLens.deliveryID
+            ? [.delivery, .workspaces, .attention] : [.delivery, .attention, .workspaces]
+    }
+
+    private func sectionIsVisible(_ section: HomeSection) -> Bool {
+        section != .delivery || showsDeliverySection
+    }
+
+    private func sectionGap(after section: HomeSection, in sections: [HomeSection]) -> CGFloat {
+        sectionIsVisible(section) && sections.last(where: sectionIsVisible) != section
+            ? PPProPulseRhythm.spineGap : 0
     }
 
     /// The route comes from the membership-gated Objective-C snapshot. A
@@ -5339,10 +5436,24 @@ struct PPProPulseView: View {
         // The official root UITabBarController owns bottom navigation, so this
         // surface deliberately renders no dock of its own.
         .onAppear {
+            isOnScreen = true
+            reconcileDriverHomeStore()
             appeared = true
             guard !bootStalled else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.bootPatience) {
                 bootStalled = true
+            }
+        }
+        .onDisappear {
+            isOnScreen = false
+            driverHomeStore?.setVisible(false)
+        }
+        .onChange(of: hasDeliveryCapability) { _, _ in reconcileDriverHomeStore() }
+        .onChange(of: PPDeliveryCompanyService.currentAccountUID()) { _, _ in reconcileDriverHomeStore() }
+        .transaction { transaction in
+            if reduceMotion || !isOnScreen || scenePhase != .active {
+                transaction.animation = nil
+                transaction.disablesAnimations = true
             }
         }
         .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
@@ -5369,48 +5480,24 @@ struct PPProPulseView: View {
 
                 // A rail of one real lens plus "all" is a control with nothing to
                 // choose, so it only appears once there is a choice to make.
-                if snapshot.capabilities.count > 1 {
+                if showsWorkspaceRail {
                     PPProLensRail(
-                        capabilities: snapshot.capabilities,
-                        selectedID: store.selectedCapabilityID,
+                        workspaces: store.workspaceLenses,
+                        selectedID: store.selectedWorkspaceID,
                         palette: palette,
                         isRTL: isRTL,
-                        reduceMotion: reduceMotion,
+                        reduceMotion: workspaceAnimation == nil,
                         onSelect: selectLens
                     )
                 }
 
-                if let driverRoute = driverWorkspaceRoute {
-                    PPDriverHomeAvailabilitySection {
-                        activate(driverRoute)
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(sectionOrder, id: \.self) { section in
+                        homeSection(section)
+                            .padding(.bottom, sectionGap(after: section, in: sectionOrder))
                     }
-                    .id(PPDeliveryCompanyService.currentAccountUID())
-                    .padding(.horizontal, PPProPulseRhythm.screenMargin)
-                } else if hasDeliveryCapability {
-                    PPDeliveryHomeEntrySection(onOpenDriverCockpit: { activate("driverCockpit") },
-                                               onOpenProviderCockpit: { activate("delivery") })
-                    .id(PPDeliveryCompanyService.currentAccountUID())
-                    .padding(.horizontal, PPProPulseRhythm.screenMargin)
                 }
-
-                attentionBand
-                    .padding(.horizontal, PPProPulseRhythm.screenMargin)
-
-                if scope.hasCapabilities {
-                    PPProWorkspaceBand(
-                        activeCapabilities: scope.activeCapabilities,
-                        idleCapabilities: scope.idleCapabilities,
-                        signals: snapshot.signals,
-                        lensID: store.selectedCapabilityID,
-                        palette: palette,
-                        isRTL: isRTL,
-                        onOpen: activate
-                    )
-                    .padding(.horizontal, PPProPulseRhythm.screenMargin)
-                } else {
-                    lockedNotice
-                        .padding(.horizontal, PPProPulseRhythm.screenMargin)
-                }
+                .padding(.horizontal, PPProPulseRhythm.screenMargin)
             }
             .padding(.top, 8)
             .padding(.bottom, 28)
@@ -5427,47 +5514,29 @@ struct PPProPulseView: View {
                 VStack(alignment: .leading, spacing: PPProPulseRhythm.spineGap) {
                     commandBar
 
-                    if snapshot.capabilities.count > 1 {
+                    if showsWorkspaceRail {
                         PPProLensRail(
-                            capabilities: snapshot.capabilities,
-                            selectedID: store.selectedCapabilityID,
+                            workspaces: store.workspaceLenses,
+                            selectedID: store.selectedWorkspaceID,
                             palette: palette,
                             isRTL: isRTL,
-                            reduceMotion: reduceMotion,
+                            reduceMotion: workspaceAnimation == nil,
                             onSelect: selectLens
                         )
                     }
 
-                    if let driverRoute = driverWorkspaceRoute {
-                        PPDriverHomeAvailabilitySection {
-                            activate(driverRoute)
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(sectionOrder.filter { $0 != .workspaces }, id: \.self) { section in
+                            homeSection(section)
+                                .padding(.bottom, sectionGap(after: section, in: [.delivery, .attention]))
                         }
-                        .id(PPDeliveryCompanyService.currentAccountUID())
-                    } else if hasDeliveryCapability {
-                        PPDeliveryHomeEntrySection(onOpenDriverCockpit: { activate("driverCockpit") },
-                                                   onOpenProviderCockpit: { activate("delivery") })
-                        .id(PPDeliveryCompanyService.currentAccountUID())
                     }
-
-                    attentionBand
                 }
                 .frame(width: 380)
 
                 // Trailing Flank: Expansive Pro Capability Matrix & Operational Launchpad
                 VStack(alignment: .leading, spacing: PPProPulseRhythm.spineGap) {
-                    if scope.hasCapabilities {
-                        PPProWorkspaceBand(
-                            activeCapabilities: scope.activeCapabilities,
-                            idleCapabilities: scope.idleCapabilities,
-                            signals: snapshot.signals,
-                            lensID: store.selectedCapabilityID,
-                            palette: palette,
-                            isRTL: isRTL,
-                            onOpen: activate
-                        )
-                    } else {
-                        lockedNotice
-                    }
+                    workspaceBand
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -5476,6 +5545,64 @@ struct PPProPulseView: View {
             .padding(.bottom, 32)
         }
         .accessibilityHidden(store.focusedSignal != nil)
+    }
+
+    @ViewBuilder
+    private func homeSection(_ section: HomeSection) -> some View {
+        switch section {
+        case .delivery: deliverySection
+        case .attention: attentionBand
+        case .workspaces: workspaceBand
+        }
+    }
+
+    @ViewBuilder
+    private var deliverySection: some View {
+        if hasDeliveryCapability, let driverHomeStore,
+           driverHomeStore.boundUID == PPDeliveryCompanyService.currentAccountUID() {
+            Group {
+                if let driverRoute = driverWorkspaceRoute {
+                    PPDriverHomeAvailabilitySection(store: driverHomeStore, isActive: showsDeliverySection) {
+                        activate(driverRoute)
+                    }
+                } else {
+                    PPDeliveryHomeEntrySection(driverStore: driverHomeStore, isActive: showsDeliverySection,
+                                               onOpenDriverCockpit: { activate("driverCockpit") },
+                                               onOpenProviderCockpit: { activate("delivery") })
+                }
+            }
+            .id(PPDeliveryCompanyService.currentAccountUID())
+            .frame(height: showsDeliverySection ? nil : 0)
+            .opacity(showsDeliverySection ? 1 : 0)
+            .clipped()
+            .allowsHitTesting(showsDeliverySection)
+            .accessibilityHidden(!showsDeliverySection)
+        }
+    }
+
+    @ViewBuilder
+    private var workspaceBand: some View {
+        if scope.hasCapabilities {
+            PPProWorkspaceBand(activeCapabilities: scope.activeCapabilities,
+                               idleCapabilities: scope.idleCapabilities, signals: snapshot.signals,
+                               lensID: store.selectedWorkspaceID, palette: palette, isRTL: isRTL, onOpen: activate)
+                .animation(workspaceAnimation, value: scope.activeCapabilities.map(\.id) +
+                           ["idle"] + scope.idleCapabilities.map(\.id))
+        } else {
+            lockedNotice
+        }
+    }
+
+    private func reconcileDriverHomeStore() {
+        let uid = PPDeliveryCompanyService.currentAccountUID()
+        guard hasDeliveryCapability, !uid.isEmpty else {
+            driverHomeStore?.setVisible(false)
+            driverHomeStore = nil
+            return
+        }
+        guard driverHomeStore?.boundUID != uid else { return }
+        driverHomeStore?.setVisible(false)
+        driverHomeStore = PPDriverCockpitStore(loadsOffers: false)
     }
 
     // MARK: Command bar — identity plus the scope's own counts
@@ -5712,7 +5839,6 @@ struct PPProPulseView: View {
                 allClearNotice
             }
         }
-        .animation(reduceMotion ? nil : PPProMotion.lensSwap, value: store.selectedCapabilityID)
     }
 
     private var streamingState: some View {
@@ -5972,8 +6098,10 @@ struct PPProPulseView: View {
     /// Lens selection stays local presentation state: it never fetches and never
     /// re-enters Objective-C.
     private func selectLens(_ id: String) {
+        guard id != store.selectedWorkspaceID,
+              id == "all" || store.workspaceLenses.contains(where: { $0.id == id }) else { return }
         UISelectionFeedbackGenerator().selectionChanged()
-        withAnimation(reduceMotion ? nil : PPProMotion.lensSwap) {
+        withAnimation(workspaceAnimation) {
             store.selectedCapabilityID = id
         }
     }
@@ -6192,21 +6320,30 @@ private struct PPProMoreView: View {
         guard !capabilities.isEmpty else { return [] }
         return [
             MoreEntry(
+                id: "companyProfile",
+                title: Language.isRTL() ? "ملف المنشأة التجاري" : "Company & Facility Profile",
+                subtitle: Language.isRTL() ? "الاسم التجاري، الشعار، معرض الصور ونطاق الخدمة في قطر" : "Trade name, logo, cover showcase and location in Qatar",
+                symbol: "building.2.crop.circle.fill",
+                badgeCount: 0,
+                domainColor: palette.accent,
+                isPrimaryAction: true
+            ),
+            MoreEntry(
+                id: "profileSettings",
+                title: Language.isRTL() ? "الحساب والإعدادات الشخصية" : "User Profile & Account",
+                subtitle: Language.isRTL() ? "البيانات الشخصية، تفضيلات المظهر واللغة وإدارة الجلسة" : "Personal details, theme, language and session security",
+                symbol: "person.crop.circle.fill",
+                badgeCount: 0,
+                domainColor: Color(uiColor: .ppQuickActionCommunity),
+                isPrimaryAction: false
+            ),
+            MoreEntry(
                 id: "notificationSettings",
                 title: localized("NotificationSettings"),
                 subtitle: Language.get("ProMore_Notifications_Subtitle", alter: "قنوات التنبيه الفوري والأصوات وتحديثات الحساب"),
                 symbol: "bell.badge.fill",
                 badgeCount: 0,
                 domainColor: Color(uiColor: .ppCareAccent),
-                isPrimaryAction: false
-            ),
-            MoreEntry(
-                id: "profileSettings",
-                title: localized("ProfileSettings"),
-                subtitle: Language.get("ProMore_Profile_Subtitle", alter: "بيانات المنشأة، السجل التجاري والتراخيص الموثقة"),
-                symbol: "gearshape.fill",
-                badgeCount: 0,
-                domainColor: Color(uiColor: .ppQuickActionCommunity),
                 isPrimaryAction: false
             )
         ]

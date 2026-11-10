@@ -819,12 +819,13 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
 - (BOOL)pp_canManageFulfillment {
     UserModel *user = [self pp_activeDashboardUser];
     if (!user) return NO;
-    BOOL isStaffOrOfficial = [user.accountType isEqualToString:@"staff"] ||
-                             [user.accountType isEqualToString:@"official"] ||
-                             user.isAdmin || user.isSuperAdmin || user.isOwner ||
-                             [user.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
-                             [user.email.lowercaseString isEqualToString:@"admin@pure-pets.net"];
-    if (isStaffOrOfficial) return YES;
+    // A delivery staff role may receive or self-accept delivery tasks but it
+    // never becomes the platform fulfillment owner. Staff operations stay in
+    // Admin/Console; Pro exposes the platform lane only to its exact official
+    // owner, then exposes provider-owned fulfillment through provider gates.
+    BOOL isOfficialPlatformOwner = [user.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
+                                   [user.email.lowercaseString isEqualToString:@"admin@pure-pets.net"];
+    if (isOfficialPlatformOwner) return YES;
     return [self pp_canManageServices] || [self pp_canManageMarketplace] || [self pp_canManagePharmacy];
 }
 
@@ -5250,7 +5251,9 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
         return;
     }
 
-    if ([route isEqualToString:@"__providerEditor"]) {
+    if ([route isEqualToString:@"__providerEditor"] ||
+        [route isEqualToString:@"companyProfile"] ||
+        [route isEqualToString:@"providerProfile"]) {
         [self pp_openProviderProfileEditor];
         return;
     }
@@ -5275,7 +5278,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
         return;
     }
 
-    if ([route isEqualToString:@"fulfillmentOrders"]) {
+    if ([route isEqualToString:@"fulfillmentOrders"] && [self pp_canManageFulfillment]) {
         [self pp_markQuickActionKindSeen:PPAdminQuickActionSignalFulfillment];
     } else if ([route isEqualToString:@"delivery"] || [route isEqualToString:@"deliveryCompany"] ||
                [route isEqualToString:@"deliveryCockpit"] || [route isEqualToString:@"driverCockpit"]) {
@@ -5315,6 +5318,9 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
         }
         return;
     } else if ([route isEqualToString:@"fulfillmentOrders"]) {
+        if (![self pp_canManageFulfillment]) {
+            return;
+        }
         [PPFunc pp_playTapEffect];
         PPFulfillmentListViewController *vc = [[PPFulfillmentListViewController alloc] init];
         [self.navigationController pushViewController:vc animated:YES];

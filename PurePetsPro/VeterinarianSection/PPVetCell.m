@@ -184,17 +184,41 @@
     divider.backgroundColor = [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.55];
     [self.cardView addSubview:divider];
 
+    BOOL isRTL = [Language isRTL];
+    NSString *chevronName = isRTL ? @"chevron.left" : @"chevron.right";
+    UIImageSymbolConfiguration *symConfig = [UIImageSymbolConfiguration configurationWithPointSize:11.5 weight:UIImageSymbolWeightBold];
+    UIImage *chevronImg = [UIImage systemImageNamed:chevronName withConfiguration:symConfig];
+
     self.profileActionButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.profileActionButton.accessibilityLabel = kLang(@"Vet_Roster_View_Profile");
-    [self.profileActionButton setTitle:kLang(@"Vet_Roster_View_Profile") forState:UIControlStateNormal];
-    [self.profileActionButton setImage:[UIImage systemImageNamed:@"chevron.forward"] forState:UIControlStateNormal];
-    self.profileActionButton.titleLabel.font = [Styling fontBold:13];
-    self.profileActionButton.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
-    self.profileActionButton.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.09];
     self.profileActionButton.tintColor = AppPrimaryClr;
-    self.profileActionButton.contentEdgeInsets = UIEdgeInsetsMake(0, 9, 0, 9);
+    self.profileActionButton.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.09];
+    self.profileActionButton.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
     PPApplyContinuousCorners(self.profileActionButton, 13);
     [self.profileActionButton addTarget:self action:@selector(openTapped) forControlEvents:UIControlEventTouchUpInside];
+
+    if (@available(iOS 15.0, *)) {
+        UIButtonConfiguration *config = [UIButtonConfiguration plainButtonConfiguration];
+        config.title = kLang(@"Vet_Roster_View_Profile");
+        config.image = chevronImg;
+        config.imagePlacement = NSDirectionalRectEdgeTrailing;
+        config.imagePadding = 6.0;
+        config.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 0, 14);
+        UIFont *btnFont = [Styling fontBold:13] ?: [UIFont boldSystemFontOfSize:13];
+        config.titleTextAttributesTransformer = ^NSDictionary<NSAttributedStringKey,id> *(NSDictionary<NSAttributedStringKey,id> *incoming) {
+            NSMutableDictionary *attrs = [incoming mutableCopy] ?: [NSMutableDictionary dictionary];
+            attrs[NSFontAttributeName] = btnFont;
+            attrs[NSForegroundColorAttributeName] = AppPrimaryClr;
+            return attrs;
+        };
+        self.profileActionButton.configuration = config;
+    } else {
+        [self.profileActionButton setTitle:kLang(@"Vet_Roster_View_Profile") forState:UIControlStateNormal];
+        [self.profileActionButton setImage:chevronImg forState:UIControlStateNormal];
+        self.profileActionButton.titleLabel.font = [Styling fontBold:13];
+        self.profileActionButton.contentEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 12);
+        self.profileActionButton.imageEdgeInsets = isRTL ? UIEdgeInsetsMake(0, -6, 0, 6) : UIEdgeInsetsMake(0, 6, 0, -6);
+    }
 
     UIImageSymbolConfiguration *symbol = [UIImageSymbolConfiguration configurationWithPointSize:17 weight:UIImageSymbolWeightSemibold];
     self.callButton = [UIButton buttonWithType:UIButtonTypeSystem];

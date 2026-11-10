@@ -319,6 +319,8 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
             "notificationsInbox": "NotificationsListViewController",
             "providerSupportChats": "PPProviderSupportChatsViewController",
             "profileSettings": "PPProProfileSettingsViewController",
+            "companyProfile": "PPProviderProfileEditorViewController",
+            "providerProfile": "PPProviderProfileEditorViewController",
             "branchesManagement": "PPMarketplaceBranchesViewController",
             "notificationSettings": "NotificationSettingsViewController",
             "deliveryCompanyMembers": "PPDeliveryCompanyMembersViewController",

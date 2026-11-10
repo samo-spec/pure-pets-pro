@@ -41,18 +41,25 @@ static BOOL PPAdminIsCompanyDeliveryPayload(NSDictionary *payload)
 static BOOL PPAdminPayloadTargetsOtherApp(NSDictionary *payload)
 {
     NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
-    NSString *targetApp = [PPAdminRouteTrimmedString(safePayload[@"targetApp"] ?: safePayload[@"targetAppId"] ?: safePayload[@"appId"]) lowercaseString];
+    NSDictionary *data = [safePayload[@"data"] isKindOfClass:NSDictionary.class] ? safePayload[@"data"] : @{};
+    NSString *targetApp = [PPAdminRouteTrimmedString(safePayload[@"targetApp"] ?: safePayload[@"targetAppId"] ?: safePayload[@"appId"] ?: data[@"targetApp"] ?: data[@"targetAppId"] ?: data[@"appId"]) lowercaseString];
     return targetApp.length > 0 && ![targetApp isEqualToString:@"pro_ios"];
 }
 
-/// The account a notification is addressed to: `targetUid` on every
-/// Notifications V2 push, `targetUserID` on inbox documents.
+/// The account a notification is addressed to: checks standard and nested keys across payload sources.
 static NSString *PPProNotificationRecipientUID(NSDictionary *payload)
 {
     NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
     NSDictionary *meta = [safePayload[@"meta"] isKindOfClass:NSDictionary.class] ? safePayload[@"meta"] : @{};
-    for (NSDictionary *source in @[safePayload, meta]) {
-        for (NSString *key in @[@"targetUid", @"recipientUid", @"targetUserID"]) {
+    NSDictionary *data = [safePayload[@"data"] isKindOfClass:NSDictionary.class] ? safePayload[@"data"] : @{};
+    NSArray<NSString *> *candidateKeys = @[
+        @"targetUid", @"targetUID", @"targetUserId", @"targetUserID",
+        @"recipientUid", @"recipientUID", @"recipientId", @"recipient_uid",
+        @"userId", @"userID", @"uid",
+        @"driverUid", @"driverUID", @"providerUid", @"providerUID", @"deliveryUserId"
+    ];
+    for (NSDictionary *source in @[safePayload, meta, data]) {
+        for (NSString *key in candidateKeys) {
             NSString *value = PPAdminRouteTrimmedString(source[key]);
             if (value.length > 0) return value;
         }
@@ -60,26 +67,37 @@ static NSString *PPProNotificationRecipientUID(NSDictionary *payload)
     return @"";
 }
 
+static NSString *PPProCurrentSignedInUID(void)
+{
+    NSString *firUID = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    if (firUID.length > 0) return firUID;
+    NSString *userMgrUID = PPAdminRouteTrimmedString([UserManager shared].currentUser.uid ?: [UserManager shared].currentUser.ID);
+    return userMgrUID;
+}
+
 /// A push reaches this device only while the device is bound to its
-/// recipient, but a device can still be bound to the previous login. Such a
-/// push is never shown, listed or opened for the account signed in now.
+/// recipient. Unaddressed broadcast pushes (e.g. driver pool or company offers)
+/// are accepted; pushes explicitly addressed to another account are rejected.
 static BOOL PPProPushIsForSignedInAccount(NSDictionary *payload)
 {
+    NSString *currentUID = PPProCurrentSignedInUID();
+    if (currentUID.length == 0) return NO;
     return [AppDelegate pp_notificationPayload:payload
-                              isAddressedToUID:[FIRAuth auth].currentUser.uid
-                             requiresRecipient:YES];
+                              isAddressedToUID:currentUID
+                             requiresRecipient:NO];
 }
 
 static BOOL PPProPayloadHasSupportedSchema(NSDictionary *payload)
 {
     NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
     NSDictionary *meta = [safePayload[@"meta"] isKindOfClass:NSDictionary.class] ? safePayload[@"meta"] : @{};
-    NSString *type = [PPAdminRouteTrimmedString(safePayload[@"notificationType"] ?: safePayload[@"type"] ?: safePayload[@"eventType"] ?: safePayload[@"templateKey"]) lowercaseString];
+    NSDictionary *data = [safePayload[@"data"] isKindOfClass:NSDictionary.class] ? safePayload[@"data"] : @{};
+    NSString *type = [PPAdminRouteTrimmedString(safePayload[@"notificationType"] ?: safePayload[@"type"] ?: safePayload[@"eventType"] ?: safePayload[@"templateKey"] ?: data[@"notificationType"] ?: data[@"type"]) lowercaseString];
     type = [type stringByReplacingOccurrencesOfString:@"." withString:@"_"];
     type = [type stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
     BOOL isProviderOrderCancellation = [type isEqualToString:@"provider_order_cancelled"];
 
-    id rawSchema = safePayload[@"schemaVersion"] ?: meta[@"schemaVersion"];
+    id rawSchema = safePayload[@"schemaVersion"] ?: meta[@"schemaVersion"] ?: data[@"schemaVersion"];
     if (!rawSchema) return !isProviderOrderCancellation;
 
     NSString *schema = @"";
@@ -93,23 +111,39 @@ static BOOL PPProPayloadHasSupportedSchema(NSDictionary *payload)
     static NSSet<NSString *> *supportedSchemas;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        supportedSchemas = [NSSet setWithArray:@[@"1", @"2", @"order.lifecycle.v1", @"order.fulfillment.v1"]];
+        supportedSchemas = [NSSet setWithArray:@[
+            @"1", @"2", @"1.0", @"1.0.0", @"2.0", @"2.0.0",
+            @"order.lifecycle.v1", @"order.lifecycle.v2",
+            @"order.fulfillment.v1", @"order.fulfillment.v2",
+            @"delivery.v1", @"delivery.v2",
+            @"company.delivery.v1", @"driver.task.v1",
+            @"fleet_partner", @"fulfillment_order"
+        ]];
     });
-    if (![supportedSchemas containsObject:schema]) return NO;
+    if (![supportedSchemas containsObject:schema] &&
+        ![schema hasPrefix:@"order."] &&
+        ![schema hasPrefix:@"delivery."] &&
+        ![schema hasPrefix:@"fulfillment."] &&
+        ![schema hasPrefix:@"driver."] &&
+        ![schema hasPrefix:@"company."]) {
+        return NO;
+    }
     if (!isProviderOrderCancellation) return YES;
 
     NSString *notificationID = PPAdminRouteTrimmedString(safePayload[@"notificationId"]);
     if (notificationID.length == 0) notificationID = PPAdminRouteTrimmedString(meta[@"notificationId"]);
+    if (notificationID.length == 0) notificationID = PPAdminRouteTrimmedString(data[@"notificationId"]);
     NSString *fulfillmentID = PPAdminRouteTrimmedString(safePayload[@"fulfillmentId"] ?: safePayload[@"fulfillmentID"]);
     if (fulfillmentID.length == 0) fulfillmentID = PPAdminRouteTrimmedString(meta[@"fulfillmentId"] ?: meta[@"fulfillmentID"]);
-    if (![schema isEqualToString:@"2"] ||
-        notificationID.length == 0 || notificationID.length > 500 || [notificationID containsString:@"/"] ||
-        fulfillmentID.length == 0 || fulfillmentID.length > 500 || [fulfillmentID containsString:@"/"]) {
+    if (fulfillmentID.length == 0) fulfillmentID = PPAdminRouteTrimmedString(data[@"fulfillmentId"] ?: data[@"fulfillmentID"]);
+    if (![schema isEqualToString:@"2"] && ![schema isEqualToString:@"2.0"] && ![schema hasPrefix:@"order.fulfillment"] &&
+        (notificationID.length == 0 || notificationID.length > 500 || [notificationID containsString:@"/"] ||
+         fulfillmentID.length == 0 || fulfillmentID.length > 500 || [fulfillmentID containsString:@"/"])) {
         return NO;
     }
 
     BOOL hasProIOSAudience = NO;
-    for (NSDictionary *source in @[safePayload, meta]) {
+    for (NSDictionary *source in @[safePayload, meta, data]) {
         NSString *targetApp = [PPAdminRouteTrimmedString(source[@"targetApp"] ?: source[@"targetAppId"] ?: source[@"appId"]) lowercaseString];
         if (targetApp.length > 0) {
             if (![targetApp isEqualToString:@"pro_ios"]) return NO;
@@ -214,13 +248,15 @@ static BOOL PPProUserDocIsStaffAccount(NSDictionary *userDoc)
 static BOOL PPProIsDriverTaskPayload(NSDictionary *payload)
 {
     NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
-    NSString *route = [PPAdminRouteTrimmedString(safePayload[@"route"]) lowercaseString];
-    NSString *authority = [PPAdminRouteTrimmedString(safePayload[@"authority"]) uppercaseString];
-    if (PPAdminRouteTrimmedString(safePayload[@"taskId"]).length == 0) return NO;
+    NSDictionary *data = [safePayload[@"data"] isKindOfClass:NSDictionary.class] ? safePayload[@"data"] : @{};
+    NSString *route = [PPAdminRouteTrimmedString(safePayload[@"route"] ?: data[@"route"]) lowercaseString];
+    NSString *authority = [PPAdminRouteTrimmedString(safePayload[@"authority"] ?: data[@"authority"]) uppercaseString];
+    NSString *taskId = PPAdminRouteTrimmedString(safePayload[@"taskId"] ?: data[@"taskId"] ?: safePayload[@"orderId"] ?: data[@"orderId"]);
+    if (taskId.length == 0) return NO;
     if ([route isEqualToString:@"driver_task"]) {
-        return [authority isEqualToString:@"FULFILLMENT_V1"] || [authority isEqualToString:@"COMPANY_DELIVERY_REQUEST"];
+        return authority.length == 0 || [authority isEqualToString:@"FULFILLMENT_V1"] || [authority isEqualToString:@"COMPANY_DELIVERY_REQUEST"];
     }
-    return [route isEqualToString:@"fleet_partner"] && [authority isEqualToString:@"PARTNER_COMPANY_REQUEST"];
+    return [route isEqualToString:@"fleet_partner"] && ([authority isEqualToString:@"PARTNER_COMPANY_REQUEST"] || authority.length == 0);
 }
 
 @interface AppDelegate ()
@@ -1161,29 +1197,47 @@ extern BOOL PP_TouchDotsEnabled;
                                          title:(NSString *)title
                                           body:(NSString *)body {
     NSDictionary *safePayload = [payload isKindOfClass:NSDictionary.class] ? payload : @{};
-    NSString *type = [PPAdminRouteTrimmedString(safePayload[@"type"]) lowercaseString];
-    NSString *notificationType = [PPAdminRouteTrimmedString(safePayload[@"notificationType"]) lowercaseString];
-    NSString *effectiveType = type.length > 0 ? type : notificationType;
-    NSString *orderId = PPAdminRouteTrimmedString(safePayload[@"orderId"]);
+    NSDictionary *dataDict = [safePayload[@"data"] isKindOfClass:NSDictionary.class] ? safePayload[@"data"] : nil;
+    NSDictionary *apsDict = [safePayload[@"aps"] isKindOfClass:NSDictionary.class] ? safePayload[@"aps"] : nil;
+    id apsAlert = apsDict[@"alert"];
+    NSDictionary *alertDict = [apsAlert isKindOfClass:NSDictionary.class] ? (NSDictionary *)apsAlert : nil;
+    NSString *alertString = [apsAlert isKindOfClass:NSString.class] ? (NSString *)apsAlert : nil;
+
+    NSString *type = [PPAdminRouteTrimmedString(safePayload[@"type"] ?: dataDict[@"type"]) lowercaseString];
+    NSString *notificationType = [PPAdminRouteTrimmedString(safePayload[@"notificationType"] ?: dataDict[@"notificationType"]) lowercaseString];
+    NSString *eventType = [PPAdminRouteTrimmedString(safePayload[@"eventType"] ?: dataDict[@"eventType"]) lowercaseString];
+    NSString *effectiveType = type.length > 0 ? type : (notificationType.length > 0 ? notificationType : eventType);
+
     NSString *effectiveTitle = title.length > 0 ? title : PPAdminRouteTrimmedString(safePayload[@"title"]);
-    NSString *effectiveBody = body.length > 0 ? body : PPAdminRouteTrimmedString(safePayload[@"body"]);
-    BOOL isProviderOrderCancellation = PPProIsProviderOrderCancelledPayload(safePayload);
+    if (effectiveTitle.length == 0 && alertDict) effectiveTitle = PPAdminRouteTrimmedString(alertDict[@"title"]);
+    if (effectiveTitle.length == 0 && dataDict) effectiveTitle = PPAdminRouteTrimmedString(dataDict[@"title"]);
+
+    NSString *effectiveBody = body.length > 0 ? body : PPAdminRouteTrimmedString(safePayload[@"body"] ?: safePayload[@"message"]);
+    if (effectiveBody.length == 0 && alertDict) effectiveBody = PPAdminRouteTrimmedString(alertDict[@"body"]);
+    if (effectiveBody.length == 0 && alertString.length > 0) effectiveBody = PPAdminRouteTrimmedString(alertString);
+    if (effectiveBody.length == 0 && dataDict) effectiveBody = PPAdminRouteTrimmedString(dataDict[@"body"] ?: dataDict[@"message"]);
+
+    BOOL isProviderOrderCancellation = PPProIsProviderOrderCancelledPayload(safePayload) || (dataDict && PPProIsProviderOrderCancelledPayload(dataDict));
     if (isProviderOrderCancellation) {
         effectiveTitle = PPProLocalizedProviderCancellationTitle(safePayload, effectiveTitle);
         effectiveBody = PPProLocalizedProviderCancellationBody(effectiveBody);
     }
     NSString *subtitle = effectiveBody.length > 0 ? effectiveBody : kLang(@"New notification");
 
-    BOOL isDriverTask = PPProIsDriverTaskPayload(safePayload);
-    if (isDriverTask) {
-        // A visible driver cockpit re-reads its tasks at once; the push itself
-        // is never treated as the task state.
+    BOOL isDriverTask = PPProIsDriverTaskPayload(safePayload) || (dataDict && PPProIsDriverTaskPayload(dataDict));
+    BOOL isDeliveryOrOrderAction = isDriverTask ||
+                                   [effectiveType containsString:@"delivery"] ||
+                                   [effectiveType containsString:@"driver"] ||
+                                   [effectiveType containsString:@"fulfillment"] ||
+                                   [effectiveType containsString:@"order"];
+    if (isDeliveryOrOrderAction) {
+        // A visible driver cockpit or orders list re-reads its tasks at once
         [[NSNotificationCenter defaultCenter] postNotificationName:kPPDriverCockpitShouldRefreshNotification object:nil];
     }
 
     if (![PPProInAppNotificationPresenter notificationPreferencesAllowPayload:safePayload]) {
         DLog(@"[Push] Pro foreground notification suppressed by local notification settings. type=%@", effectiveType);
-        return YES;
+        return NO;
     }
 
     if (isDriverTask) {
@@ -1197,7 +1251,7 @@ extern BOOL PP_TouchDotsEnabled;
         return YES;
     }
 
-    if (PPAdminIsCompanyDeliveryPayload(safePayload)) {
+    if (PPAdminIsCompanyDeliveryPayload(safePayload) || (dataDict && PPAdminIsCompanyDeliveryPayload(dataDict))) {
         [[PPProInAppNotificationPresenter sharedPresenter] showCompanyDeliveryNotificationWithPayload:safePayload
                                                                                                 title:effectiveTitle
                                                                                              subtitle:subtitle];
@@ -1219,7 +1273,7 @@ extern BOOL PP_TouchDotsEnabled;
                                                                            accentColor:AppPrimaryClr];
         return YES;
     }
-    if ([effectiveType hasPrefix:@"delivery"] || [effectiveType hasPrefix:@"request"] || [effectiveType hasPrefix:@"drivers_delivery_requested"] || [effectiveType hasPrefix:@"customer_delivery_requested"]) {
+    if ([effectiveType hasPrefix:@"delivery"] || [effectiveType containsString:@"delivery"] || [effectiveType hasPrefix:@"request"] || [effectiveType hasPrefix:@"drivers_delivery_requested"] || [effectiveType hasPrefix:@"customer_delivery_requested"]) {
         [[PPProInAppNotificationPresenter sharedPresenter] showNotificationWithPayload:safePayload
                                                                                  title:effectiveTitle
                                                                               subtitle:effectiveBody
@@ -1364,7 +1418,8 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
         [[NSNotificationCenter defaultCenter] postNotificationName:kPPDriverCockpitShouldRefreshNotification object:nil];
     }
     
-    if (application.applicationState == UIApplicationStateActive) {
+    if (application.applicationState == UIApplicationStateActive ||
+        application.applicationState == UIApplicationStateInactive) {
         BOOL didShowLocalNotification = NO;
         BOOL allowsProForegroundAlert = [PPProInAppNotificationPresenter notificationPreferencesAllowPayload:userInfo];
         if (!allowsProForegroundAlert) {

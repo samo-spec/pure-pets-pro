@@ -2781,6 +2781,18 @@
 "ProfileSettings_LanguageArabic" = "Arabic";
 "ProfileSettings_LanguageSheetSubtitle" = "Choose the language used across Pure Pets Pro.";
 "ProviderProfileEditor_Title" = "Provider Profile";
+"ProviderProfileEditor_Subtitle" = "Customize your commercial identity and media for customers";
+"ProviderProfileEditor_CoverCountFormat" = "%lu of 5 cover photos";
+"ProviderProfileEditor_AddCoverButton" = "Add Cover";
+"ProviderProfileEditor_SaveButton" = "Save Changes";
+"ProviderProfileEditor_StatusActive" = "Provider profile is verified and active for customers.";
+"ProviderProfileEditor_StatusDraft" = "Commercial profile setup · Changes are saved to your account.";
+"ProviderProfileEditor_ConsumerPreviewTitle" = "Customer Card Preview in User App";
+"ProviderProfileEditor_StoreName" = "Business / Commercial Name";
+"ProviderProfileEditor_StorePhone" = "Business Contact Phone";
+"ProviderProfileEditor_ChooseCity" = "Choose City";
+"ProviderProfileEditor_SetupNotice" = "Commercial profile setup · Changes are saved to your account.";
+"ProfileSettings_VerifiedStore" = "Verified Provider · Pure Pets Qatar";
 "ProviderProfileEditor_HeroSubtitle" = "Refine the public details customers recognize first across your provider presence.";
 "ProviderProfileEditor_IdentitySection" = "Identity";
 "ProviderProfileEditor_IdentitySubtitle" = "Keep the essentials clean, trusted, and ready for the public-facing profile.";
@@ -4499,6 +4511,10 @@
 "DriverHome_ActiveCount_Format" = "Active deliveries: %@";
 "DriverHome_Attention" = "Needs your attention. Open to review.";
 "DriverHome_Restricted" = "New deliveries are restricted";
+"DriverHome_ActiveDelivery" = "Your delivery in progress";
+"DriverHome_ChooseDelivery" = "Choose an assigned delivery";
+"DriverHome_CheckAssigned" = "Check your assigned deliveries before changing availability.";
+"DriverHome_ProgressHint" = "Grouped delivery phases. The status above shows the current state.";
 
 /* V8 veterinary clinical roster */
 "Vet_Roster_Title" = "Veterinary team";
@@ -4531,9 +4547,17 @@
 "Vet_Roster_Fee_Label" = "Consultation fee";
 
 /* Official Pure Pets orders in Fulfillment */
-"Fulfillment_StaffNoteMessage" = "Official Pure Pets orders need a note, which is saved in the audit log.";
-"Fulfillment_StaffNotePlaceholder" = "Note (at least 3 characters)";
+"Fulfillment_StaffNoteMessage" = "Order note is saved in the audit log (optional — auto-generated if left blank).";
+"Fulfillment_StaffNotePlaceholder" = "Add a note (optional)";
 "Fulfillment_StaffNoteTooShort" = "Enter a note of at least 3 characters.";
+"Fulfillment_AutoNote_start_preparing" = "Order preparation started at branch";
+"Fulfillment_AutoNote_mark_ready" = "Order prepared and ready for pickup";
+"Fulfillment_AutoNote_request_delivery" = "Delivery courier requested for shipment";
+"Fulfillment_AutoNote_confirm_handover" = "Order successfully handed over to courier";
+"Fulfillment_AutoNote_accept" = "Order accepted and confirmed";
+"Fulfillment_AutoNote_reject" = "Order rejected due to fulfillment constraint";
+"Fulfillment_AutoNote_cancel_request" = "Order cancelled by store";
+"Fulfillment_AutoNote_default" = "Order status updated to %@";
 
 /* Provider fulfillment work queue and verified command review. */
 "ProFulfillment_QueueTitle" = "Orders to move forward";

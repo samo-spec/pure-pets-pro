@@ -14,6 +14,8 @@ import SwiftUI
 /// exists until the authenticated account's delivery destination is resolved.
 @MainActor
 struct PPDeliveryHomeEntrySection: View {
+    @ObservedObject var driverStore: PPDriverCockpitStore
+    var isActive = true
     private enum Phase: Equatable { case checking, driver, provider, failed }
     @State private var phase = Phase.checking
     @State private var generation = 0
@@ -24,9 +26,11 @@ struct PPDeliveryHomeEntrySection: View {
         VStack(alignment: .leading, spacing: AdminSpacing.md) {
             switch phase {
             case .driver:
-                PPDriverHomeAvailabilitySection(onOpenCockpit: onOpenDriverCockpit)
+                PPDriverHomeAvailabilitySection(store: driverStore, isActive: isActive, onOpenCockpit: onOpenDriverCockpit)
             case .provider:
-                PPDeliveryDriverHomeControlSection(onOpenCockpit: onOpenProviderCockpit)
+                if isActive {
+                    PPDeliveryDriverHomeControlSection(onOpenCockpit: onOpenProviderCockpit)
+                }
             case .checking, .failed:
                 VStack(alignment: .leading, spacing: AdminSpacing.md) {
                     Label(ppDriverText("DriverCockpit_Title"), systemImage: "steeringwheel")
@@ -50,10 +54,14 @@ struct PPDeliveryHomeEntrySection: View {
             }
         }
         .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
-        .onAppear(perform: resolveEntry)
+        .onAppear { if isActive { resolveEntry() } }
+        .onChange(of: isActive) { _, active in
+            if active && (phase == .checking || phase == .failed) { resolveEntry() }
+        }
     }
 
     private func resolveEntry() {
+        guard isActive else { return }
         generation += 1
         let requestGeneration = generation
         let requestedUID = PPDeliveryCompanyService.currentAccountUID()
@@ -72,18 +80,20 @@ struct PPDeliveryHomeEntrySection: View {
 /// Company drivers use the same canonical state/commands as the dashboard.
 /// The marketplace provider presentation below remains its separate workflow.
 ///
-/// Readiness Beacon (NextGen v7): starts collapsed to one header that says
-/// whether the driver is receiving deliveries, how many are active and
-/// whether anything needs attention. Expanding reveals the shared confirmed
-/// availability control, recovery, fleet switching and the dashboard link.
-/// PPDriverCockpitStore stays the only state owner.
+/// NextGen V9 next-stop slip: assigned work replaces idle availability without
+/// disclosure. The existing cockpit store and confirmation own every command;
+/// the readiness controls return after a confirmed empty assigned-task read.
 @MainActor
 struct PPDriverHomeAvailabilitySection: View {
-    @StateObject private var store = PPDriverCockpitStore(loadsTaskQueue: false)
+    @ObservedObject var store: PPDriverCockpitStore
+    var isActive = true
     /// Collapsed every time the section is created.
     @State private var isExpanded = false
+    @State private var confirmation: PPDriverConfirmation?
+    @State private var isOnScreen = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.scenePhase) private var scenePhase
     let onOpenCockpit: () -> Void
 
     private enum Tone {
@@ -100,11 +110,33 @@ struct PPDriverHomeAvailabilitySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            header
-            if isExpanded {
-                controls
-                    .padding(.top, AdminSpacing.md)
-                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+            if let task = activeTask {
+                missionHeader
+                PPDriverHomeMissionSummary(task: task)
+                    .padding(.top, AdminSpacing.base)
+                nextStep(for: task)
+                    .padding(.top, AdminSpacing.base)
+                if let notice = store.notice, store.uncertainCommand == nil {
+                    recoveryCallout(notice)
+                        .padding(.top, AdminSpacing.md)
+                }
+                dashboardRow
+                    .padding(.top, AdminSpacing.sm)
+            } else {
+                header
+                if holdsAvailabilityForTaskRead {
+                    taskReadRecovery
+                        .padding(.top, AdminSpacing.md)
+                    if let notice = store.notice, store.uncertainCommand == nil {
+                        recoveryCallout(notice)
+                            .padding(.top, AdminSpacing.md)
+                    }
+                    dashboardRow
+                } else if isExpanded {
+                    controls
+                        .padding(.top, AdminSpacing.md)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+                }
             }
         }
         .padding(AdminSpacing.base)
@@ -113,11 +145,222 @@ struct PPDriverHomeAvailabilitySection: View {
         .clipShape(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous))
         .sensoryFeedback(.selection, trigger: isExpanded)
         .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
-        .onAppear {
-            store.start(focus: nil)
-            store.setVisible(true)
+        .environment(\.locale, Locale(identifier: Language.currentLanguageCode()))
+        .sheet(item: $confirmation) { request in
+            PPDriverConfirmSheet(task: request.task, action: request.action) { inputs in
+                store.perform(request.action, on: request.task, inputs: inputs, contextID: request.contextID)
+            }
+            .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
         }
-        .onDisappear { store.setVisible(false) }
+        .onAppear {
+            isOnScreen = true
+            if isActive { store.start(focus: nil) }
+            store.setVisible(isActive && scenePhase == .active)
+        }
+        .onChange(of: scenePhase) { _, phase in store.setVisible(isOnScreen && isActive && phase == .active) }
+        .onChange(of: isActive) { _, active in
+            if active { store.start(focus: nil) }
+            else { confirmation = nil }
+            store.setVisible(isOnScreen && active && scenePhase == .active)
+        }
+        .onChange(of: activeTask?.id) { previous, current in
+            if previous != nil, current == nil, store.phase == .ready,
+               !store.isStale, store.uncertainCommand == nil {
+                isExpanded = true
+            }
+        }
+        .onDisappear {
+            isOnScreen = false
+            confirmation = nil
+            store.setVisible(false)
+        }
+    }
+
+    // MARK: Active delivery
+
+    private var assignedTasks: [PPDriverTask] {
+        store.activeTasks.filter { $0.mine && !$0.isTerminal }
+    }
+
+    private var activeTask: PPDriverTask? {
+        assignedTasks.first(where: { $0.id == store.focusedTaskKey }) ?? assignedTasks.first
+    }
+
+    /// Never present an empty/failed first page or an uncertain completion as
+    /// proof that the driver is idle. Availability remains a separate mode.
+    private var holdsAvailabilityForTaskRead: Bool {
+        store.uncertainCommand != nil || store.isSubmitting || store.isVerifying ||
+            (store.phase == .ready && (store.lastConfirmedAt == nil || store.isStale || activeCount > 0))
+    }
+
+    private var missionHeader: some View {
+        HStack(alignment: .center, spacing: AdminSpacing.md) {
+            Image(systemName: "shippingbox.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(AdminSurface.primary)
+                .frame(width: 44, height: 44)
+                .background(AdminSurface.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: AdminRadius.medium))
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(ppDriverText("DriverHome_ActiveDelivery"))
+                    .font(AdminType.headlineBold)
+                    .foregroundStyle(AdminSurface.primaryText)
+                    .accessibilityAddTraits(.isHeader)
+                if let context = store.selectedContext {
+                    Text(contextName(context))
+                        .font(AdminType.footnote)
+                        .foregroundStyle(AdminSurface.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            if assignedTasks.count > 1 {
+                Menu {
+                    ForEach(assignedTasks) { task in
+                        Button { store.focus(on: task) } label: {
+                            if task.id == activeTask?.id {
+                                Label(ppOrderTitle(task), systemImage: "checkmark")
+                            } else {
+                                Text(ppOrderTitle(task))
+                            }
+                        }
+                    }
+                } label: {
+                    Label(localizedCount(assignedTasks.count), systemImage: "square.stack")
+                        .font(AdminType.calloutBold)
+                        .foregroundStyle(AdminSurface.primary)
+                        .padding(.horizontal, AdminSpacing.sm)
+                        .frame(minHeight: AdminTouchTarget.minimum)
+                        .background(AdminSurface.primary.opacity(0.08), in: Capsule())
+                }
+                .disabled(!store.canSwitchContext)
+                .accessibilityLabel(ppDriverText("DriverHome_ChooseDelivery"))
+                .accessibilityValue(ppDriverFormat("DriverHome_ActiveCount_Format", localizedCount(assignedTasks.count)))
+            }
+        }
+        .accessibilityIdentifier("driver.home.active.header")
+    }
+
+    private var taskReadRecovery: some View {
+        VStack(alignment: .leading, spacing: AdminSpacing.md) {
+            if store.isRefreshing || store.isResolvingContexts || store.isSubmitting || store.isVerifying {
+                ProgressView(ppDriverText("DriverCockpit_Loading_Tasks"))
+                    .font(AdminType.subheadline)
+            } else if store.uncertainCommand != nil {
+                uncertainCommandRecovery
+            } else {
+                Label(ppDriverText("DriverHome_CheckAssigned"), systemImage: "arrow.clockwise.circle")
+                    .font(AdminType.subheadline)
+                    .foregroundStyle(AdminSurface.secondaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(ppDriverText("DriverCockpit_CheckLatest")) { store.refreshAvailability() }
+                    .buttonStyle(PPDriverPrimaryButtonStyle())
+                    .disabled(!store.canSwitchContext)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityIdentifier("driver.home.active.checking")
+    }
+
+    @ViewBuilder
+    private func nextStep(for task: PPDriverTask) -> some View {
+        if store.isSubmitting || store.isVerifying {
+            Button {} label: {
+                HStack(spacing: AdminSpacing.sm) {
+                    ProgressView().tint(.white)
+                    Text(ppDriverText("DriverCockpit_Notice_Waiting"))
+                }
+            }
+            .buttonStyle(PPDriverPrimaryButtonStyle(enabled: false))
+            .disabled(true)
+        } else if store.uncertainCommand != nil {
+            uncertainCommandRecovery
+        } else if store.isStale {
+            statusNote("DriverCockpit_Notice_Offline", symbol: "wifi.exclamationmark")
+            refreshTaskButton
+        } else if task.awaitsStoreHandover {
+            statusNote("DriverCockpit_Wait_StoreHandover", symbol: "shippingbox")
+            refreshTaskButton
+        } else if let action = task.primaryAction {
+            if let key = ppDriverActionBlockKey(action, task: task, canSelfAcceptOrders: store.canSelfAcceptOrders) {
+                statusNote(key, symbol: "lock.shield")
+            } else {
+                Button { execute(action, on: task) } label: {
+                    HStack(spacing: AdminSpacing.md) {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(ppActionTitle(action.code))
+                                .font(AdminType.headlineBold)
+                            Text(ppActionConsequence(action, task: task))
+                                .font(AdminType.caption1)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .opacity(0.9)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .multilineTextAlignment(.leading)
+                        if store.isRefreshing { ProgressView().tint(.white) }
+                        else { Image(systemName: "arrow.forward").accessibilityHidden(true) }
+                    }
+                    .padding(.vertical, AdminSpacing.xs)
+                }
+                .buttonStyle(PPDriverPrimaryButtonStyle(enabled: store.canPerformCurrentAction(action, on: task)))
+                .disabled(!store.canPerformCurrentAction(action, on: task))
+                .accessibilityLabel(ppActionTitle(action.code))
+                .accessibilityHint(ppActionConsequence(action, task: task))
+                .accessibilityIdentifier("driver.home.active.nextStep")
+            }
+        } else {
+            statusNote(task.stage == .delivered || task.stage == .settled
+                       ? "DriverCockpit_Wait_Dispatch" : "DriverCockpit_Wait_Generic", symbol: "clock")
+            refreshTaskButton
+        }
+    }
+
+    private var uncertainCommandRecovery: some View {
+        VStack(alignment: .leading, spacing: AdminSpacing.md) {
+            statusNote("DriverCockpit_Notice_Unconfirmed", symbol: "exclamationmark.arrow.triangle.2.circlepath")
+            Button { store.retryUncertainCommand() } label: {
+                Label(ppDriverText("DriverCockpit_RetrySafely"), systemImage: "arrow.clockwise")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(PPDriverPrimaryButtonStyle(enabled: !store.isSubmitting && !store.isVerifying))
+            .disabled(store.isSubmitting || store.isVerifying)
+            .accessibilityIdentifier("driver.home.active.retry")
+            Button(ppDriverText("DriverCockpit_CheckLatest")) { store.checkUncertainCommandStatus() }
+                .font(AdminType.calloutBold)
+                .frame(maxWidth: .infinity, minHeight: AdminTouchTarget.minimum)
+                .disabled(store.isSubmitting || store.isRefreshing || store.isResolvingContexts || store.isVerifying)
+                .accessibilityIdentifier("driver.home.active.checkStatus")
+        }
+    }
+
+    private var refreshTaskButton: some View {
+        Button { store.refreshAvailability() } label: {
+            HStack(spacing: AdminSpacing.sm) {
+                if store.isRefreshing { ProgressView().tint(.white) }
+                else { Image(systemName: "arrow.clockwise") }
+                Text(ppDriverText("DriverCockpit_CheckLatest"))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .buttonStyle(PPDriverPrimaryButtonStyle(enabled: !store.isRefreshing))
+        .disabled(store.isRefreshing || store.isResolvingContexts || !store.canSwitchContext)
+    }
+
+    private func statusNote(_ key: String, symbol: String) -> some View {
+        Label(ppDriverText(key), systemImage: symbol)
+            .font(AdminType.footnote)
+            .foregroundStyle(AdminSurface.secondaryText)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func execute(_ action: PPDriverTaskAction, on task: PPDriverTask) {
+        guard store.canPerformCurrentAction(action, on: task) else { return }
+        if ["DELIVER", "CONFIRM_PAYMENT", "COMPLETE"].contains(action.code) {
+            confirmation = PPDriverConfirmation(task: task, action: action, contextID: store.selectedContext?.id)
+        } else {
+            store.perform(action, on: task)
+        }
     }
 
     // MARK: Collapsed header
@@ -290,16 +533,6 @@ struct PPDriverHomeAvailabilitySection: View {
                     .foregroundStyle(AdminSurface.primaryText)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            if store.uncertainCommand != nil {
-                Button(ppDriverText("DriverAvailability_CheckStatus")) { store.refreshAvailability() }
-                    .font(AdminType.calloutBold)
-                    .frame(minHeight: AdminTouchTarget.minimum)
-                    .disabled(store.isSubmitting || store.isRefreshing || store.isResolvingContexts)
-                Button(ppDriverText("DriverCockpit_RetrySafely")) { store.retryUncertainCommand() }
-                    .font(AdminType.calloutBold)
-                    .frame(minHeight: AdminTouchTarget.minimum)
-                    .disabled(store.isSubmitting || store.isVerifying)
-            }
         }
         .padding(AdminSpacing.md)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -322,7 +555,7 @@ struct PPDriverHomeAvailabilitySection: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .disabled(!store.canSwitchContext)
+        .disabled(store.isSubmitting || store.isVerifying)
         .accessibilityIdentifier("driver.availability.openDashboard")
     }
 
@@ -443,6 +676,167 @@ struct PPDriverHomeAvailabilitySection: View {
     }
 }
 
+/// Presentation only. Order, route, cash and grouped lifecycle position are
+/// supplied by the same redacted task projection used in the full cockpit.
+private struct PPDriverHomeMissionSummary: View {
+    let task: PPDriverTask
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private let steps = ["DriverCockpit_Step_Collect", "DriverCockpit_Step_Transit",
+                         "DriverCockpit_Step_Deliver", "DriverCockpit_Step_Close"]
+    private var pickupIsNext: Bool { task.stage == .offer || task.stage == .toPickup }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AdminSpacing.base) {
+            VStack(alignment: .leading, spacing: AdminSpacing.sm) {
+                Text(ppOrderTitle(task))
+                    .font(AdminType.title2)
+                    .foregroundStyle(AdminSurface.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                Label(ppStatusText(task.status), systemImage: statusSymbol)
+                    .font(AdminType.subheadlineBold)
+                    .foregroundStyle(AdminSurface.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .contentTransition(.opacity)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: task.status)
+            }
+
+            if task.stage != .unknown {
+                progress
+            }
+
+            VStack(alignment: .leading, spacing: AdminSpacing.md) {
+                routeStop(task.pickup, title: "DriverCockpit_Pickup", symbol: "shippingbox",
+                          current: pickupIsNext)
+                Rectangle()
+                    .fill(AdminSurface.hairline)
+                    .frame(height: 0.5)
+                    .accessibilityHidden(true)
+                routeStop(task.dropoff, title: "DriverCockpit_Dropoff", symbol: "house",
+                          current: !pickupIsNext && task.stage != .unknown)
+            }
+            .padding(AdminSpacing.md)
+            .background(AdminSurface.backgroundSecondary,
+                        in: RoundedRectangle(cornerRadius: AdminRadius.medium, style: .continuous))
+
+            if !task.customerName.isEmpty || task.cash?.required == true {
+                let layout = dynamicTypeSize.isAccessibilitySize
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: AdminSpacing.sm))
+                    : AnyLayout(HStackLayout(alignment: .firstTextBaseline, spacing: AdminSpacing.md))
+                layout {
+                    if !task.customerName.isEmpty {
+                        Label(ppDriverIsolated(task.customerName), systemImage: "person")
+                            .font(AdminType.footnote)
+                            .foregroundStyle(AdminSurface.primaryText)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .accessibilityLabel(ppDriverFormat("DriverCockpit_Customer_Format", task.customerName))
+                    }
+                    if let cash = task.cash, cash.required {
+                        cashSummary(cash)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("driver.home.active.order")
+    }
+
+    private var statusSymbol: String {
+        switch task.stage {
+        case .offer, .toPickup: return "shippingbox"
+        case .collected, .inTransit: return "truck.box"
+        case .delivered, .settled: return "checkmark.circle"
+        default: return "info.circle"
+        }
+    }
+
+    private var progress: some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: AdminSpacing.sm))
+            : AnyLayout(HStackLayout(alignment: .top, spacing: AdminSpacing.sm))
+        return layout {
+            ForEach(steps.indices, id: \.self) { index in
+                milestone(index)
+            }
+        }
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: task.stage)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(ppDriverFormat("DriverCockpit_Step_Accessibility_Format",
+                                           task.stage.railIndex + 1, steps.count,
+                                           ppDriverText(steps[min(task.stage.railIndex, steps.count - 1)])))
+        .accessibilityHint(ppDriverText("DriverHome_ProgressHint"))
+        .accessibilityIdentifier("driver.home.active.progress")
+    }
+
+    private func milestone(_ index: Int) -> some View {
+        let isCurrent = index == task.stage.railIndex
+        let isPast = index < task.stage.railIndex
+        let color = isCurrent ? AdminSurface.primary : (isPast ? AdminSurface.emerald : AdminSurface.secondaryText)
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(HStackLayout(spacing: AdminSpacing.sm))
+            : AnyLayout(VStackLayout(alignment: .leading, spacing: AdminSpacing.sm))
+        return layout {
+            HStack(spacing: 5) {
+                Image(systemName: isPast ? "checkmark.circle.fill" : (isCurrent ? "circle.inset.filled" : "circle"))
+                    .font(.system(size: 15, weight: .semibold))
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Capsule()
+                        .fill(color.opacity(isCurrent || isPast ? 0.8 : 0.15))
+                        .frame(height: 3)
+                }
+            }
+            .foregroundStyle(color)
+            Text(ppDriverText(steps[index]))
+                .font(isCurrent ? AdminType.caption1Bold : AdminType.caption1)
+                .foregroundStyle(isCurrent ? AdminSurface.primaryText : AdminSurface.secondaryText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func routeStop(_ address: PPDriverAddress, title: String, symbol: String, current: Bool) -> some View {
+        HStack(alignment: .top, spacing: AdminSpacing.md) {
+            Image(systemName: symbol)
+                .font(.system(size: 16, weight: current ? .semibold : .regular))
+                .foregroundStyle(current ? AdminSurface.primary : AdminSurface.secondaryText)
+                .frame(width: 28, height: 28)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(ppDriverText(title))
+                    .font(AdminType.caption1Bold)
+                    .foregroundStyle(current ? AdminSurface.primary : AdminSurface.secondaryText)
+                Text(address.primary.isEmpty
+                     ? (address.secondary.isEmpty ? ppDriverText("DriverCockpit_Address_Pending") : address.secondary)
+                     : ppDriverIsolated(address.primary))
+                    .font(current ? AdminType.bodyBold : AdminType.subheadline)
+                    .foregroundStyle(AdminSurface.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !address.primary.isEmpty && !address.secondary.isEmpty && address.primary != address.secondary {
+                    Text(ppDriverIsolated(address.secondary))
+                        .font(AdminType.footnote)
+                        .foregroundStyle(AdminSurface.secondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    private func cashSummary(_ cash: PPDriverCash) -> some View {
+        let title = cash.collected ? ppDriverText("DriverCockpit_CashCollected") :
+            cash.amount.map { ppDriverFormat("DriverCockpit_CashDue_Format", ppDriverMoney($0, currency: cash.currency)) }
+                ?? ppDriverText("DriverCockpit_CashDue_Unknown")
+        return Label(title, systemImage: "banknote")
+            .font(AdminType.footnoteBold)
+            .foregroundStyle(cash.collected ? AdminSurface.emerald : AdminSurface.primaryText)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
 // MARK: - Reusable Tactile Scale Touch Button Style
 
 public struct PPDeliveryTouchButtonStyle: ButtonStyle {
@@ -548,6 +942,11 @@ public struct PPDeliveryDriverHomeControlSection: View {
                     radarPulse = true
                 }
             }
+        }
+        .onDisappear {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { radarPulse = false }
         }
     }
 

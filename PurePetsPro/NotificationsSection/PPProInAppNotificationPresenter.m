@@ -91,20 +91,29 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
         return kPPProNotifCategoryGeneralKey;
     }
 
+    NSDictionary *dataDict = [payload[@"data"] isKindOfClass:NSDictionary.class] ? payload[@"data"] : nil;
     NSString *type = PPProNoticeTrimmedString(payload[@"type"]).lowercaseString;
     NSString *notificationType = PPProNoticeTrimmedString(payload[@"notificationType"]).lowercaseString;
     NSString *route = PPProNoticeTrimmedString(payload[@"route"]).lowercaseString;
     NSString *eventKey = PPProNoticeTrimmedString(payload[@"eventKey"]).lowercaseString;
     NSString *key = PPProNoticeTrimmedString(payload[@"key"]).lowercaseString;
+    
+    if (type.length == 0 && dataDict) type = PPProNoticeTrimmedString(dataDict[@"type"]).lowercaseString;
+    if (notificationType.length == 0 && dataDict) notificationType = PPProNoticeTrimmedString(dataDict[@"notificationType"]).lowercaseString;
+    if (route.length == 0 && dataDict) route = PPProNoticeTrimmedString(dataDict[@"route"]).lowercaseString;
+    if (eventKey.length == 0 && dataDict) eventKey = PPProNoticeTrimmedString(dataDict[@"eventKey"]).lowercaseString;
+
     NSString *effectiveType = type.length > 0 ? type : notificationType;
     if (effectiveType.length == 0) {
         effectiveType = eventKey.length > 0 ? eventKey : key;
     }
 
     if ([route isEqualToString:@"fleet_partner"] ||
+        [route isEqualToString:@"driver_task"] ||
         [effectiveType hasPrefix:@"company_delivery"] ||
         [effectiveType hasPrefix:@"delivery"] ||
         [effectiveType hasPrefix:@"request"] ||
+        [effectiveType containsString:@"driver"] ||
         [effectiveType hasPrefix:@"drivers_delivery_requested"] ||
         [effectiveType hasPrefix:@"customer_delivery_requested"]) {
         return kPPProNotifCategoryDeliveryKey;
@@ -950,7 +959,7 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (UIApplication.sharedApplication.applicationState != UIApplicationStateActive) {
+        if (UIApplication.sharedApplication.applicationState == UIApplicationStateBackground) {
             return;
         }
 
@@ -975,9 +984,18 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
 
 - (void)pp_prepareOverlayIfNeeded
 {
+    UIWindowScene *activeScene = [self pp_activeWindowScene];
+    CGRect sceneBounds = activeScene ? activeScene.coordinateSpace.bounds : UIScreen.mainScreen.bounds;
+    if (CGRectIsEmpty(sceneBounds)) {
+        sceneBounds = UIScreen.mainScreen.bounds;
+    }
+
     if (self.overlayWindow && self.bannerView.superview) {
         UIWindowScene *scene = self.overlayWindow.windowScene;
-        if (!scene || scene.activationState == UISceneActivationStateForegroundActive) {
+        if (!scene ||
+            scene.activationState == UISceneActivationStateForegroundActive ||
+            scene.activationState == UISceneActivationStateForegroundInactive) {
+            self.overlayWindow.frame = sceneBounds;
             self.overlayWindow.hidden = NO;
             return;
         }
@@ -987,13 +1005,16 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
     }
     
     PPProNoticePassthroughWindow *window = nil;
-    UIWindowScene *activeScene = [self pp_activeWindowScene];
     if (activeScene) {
         window = [[PPProNoticePassthroughWindow alloc] initWithWindowScene:activeScene];
     } else {
-        window = [[PPProNoticePassthroughWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+        window = [[PPProNoticePassthroughWindow alloc] initWithFrame:sceneBounds];
     }
-    window.windowLevel = UIWindowLevelStatusBar + 4.0;
+    window.frame = sceneBounds;
+    if (activeScene && !window.windowScene) {
+        window.windowScene = activeScene;
+    }
+    window.windowLevel = UIWindowLevelAlert + 100.0;
     window.backgroundColor = UIColor.clearColor;
     window.hidden = YES;
     window.userInteractionEnabled = YES;
@@ -1016,10 +1037,18 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
     NSLayoutConstraint *widthLimit = [banner.widthAnchor constraintLessThanOrEqualToConstant:kPPProNoticeMaxWidth];
     widthLimit.priority = UILayoutPriorityRequired;
     
+    NSLayoutConstraint *leadingFit = [banner.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:kPPProNoticeHorizontalInset];
+    leadingFit.priority = UILayoutPriorityDefaultHigh;
+
+    NSLayoutConstraint *trailingFit = [banner.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-kPPProNoticeHorizontalInset];
+    trailingFit.priority = UILayoutPriorityDefaultHigh;
+
     [NSLayoutConstraint activateConstraints:@[
         [banner.topAnchor constraintEqualToAnchor:safe.topAnchor constant:kPPProNoticeTopInset],
-        [banner.leadingAnchor constraintGreaterThanOrEqualToAnchor:root.view.leadingAnchor constant:kPPProNoticeHorizontalInset],
-        [banner.trailingAnchor constraintLessThanOrEqualToAnchor:root.view.trailingAnchor constant:-kPPProNoticeHorizontalInset],
+        [banner.leadingAnchor constraintGreaterThanOrEqualToAnchor:safe.leadingAnchor constant:kPPProNoticeHorizontalInset],
+        [banner.trailingAnchor constraintLessThanOrEqualToAnchor:safe.trailingAnchor constant:-kPPProNoticeHorizontalInset],
+        leadingFit,
+        trailingFit,
         [banner.centerXAnchor constraintEqualToAnchor:root.view.centerXAnchor],
         widthLimit,
         [banner.heightAnchor constraintGreaterThanOrEqualToConstant:kPPProNoticeMinHeight],
@@ -1033,10 +1062,22 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
 - (UIWindowScene *)pp_activeWindowScene
 {
     for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
-        if (scene.activationState == UISceneActivationStateForegroundActive &&
-            [scene isKindOfClass:UIWindowScene.class]) {
+        if ([scene isKindOfClass:UIWindowScene.class]) {
+            UIWindowScene *ws = (UIWindowScene *)scene;
+            if (ws.activationState == UISceneActivationStateForegroundActive ||
+                ws.activationState == UISceneActivationStateForegroundInactive) {
+                return ws;
+            }
+        }
+    }
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if ([scene isKindOfClass:UIWindowScene.class]) {
             return (UIWindowScene *)scene;
         }
+    }
+    SceneDelegate *sd = PPProNoticeActiveSceneDelegate();
+    if (sd && [sd.window.windowScene isKindOfClass:UIWindowScene.class]) {
+        return sd.window.windowScene;
     }
     return nil;
 }
@@ -1045,6 +1086,15 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
 
 - (void)pp_showBanner
 {
+    UIWindowScene *activeScene = [self pp_activeWindowScene];
+    CGRect sceneBounds = activeScene ? activeScene.coordinateSpace.bounds : UIScreen.mainScreen.bounds;
+    if (!CGRectIsEmpty(sceneBounds)) {
+        self.overlayWindow.frame = sceneBounds;
+    }
+    if (activeScene && self.overlayWindow.windowScene != activeScene) {
+        self.overlayWindow.windowScene = activeScene;
+    }
+    [self.overlayWindow.rootViewController.view setNeedsLayout];
     [self.overlayWindow.rootViewController.view layoutIfNeeded];
     [self.bannerView.layer removeAllAnimations];
     [self.bannerView stopLiveEffects];

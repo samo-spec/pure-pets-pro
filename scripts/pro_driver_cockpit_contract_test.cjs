@@ -86,13 +86,15 @@ check('cockpit transport is an allowlist of driver callables only', () => {
 check('self-acceptance is company-controlled and live revocation clears offers', () => {
   assert(models.includes('var canSelfAcceptOrders: Bool'));
   assert(models.includes('context.capabilities["claimOffers"] == true'));
-  assert(models.includes('guard self.canSelfAcceptOrders else'));
+  assert(models.includes('guard self.loadsOffers && self.canSelfAcceptOrders else'));
   assert(models.includes('guard action.code != "CLAIM" || canSelfAcceptOrders else'));
   const observation = slice(models, 'private func observeAcceptancePolicy()', 'private func installObservers()');
   assert(observation.includes('self.liveSelfAcceptance = allowed'));
   assert(observation.includes('self.offers = []'));
   assert(observation.includes('self.isSameAccount()'));
-  assert(companyService.includes('if (snapshot && snapshot.metadata.fromCache) return;'));
+  assert(companyService.includes('addSnapshotListenerWithIncludeMetadataChanges:YES'));
+  assert(companyService.includes('!snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites'));
+  assert(companyService.includes('BOOL allowed = !policyError && confirmed && snapshot.exists'));
   assert(companyService.includes('- (void)dealloc { [_registration remove]; }'));
   assert(models.includes('acceptanceObservationNeedsRetry = !confirmed'));
   assert(models.includes('if acceptanceObservationNeedsRetry && isVisible'));
@@ -308,10 +310,12 @@ check('cockpit copy is localized in Arabic and English with matching formats', (
   assert(used.size > 100, `expected the full cockpit key set, saw ${used.size}`);
 });
 
-check('Home and the dashboard share confirmed driver availability and the real fleet route', () => {
+check('Home reads assigned work without offers and keeps the same availability and fleet routes', () => {
   const home = slice(legacyHome, 'struct PPDriverHomeAvailabilitySection', '// MARK: - Reusable Tactile');
-  assert(home.includes('PPDriverCockpitStore(loadsTaskQueue: false)'));
-  assert(models.includes('init(loadsTaskQueue: Bool = true)'));
+  assert(home.includes('PPDriverCockpitStore(loadsOffers: false)'));
+  assert(models.includes('init(loadsTaskQueue: Bool = true, loadsOffers: Bool = true)'));
+  assert.equal((models.match(/guard self\.loadsOffers && self\.canSelfAcceptOrders else/g) || []).length, 2,
+    'Home skips the available-offer read for both official and partner companies');
   assert(models.includes('["availabilityOnly": true]'));
   assert(home.includes('PPDriverAvailabilityControl(store: store)'));
   assert(home.includes('store.setVisible(false)'));
@@ -326,6 +330,87 @@ check('Home and the dashboard share confirmed driver availability and the real f
   assert(pulse.includes('$0.routeTag == "driverCockpit"'));
   assert(pulse.includes('.id(PPDeliveryCompanyService.currentAccountUID())'));
   assert(!/\.collection\(|Firestore\.firestore/.test(home));
+});
+check('Home prioritizes owned active work and never returns idle availability on an uncertain read', () => {
+  const home = slice(legacyHome, 'struct PPDriverHomeAvailabilitySection', 'private struct PPDriverHomeMissionSummary');
+  assert(home.includes('store.activeTasks.filter { $0.mine && !$0.isTerminal }'));
+  assert(home.indexOf('if let task = activeTask') < home.indexOf('} else if isExpanded {'));
+  assert(home.includes('PPDriverHomeMissionSummary(task: task)'));
+  const hold = slice(home, 'private var holdsAvailabilityForTaskRead:', 'private var missionHeader:');
+  for (const token of ['store.uncertainCommand != nil', 'store.isSubmitting', 'store.isVerifying',
+    'store.lastConfirmedAt == nil', 'store.isStale', 'activeCount > 0']) assert(hold.includes(token), token);
+  assert(home.includes('assignedTasks.first(where: { $0.id == store.focusedTaskKey })'));
+  assert(home.includes('store.focus(on: task)'));
+  assert(home.includes('store.setVisible(isOnScreen && phase == .active)'));
+  assert(home.includes('confirmation = nil'));
+  const sent = slice(models, 'private func send(_ command:', 'private func handleCommandFailure');
+  assert(sent.includes('if self.selectedContext?.kind == .partnerDriver'),
+    'task completion refreshes partner membership workload as well as assigned tasks');
+  assert(!sent.includes('command.kind == .availability && self.selectedContext?.kind == .partnerDriver'));
+});
+check('Home and cockpit share exact confirmation and proof/cash blocking', () => {
+  const home = slice(legacyHome, 'struct PPDriverHomeAvailabilitySection', 'private struct PPDriverHomeMissionSummary');
+  for (const source of [home, view]) {
+    assert(source.includes('PPDriverConfirmSheet(task: request.task, action: request.action)'));
+    assert(source.includes('contextID: request.contextID'));
+    assert(source.includes('ppDriverActionBlockKey(action, task: task, canSelfAcceptOrders: store.canSelfAcceptOrders)'));
+  }
+  assert(home.includes('store.canPerformCurrentAction(action, on: task)'));
+  assert(home.includes('["DELIVER", "CONFIRM_PAYMENT", "COMPLETE"].contains(action.code)'));
+  const block = slice(models, 'func ppDriverActionBlockKey', 'func ppDriverActionSnapshotMatches');
+  for (const token of ['task.proof.photoRequired', 'task.proof.signatureRequired', 'DriverCockpit_Blocked_Cash',
+    'DriverCockpit_Blocked_Proof', 'task.cash?.amount', 'task.authority != .fulfillmentV1']) assert(block.includes(token));
+});
+check('Home recovery remains actionable without a notice and dashboard navigation is independent of an uncertain mutation', () => {
+  const home = slice(legacyHome, 'struct PPDriverHomeAvailabilitySection', 'private struct PPDriverHomeMissionSummary');
+  const step = slice(home, 'private func nextStep(for task:', 'private var refreshTaskButton:');
+  assert(/else if store\.uncertainCommand != nil \{\s*uncertainCommandRecovery/.test(step));
+  const recovery = slice(home, 'private var uncertainCommandRecovery:', 'private var refreshTaskButton:');
+  assert(recovery.includes('store.retryUncertainCommand()'));
+  assert(recovery.includes('store.checkUncertainCommandStatus()'));
+  assert(recovery.includes('.buttonStyle(PPDriverPrimaryButtonStyle'));
+  const dashboard = slice(home, 'private var dashboardRow:', '// MARK: Derived state');
+  assert(!dashboard.includes('canSwitchContext'), 'an unknown mutation must not disable read-only dashboard navigation');
+  assert(dashboard.includes('store.isSubmitting || store.isVerifying'));
+});
+check('fresh reads reconcile an uncertain command while retaining its identity until progress is verified', () => {
+  const refresh = slice(models, 'func refresh() {', 'func loadHistory()');
+  assert(refresh.indexOf('if isRefreshing {') < refresh.indexOf('pendingVerification = command'),
+    'a read already in flight before the uncertain result cannot verify that result');
+  assert(refresh.includes('let command = uncertainCommand'));
+  const failure = slice(models, 'private func handleCommandFailure', 'private func verifyPendingCommand');
+  assert(/case \.transport, \.unknown:[\s\S]*uncertainCommand = command[\s\S]*refreshAll\(\)/.test(failure));
+  const checkLatest = slice(models, 'func checkUncertainCommandStatus()', 'func dismissNotice()');
+  assert(checkLatest.includes('refreshAll()'));
+  assert(!checkLatest.includes('uncertainCommand = nil'), 'a status check must not discard the retry identity');
+  const report = slice(models, 'private func reportVerification(', '// MARK: Helpers');
+  assert(report.includes('if confirmed || endedStatus != nil'));
+  assert(report.includes('else if uncertainCommand != nil'));
+  assert(report.includes('DriverCockpit_Notice_Unconfirmed'));
+  assert(view.includes('store.checkUncertainCommandStatus()'));
+});
+check('a captured Home action must still match the latest task before the only command writer', () => {
+  const snapshot = slice(models, 'func ppDriverActionSnapshotMatches', 'struct PPDriverFocusRequest');
+  for (const token of ['snapshot.id == current.id', 'snapshot.companyID == current.companyID',
+    'snapshot.status == current.status', 'snapshot.revision == current.revision', 'snapshot.mine == current.mine',
+    'snapshot.proof == current.proof', 'snapshot.cash == current.cash', 'current.actions.contains(action)',
+    '!current.isTerminal']) assert(snapshot.includes(token), token);
+  const allowed = slice(models, 'func canPerformCurrentAction', 'func perform(');
+  for (const token of ['isSameAccount()', '!isStale', '!isRefreshing', '!isResolvingContexts',
+    'contextID == selectedContext?.id', 'ppDriverActionSnapshotMatches']) assert(allowed.includes(token), token);
+  const perform = slice(models, 'func perform(', 'func setOnline(');
+  assert(perform.indexOf('canPerformCurrentAction') < perform.indexOf('send(PPDriverCommand.task'));
+});
+check('Home progress is model-backed, accessible, direction-aware, and localized', () => {
+  const summary = slice(legacyHome, 'private struct PPDriverHomeMissionSummary', '// MARK: - Reusable Tactile');
+  for (const token of ['task.stage != .unknown', 'task.stage.railIndex', 'dynamicTypeSize.isAccessibilitySize',
+    'AnyLayout(VStackLayout', 'ppDriverIsolated', 'accessibilityElement(children: .ignore)',
+    'reduceMotion ? nil', 'value: task.status']) assert(summary.includes(token), token);
+  for (const language of ['ar', 'en']) {
+    for (const key of ['DriverHome_ActiveDelivery', 'DriverHome_ChooseDelivery', 'DriverHome_CheckAssigned',
+      'DriverHome_ProgressHint']) assert.equal((strings[language].match(new RegExp(`^"${key}"\\s*=`, 'gm')) || []).length, 1,
+        `${language}: ${key}`);
+  }
 });
 check('availability has fresh-revision guards, contextual confirmation and honest status', () => {
   const control = slice(view, 'struct PPDriverAvailabilityControl', 'struct PPDriverCockpitView');

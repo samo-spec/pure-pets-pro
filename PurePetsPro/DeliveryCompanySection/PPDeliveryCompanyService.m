@@ -561,23 +561,37 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
     FIRCollectionReference *companies = [[FIRFirestore firestore] collectionWithPath:@"deliveryCompanies"];
     FIRDocumentReference *member = [[[companies documentWithPath:companyID]
         collectionWithPath:@"members"] documentWithPath:uid];
-    token.registration = [member addSnapshotListener:^(FIRDocumentSnapshot *snapshot, NSError *error) {
-        if (snapshot && snapshot.metadata.fromCache) return;
-        NSDictionary *data = snapshot.data ?: @{};
+    __weak PPDriverAcceptanceObservation *weakToken = token;
+    token.registration = [member addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRDocumentSnapshot *snapshot, NSError *error) {
+        // Metadata-only server confirmation matters when the first copy came
+        // from cache. Neither cached grants nor pending local writes enable a claim.
+        BOOL confirmed = snapshot && !snapshot.metadata.fromCache && !snapshot.metadata.hasPendingWrites;
+        NSError *policyError = error;
+        if (!policyError && !confirmed) {
+            policyError = [NSError errorWithDomain:@"PurePetsPro.DriverCockpit" code:503
+                userInfo:@{NSLocalizedDescriptionKey: kLang(@"Delivery_Driver_Acceptance_Sync_Error")}];
+        }
+        NSDictionary *data = [snapshot.data isKindOfClass:NSDictionary.class] ? snapshot.data : @{};
         BOOL restricted = [data[@"isActive"] isEqual:@NO];
         for (NSString *field in @[@"blocked", @"isBlocked", @"banned", @"disabled", @"isDisabled",
                                   @"suspended", @"isSuspended", @"deleted", @"isDeleted", @"deactivated"]) {
             if ([data[field] isEqual:@YES]) { restricted = YES; break; }
         }
         NSString *accountStatus = [data[@"accountStatus"] isKindOfClass:NSString.class] ?
-            [data[@"accountStatus"] lowercaseString] : @"";
+            [[data[@"accountStatus"] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] lowercaseString] : @"";
+        id memberUID = data[@"uid"], memberCompanyID = data[@"companyId"];
+        BOOL uidMatches = !memberUID || memberUID == NSNull.null || [memberUID isEqual:@""] || [memberUID isEqual:uid];
+        BOOL companyMatches = !memberCompanyID || memberCompanyID == NSNull.null || [memberCompanyID isEqual:@""] || [memberCompanyID isEqual:companyID];
         id grant = data[@"canSelfAcceptOrders"];
         BOOL explicitGrant = [grant isKindOfClass:NSNumber.class] &&
             CFGetTypeID((__bridge CFTypeRef)grant) == CFBooleanGetTypeID() && [grant boolValue];
-        BOOL allowed = !error && snapshot.exists && [data[@"status"] isEqual:@"active"] &&
+        BOOL allowed = !policyError && confirmed && snapshot.exists && uidMatches && companyMatches && [data[@"status"] isEqual:@"active"] &&
             !restricted && (!accountStatus.length || [accountStatus isEqual:@"active"]) &&
             [data[@"role"] isEqual:@"driver"] && explicitGrant;
-        dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(allowed, error); });
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (!weakToken || ![FIRAuth.auth.currentUser.uid ?: @"" isEqualToString:uid]) return;
+            if (completion) completion(allowed, policyError);
+        });
     }];
     return token;
 }

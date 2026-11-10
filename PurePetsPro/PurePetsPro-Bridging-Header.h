@@ -32,3 +32,7 @@
 #import "ServiceSection/PPServiceRequestsViewController.h"
 #import "ServiceSection/PPServiceScheduleViewController.h"
 #import "ServiceSection/PPServiceTemplatePickerViewController.h"
+#import "VeterinarianSection/PPVetModel.h"
+#import "VeterinarianSection/PPVetManager.h"
+#import "Main Controllers/PPProProfileSettingsViewController.h"
+#import "Main Controllers/PPProviderProfileEditorViewController.h"

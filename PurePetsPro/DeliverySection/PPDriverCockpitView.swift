@@ -12,18 +12,18 @@ import UIKit
 
 // MARK: - Labels
 
-private func ppActionTitle(_ code: String) -> String {
+func ppActionTitle(_ code: String) -> String {
     ppDriverText("DriverCockpit_Action_\(code)")
 }
 
-private func ppActionConsequence(_ action: PPDriverTaskAction, task: PPDriverTask) -> String {
+func ppActionConsequence(_ action: PPDriverTaskAction, task: PPDriverTask) -> String {
     if action.code == "CONFIRM_PAYMENT", let amount = task.cash?.amount {
         return ppDriverFormat("DriverCockpit_Consequence_CONFIRM_PAYMENT_Format", ppDriverMoney(amount, currency: task.cash?.currency ?? ""))
     }
     return ppDriverText("DriverCockpit_Consequence_\(action.code)")
 }
 
-private func ppStatusText(_ status: String) -> String {
+func ppStatusText(_ status: String) -> String {
     let known: Set<String> = ["delivery_requested", "accepted_by_company", "offered", "delivery_assigned",
                               "awaiting_handover", "assigned_to_driver", "handed_over", "picked_up", "in_transit",
                               "delivered", "payment_pending", "payment_confirmed", "completed", "cancelled",
@@ -32,7 +32,7 @@ private func ppStatusText(_ status: String) -> String {
     return ppDriverText(known.contains(status) ? "DriverCockpit_Status_\(status)" : "DriverCockpit_Status_unknown")
 }
 
-private func ppOrderTitle(_ task: PPDriverTask) -> String {
+func ppOrderTitle(_ task: PPDriverTask) -> String {
     task.orderNumber.isEmpty
         ? ppDriverText("DriverCockpit_Delivery_Generic")
         : ppDriverFormat("DriverCockpit_Order_Format", ppDriverIsolated("#\(task.orderNumber)"))
@@ -81,7 +81,7 @@ private func ppMapsURL(_ address: PPDriverAddress) -> URL? {
 
 // MARK: - Button styles
 
-private struct PPDriverPrimaryButtonStyle: ButtonStyle {
+struct PPDriverPrimaryButtonStyle: ButtonStyle {
     var enabled: Bool = true
 
     func makeBody(configuration: Configuration) -> some View {
@@ -262,7 +262,7 @@ struct PPDriverCockpitView: View {
         .environment(\.locale, Locale(identifier: Language.currentLanguageCode()))
         .sheet(item: $confirmation) { request in
             PPDriverConfirmSheet(task: request.task, action: request.action) { inputs in
-                store.perform(request.action, on: request.task, inputs: inputs)
+                store.perform(request.action, on: request.task, inputs: inputs, contextID: request.contextID)
             }
             .environment(\.layoutDirection, layoutDirection)
         }
@@ -375,10 +375,15 @@ struct PPDriverCockpitView: View {
             .padding(.vertical, AdminSpacing.base)
         }
         .safeAreaInset(edge: .bottom) {
-            if store.phase == .ready {
+            if store.phase == .ready && hasDockContent {
                 dock
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .bottom).combined(with: .opacity),
+                        removal: .move(edge: .bottom).combined(with: .opacity)
+                    ))
             }
         }
+        .animation(.spring(response: 0.38, dampingFraction: 0.84), value: hasDockContent)
     }
 
     @ViewBuilder
@@ -405,9 +410,9 @@ struct PPDriverCockpitView: View {
         if !store.visibleOffers.isEmpty {
             sectionTitle(ppDriverText("DriverCockpit_Section_Offers"))
             ForEach(store.visibleOffers) { task in
-                taskRow(task, subtitle: task.dropoff.secondary.isEmpty
-                        ? ppDriverText("DriverCockpit_Offer_Review")
-                        : ppDriverFormat("DriverCockpit_Offer_Area_Format", task.dropoff.secondary))
+                taskRow(task, subtitle: !task.dropoff.secondary.isEmpty
+                        ? ppDriverFormat("DriverCockpit_Offer_Area_Format", task.dropoff.secondary)
+                        : (!task.dropoff.primary.isEmpty ? task.dropoff.primary : ppDriverText("DriverCockpit_Offer_Review")))
             }
         }
         if store.canLoadMoreActive {
@@ -698,7 +703,21 @@ struct PPDriverCockpitView: View {
 
     // MARK: Dock
 
-    private enum DockState {
+    private var hasDockSecondaryContent: Bool {
+        guard let task = store.focusedTask else { return false }
+        let target = task.stage <= .toPickup ? task.pickup : task.dropoff
+        let mapsURL = task.stage == .unknown ? nil : ppMapsURL(target)
+        let customerURL = task.mine && task.stage >= .collected && task.stage != .unknown ? ppPhoneURL(task.customerPhone) : nil
+        let dispatchURL = store.dispatchPhone.flatMap(ppPhoneURL)
+        return mapsURL != nil || customerURL != nil || dispatchURL != nil
+    }
+
+    private var hasDockContent: Bool {
+        if dockState != .none { return true }
+        return hasDockSecondaryContent
+    }
+
+    private enum DockState: Equatable {
         case none
         case waiting
         case uncertain
@@ -728,17 +747,8 @@ struct PPDriverCockpitView: View {
             }
             return .informational(task, ppDriverText(key))
         }
-        if action.code == "CLAIM" && !store.canSelfAcceptOrders {
-            return .blocked(task, ppDriverText("Delivery_Driver_Acceptance_Managed"))
-        }
-        if action.code == "DELIVER" && task.authority != .fulfillmentV1 &&
-            (task.proof.photoRequired || task.proof.signatureRequired) {
-            return .blocked(task, ppDriverText("DriverCockpit_Blocked_Proof"))
-        }
-        let cashNeeded = action.code == "CONFIRM_PAYMENT" ||
-            (action.code == "DELIVER" && task.authority != .fulfillmentV1 && (task.cash?.required ?? false) && !(task.cash?.collected ?? false))
-        if cashNeeded && ((task.cash?.amount ?? 0) <= 0 || (action.code == "CONFIRM_PAYMENT" && (task.cash?.currency.count ?? 0) != 3)) {
-            return .blocked(task, ppDriverText("DriverCockpit_Blocked_Cash"))
+        if let blockKey = ppDriverActionBlockKey(action, task: task, canSelfAcceptOrders: store.canSelfAcceptOrders) {
+            return .blocked(task, ppDriverText(blockKey))
         }
         return .action(task, action)
     }
@@ -778,12 +788,12 @@ struct PPDriverCockpitView: View {
             }
             .buttonStyle(PPDriverPrimaryButtonStyle())
             .accessibilityHint(ppDriverText("DriverCockpit_Notice_Unconfirmed"))
-            Button(ppDriverText("DriverCockpit_CheckLatest")) { store.discardUncertainCommand() }
+            Button(ppDriverText("DriverCockpit_CheckLatest")) { store.checkUncertainCommandStatus() }
                 .buttonStyle(PPDriverSecondaryButtonStyle())
         case .action(let task, let action):
             Button {
                 if ["CLAIM", "DELIVER", "CONFIRM_PAYMENT", "COMPLETE"].contains(action.code) {
-                    confirmation = PPDriverConfirmation(task: task, action: action)
+                    confirmation = PPDriverConfirmation(task: task, action: action, contextID: store.selectedContext?.id)
                 } else {
                     store.perform(action, on: task)
                 }
@@ -976,16 +986,27 @@ private struct PPDriverMissionCard: View {
     }
 
     private func addressBlock(title: String, symbol: String, address: PPDriverAddress, emphasized: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        let primaryText: String = {
+            if !address.primary.isEmpty { return address.primary }
+            if !address.secondary.isEmpty { return address.secondary }
+            return ppDriverText("DriverCockpit_Address_Pending")
+        }()
+        let secondaryText: String = {
+            if !address.primary.isEmpty && !address.secondary.isEmpty && address.primary != address.secondary {
+                return address.secondary
+            }
+            return ""
+        }()
+        return VStack(alignment: .leading, spacing: 4) {
             Label(title, systemImage: symbol)
                 .font(AdminType.footnoteBold)
                 .foregroundStyle(emphasized ? AdminSurface.primary : AdminSurface.secondaryText)
-            Text(address.primary.isEmpty ? ppDriverText("DriverCockpit_Address_Pending") : address.primary)
+            Text(primaryText)
                 .font(emphasized ? AdminType.bodyBold : AdminType.body)
                 .foregroundStyle(AdminSurface.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
-            if !address.secondary.isEmpty {
-                Text(address.secondary)
+            if !secondaryText.isEmpty {
+                Text(secondaryText)
                     .font(AdminType.footnote)
                     .foregroundStyle(AdminSurface.secondaryText)
             }
@@ -1057,13 +1078,14 @@ private struct PPDriverStepRail: View {
 
 // MARK: - Confirmation
 
-private struct PPDriverConfirmation: Identifiable {
+struct PPDriverConfirmation: Identifiable {
     let id = UUID()
     let task: PPDriverTask
     let action: PPDriverTaskAction
+    let contextID: String?
 }
 
-private struct PPDriverConfirmSheet: View {
+struct PPDriverConfirmSheet: View {
     let task: PPDriverTask
     let action: PPDriverTaskAction
     let onConfirm: (PPDriverCommandInputs) -> Void
@@ -1283,7 +1305,7 @@ private struct PPDriverConfirmSheet: View {
                             .font(AdminType.caption2Bold)
                             .foregroundStyle(AdminSurface.primary)
 
-                        Text(task.pickup.primary.isEmpty ? ppDriverText("DriverCockpit_Address_Pending") : task.pickup.primary)
+                        Text(!task.pickup.primary.isEmpty ? task.pickup.primary : (!task.pickup.secondary.isEmpty ? task.pickup.secondary : ppDriverText("DriverCockpit_Address_Pending")))
                             .font(AdminType.calloutBold)
                             .foregroundStyle(AdminSurface.primaryText)
                             .lineLimit(2)
@@ -1327,7 +1349,7 @@ private struct PPDriverConfirmSheet: View {
                             .font(AdminType.caption2Bold)
                             .foregroundStyle(AdminSurface.emerald)
 
-                        Text(task.dropoff.primary.isEmpty ? ppDriverText("DriverCockpit_Address_Pending") : task.dropoff.primary)
+                        Text(!task.dropoff.primary.isEmpty ? task.dropoff.primary : (!task.dropoff.secondary.isEmpty ? task.dropoff.secondary : ppDriverText("DriverCockpit_Address_Pending")))
                             .font(AdminType.calloutBold)
                             .foregroundStyle(AdminSurface.primaryText)
                             .lineLimit(2)

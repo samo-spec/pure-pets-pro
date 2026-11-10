@@ -569,7 +569,8 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
         PPUserBoolValue(safeDict[@"canPharmacy"]) ||
         PPUserBoolForKeyVariants(featuresDict, @[@"pharmacy", @"canPharmacy"]);
     self.canAccessProviderMarketplaceFeature =
-        PPUserBoolValue(featuresDict[@"canAccessProviderMarketplace"]);
+        [featuresDict[@"production"] isEqual:@YES] ||
+        [featuresDict[@"canAccessProviderMarketplace"] isEqual:@YES];
 
     NSDictionary *onboardingDict = PPSafeDict(safeDict[kUserKeyOnboarding]);
     NSDictionary *partnerRoot = onboardingDict.count > 0 ? onboardingDict : safeDict;

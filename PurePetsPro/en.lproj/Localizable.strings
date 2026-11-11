@@ -3755,6 +3755,10 @@
 "Deliv_Duty_Active" = "Active";
 "Deliv_Duty_Offline" = "Break";
 "Deliv_Section_ControlTitle" = "Field Delivery Cockpit";
+"Deliv_Collapse_Hint" = "Hides delivery operations and routes.";
+"Deliv_Expand_Hint" = "Shows delivery operations and routes.";
+"Expanded" = "Expanded";
+"Collapsed" = "Collapsed";
 "Deliv_ActiveEnRoute" = "Active Mission in Progress";
 "Deliv_Waypoint_Pickup" = "Branch Pickup";
 "Deliv_Waypoint_Dropoff" = "Customer Dropoff";
@@ -4648,3 +4652,15 @@
 "ProFulfillment_ManifestUnavailable" = "Unavailable";
 "ProFulfillment_ManifestQuantity" = "Quantity";
 "ProFulfillment_ManifestUnitPrice" = "Unit price";
+
+/* Partner subscription terms — Infra contract version 1. */
+"PartnerSub_UnmanagedHint" = "Subscription term not set";
+"PartnerSub_NoEnd" = "No scheduled end date";
+"PartnerSub_StatusTerm" = "%@ · %@";
+"PartnerSub_Status_all" = "All subscriptions";
+"PartnerSub_Status_active" = "Active";
+"PartnerSub_Status_paused" = "Paused";
+"PartnerSub_Status_expired" = "Expired";
+"PartnerSub_Status_cancelled" = "Cancelled";
+"PartnerSub_Status_unmanaged" = "Term not set";
+"PartnerSub_Status_unavailable" = "Unavailable";

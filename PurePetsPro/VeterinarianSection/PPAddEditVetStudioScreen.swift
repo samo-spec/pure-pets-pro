@@ -105,27 +105,29 @@ public struct PPAddEditVetStudioScreen: View {
 
         if let vet = vetToEdit {
             _type = State(initialValue: vet.type)
-            _title = State(initialValue: vet.title ?? "")
-            _descriptionText = State(initialValue: vet.descriptionText ?? "")
-            _phone = State(initialValue: vet.phone ?? "")
-            _whatsapp = State(initialValue: vet.whatsapp ?? "")
+            _title = State(initialValue: vet.title)
+            _descriptionText = State(initialValue: vet.descriptionText)
+            _phone = State(initialValue: vet.phone)
+            _whatsapp = State(initialValue: vet.whatsapp)
             _vetCost = State(initialValue: vet.vetCost > 0 ? String(format: "%.0f", vet.vetCost) : "")
             _petMainKindID = State(initialValue: vet.petMainKindID > 0 ? vet.petMainKindID : 1)
-            _existingLogoURL = State(initialValue: vet.logoURL)
+            _existingLogoURL = State(initialValue: vet.logoURL.isEmpty ? nil : vet.logoURL)
             if let date = vet.availableDate {
                 _availableDate = State(initialValue: date)
             }
 
             // Extract tags from description
             var extractedTags: Set<String> = []
+            let desc = vet.descriptionText
             for tag in PPSpecialtyCatalog.items {
-                if let desc = vet.descriptionText, desc.contains(tag.titleAr) || desc.contains(tag.titleEn) {
+                if desc.contains(tag.titleAr) || desc.contains(tag.titleEn) {
                     extractedTags.insert(tag.id)
                 }
             }
             _selectedSpecialtyTags = State(initialValue: extractedTags)
 
-            if let animals = vet.animalTypes, !animals.isEmpty {
+            let animals = vet.animalTypes
+            if !animals.isEmpty {
                 let ids = Set(animals.compactMap { Int($0) })
                 _selectedSpeciesIDs = State(initialValue: ids.isEmpty ? [vet.petMainKindID > 0 ? vet.petMainKindID : 1] : ids)
             } else {
@@ -135,7 +137,8 @@ public struct PPAddEditVetStudioScreen: View {
     }
 
     private var isEditing: Bool {
-        vetToEdit != nil && vetToEdit?.vetID?.isEmpty == false
+        guard let vet = vetToEdit else { return false }
+        return !vet.vetID.isEmpty
     }
 
     private var isClinic: Bool {
@@ -1299,9 +1302,9 @@ public struct PPAddEditVetStudioScreen: View {
         }
 
         if isEditing {
-            PPVetManager.sharedManager().updateVet(model, image: selectedImage, completion: completionBlock)
+            PPVetManager.shared().updateVet(model, image: selectedImage, completion: completionBlock)
         } else {
-            PPVetManager.sharedManager().addVet(model, image: selectedImage, completion: completionBlock)
+            PPVetManager.shared().addVet(model, image: selectedImage, completion: completionBlock)
         }
     }
 }

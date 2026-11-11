@@ -1999,32 +1999,12 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (NSString *)pp_nextRenewalTextForProfile:(PPProviderProfile *)profile {
-    if (!profile || !profile.approvedAt) {
-        return kLang(@"ProviderSubscriptionCardManagedByConsole");
-    }
-
-    NSString *interval = [PPSafeString(profile.billingInterval).lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    if ([interval isEqualToString:@"one_time"] || [interval isEqualToString:@"once"]) {
-        return kLang(@"ProviderPlanIntervalOneTime");
-    }
-
-    NSDateComponents *components = [[NSDateComponents alloc] init];
-    if ([interval isEqualToString:@"yearly"] || [interval isEqualToString:@"annual"]) {
-        components.year = 1;
-    } else {
-        components.month = 1;
-    }
-
-    NSDate *renewalDate = [[NSCalendar currentCalendar] dateByAddingComponents:components toDate:profile.approvedAt options:0];
-    if (!renewalDate) {
-        return kLang(@"ProviderSubscriptionCardManagedByConsole");
-    }
-
-    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
-    formatter.locale = [NSLocale localeWithLocaleIdentifier:Language.isRTL ? @"ar" : @"en_US"];
+    if (!profile.hasManagedSubscription) return kLang(@"PartnerSub_UnmanagedHint");
+    if (!profile.subscriptionExpiresAt) return kLang(@"PartnerSub_NoEnd");
+    NSDateFormatter *formatter = [NSDateFormatter new];
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:Language.isRTL ? @"ar" : @"en"];
     formatter.dateStyle = NSDateFormatterMediumStyle;
-    formatter.timeStyle = NSDateFormatterNoStyle;
-    return [formatter stringFromDate:renewalDate] ?: kLang(@"ProviderSubscriptionCardManagedByConsole");
+    return [formatter stringFromDate:profile.subscriptionExpiresAt];
 }
 
 - (NSString *)pp_subscriptionPendingTextForCount:(NSUInteger)pendingCount eligibleCount:(NSUInteger)eligibleCount {
@@ -2058,6 +2038,13 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         pendingValue = kLang(@"ProviderRetryButton");
     } else if (!self.isProviderSubscriptionLoading && state) {
         PPProviderProfile *activeProfile = [self pp_primaryActiveProviderProfileForState:state];
+        PPProviderProfile *managedInactiveProfile = nil;
+        if (!activeProfile) {
+            for (NSNumber *type in @[@(PPProviderTypeMarketplace), @(PPProviderTypeDeliveryCompany), @(PPProviderTypeVet), @(PPProviderTypePharmacy), @(PPProviderTypeService)]) {
+                PPProviderProfile *candidate = [state profileForType:type.integerValue];
+                if (candidate.hasManagedSubscription) { managedInactiveProfile = candidate; break; }
+            }
+        }
         NSUInteger pendingCount = [self pp_pendingProviderApplicationCountForState:state];
         NSUInteger eligibleCount = state.eligibleProviderTypes.count;
 
@@ -2076,6 +2063,13 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
             subtitle = kLang(@"ProviderSubscriptionCardActiveSubtitle");
             statusValue = kLang(@"ProviderStatusActive");
             renewalValue = [self pp_nextRenewalTextForProfile:activeProfile];
+        } else if (managedInactiveProfile) {
+            statusColor = [UIColor ppWarning];
+            pill = kLang([@"PartnerSub_Status_" stringByAppendingString:managedInactiveProfile.effectiveSubscriptionStatus]);
+            title = managedInactiveProfile.localizedPlanName;
+            subtitle = managedInactiveProfile.localizedSubscriptionSummary;
+            statusValue = pill;
+            renewalValue = [self pp_nextRenewalTextForProfile:managedInactiveProfile];
         } else if (pendingCount > 0) {
             statusColor = [UIColor ppWarning];
             pill = kLang(@"ProviderHeroReviewBadge");
@@ -5151,7 +5145,19 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     }
     snapshot.roleSummary = [self pp_dashboardRoleBadgeTextForUser:user] ?: @"";
     snapshot.isRTL = Language.isRTL;
-    snapshot.workspaceCount = capabilities.count;
+    // Collapse delivery-related capabilities (deliveryCompany, driverCockpit, delivery)
+    // into a single workspace to match the lens-based workspace rail count.
+    NSSet *deliveryIDs = [NSSet setWithObjects:@"deliveryCompany", @"driverCockpit", @"delivery", nil];
+    BOOL hasDeliveryLens = NO;
+    NSInteger lensCount = 0;
+    for (PPProCommandCapabilityDescriptor *cap in capabilities) {
+        if ([deliveryIDs containsObject:cap.identifier]) {
+            if (!hasDeliveryLens) { hasDeliveryLens = YES; lensCount += 1; }
+        } else {
+            lensCount += 1;
+        }
+    }
+    snapshot.workspaceCount = lensCount;
     snapshot.actionCount = operationalActionCount;
     snapshot.inboxUnreadCount = self.inboxUnreadCount;
     snapshot.supportUnreadCount = hasProviderWorkspace ? self.supportChatsUnreadThreadsCount : 0;

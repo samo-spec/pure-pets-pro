@@ -112,30 +112,43 @@ struct PPDriverHomeAvailabilitySection: View {
         VStack(alignment: .leading, spacing: 0) {
             if let task = activeTask {
                 missionHeader
-                PPDriverHomeMissionSummary(task: task)
-                    .padding(.top, AdminSpacing.base)
-                nextStep(for: task)
-                    .padding(.top, AdminSpacing.base)
-                if let notice = store.notice, store.uncertainCommand == nil {
-                    recoveryCallout(notice)
-                        .padding(.top, AdminSpacing.md)
+                if isExpanded {
+                    VStack(alignment: .leading, spacing: 0) {
+                        PPDriverHomeMissionSummary(task: task)
+                            .padding(.top, AdminSpacing.base)
+                        nextStep(for: task)
+                            .padding(.top, AdminSpacing.base)
+                        if let notice = store.notice, store.uncertainCommand == nil {
+                            recoveryCallout(notice)
+                                .padding(.top, AdminSpacing.md)
+                        }
+                        dashboardRow
+                            .padding(.top, AdminSpacing.sm)
+                    }
+                    .transition(reduceMotion ? .opacity : .asymmetric(
+                        insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .top)),
+                        removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+                    ))
                 }
-                dashboardRow
-                    .padding(.top, AdminSpacing.sm)
             } else {
                 header
                 if holdsAvailabilityForTaskRead {
-                    taskReadRecovery
-                        .padding(.top, AdminSpacing.md)
-                    if let notice = store.notice, store.uncertainCommand == nil {
-                        recoveryCallout(notice)
+                    if isExpanded {
+                        taskReadRecovery
                             .padding(.top, AdminSpacing.md)
+                        if let notice = store.notice, store.uncertainCommand == nil {
+                            recoveryCallout(notice)
+                                .padding(.top, AdminSpacing.md)
+                        }
+                        dashboardRow
                     }
-                    dashboardRow
                 } else if isExpanded {
                     controls
                         .padding(.top, AdminSpacing.md)
-                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.97, anchor: .top)))
+                        .transition(reduceMotion ? .opacity : .asymmetric(
+                            insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .top)),
+                            removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+                        ))
                 }
             }
         }
@@ -156,6 +169,9 @@ struct PPDriverHomeAvailabilitySection: View {
             isOnScreen = true
             if isActive { store.start(focus: nil) }
             store.setVisible(isActive && scenePhase == .active)
+            if activeTask != nil {
+                isExpanded = true
+            }
         }
         .onChange(of: scenePhase) { _, phase in store.setVisible(isOnScreen && isActive && phase == .active) }
         .onChange(of: isActive) { _, active in
@@ -164,7 +180,11 @@ struct PPDriverHomeAvailabilitySection: View {
             store.setVisible(isOnScreen && active && scenePhase == .active)
         }
         .onChange(of: activeTask?.id) { previous, current in
-            if previous != nil, current == nil, store.phase == .ready,
+            if previous == nil && current != nil {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.82)) {
+                    isExpanded = true
+                }
+            } else if previous != nil, current == nil, store.phase == .ready,
                !store.isStale, store.uncertainCommand == nil {
                 isExpanded = true
             }
@@ -195,25 +215,45 @@ struct PPDriverHomeAvailabilitySection: View {
 
     private var missionHeader: some View {
         HStack(alignment: .center, spacing: AdminSpacing.md) {
-            Image(systemName: "shippingbox.fill")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(AdminSurface.primary)
-                .frame(width: 44, height: 44)
-                .background(AdminSurface.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: AdminRadius.medium))
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(ppDriverText("DriverHome_ActiveDelivery"))
-                    .font(AdminType.headlineBold)
-                    .foregroundStyle(AdminSurface.primaryText)
-                    .accessibilityAddTraits(.isHeader)
-                if let context = store.selectedContext {
-                    Text(contextName(context))
-                        .font(AdminType.footnote)
-                        .foregroundStyle(AdminSurface.secondaryText)
-                        .fixedSize(horizontal: false, vertical: true)
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.82)) {
+                    isExpanded.toggle()
                 }
+            } label: {
+                HStack(alignment: .center, spacing: AdminSpacing.md) {
+                    Image(systemName: "shippingbox.fill")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundStyle(AdminSurface.primary)
+                        .frame(width: 44, height: 44)
+                        .background(AdminSurface.primary.opacity(0.1), in: RoundedRectangle(cornerRadius: AdminRadius.medium))
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(ppDriverText("DriverHome_ActiveDelivery"))
+                            .font(AdminType.headlineBold)
+                            .foregroundStyle(AdminSurface.primaryText)
+                            .accessibilityAddTraits(.isHeader)
+                        if !isExpanded, let task = activeTask {
+                            Text(ppOrderTitle(task))
+                                .font(AdminType.caption1Bold)
+                                .foregroundStyle(AdminSurface.primary)
+                                .lineLimit(1)
+                        } else if let context = store.selectedContext {
+                            Text(contextName(context))
+                                .font(AdminType.footnote)
+                                .foregroundStyle(AdminSurface.secondaryText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .buttonStyle(PPDeliveryTouchButtonStyle(pressedScale: 0.985, pressedOpacity: 0.94))
+            .accessibilityLabel(ppDriverText("DriverHome_ActiveDelivery"))
+            .accessibilityValue(ppDriverText(isExpanded ? "DriverHome_State_Expanded" : "DriverHome_State_Collapsed"))
+            .accessibilityHint(ppDriverText(isExpanded ? "DriverHome_Collapse_Hint" : "DriverHome_Expand_Hint"))
+
             if assignedTasks.count > 1 {
                 Menu {
                     ForEach(assignedTasks) { task in
@@ -237,6 +277,22 @@ struct PPDriverHomeAvailabilitySection: View {
                 .accessibilityLabel(ppDriverText("DriverHome_ChooseDelivery"))
                 .accessibilityValue(ppDriverFormat("DriverHome_ActiveCount_Format", localizedCount(assignedTasks.count)))
             }
+
+            Button {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.82)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(AdminSurface.secondaryText)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .frame(width: 32, height: 32)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHidden(true)
         }
         .accessibilityIdentifier("driver.home.active.header")
     }
@@ -367,7 +423,8 @@ struct PPDriverHomeAvailabilitySection: View {
 
     private var header: some View {
         Button {
-            withAnimation(reduceMotion ? nil : .spring(response: 0.32, dampingFraction: 0.86)) {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.82)) {
                 isExpanded.toggle()
             }
         } label: {
@@ -862,8 +919,11 @@ public struct PPDeliveryDriverHomeControlSection: View {
     @StateObject private var state = PPDeliveryDriverObservableState()
     public let onOpenCockpit: () -> Void
 
+    @State private var isExpanded: Bool = true
     @State private var radarPulse: Bool = false
+    @State private var isOnScreen = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
 
     private var isRTL: Bool { Language.isRTL() }
 
@@ -872,27 +932,36 @@ public struct PPDeliveryDriverHomeControlSection: View {
     }
 
     public var body: some View {
-        VStack(spacing: 16) {
-            // 1. Mission Control Header & Duty Switcher Capsule
+        VStack(alignment: .leading, spacing: 0) {
+            // 1. Mission Control Header & Duty Switcher Capsule (Tappable expand/collapse)
             headerDeck
 
-            // 2. Dynamic Center Content: In-Flight Mission OR Live Shift Telemetry
-            if let activeOrder = state.activeMissionOrder {
-                activeMissionDeck(activeOrder)
-                    .transition(reduceMotion ? .opacity : .asymmetric(
-                        insertion: .scale(scale: 0.96).combined(with: .opacity),
-                        removal: .scale(scale: 0.96).combined(with: .opacity)
-                    ))
-            } else {
-                telemetryDeck
-                    .transition(reduceMotion ? .opacity : .asymmetric(
-                        insertion: .scale(scale: 0.96).combined(with: .opacity),
-                        removal: .scale(scale: 0.96).combined(with: .opacity)
-                    ))
-            }
+            // 2. Dynamic Center Content: In-Flight Mission OR Live Shift Telemetry + Action Track
+            if isExpanded {
+                VStack(spacing: 16) {
+                    if let activeOrder = state.activeMissionOrder {
+                        activeMissionDeck(activeOrder)
+                            .transition(reduceMotion ? .opacity : .asymmetric(
+                                insertion: .scale(scale: 0.96).combined(with: .opacity),
+                                removal: .scale(scale: 0.96).combined(with: .opacity)
+                            ))
+                    } else {
+                        telemetryDeck
+                            .transition(reduceMotion ? .opacity : .asymmetric(
+                                insertion: .scale(scale: 0.96).combined(with: .opacity),
+                                removal: .scale(scale: 0.96).combined(with: .opacity)
+                            ))
+                    }
 
-            // 3. Category-Defining Launch Cockpit Action Track
-            cockpitLaunchTrack
+                    // 3. Category-Defining Launch Cockpit Action Track
+                    cockpitLaunchTrack
+                }
+                .padding(.top, 16)
+                .transition(reduceMotion ? .opacity : .asymmetric(
+                    insertion: .opacity.combined(with: .scale(scale: 0.98, anchor: .top)),
+                    removal: .opacity.combined(with: .scale(scale: 0.98, anchor: .top))
+                ))
+            }
         }
         .padding(18)
         .background(
@@ -931,100 +1000,150 @@ public struct PPDeliveryDriverHomeControlSection: View {
                     )
             }
         )
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
         .shadow(color: Color.black.opacity(0.04), radius: 16, x: 0, y: 6)
+        .sensoryFeedback(.selection, trigger: isExpanded)
         .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
         .onAppear {
-            if !reduceMotion {
-                withAnimation(
-                    .easeInOut(duration: 2.0)
-                    .repeatForever(autoreverses: true)
-                ) {
-                    radarPulse = true
+            isOnScreen = true
+            synchronizeRadarPulse()
+            if state.activeMissionOrder != nil {
+                isExpanded = true
+            }
+        }
+        .onChange(of: reduceMotion) { _, _ in synchronizeRadarPulse() }
+        .onChange(of: scenePhase) { _, _ in synchronizeRadarPulse() }
+        .onChange(of: state.dutyState) { _, _ in synchronizeRadarPulse() }
+        .onChange(of: state.activeMissionOrder?.orderId) { previous, current in
+            if previous == nil && current != nil {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.82)) {
+                    isExpanded = true
                 }
             }
         }
         .onDisappear {
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { radarPulse = false }
+            isOnScreen = false
+            synchronizeRadarPulse()
         }
+    }
+
+    private var shouldPulse: Bool {
+        isOnScreen && scenePhase == .active && !reduceMotion && state.dutyState == .busyFlight
+    }
+
+    private func synchronizeRadarPulse() {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { radarPulse = false }
+        guard shouldPulse else { return }
+        withAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true)) { radarPulse = true }
     }
 
     // MARK: - Header Deck
 
     private var headerDeck: some View {
-        HStack(alignment: .center, spacing: 12) {
-            // Animated Status Orbital Beacon
-            ZStack {
-                // Expanding concentric radar pulse wave (when on duty)
-                if state.dutyState == .busyFlight && !reduceMotion {
+        Button(action: {
+            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.82)) {
+                isExpanded.toggle()
+            }
+        }) {
+            HStack(alignment: .center, spacing: 12) {
+                // Animated Status Orbital Beacon
+                ZStack {
+                    // Expanding concentric radar pulse wave (when on duty)
+                    if shouldPulse {
+                        Circle()
+                            .stroke(state.dutyState.tintColor.opacity(0.25), lineWidth: 1.5)
+                            .scaleEffect(radarPulse ? 1.4 : 0.9)
+                            .opacity(radarPulse ? 0.0 : 0.6)
+                            .frame(width: 38, height: 38)
+                    }
+
+                    // Outer chassis ring
                     Circle()
-                        .stroke(state.dutyState.tintColor.opacity(0.25), lineWidth: 1.5)
-                        .scaleEffect(radarPulse ? 1.4 : 0.9)
-                        .opacity(radarPulse ? 0.0 : 0.6)
+                        .stroke(state.dutyState.tintColor.opacity(0.28), lineWidth: 2)
                         .frame(width: 38, height: 38)
-                }
+                        .background(
+                            Circle().fill(state.dutyState.tintColor.opacity(0.08))
+                        )
 
-                // Outer chassis ring
-                Circle()
-                    .stroke(state.dutyState.tintColor.opacity(0.28), lineWidth: 2)
-                    .frame(width: 38, height: 38)
-                    .background(
-                        Circle().fill(state.dutyState.tintColor.opacity(0.08))
-                    )
-
-                // Core beacon
-                Circle()
-                    .fill(state.dutyState.tintColor)
-                    .frame(width: 14, height: 14)
-                    .shadow(color: state.dutyState.tintColor.opacity(0.6), radius: 4, x: 0, y: 1)
-            }
-
-            // Title & Subtitle Stack
-            VStack(alignment: .leading, spacing: 3) {
-                HStack(spacing: 6) {
-                    Text(Language.get("Deliv_Section_ControlTitle", alter: "مركز عمليات التوصيل الميداني"))
-                        .font(PPBrandFont.bold(16))
-                        .foregroundColor(AdminSurface.primaryText)
-                        .lineLimit(1)
-
-                    // Small alive status indicator
+                    // Core beacon
                     Circle()
-                        .fill(state.dutyState == .busyFlight ? AdminSurface.amber : AdminSurface.secondaryText.opacity(0.4))
-                        .frame(width: 7, height: 7)
+                        .fill(state.dutyState.tintColor)
+                        .frame(width: 14, height: 14)
+                        .shadow(color: state.dutyState.tintColor.opacity(0.6), radius: 4, x: 0, y: 1)
                 }
 
-                Text(state.dutyState.title)
-                    .font(PPBrandFont.regular(12))
-                    .foregroundColor(state.dutyState.tintColor)
-                    .lineLimit(1)
+                // Title & Subtitle Stack
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 6) {
+                        Text(Language.get("Deliv_Section_ControlTitle", alter: "مركز عمليات التوصيل الميداني"))
+                            .font(PPBrandFont.bold(16))
+                            .foregroundColor(AdminSurface.primaryText)
+                            .lineLimit(1)
+
+                        // Small alive status indicator
+                        Circle()
+                            .fill(state.dutyState == .busyFlight ? AdminSurface.amber : AdminSurface.secondaryText.opacity(0.4))
+                            .frame(width: 7, height: 7)
+                    }
+
+                    if !isExpanded, let activeOrder = state.activeMissionOrder {
+                        HStack(spacing: 4) {
+                            Text(Language.get("Deliv_ActiveEnRoute", alter: "مهمة جارية"))
+                                .font(PPBrandFont.bold(11))
+                                .foregroundColor(AdminSurface.amber)
+                            Text("·")
+                                .foregroundColor(AdminSurface.secondaryText)
+                            Text(!activeOrder.displayOrderNumber.isEmpty ? activeOrder.displayOrderNumber : activeOrder.bestOrderNumber())
+                                .font(PPBrandFont.medium(11))
+                                .foregroundColor(AdminSurface.secondaryText)
+                        }
+                        .lineLimit(1)
+                    } else {
+                        Text(state.dutyState.title)
+                            .font(PPBrandFont.regular(12))
+                            .foregroundColor(state.dutyState.tintColor)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 4)
+
+                // Read-only work state
+                HStack(spacing: 5) {
+                    Image(systemName: state.dutyState.systemIcon)
+                        .font(.system(size: 11, weight: .bold))
+
+                    Text(state.dutyState.shortTitle)
+                        .font(PPBrandFont.bold(12))
+                }
+                .foregroundColor(state.dutyState.tintColor)
+                .padding(.horizontal, 11)
+                .padding(.vertical, 6)
+                .background(
+                    Capsule()
+                        .fill(state.dutyState.tintColor.opacity(0.12))
+                )
+                .overlay(
+                    Capsule()
+                        .stroke(state.dutyState.tintColor.opacity(0.28), lineWidth: 1)
+                )
+
+                // Animated Chevron
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(AdminSurface.secondaryText)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                    .frame(width: 20, height: 20)
             }
-
-            Spacer(minLength: 4)
-
-            // Read-only work state: the marketplace flow has no backend
-            // availability record, so no local duty switch is offered.
-            HStack(spacing: 5) {
-                Image(systemName: state.dutyState.systemIcon)
-                    .font(.system(size: 11, weight: .bold))
-
-                Text(state.dutyState.shortTitle)
-                    .font(PPBrandFont.bold(12))
-            }
-            .foregroundColor(state.dutyState.tintColor)
-            .padding(.horizontal, 11)
-            .padding(.vertical, 6)
-            .background(
-                Capsule()
-                    .fill(state.dutyState.tintColor.opacity(0.12))
-            )
-            .overlay(
-                Capsule()
-                    .stroke(state.dutyState.tintColor.opacity(0.28), lineWidth: 1)
-            )
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(state.dutyState.title)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(PPDeliveryTouchButtonStyle(pressedScale: 0.985, pressedOpacity: 0.92))
+        .accessibilityLabel(Language.get("Deliv_Section_ControlTitle", alter: "مركز عمليات التوصيل الميداني"))
+        .accessibilityValue("\(state.dutyState.title), \(Language.get(isExpanded ? "Expanded" : "Collapsed", alter: isExpanded ? "موسّع" : "مطوي"))")
+        .accessibilityHint(Language.get(isExpanded ? "Deliv_Collapse_Hint" : "Deliv_Expand_Hint", alter: isExpanded ? "اضغط لطي بطاقة التوصيل" : "اضغط لتوسيع بطاقة التوصيل"))
     }
 
     // MARK: - Active Mission Deck (Dynamic Waypoint Corridor)

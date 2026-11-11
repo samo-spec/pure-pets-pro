@@ -9,6 +9,7 @@
 
 
 #import "AppManager.h"
+#import <math.h>
 @import FirebaseCore;
 @import FirebaseAppCheck;
 #import "PPFirebaseCompat.h"
@@ -145,8 +146,17 @@ static BOOL PPProSubscriptionIsActive(id value) {
     if (!value) return YES;
     id status = value;
     if ([value isKindOfClass:NSDictionary.class]) {
+        id schemaVersion = value[@"schemaVersion"];
+        if (schemaVersion && (![schemaVersion isKindOfClass:NSNumber.class] || [schemaVersion doubleValue] != 1)) return NO;
+        if (schemaVersion && value[@"expiresAt"] && value[@"expiresAt"] != NSNull.null) {
+            id rawDate = value[@"expiresAt"];
+            if ([rawDate isKindOfClass:NSNumber.class] && !isfinite([rawDate doubleValue])) return NO;
+            NSDate *end = [rawDate isKindOfClass:NSNumber.class] ? [NSDate dateWithTimeIntervalSince1970:[rawDate doubleValue] / 1000.0]
+                : ([rawDate respondsToSelector:@selector(dateValue)] ? [rawDate dateValue] : nil);
+            if (!end || end.timeIntervalSinceNow <= 0) return NO;
+        }
         status = value[@"status"];
-        if (!status) return YES;
+        if (!status) return !schemaVersion;
     }
     return [status isKindOfClass:NSString.class] &&
            [@[@"active", @"approved", @"trial"] containsObject:status];

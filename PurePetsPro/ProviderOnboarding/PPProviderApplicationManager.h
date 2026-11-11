@@ -89,6 +89,12 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 
 @interface PPProviderProfile : NSObject
 
+@property (nonatomic, copy) NSDictionary *subscription;
+- (BOOL)hasManagedSubscription;
+- (NSString *)effectiveSubscriptionStatus;
+- (nullable NSDate *)subscriptionExpiresAt;
+- (NSString *)localizedSubscriptionSummary;
+
 @property (nonatomic, copy) NSString *profileID;
 @property (nonatomic, assign) PPProviderType providerType;
 @property (nonatomic, copy) NSString *status;
@@ -156,6 +162,9 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 @end
 
 @interface PPProviderOnboardingState : NSObject
+
+/// Automatic application presentation requires server-observed initial data.
+@property (nonatomic, assign) BOOL initialDataAuthoritative;
 
 @property (nonatomic, copy) NSString *uid;
 @property (nonatomic, copy) NSString *displayName;

@@ -14,8 +14,6 @@
 		533CBA5E149AA91874136710 /* QBImagePicker.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = F18B2ED8BBF11FC7A093DEDC /* QBImagePicker.storyboard */; };
 		581500F3F2D98A60E69551A6 /* QBSlomoIconView.m in Sources */ = {isa = PBXBuildFile; fileRef = 38AB14AA34F486C60429D7F7 /* QBSlomoIconView.m */; };
 		6354F03D931845639C592CFF /* PPProRootTabBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC6A2BB459BAE2B8EAA /* PPProRootTabBarController.swift */; };
-		F5A0B3013005000100A0B301 /* PPProProfileSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC7A2BB459BAE2B8EAB /* PPProProfileSettingsView.swift */; };
-		F5A0B3023005000200A0B302 /* PPProviderProfileEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC8A2BB459BAE2B8EAC /* PPProviderProfileEditorView.swift */; };
 		66213DB3EE11415A8153A6AA /* PPAddEditVetViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 2C97DB99BC4542DD8F31D494 /* PPAddEditVetViewController.m */; };
 		6C65E6AFB8534ED2B64E8AC0 /* PPVetManager.m in Sources */ = {isa = PBXBuildFile; fileRef = 35927158F3DE4461BAA4F526 /* PPVetManager.m */; };
 		86200C95A3CA4EA2AD869767 /* PPVetDetailViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = CEFE7BC8BF5E4D1DA7960E4A /* PPVetDetailViewController.m */; };
@@ -167,13 +165,6 @@
 		F2BEEC812F8C8148003E8012 /* PPDeliveryStatusTimelineView.m in Sources */ = {isa = PBXBuildFile; fileRef = F2BEEC7C2F8C8148003E8012 /* PPDeliveryStatusTimelineView.m */; };
 		F2BEEC822F8C8148003E8012 /* PPDeliveryOrderModel.m in Sources */ = {isa = PBXBuildFile; fileRef = F2BEEC7A2F8C8148003E8012 /* PPDeliveryOrderModel.m */; };
 		F2BEEC832F8C8148003E8012 /* PPDeliveryDashboardViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2BEEC722F8C8148003E8012 /* PPDeliveryDashboardViewController.m */; };
-		F4D000100000000000000001 /* PPDeliveryDriverModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000001 /* PPDeliveryDriverModels.swift */; };
-		F4D000100000000000000002 /* PPDeliveryDriverControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000002 /* PPDeliveryDriverControlView.swift */; };
-		F4D000100000000000000003 /* PPDeliveryDriverHomeControlSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000003 /* PPDeliveryDriverHomeControlSection.swift */; };
-		F4D000100000000000000004 /* PPDeliveryDriverDashboardHostController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000004 /* PPDeliveryDriverDashboardHostController.swift */; };
-		F4D000100000000000000005 /* PPDriverCockpitModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000005 /* PPDriverCockpitModels.swift */; };
-		F4D000100000000000000006 /* PPDriverCockpitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000006 /* PPDriverCockpitView.swift */; };
-		F4D000100000000000000007 /* PPDeliveryMissionDossierView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000007 /* PPDeliveryMissionDossierView.swift */; };
 		F2C111113001000100A1B2C3 /* PPProviderProfileEditorViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2C111103001000100A1B2C3 /* PPProviderProfileEditorViewController.m */; };
 		F2CAD1B32FDB1F6600418D7C /* Waiting.json in Resources */ = {isa = PBXBuildFile; fileRef = F2CAD1B22FDB1F6600418D7C /* Waiting.json */; };
 		F2CAD1B52FDB344B00418D7C /* BePartner.json in Resources */ = {isa = PBXBuildFile; fileRef = F2CAD1B42FDB344B00418D7C /* BePartner.json */; };
@@ -188,9 +179,6 @@
 		F2CCF4372F8CA17F007FBAD4 /* PPServiceDetailViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4292F8CA17F007FBAD4 /* PPServiceDetailViewController.m */; };
 		F2CCF4382F8CA17F007FBAD4 /* PPAddEditServiceViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4252F8CA17F007FBAD4 /* PPAddEditServiceViewController.m */; };
 		F2CCF4392F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4312F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.m */; };
-		F2CCF4832F8CA17F007FBAD4 /* PPServiceRequestsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4822F8CA17F007FBAD4 /* PPServiceRequestsViewController.m */; };
-		F2CCF4862F8CA17F007FBAD4 /* PPServiceScheduleViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4852F8CA17F007FBAD4 /* PPServiceScheduleViewController.m */; };
-		F2CCF4892F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4882F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m */; };
 		F2CCF44B2F8CA17F007FBAD4 /* PPFulfillmentCell.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4422F8CA17F007FBAD4 /* PPFulfillmentCell.m */; };
 		F2CCF44C2F8CA17F007FBAD4 /* PPFulfillmentListViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4462F8CA17F007FBAD4 /* PPFulfillmentListViewController.m */; };
 		F2CCF44D2F8CA17F007FBAD4 /* PPFulfillmentManager.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4482F8CA17F007FBAD4 /* PPFulfillmentManager.m */; };
@@ -200,6 +188,9 @@
 		F2CCF4512F8CA17F007FBAD4 /* PPProviderMarketplaceManager.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4552F8CA17F007FBAD4 /* PPProviderMarketplaceManager.m */; };
 		F2CCF45C2F8CA17F007FBAD4 /* PPProviderMarketItemsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4572F8CA17F007FBAD4 /* PPProviderMarketItemsViewController.m */; };
 		F2CCF45D2F8CA17F007FBAD4 /* PPProviderMarketItemEditorViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF45B2F8CA17F007FBAD4 /* PPProviderMarketItemEditorViewController.m */; };
+		F2CCF4832F8CA17F007FBAD4 /* PPServiceRequestsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4822F8CA17F007FBAD4 /* PPServiceRequestsViewController.m */; };
+		F2CCF4862F8CA17F007FBAD4 /* PPServiceScheduleViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4852F8CA17F007FBAD4 /* PPServiceScheduleViewController.m */; };
+		F2CCF4892F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4882F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m */; };
 		F2D33AE42F3FADE80007EC75 /* PetImageItem.m in Sources */ = {isa = PBXBuildFile; fileRef = F2D33AE32F3FADE80007EC75 /* PetImageItem.m */; };
 		F2D33AE72F3FB0420007EC75 /* ArabicNormalizer.m in Sources */ = {isa = PBXBuildFile; fileRef = F2D33AE62F3FB0420007EC75 /* ArabicNormalizer.m */; };
 		F2D33AF42F3FB1CE0007EC75 /* MainKindsModel.m in Sources */ = {isa = PBXBuildFile; fileRef = F2D33AED2F3FB1CE0007EC75 /* MainKindsModel.m */; };
@@ -242,6 +233,7 @@
 		F3C123456789456789012346 /* PPProNotificationsHubViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2PPHUBVC1234567 /* PPProNotificationsHubViewController.m */; };
 		F410A2012FD1000100111001 /* PPPharmacyMedicinesViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F410A1022FD1000100111001 /* PPPharmacyMedicinesViewController.m */; };
 		F410A2022FD1000100111001 /* PPPharmacyMedicineEditorViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F410A1042FD1000100111001 /* PPPharmacyMedicineEditorViewController.m */; };
+		F410A2052FD1000100111001 /* PPPharmacyMedicineStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F410A1052FD1000100111001 /* PPPharmacyMedicineStudioView.swift */; };
 		F421A0010000000000000001 /* PPDeliveryCompanyModels.m in Sources */ = {isa = PBXBuildFile; fileRef = F421B0010000000000000002 /* PPDeliveryCompanyModels.m */; };
 		F421A0010000000000000002 /* PPDeliveryCompanyService.m in Sources */ = {isa = PBXBuildFile; fileRef = F421B0010000000000000004 /* PPDeliveryCompanyService.m */; };
 		F421A0010000000000000003 /* PPDeliveryCompanySetupViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F421B0010000000000000006 /* PPDeliveryCompanySetupViewController.m */; };
@@ -251,6 +243,7 @@
 		F421A0010000000000000007 /* PPDeliveryService.m in Sources */ = {isa = PBXBuildFile; fileRef = F421B001000000000000000E /* PPDeliveryService.m */; };
 		F421A0010000000000000008 /* PPDeliveryListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F421B001000000000000000F /* PPDeliveryListView.swift */; };
 		F4B100010000000000000001 /* PPMarketplaceBranchesViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F4B200020000000000000002 /* PPMarketplaceBranchesViewController.m */; };
+		F4B100020000000000000002 /* PackageDelivery.json in Resources */ = {isa = PBXBuildFile; fileRef = F4B200030000000000000003 /* PackageDelivery.json */; };
 		F4B100100000000000000001 /* PPMarketplaceBranchesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200100000000000000001 /* PPMarketplaceBranchesView.swift */; };
 		F4B100200000000000000001 /* PPItemEditorHeroView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200200000000000000001 /* PPItemEditorHeroView.swift */; };
 		F4B10020000000000000000A /* PPProviderMarketInventoryReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000A /* PPProviderMarketInventoryReinventionView.swift */; };
@@ -266,9 +259,17 @@
 		F4B100300000000000000007 /* PPAccessoryVariantMatrixView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000007 /* PPAccessoryVariantMatrixView.swift */; };
 		F4B100300000000000000008 /* PPAccessoryVariantSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000008 /* PPAccessoryVariantSection.swift */; };
 		F4B100300000000000000009 /* PPInventoryFamilyGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000009 /* PPInventoryFamilyGrouping.swift */; };
-		F4B100020000000000000002 /* PackageDelivery.json in Resources */ = {isa = PBXBuildFile; fileRef = F4B200030000000000000003 /* PackageDelivery.json */; };
+		F4D000100000000000000001 /* PPDeliveryDriverModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000001 /* PPDeliveryDriverModels.swift */; };
+		F4D000100000000000000002 /* PPDeliveryDriverControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000002 /* PPDeliveryDriverControlView.swift */; };
+		F4D000100000000000000003 /* PPDeliveryDriverHomeControlSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000003 /* PPDeliveryDriverHomeControlSection.swift */; };
+		F4D000100000000000000004 /* PPDeliveryDriverDashboardHostController.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000004 /* PPDeliveryDriverDashboardHostController.swift */; };
+		F4D000100000000000000005 /* PPDriverCockpitModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000005 /* PPDriverCockpitModels.swift */; };
+		F4D000100000000000000006 /* PPDriverCockpitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000006 /* PPDriverCockpitView.swift */; };
+		F4D000100000000000000007 /* PPDeliveryMissionDossierView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000007 /* PPDeliveryMissionDossierView.swift */; };
 		F5A0B1013005000100A0B101 /* PPHero.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5A0B1023005000100A0B102 /* PPHero.swift */; };
 		F5A0B2013005000100A0B201 /* PPProQuickActionsDeck.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5A0B2023005000100A0B202 /* PPProQuickActionsDeck.swift */; };
+		F5A0B3013005000100A0B301 /* PPProProfileSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC7A2BB459BAE2B8EAB /* PPProProfileSettingsView.swift */; };
+		F5A0B3023005000200A0B302 /* PPProviderProfileEditorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC8A2BB459BAE2B8EAC /* PPProviderProfileEditorView.swift */; };
 		FA23686D0529430AA2E37709 /* PPVetModel.m in Sources */ = {isa = PBXBuildFile; fileRef = 48315371333844CE99A6638A /* PPVetModel.m */; };
 		FB2EBAA84B72D8DD66303849 /* PPImageCollection.m in Sources */ = {isa = PBXBuildFile; fileRef = FF8490CE958C77FF7170D4E9 /* PPImageCollection.m */; };
 		FF6F85FD74CEF7C068844948 /* QBAssetCell.m in Sources */ = {isa = PBXBuildFile; fileRef = 5049D2B95AC57DD90700A7C7 /* QBAssetCell.m */; };
@@ -449,8 +450,8 @@
 		F28A76612E68955500D40BCF /* PPHUD.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPHUD.h; sourceTree = "<group>"; };
 		F28A76622E68956200D40BCF /* PPHUD.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPHUD.m; sourceTree = "<group>"; };
 		F28AE10D2E568D50007279F5 /* PurePetsPro.app */ = {isa = PBXFileReference; lastKnownFileType = wrapper.application; name = PurePetsPro.app; path = ../../PurePetsPro.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		F28AE10E2E568D50007279F5 /* PurePetsProTests.xctest */ = {isa = PBXFileReference; lastKnownFileType = file; name = PurePetsProTests.xctest; path = ../../PurePetsProTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		F28AE10F2E568D50007279F5 /* PurePetsProUITests.xctest */ = {isa = PBXFileReference; lastKnownFileType = file; name = PurePetsProUITests.xctest; path = ../../PurePetsProUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F28AE10E2E568D50007279F5 /* PurePetsProTests.xctest */ = {isa = PBXFileReference; name = PurePetsProTests.xctest; path = ../../PurePetsProTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		F28AE10F2E568D50007279F5 /* PurePetsProUITests.xctest */ = {isa = PBXFileReference; name = PurePetsProUITests.xctest; path = ../../PurePetsProUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F28AE1112E568FE4007279F5 /* PurePetsPro.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = PurePetsPro.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F28AE1122E568FE4007279F5 /* PurePetsProTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PurePetsProTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F28AE1132E568FE4007279F5 /* PurePetsProUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PurePetsProUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -615,13 +616,6 @@
 		F2BEEC7A2F8C8148003E8012 /* PPDeliveryOrderModel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPDeliveryOrderModel.m; sourceTree = "<group>"; };
 		F2BEEC7B2F8C8148003E8012 /* PPDeliveryStatusTimelineView.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPDeliveryStatusTimelineView.h; sourceTree = "<group>"; };
 		F2BEEC7C2F8C8148003E8012 /* PPDeliveryStatusTimelineView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPDeliveryStatusTimelineView.m; sourceTree = "<group>"; };
-		F4D000200000000000000001 /* PPDeliveryDriverModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverModels.swift; sourceTree = "<group>"; };
-		F4D000200000000000000002 /* PPDeliveryDriverControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverControlView.swift; sourceTree = "<group>"; };
-		F4D000200000000000000003 /* PPDeliveryDriverHomeControlSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverHomeControlSection.swift; sourceTree = "<group>"; };
-		F4D000200000000000000004 /* PPDeliveryDriverDashboardHostController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverDashboardHostController.swift; sourceTree = "<group>"; };
-		F4D000200000000000000005 /* PPDriverCockpitModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDriverCockpitModels.swift; sourceTree = "<group>"; };
-		F4D000200000000000000006 /* PPDriverCockpitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDriverCockpitView.swift; sourceTree = "<group>"; };
-		F4D000200000000000000007 /* PPDeliveryMissionDossierView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryMissionDossierView.swift; sourceTree = "<group>"; };
 		F2C1110F3001000100A1B2C3 /* PPProviderProfileEditorViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPProviderProfileEditorViewController.h; sourceTree = "<group>"; };
 		F2C111103001000100A1B2C3 /* PPProviderProfileEditorViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPProviderProfileEditorViewController.m; sourceTree = "<group>"; };
 		F2CAD1B22FDB1F6600418D7C /* Waiting.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = Waiting.json; sourceTree = "<group>"; };
@@ -648,12 +642,6 @@
 		F2CCF42F2F8CA17F007FBAD4 /* PPServicesListViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServicesListViewController.m; sourceTree = "<group>"; };
 		F2CCF4302F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceSubscriptionViewController.h; sourceTree = "<group>"; };
 		F2CCF4312F8CA17F007FBAD4 /* PPServiceSubscriptionViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceSubscriptionViewController.m; sourceTree = "<group>"; };
-		F2CCF4812F8CA17F007FBAD4 /* PPServiceRequestsViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceRequestsViewController.h; sourceTree = "<group>"; };
-		F2CCF4822F8CA17F007FBAD4 /* PPServiceRequestsViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceRequestsViewController.m; sourceTree = "<group>"; };
-		F2CCF4842F8CA17F007FBAD4 /* PPServiceScheduleViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceScheduleViewController.h; sourceTree = "<group>"; };
-		F2CCF4852F8CA17F007FBAD4 /* PPServiceScheduleViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceScheduleViewController.m; sourceTree = "<group>"; };
-		F2CCF4872F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceTemplatePickerViewController.h; sourceTree = "<group>"; };
-		F2CCF4882F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceTemplatePickerViewController.m; sourceTree = "<group>"; };
 		F2CCF4412F8CA17F007FBAD4 /* PPFulfillmentCell.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPFulfillmentCell.h; sourceTree = "<group>"; };
 		F2CCF4422F8CA17F007FBAD4 /* PPFulfillmentCell.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPFulfillmentCell.m; sourceTree = "<group>"; };
 		F2CCF4432F8CA17F007FBAD4 /* PPFulfillmentDetailViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPFulfillmentDetailViewController.h; sourceTree = "<group>"; };
@@ -672,6 +660,12 @@
 		F2CCF4572F8CA17F007FBAD4 /* PPProviderMarketItemsViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPProviderMarketItemsViewController.m; sourceTree = "<group>"; };
 		F2CCF45A2F8CA17F007FBAD4 /* PPProviderMarketItemEditorViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPProviderMarketItemEditorViewController.h; sourceTree = "<group>"; };
 		F2CCF45B2F8CA17F007FBAD4 /* PPProviderMarketItemEditorViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPProviderMarketItemEditorViewController.m; sourceTree = "<group>"; };
+		F2CCF4812F8CA17F007FBAD4 /* PPServiceRequestsViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceRequestsViewController.h; sourceTree = "<group>"; };
+		F2CCF4822F8CA17F007FBAD4 /* PPServiceRequestsViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceRequestsViewController.m; sourceTree = "<group>"; };
+		F2CCF4842F8CA17F007FBAD4 /* PPServiceScheduleViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceScheduleViewController.h; sourceTree = "<group>"; };
+		F2CCF4852F8CA17F007FBAD4 /* PPServiceScheduleViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceScheduleViewController.m; sourceTree = "<group>"; };
+		F2CCF4872F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceTemplatePickerViewController.h; sourceTree = "<group>"; };
+		F2CCF4882F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceTemplatePickerViewController.m; sourceTree = "<group>"; };
 		F2CDFBE72F9303C30037AD9A /* RecaptchaInterop.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = RecaptchaInterop.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F2D33AE22F3FADE80007EC75 /* PetImageItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PetImageItem.h; sourceTree = "<group>"; };
 		F2D33AE32F3FADE80007EC75 /* PetImageItem.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PetImageItem.m; sourceTree = "<group>"; };
@@ -748,6 +742,7 @@
 		F410A1022FD1000100111001 /* PPPharmacyMedicinesViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPPharmacyMedicinesViewController.m; sourceTree = "<group>"; };
 		F410A1032FD1000100111001 /* PPPharmacyMedicineEditorViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPPharmacyMedicineEditorViewController.h; sourceTree = "<group>"; };
 		F410A1042FD1000100111001 /* PPPharmacyMedicineEditorViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPPharmacyMedicineEditorViewController.m; sourceTree = "<group>"; };
+		F410A1052FD1000100111001 /* PPPharmacyMedicineStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPPharmacyMedicineStudioView.swift; sourceTree = "<group>"; };
 		F421B0010000000000000001 /* PPDeliveryCompanyModels.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPDeliveryCompanyModels.h; sourceTree = "<group>"; };
 		F421B0010000000000000002 /* PPDeliveryCompanyModels.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPDeliveryCompanyModels.m; sourceTree = "<group>"; };
 		F421B0010000000000000003 /* PPDeliveryCompanyService.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPDeliveryCompanyService.h; sourceTree = "<group>"; };
@@ -765,6 +760,7 @@
 		F421B001000000000000000F /* PPDeliveryListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryListView.swift; sourceTree = "<group>"; };
 		F4B200010000000000000001 /* PPMarketplaceBranchesViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPMarketplaceBranchesViewController.h; sourceTree = "<group>"; };
 		F4B200020000000000000002 /* PPMarketplaceBranchesViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPMarketplaceBranchesViewController.m; sourceTree = "<group>"; };
+		F4B200030000000000000003 /* PackageDelivery.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PackageDelivery.json; sourceTree = "<group>"; };
 		F4B200100000000000000001 /* PPMarketplaceBranchesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPMarketplaceBranchesView.swift; sourceTree = "<group>"; };
 		F4B200200000000000000001 /* PPItemEditorHeroView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPItemEditorHeroView.swift; sourceTree = "<group>"; };
 		F4B20020000000000000000A /* PPProviderMarketInventoryReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderMarketInventoryReinventionView.swift; sourceTree = "<group>"; };
@@ -780,7 +776,13 @@
 		F4B200300000000000000007 /* PPAccessoryVariantMatrixView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantMatrixView.swift; sourceTree = "<group>"; };
 		F4B200300000000000000008 /* PPAccessoryVariantSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantSection.swift; sourceTree = "<group>"; };
 		F4B200300000000000000009 /* PPInventoryFamilyGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPInventoryFamilyGrouping.swift; sourceTree = "<group>"; };
-		F4B200030000000000000003 /* PackageDelivery.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = PackageDelivery.json; sourceTree = "<group>"; };
+		F4D000200000000000000001 /* PPDeliveryDriverModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverModels.swift; sourceTree = "<group>"; };
+		F4D000200000000000000002 /* PPDeliveryDriverControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverControlView.swift; sourceTree = "<group>"; };
+		F4D000200000000000000003 /* PPDeliveryDriverHomeControlSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverHomeControlSection.swift; sourceTree = "<group>"; };
+		F4D000200000000000000004 /* PPDeliveryDriverDashboardHostController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverDashboardHostController.swift; sourceTree = "<group>"; };
+		F4D000200000000000000005 /* PPDriverCockpitModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDriverCockpitModels.swift; sourceTree = "<group>"; };
+		F4D000200000000000000006 /* PPDriverCockpitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDriverCockpitView.swift; sourceTree = "<group>"; };
+		F4D000200000000000000007 /* PPDeliveryMissionDossierView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryMissionDossierView.swift; sourceTree = "<group>"; };
 		F5A0B1023005000100A0B102 /* PPHero.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPHero.swift; sourceTree = "<group>"; };
 		F5A0B2023005000100A0B202 /* PPProQuickActionsDeck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProQuickActionsDeck.swift; sourceTree = "<group>"; };
 		F6E33AEDD7F445E88CB23B22 /* PPFunc+Haptics.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "PPFunc+Haptics.h"; sourceTree = "<group>"; };
@@ -1545,22 +1547,6 @@
 			path = MarketSection;
 			sourceTree = "<group>";
 		};
-		F4B200300000000000000000 /* Variants */ = {
-			isa = PBXGroup;
-			children = (
-				F4B200300000000000000001 /* PPAdminDesignCompat.swift */,
-				F4B200300000000000000002 /* PPAccessoryVariantError.swift */,
-				F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */,
-				F4B200300000000000000004 /* PPAccessoryVariantModels.swift */,
-				F4B200300000000000000005 /* PPAccessoryVariantService.swift */,
-				F4B200300000000000000006 /* PPAccessoryOptionEditorView.swift */,
-				F4B200300000000000000007 /* PPAccessoryVariantMatrixView.swift */,
-				F4B200300000000000000008 /* PPAccessoryVariantSection.swift */,
-				F4B200300000000000000009 /* PPInventoryFamilyGrouping.swift */,
-			);
-			path = Variants;
-			sourceTree = "<group>";
-		};
 		F2D33B1D2F3FC3760007EC75 /* HXPHPickerBridge */ = {
 			isa = PBXGroup;
 			children = (
@@ -1723,6 +1709,7 @@
 				F410A1022FD1000100111001 /* PPPharmacyMedicinesViewController.m */,
 				F410A1032FD1000100111001 /* PPPharmacyMedicineEditorViewController.h */,
 				F410A1042FD1000100111001 /* PPPharmacyMedicineEditorViewController.m */,
+				F410A1052FD1000100111001 /* PPPharmacyMedicineStudioView.swift */,
 			);
 			path = PharmacySection;
 			sourceTree = "<group>";
@@ -1769,6 +1756,22 @@
 				F4B20020000000000000000D /* PPAddEditVetStudioScreen.swift */,
 			);
 			path = VeterinarianSection;
+			sourceTree = "<group>";
+		};
+		F4B200300000000000000000 /* Variants */ = {
+			isa = PBXGroup;
+			children = (
+				F4B200300000000000000001 /* PPAdminDesignCompat.swift */,
+				F4B200300000000000000002 /* PPAccessoryVariantError.swift */,
+				F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */,
+				F4B200300000000000000004 /* PPAccessoryVariantModels.swift */,
+				F4B200300000000000000005 /* PPAccessoryVariantService.swift */,
+				F4B200300000000000000006 /* PPAccessoryOptionEditorView.swift */,
+				F4B200300000000000000007 /* PPAccessoryVariantMatrixView.swift */,
+				F4B200300000000000000008 /* PPAccessoryVariantSection.swift */,
+				F4B200300000000000000009 /* PPInventoryFamilyGrouping.swift */,
+			);
+			path = Variants;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -1836,7 +1839,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastUpgradeCheck = 1640;
+				LastUpgradeCheck = 2720;
 				TargetAttributes = {
 					F2B41E912E5647BD0054D8CD = {
 						CreatedOnToolsVersion = 16.4;
@@ -1926,9 +1929,13 @@
 			inputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-PurePetsPro/Pods-PurePetsPro-resources-${CONFIGURATION}-input-files.xcfilelist",
 			);
+			inputPaths = (
+			);
 			name = "[CP] Copy Pods Resources";
 			outputFileListPaths = (
 				"${PODS_ROOT}/Target Support Files/Pods-PurePetsPro/Pods-PurePetsPro-resources-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
@@ -1982,6 +1989,7 @@
 				F2E112472FDD8B8E00F83E77 /* PPAddEditAdoptPetViewController.m in Sources */,
 				F410A2012FD1000100111001 /* PPPharmacyMedicinesViewController.m in Sources */,
 				F410A2022FD1000100111001 /* PPPharmacyMedicineEditorViewController.m in Sources */,
+				F410A2052FD1000100111001 /* PPPharmacyMedicineStudioView.swift in Sources */,
 				CC56314264F8477EAADF6431 /* PPVetCell.m in Sources */,
 				ABE31BEAA85D476F8D0300B9 /* PPVetsListViewController.m in Sources */,
 				66213DB3EE11415A8153A6AA /* PPAddEditVetViewController.m in Sources */,
@@ -2444,14 +2452,12 @@
 		F2B41EC32E5647C00054D8CD /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
-				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
@@ -2485,6 +2491,7 @@
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
@@ -2501,23 +2508,24 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++14";
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 			};
 			name = Debug;
 		};
 		F2B41EC42E5647C00054D8CD /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_LOCALIZABILITY_NONLOCALIZED = YES;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
-				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
 				CLANG_ENABLE_OBJC_WEAK = YES;
 				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
@@ -2550,6 +2558,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "$(SRCROOT)/PurePetsPro/PrefixHeader.pch";
@@ -2561,9 +2570,12 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.5;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MODULE_VERIFIER_SUPPORTED_LANGUAGE_STANDARDS = "gnu17 gnu++14";
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = iphoneos;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;

@@ -761,6 +761,7 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
 
     BOOL hasReviewLifecycle = [self pp_hasReviewLifecycleInState:state];
     if (self.prefersAutoPresentBecomeProvider &&
+        state.initialDataAuthoritative &&
         !self.didAutoPresentBecomeProvider &&
         !hasReviewLifecycle &&
         !state.hasAnyLifecycleRecord &&
@@ -845,7 +846,7 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
             continue;
         }
         BOOL isActive = [state isActiveForType:type];
-        if (isActive && ![applicationTypes containsObject:PPProviderTypeIdentifier(type)]) {
+        if ([state profileForType:type].hasManagedSubscription || (isActive && ![applicationTypes containsObject:PPProviderTypeIdentifier(type)])) {
             [cards addObject:[self pp_cardForType:type]];
         }
     }
@@ -1478,9 +1479,10 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
 }
 
 - (UIView *)pp_cardForType:(PPProviderType)type {
+    PPProviderProfile *profile = [self.state profileForType:type];
     return [self pp_cardForType:type
-                    application:[self.state applicationForType:type]
-                        profile:[self.state profileForType:type]
+                    application:profile.hasManagedSubscription ? nil : [self.state applicationForType:type]
+                        profile:profile
                        isActive:[self.state isActiveForType:type]];
 }
 
@@ -1490,7 +1492,8 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
                   isActive:(BOOL)isActive {
 
     NSString *statusValue = isActive ? kPPProviderProfileStatusActiveValue : (application.status.length > 0 ? application.status : @"not_applied");
-    NSString *statusText = [PPProviderApplicationManager localizedStatusTitle:statusValue];
+    if (profile.hasManagedSubscription) statusValue = profile.effectiveSubscriptionStatus;
+    NSString *statusText = profile.hasManagedSubscription ? kLang([@"PartnerSub_Status_" stringByAppendingString:statusValue]) : [PPProviderApplicationManager localizedStatusTitle:statusValue];
     UIColor *accentColor = PPProviderStatusAccentColor();
     if ([statusValue isEqualToString:kPPProviderStatusRejectedValue]) {
         accentColor = [UIColor ppError];
@@ -1550,7 +1553,7 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     titleLabel.text = [PPProviderApplicationManager localizedTitleForProviderType:type];
     [card addSubview:titleLabel];
 
-    NSString *planName = isActive ? profile.localizedPlanName : application.localizedPlanName;
+    NSString *planName = profile ? profile.localizedPlanName : application.localizedPlanName;
     UILabel *summaryLabel = [[UILabel alloc] init];
     summaryLabel.translatesAutoresizingMaskIntoConstraints = NO;
     summaryLabel.font = [Styling fontMedium:13.0];
@@ -1558,6 +1561,7 @@ static UIColor *PPProviderStatusSecondaryTextColor(void) {
     summaryLabel.textAlignment = Language.alignmentForCurrentLanguage;
     summaryLabel.numberOfLines = 0;
     summaryLabel.text = planName.length > 0 ? [NSString stringWithFormat:@"%@ · %@", kLang(@"ProviderCardPlanLabel"), planName] : [PPProviderApplicationManager localizedSubtitleForProviderType:type];
+    if (profile) summaryLabel.text = [NSString stringWithFormat:@"%@\n%@", summaryLabel.text ?: @"", profile.localizedSubscriptionSummary];
     [card addSubview:summaryLabel];
 
     UILabel *notesLabel = [[UILabel alloc] init];

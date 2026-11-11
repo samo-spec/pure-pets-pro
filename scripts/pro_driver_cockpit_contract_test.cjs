@@ -312,7 +312,7 @@ check('cockpit copy is localized in Arabic and English with matching formats', (
 
 check('Home reads assigned work without offers and keeps the same availability and fleet routes', () => {
   const home = slice(legacyHome, 'struct PPDriverHomeAvailabilitySection', '// MARK: - Reusable Tactile');
-  assert(home.includes('PPDriverCockpitStore(loadsOffers: false)'));
+  assert(home.includes('@ObservedObject var store: PPDriverCockpitStore'));
   assert(models.includes('init(loadsTaskQueue: Bool = true, loadsOffers: Bool = true)'));
   assert.equal((models.match(/guard self\.loadsOffers && self\.canSelfAcceptOrders else/g) || []).length, 2,
     'Home skips the available-offer read for both official and partner companies');
@@ -325,8 +325,11 @@ check('Home reads assigned work without offers and keeps the same availability a
   assert(view.includes('PPDriverAvailabilityControl(store: store)'));
   const surface = read('PurePetsPro/AdminCore/Auth/PPProLoginSurfaceController.swift');
   const pulse = slice(surface, 'struct PPProPulseView', 'private struct PPProMoreDestinationView');
-  assert.equal((pulse.match(/PPDriverHomeAvailabilitySection/g) || []).length, 2, 'both compact and regular Home layouts');
-  assert.equal((pulse.match(/activate\(driverRoute\)/g) || []).length, 2);
+  assert(pulse.includes('@State private var driverHomeStore: PPDriverCockpitStore?'));
+  assert(pulse.includes('driverHomeStore = PPDriverCockpitStore(loadsOffers: false)'));
+  assert.equal((pulse.match(/PPDriverHomeAvailabilitySection/g) || []).length, 1, 'one delivery integration shared by compact and regular layouts');
+  assert.equal((pulse.match(/activate\(driverRoute\)/g) || []).length, 1);
+  assert(pulse.includes('driverHomeStore.boundUID == PPDeliveryCompanyService.currentAccountUID()'));
   assert(pulse.includes('$0.routeTag == "driverCockpit"'));
   assert(pulse.includes('.id(PPDeliveryCompanyService.currentAccountUID())'));
   assert(!/\.collection\(|Firestore\.firestore/.test(home));
@@ -341,12 +344,59 @@ check('Home prioritizes owned active work and never returns idle availability on
     'store.lastConfirmedAt == nil', 'store.isStale', 'activeCount > 0']) assert(hold.includes(token), token);
   assert(home.includes('assignedTasks.first(where: { $0.id == store.focusedTaskKey })'));
   assert(home.includes('store.focus(on: task)'));
-  assert(home.includes('store.setVisible(isOnScreen && phase == .active)'));
+  assert(home.includes('store.setVisible(isOnScreen && isActive && phase == .active)'));
   assert(home.includes('confirmation = nil'));
   const sent = slice(models, 'private func send(_ command:', 'private func handleCommandFailure');
   assert(sent.includes('if self.selectedContext?.kind == .partnerDriver'),
     'task completion refreshes partner membership workload as well as assigned tasks');
   assert(!sent.includes('command.kind == .availability && self.selectedContext?.kind == .partnerDriver'));
+});
+check('Delivery is a presentation-only grouped workspace with permitted doors and distinct work counts', () => {
+  const surface = read('PurePetsPro/AdminCore/Auth/PPProLoginSurfaceController.swift');
+  const lenses = slice(surface, 'struct PPProWorkspaceLens:', '@MainActor\nfinal class PPProCommandCenterStore');
+  for (const token of ['deliveryWorkspace', '"deliveryCompany"', '"driverCockpit"', 'snapshot.capabilities.filter(isDelivery)',
+    'counted.insert(signal.id).inserted', '!ids.isDisjoint(with: signal.capabilityIDs)', 'Language.get("DeliverySection"']) {
+    assert(lenses.includes(token), token);
+  }
+  assert(!/onRoute|activate\(|FIRFirestore|\.collection\(/.test(lenses), 'the group cannot navigate or grant authority');
+  const store = slice(surface, 'final class PPProCommandCenterStore:', '@objc public protocol PPProCommandCenterSurfaceControllerDelegate');
+  assert(store.includes('!workspaceLenses.contains(where: { $0.id == selectedCapabilityID })'));
+  assert(store.includes('$0.capabilityIDs.isEmpty || !ids.isDisjoint(with: $0.capabilityIDs)'));
+  const scope = slice(surface, 'struct PPProPulseScope', '// MARK: - Capability Theme');
+  assert(scope.includes('for capability in snapshot.capabilities where visibleIDs.contains(capability.id)'));
+  const pulse = slice(surface, 'struct PPProPulseView:', 'private struct PPProMoreDestinationView');
+  assert(pulse.includes('store.workspaceLenses.count > 1 || hasDeliveryCapability'), 'driver-only accounts retain the Delivery tab');
+  assert(pulse.includes('id == "all" || store.workspaceLenses.contains(where: { $0.id == id })'));
+});
+check('workspace switching preserves command ownership and hides delivery from interaction, accessibility and polling', () => {
+  const surface = read('PurePetsPro/AdminCore/Auth/PPProLoginSurfaceController.swift');
+  const pulse = slice(surface, 'struct PPProPulseView:', 'private struct PPProMoreDestinationView');
+  for (const token of ['ForEach(sectionOrder, id: \\.self)', '.frame(height: showsDeliverySection ? nil : 0)',
+    '.allowsHitTesting(showsDeliverySection)', '.accessibilityHidden(!showsDeliverySection)', 'sectionGap(after:',
+    'isActive: showsDeliverySection']) assert(pulse.includes(token), token);
+  assert(!/\.id\(store\.selected/.test(pulse), 'a selected tab is never the driver store identity');
+  const driver = slice(legacyHome, 'struct PPDriverHomeAvailabilitySection:', '// MARK: Active delivery');
+  assert(driver.includes('if isActive { store.start(focus: nil) }'));
+  assert(driver.includes('else { confirmation = nil }'));
+  assert(!driver.includes('uncertainCommand = nil'), 'tab hiding must retain the issued command');
+  const entry = slice(legacyHome, 'struct PPDeliveryHomeEntrySection:', '/// Company drivers');
+  assert(entry.includes('guard isActive else { return }'));
+  assert(/case \.provider:\s*if isActive/.test(entry));
+});
+check('workspace motion has one selected indicator and stable identities with static reduced-motion recovery', () => {
+  const surface = read('PurePetsPro/AdminCore/Auth/PPProLoginSurfaceController.swift');
+  const rail = slice(surface, 'private struct PPProLensRail:', '// MARK: - Attention stage');
+  assert.equal((rail.match(/matchedGeometryEffect\(id: "workspaceSelection"/g) || []).length, 1);
+  assert(rail.includes('ForEach(workspaces)'));
+  assert(rail.includes('.accessibilityAddTraits(selected ? .isSelected : [])'));
+  assert(/if reduceMotion\s*\{\s*transaction\.animation = nil\s+transaction\.disablesAnimations = true\s*\}/.test(rail),
+    'Reduce Motion clears inherited animation and prevents child modifiers from reintroducing it');
+  const pulse = slice(surface, 'struct PPProPulseView:', 'private struct PPProMoreDestinationView');
+  assert(pulse.includes('!reduceMotion && isOnScreen && scenePhase == .active'));
+  assert(pulse.includes('withAnimation(workspaceAnimation)'));
+  assert(pulse.includes('transaction.disablesAnimations = true'));
+  const selection = slice(pulse, 'private func selectLens(', 'private func focusSignal(');
+  assert(!selection.includes('appeared ='), 'tab changes must not replay staged entrances');
 });
 check('Home and cockpit share exact confirmation and proof/cash blocking', () => {
   const home = slice(legacyHome, 'struct PPDriverHomeAvailabilitySection', 'private struct PPDriverHomeMissionSummary');

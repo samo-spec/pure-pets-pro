@@ -1,4 +1,5 @@
 #import "PPProviderApplicationManager.h"
+#import <math.h>
 #import "PPFirebaseCompat.h"
 #if __has_include(<FirebaseAppCheck/FirebaseAppCheck.h>)
 #import <FirebaseAppCheck/FirebaseAppCheck.h>
@@ -496,6 +497,34 @@ static BOOL PPProviderBool(id value) {
 
 @implementation PPProviderProfile
 
+- (BOOL)hasManagedSubscription { return self.subscription[@"schemaVersion"] != nil; }
+- (NSDate *)subscriptionExpiresAt {
+    id value = self.subscription[@"expiresAt"];
+    if ([value isKindOfClass:NSNumber.class]) return isfinite([value doubleValue]) ? [NSDate dateWithTimeIntervalSince1970:[value doubleValue] / 1000.0] : nil;
+    return PPProviderDateFromValue(value);
+}
+- (NSString *)effectiveSubscriptionStatus {
+    if (!self.hasManagedSubscription) return @"unmanaged";
+    id version = self.subscription[@"schemaVersion"];
+    if (![version isKindOfClass:NSNumber.class] || [version doubleValue] != 1) return @"unavailable";
+    NSString *status = PPSafeString(self.subscription[@"status"]);
+    if (![@[@"active", @"paused", @"expired", @"cancelled"] containsObject:status]) return @"unavailable";
+    NSDate *end = self.subscriptionExpiresAt;
+    if (self.subscription[@"expiresAt"] && self.subscription[@"expiresAt"] != NSNull.null && !end) return @"unavailable";
+    if (([status isEqualToString:@"active"] || [status isEqualToString:@"paused"]) && end && end.timeIntervalSinceNow <= 0) return @"expired";
+    return status.length ? status : @"unavailable";
+}
+- (NSString *)localizedSubscriptionSummary {
+    if (!self.hasManagedSubscription) return kLang(@"PartnerSub_UnmanagedHint");
+    NSString *status = kLang([@"PartnerSub_Status_" stringByAppendingString:self.effectiveSubscriptionStatus]);
+    NSString *term = kLang(@"PartnerSub_NoEnd");
+    if (self.subscriptionExpiresAt) {
+        NSDateFormatter *formatter = [NSDateFormatter new]; formatter.locale = [NSLocale localeWithLocaleIdentifier:Language.isRTL ? @"ar" : @"en"];
+        formatter.dateStyle = NSDateFormatterMediumStyle; term = [formatter stringFromDate:self.subscriptionExpiresAt];
+    }
+    return [NSString stringWithFormat:kLang(@"PartnerSub_StatusTerm"), status, term];
+}
+
 - (instancetype)init {
     self = [super init];
     if (self) {
@@ -516,6 +545,8 @@ static BOOL PPProviderBool(id value) {
 - (void)pp_populateWithDictionary:(NSDictionary *)dictionary documentID:(NSString *)documentID {
     NSDictionary *planSnapshot = [dictionary[@"planSnapshot"] isKindOfClass:NSDictionary.class] ? dictionary[@"planSnapshot"] : @{};
     self.profileID = documentID ?: @"";
+    self.subscription = PPSafeDict(dictionary[@"subscription"]);
+    if (dictionary[@"subscription"] && dictionary[@"subscription"] != NSNull.null && ![dictionary[@"subscription"] isKindOfClass:NSDictionary.class]) self.subscription = @{@"schemaVersion":NSNull.null};
     self.providerType = PPProviderTypeFromIdentifier(PPSafeString(dictionary[@"providerType"]));
     self.status = PPSafeString(dictionary[@"status"]);
     self.planID = PPSafeString(dictionary[@"planId"]);
@@ -804,6 +835,10 @@ static BOOL PPProviderBool(id value) {
     if (!PPProviderTypeIsEnabledInProApp(type)) {
         return NO;
     }
+    PPProviderProfile *profile = [self profileForType:type];
+    if (profile.hasManagedSubscription && ![profile.effectiveSubscriptionStatus isEqualToString:@"active"]) return NO;
+    if (profile.hasManagedSubscription && profile.isSetupRequired) return NO;
+    if ([@[@"paused", @"inactive", @"suspended", @"disabled"] containsObject:profile.status.lowercaseString ?: @""] || profile.isRestricted || profile.isSuspended) return NO;
     if (type == PPProviderTypePharmacy && self.canPharmacy) {
         return YES;
     }
@@ -833,6 +868,7 @@ static BOOL PPProviderBool(id value) {
     if (self.isBlocked || [self isActiveForType:type]) {
         return NO;
     }
+    if ([self profileForType:type].hasManagedSubscription) return NO;
     for (PPProviderApplication *application in [self applicationsForType:type]) {
         if (!PPProviderApplicationStatusAllowsReapply(application.status)) {
             return NO;
@@ -1131,11 +1167,21 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
     NSMutableDictionary<NSString *, NSDictionary *> *applicationDocs = [NSMutableDictionary dictionary];
     NSMutableDictionary<NSString *, NSDictionary *> *profileDocs = [NSMutableDictionary dictionary];
     __block NSDictionary *userRoot = nil;
+    // Resume application intent only after every required initial snapshot.
+    NSMutableSet<NSString *> *awaitingInitial = [NSMutableSet setWithArray:@[@"user", @"applications"]];
+    NSMutableSet<NSString *> *awaitingServer = [NSMutableSet setWithArray:@[@"user", @"applications"]];
+    for (NSNumber *value in @[@(PPProviderTypeVet), @(PPProviderTypePharmacy), @(PPProviderTypeDeliverySubscription), @(PPProviderTypeDeliveryCompany), @(PPProviderTypeService), @(PPProviderTypeMarketplace)]) {
+        if (!PPProviderTypeIsEnabledInProApp(value.integerValue)) continue;
+        NSString *type = PPProviderTypeIdentifier(value.integerValue);
+        [awaitingInitial addObject:[@"profile:" stringByAppendingString:type]];
+        [awaitingServer addObject:[@"profile:" stringByAppendingString:type]];
+        [awaitingInitial addObject:[@"legacy:" stringByAppendingString:type]];
+    }
 
     __weak typeof(self) weakSelf = self;
     void (^emitState)(NSError * _Nullable) = ^(NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!completion || !self) {
+        if (!completion || !self || ![[FIRAuth auth].currentUser.uid isEqualToString:authUser.uid]) {
             return;
         }
         if (error) {
@@ -1144,19 +1190,23 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
             });
             return;
         }
+        if (awaitingInitial.count > 0) return;
         PPProviderOnboardingState *state = [self pp_buildStateForUser:authUser root:userRoot applications:applicationDocs profiles:profileDocs];
+        state.initialDataAuthoritative = awaitingServer.count == 0;
         dispatch_async(dispatch_get_main_queue(), ^{
             completion(state, nil);
         });
     };
 
     FIRDocumentReference *userRef = [[self.db collectionWithPath:@"UsersCol"] documentWithPath:authUser.uid];
-    id<FIRListenerRegistration> userReg = [userRef addSnapshotListener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
+    id<FIRListenerRegistration> userReg = [userRef addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         if (error) {
             emitState(error);
             return;
         }
         userRoot = snapshot.exists ? (snapshot.data ?: @{}) : nil;
+        [awaitingInitial removeObject:@"user"];
+        if (!snapshot.metadata.isFromCache) [awaitingServer removeObject:@"user"];
         emitState(nil);
     }];
     if (userReg) {
@@ -1166,7 +1216,7 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
     FIRQuery *applicationsQuery = [[self.db collectionWithPath:kPPProviderApplicationsCollection]
                                    queryWhereField:@"userId"
                                    isEqualTo:authUser.uid];
-    id<FIRListenerRegistration> applicationsReg = [applicationsQuery addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
+    id<FIRListenerRegistration> applicationsReg = [applicationsQuery addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         if (error) {
             emitState(error);
             return;
@@ -1181,6 +1231,8 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
                 applicationDocs[document.documentID ?: @""] = document.data ?: @{};
             }
         }
+        [awaitingInitial removeObject:@"applications"];
+        if (!snapshot.metadata.isFromCache) [awaitingServer removeObject:@"applications"];
         emitState(nil);
     }];
     if (applicationsReg) {
@@ -1198,6 +1250,7 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 
         FIRDocumentReference *applicationRef = [[self.db collectionWithPath:kPPProviderApplicationsCollection] documentWithPath:documentID];
         id<FIRListenerRegistration> applicationReg = [applicationRef addSnapshotListener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
+            [awaitingInitial removeObject:[@"legacy:" stringByAppendingString:typeIdentifier]];
             if (error) {
                 [applicationDocs removeObjectForKey:legacyApplicationKey];
                 emitState(nil);
@@ -1215,12 +1268,14 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         }
 
         FIRDocumentReference *profileRef = [[self.db collectionWithPath:kPPProviderProfilesCollection] documentWithPath:documentID];
-        id<FIRListenerRegistration> profileReg = [profileRef addSnapshotListener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
+        id<FIRListenerRegistration> profileReg = [profileRef addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
             if (error) {
                 [profileDocs removeObjectForKey:typeIdentifier];
-                emitState(nil);
+                emitState(error);
                 return;
             }
+            [awaitingInitial removeObject:[@"profile:" stringByAppendingString:typeIdentifier]];
+            if (!snapshot.metadata.isFromCache) [awaitingServer removeObject:[@"profile:" stringByAppendingString:typeIdentifier]];
             if (snapshot.exists) {
                 profileDocs[typeIdentifier] = snapshot.data ?: @{};
             } else {

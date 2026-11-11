@@ -29,6 +29,7 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
     private var moreHostNav: UINavigationController!
 
     private var notificationBadgeCount: Int = 0
+    private var tabTransition: PPProTabTransitionAnimator?
 
     // MARK: Lifecycle
 
@@ -38,6 +39,10 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
         configureAppearance()
         buildTabs()
         observeLanguageChanges()
+        NotificationCenter.default.addObserver(self, selector: #selector(finishTabTransition),
+                                               name: UIApplication.willResignActiveNotification, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(finishTabTransition),
+                                               name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
         // Semantic for RTL
         view.semanticContentAttribute = Language.isRTL() ? .forceRightToLeft : .forceLeftToRight
         tabBar.semanticContentAttribute = Language.isRTL() ? .forceRightToLeft : .forceLeftToRight
@@ -45,6 +50,20 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
 
     deinit {
         NotificationCenter.default.removeObserver(self)
+    }
+
+    public override func viewWillDisappear(_ animated: Bool) {
+        finishTabTransition()
+        super.viewWillDisappear(animated)
+    }
+
+    public override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        finishTabTransition()
+        super.viewWillTransition(to: size, with: coordinator)
+    }
+
+    @objc private func finishTabTransition() {
+        tabTransition?.finishImmediately()
     }
 
     // MARK: Appearance
@@ -215,6 +234,7 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
     }
 
     @objc private func handleLanguageChange() {
+        finishTabTransition()
         // Rebuild titles and semantic
         view.semanticContentAttribute = Language.isRTL() ? .forceRightToLeft : .forceLeftToRight
         tabBar.semanticContentAttribute = Language.isRTL() ? .forceRightToLeft : .forceLeftToRight
@@ -268,6 +288,7 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
 
     private func pushRoute(_ route: String, in nav: UINavigationController?) {
         guard let nav, !route.isEmpty else { return }
+        finishTabTransition()
         // Special routes that are handled by dashboard's dispatcher
         if route == "__menuMap" || route == "__more" || route == "__dockPopToRoot" || route == "__retryCommandData" {
             // Menu/more tabs are themselves those destinations; for other special routes,
@@ -342,14 +363,110 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
     // MARK: UITabBarControllerDelegate
 
     public func tabBarController(_ tabBarController: UITabBarController, shouldSelect viewController: UIViewController) -> Bool {
-        // Haptics for tab selection
+        // Settle the current destination before a rapid retap starts another
+        // transition. UIKit remains the only selection/navigation owner.
+        finishTabTransition()
         UISelectionFeedbackGenerator().selectionChanged()
         return true
+    }
+
+    public func tabBarController(_ tabBarController: UITabBarController,
+                                 animationControllerForTransitionFrom fromVC: UIViewController,
+                                 to toVC: UIViewController) -> UIViewControllerAnimatedTransitioning? {
+        finishTabTransition()
+        guard fromVC !== toVC, viewIfLoaded?.window != nil,
+              UIApplication.shared.applicationState == .active,
+              let controllers = viewControllers,
+              let fromIndex = controllers.firstIndex(of: fromVC),
+              let toIndex = controllers.firstIndex(of: toVC) else { return nil }
+
+        let logicalDirection: CGFloat = toIndex > fromIndex ? 1 : -1
+        let animator = PPProTabTransitionAnimator(
+            direction: Language.isRTL() ? -logicalDirection : logicalDirection,
+            reduceMotion: UIAccessibility.isReduceMotionEnabled
+        )
+        tabTransition = animator
+        return animator
     }
 
     public func tabBarController(_ tabBarController: UITabBarController, didSelect viewController: UIViewController) {
         // Pop to root when re-selecting the same tab (UITabBarController standard)
         // UIKit already handles this for the selected nav, but we ensure haptics.
+    }
+}
+
+
+/// Animates only the tab content. The system tab bar keeps its own selection
+/// treatment, safe areas and accessibility; each navigation stack stays alive.
+@MainActor
+private final class PPProTabTransitionAnimator: NSObject, UIViewControllerAnimatedTransitioning {
+    private let direction: CGFloat
+    private let reduceMotion: Bool
+    private var propertyAnimator: UIViewPropertyAnimator?
+
+    init(direction: CGFloat, reduceMotion: Bool) {
+        self.direction = direction
+        self.reduceMotion = reduceMotion
+        super.init()
+    }
+
+    func transitionDuration(using transitionContext: UIViewControllerContextTransitioning?) -> TimeInterval {
+        reduceMotion ? 0.14 : 0.26
+    }
+
+    func animateTransition(using transitionContext: UIViewControllerContextTransitioning) {
+        interruptibleAnimator(using: transitionContext).startAnimation()
+    }
+
+    func interruptibleAnimator(using transitionContext: UIViewControllerContextTransitioning) -> UIViewImplicitlyAnimating {
+        if let propertyAnimator { return propertyAnimator }
+
+        let animator = UIViewPropertyAnimator(duration: transitionDuration(using: transitionContext), curve: .easeOut)
+        propertyAnimator = animator
+        guard let fromView = transitionContext.view(forKey: .from),
+              let toView = transitionContext.view(forKey: .to),
+              let toVC = transitionContext.viewController(forKey: .to) else {
+            animator.addCompletion { _ in transitionContext.completeTransition(false) }
+            return animator
+        }
+
+        let fromAlpha = fromView.alpha
+        let toAlpha = toView.alpha
+        let fromTransform = fromView.transform
+        let toTransform = toView.transform
+        let distance: CGFloat = reduceMotion ? 0 : 16 * direction
+        toView.frame = transitionContext.finalFrame(for: toVC)
+        transitionContext.containerView.addSubview(toView)
+        toView.layoutIfNeeded()
+        toView.alpha = 0
+        toView.transform = toTransform.translatedBy(x: distance, y: 0)
+
+        animator.addAnimations {
+            fromView.alpha = 0
+            fromView.transform = fromTransform.translatedBy(x: -distance, y: 0)
+            toView.alpha = toAlpha
+            toView.transform = toTransform
+        }
+        animator.addCompletion { _ in
+            let completed = !transitionContext.transitionWasCancelled
+            fromView.alpha = fromAlpha
+            fromView.transform = fromTransform
+            toView.alpha = toAlpha
+            toView.transform = toTransform
+            if !completed { toView.removeFromSuperview() }
+            transitionContext.completeTransition(completed)
+        }
+        return animator
+    }
+
+    func finishImmediately() {
+        guard let propertyAnimator, propertyAnimator.state == .active else { return }
+        propertyAnimator.stopAnimation(false)
+        propertyAnimator.finishAnimation(at: .end)
+    }
+
+    func animationEnded(_ transitionCompleted: Bool) {
+        propertyAnimator = nil
     }
 }
 

@@ -3784,6 +3784,10 @@
 "Deliv_Duty_Active" = "نشط";
 "Deliv_Duty_Offline" = "استراحة";
 "Deliv_Section_ControlTitle" = "مركز عمليات التوصيل الميداني";
+"Deliv_Collapse_Hint" = "يخفي تفاصيل ومسارات التوصيل.";
+"Deliv_Expand_Hint" = "يعرض تفاصيل ومسارات التوصيل.";
+"Expanded" = "موسّع";
+"Collapsed" = "مطوي";
 "Deliv_ActiveEnRoute" = "مهمة جارية الآن";
 "Deliv_Waypoint_Pickup" = "الاستلام من الفرع";
 "Deliv_Waypoint_Dropoff" = "التوصيل للعميل";
@@ -4677,3 +4681,15 @@
 "ProFulfillment_ManifestUnavailable" = "غير متاح";
 "ProFulfillment_ManifestQuantity" = "الكمية";
 "ProFulfillment_ManifestUnitPrice" = "سعر الوحدة";
+
+/* Partner subscription terms — Infra contract version 1. */
+"PartnerSub_UnmanagedHint" = "لم تُحدّد مدة الاشتراك";
+"PartnerSub_NoEnd" = "بلا تاريخ انتهاء محدد";
+"PartnerSub_StatusTerm" = "%@ · %@";
+"PartnerSub_Status_all" = "كل الاشتراكات";
+"PartnerSub_Status_active" = "نشط";
+"PartnerSub_Status_paused" = "متوقف مؤقتًا";
+"PartnerSub_Status_expired" = "منتهي";
+"PartnerSub_Status_cancelled" = "ملغى";
+"PartnerSub_Status_unmanaged" = "المدة غير محددة";
+"PartnerSub_Status_unavailable" = "غير متاح";

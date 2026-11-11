@@ -2627,7 +2627,7 @@ private struct PPProCommandCenterView: View {
                         .font(PPProType.bold(15, relativeTo: .headline))
                         .foregroundStyle(palette.text)
                     Spacer()
-                    Text(snapshot.capabilities.count, format: .number)
+                    Text(snapshot.workspaceCount, format: .number)
                         .font(PPProType.medium(12))
                         .foregroundStyle(palette.secondary)
                 }
@@ -3623,6 +3623,9 @@ struct PPProPulseScope {
     let idleCapabilities: [PPProCommandCapability]
 
     var isScoped: Bool { lensID != "all" }
+    var lensTitle: String? {
+        lensID == PPProWorkspaceLens.deliveryID ? Language.get("DeliverySection", alter: nil) : lens?.title
+    }
     var hasCapabilities: Bool { !activeCapabilities.isEmpty || !idleCapabilities.isEmpty }
     var capabilityCount: Int { activeCapabilities.count + idleCapabilities.count }
 
@@ -3660,8 +3663,8 @@ struct PPProPulseScope {
         let leadID = self.leadSignal?.id
         self.ledger = scopedSignals.filter { $0.id != leadID }
 
-        // Owning a signal is a property of the capability, not of the lens, so
-        // the partition reads the whole snapshot. The lens only affects order.
+        // Work ownership stays capability-bound. The selected lens filters the
+        // displayed doors; their weights still come from the authoritative snapshot.
         func ownedWeight(_ capability: PPProCommandCapability) -> Int {
             snapshot.signals
                 .filter { $0.capabilityIDs.contains(capability.id) }
@@ -3817,10 +3820,18 @@ private struct PPProVitalsStrip: View {
     }
 }
 
-/// Quiet press feedback without a separate animation or lifecycle owner.
+/// Touch feedback stays bound to the button's pressed state, so cancellation
+/// and rapid taps never leave a delayed animation or a second selection owner.
 private struct PPProHomeControlStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label.opacity(configuration.isPressed ? 0.62 : 1)
+        configuration.label
+            .opacity(configuration.isPressed ? 0.72 : 1)
+            .scaleEffect(configuration.isPressed && !reduceMotion && scenePhase == .active ? 0.97 : 1)
+            .animation(reduceMotion || scenePhase != .active ? nil : PPProMotion.press,
+                       value: configuration.isPressed)
     }
 }
 
@@ -3877,8 +3888,12 @@ private struct PPProLensRail: View {
         }
         .padding(.horizontal, PPProPulseRhythm.screenMargin)
         .environment(\.locale, Locale(identifier: Language.currentLanguageCode()))
+        .animation(reduceMotion ? nil : PPProMotion.workspaceShift, value: selectedID)
         .transaction { transaction in
-            if reduceMotion { transaction.animation = nil }
+            if reduceMotion {
+                transaction.animation = nil
+                transaction.disablesAnimations = true
+            }
         }
     }
 
@@ -4879,6 +4894,7 @@ private struct PPProWorkspaceBand: View {
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.sizeCategory) private var sizeCategory
+    @Namespace private var orderingNamespace
 
     private func localized(_ key: String, alter: String? = nil) -> String {
         Language.get(key, alter: alter)
@@ -4906,6 +4922,8 @@ private struct PPProWorkspaceBand: View {
                 VStack(spacing: 9) {
                     ForEach(activeCapabilities) { capability in
                         activeRow(capability)
+                            .matchedGeometryEffect(id: capability.id, in: orderingNamespace, properties: .position)
+                            .transition(.opacity)
                     }
                 }
             }
@@ -4914,6 +4932,8 @@ private struct PPProWorkspaceBand: View {
                 LazyVGrid(columns: columns, spacing: isPad ? 14 : 10) {
                     ForEach(idleCapabilities) { capability in
                         idleCell(capability)
+                            .matchedGeometryEffect(id: capability.id, in: orderingNamespace, properties: .position)
+                            .transition(.opacity)
                     }
                 }
             }
@@ -5327,6 +5347,7 @@ struct PPProPulseView: View {
     @State private var bootStalled = false
 
     @Namespace private var pulseNamespace
+    @Namespace private var sectionNamespace
 
     /// How long the boot spinner is allowed to represent "still working".
     private static let bootPatience: TimeInterval = 6
@@ -5360,8 +5381,12 @@ struct PPProPulseView: View {
     }
 
     private var showsWorkspaceRail: Bool { store.workspaceLenses.count > 1 || hasDeliveryCapability }
+    private var allowsWorkspaceMotion: Bool { !reduceMotion && isOnScreen && scenePhase == .active }
     private var workspaceAnimation: Animation? {
-        reduceMotion || !isOnScreen || scenePhase != .active ? nil : PPProMotion.workspaceShift
+        allowsWorkspaceMotion ? PPProMotion.workspaceShift : nil
+    }
+    private var workspaceContentTransition: AnyTransition {
+        allowsWorkspaceMotion ? .opacity.combined(with: .offset(y: 8)) : .opacity
     }
 
     private enum HomeSection: String, Hashable { case delivery, attention, workspaces }
@@ -5478,15 +5503,14 @@ struct PPProPulseView: View {
                 commandBar
                     .padding(.horizontal, PPProPulseRhythm.screenMargin)
 
-                // A rail of one real lens plus "all" is a control with nothing to
-                // choose, so it only appears once there is a choice to make.
+                // Delivery remains an explicit destination even for a driver-only account.
                 if showsWorkspaceRail {
                     PPProLensRail(
                         workspaces: store.workspaceLenses,
                         selectedID: store.selectedWorkspaceID,
                         palette: palette,
                         isRTL: isRTL,
-                        reduceMotion: workspaceAnimation == nil,
+                        reduceMotion: !allowsWorkspaceMotion,
                         onSelect: selectLens
                     )
                 }
@@ -5495,8 +5519,10 @@ struct PPProPulseView: View {
                     ForEach(sectionOrder, id: \.self) { section in
                         homeSection(section)
                             .padding(.bottom, sectionGap(after: section, in: sectionOrder))
+                            .matchedGeometryEffect(id: section, in: sectionNamespace, properties: .position)
                     }
                 }
+                .animation(workspaceAnimation, value: store.selectedWorkspaceID)
                 .padding(.horizontal, PPProPulseRhythm.screenMargin)
             }
             .padding(.top, 8)
@@ -5520,7 +5546,7 @@ struct PPProPulseView: View {
                             selectedID: store.selectedWorkspaceID,
                             palette: palette,
                             isRTL: isRTL,
-                            reduceMotion: workspaceAnimation == nil,
+                            reduceMotion: !allowsWorkspaceMotion,
                             onSelect: selectLens
                         )
                     }
@@ -5529,8 +5555,10 @@ struct PPProPulseView: View {
                         ForEach(sectionOrder.filter { $0 != .workspaces }, id: \.self) { section in
                             homeSection(section)
                                 .padding(.bottom, sectionGap(after: section, in: [.delivery, .attention]))
+                                .matchedGeometryEffect(id: section, in: sectionNamespace, properties: .position)
                         }
                     }
+                    .animation(workspaceAnimation, value: store.selectedWorkspaceID)
                 }
                 .frame(width: 380)
 
@@ -5805,15 +5833,17 @@ struct PPProPulseView: View {
                     capabilityTitle: scope.capabilityTitle(for: lead, in: snapshot),
                     palette: palette,
                     isRTL: isRTL,
-                    reduceMotion: reduceMotion,
+                    reduceMotion: !allowsWorkspaceMotion,
                     namespace: pulseNamespace,
                     onFocus: { focusSignal(lead) },
                     onExecute: { onActionTarget(lead.actionTarget.makeDescriptor()) },
                     onWorkspace: { onWorkspaceTarget(lead.actionTarget.makeWorkspaceDescriptor()) }
                 )
-                .opacity(appeared ? 1 : 0)
-                .offset(y: appeared ? 0 : 10)
-                .animation(reduceMotion ? nil : PPProMotion.entrance, value: appeared)
+                .id(lead.id)
+                .transition(workspaceContentTransition)
+                .opacity(appeared || !allowsWorkspaceMotion ? 1 : 0)
+                .offset(y: appeared || !allowsWorkspaceMotion ? 0 : 10)
+                .animation(allowsWorkspaceMotion ? PPProMotion.entrance : nil, value: appeared)
 
                 ForEach(Array(scope.ledger.enumerated()), id: \.element.id) { index, signal in
                     PPProLedgerRow(
@@ -5822,23 +5852,29 @@ struct PPProPulseView: View {
                         isActionable: PPProPulseScope.isActionable(signal),
                         palette: palette,
                         isRTL: isRTL,
-                        reduceMotion: reduceMotion,
+                        reduceMotion: !allowsWorkspaceMotion,
                         namespace: pulseNamespace,
                         onOpen: { focusSignal(signal) }
                     )
-                    .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 8)
+                    .transition(workspaceContentTransition)
+                    .opacity(appeared || !allowsWorkspaceMotion ? 1 : 0)
+                    .offset(y: appeared || !allowsWorkspaceMotion ? 0 : 8)
                     .animation(
-                        reduceMotion ? nil : PPProMotion.entrance.delay(PPProMotion.entranceDelay(index + 1)),
+                        allowsWorkspaceMotion ? PPProMotion.entrance.delay(PPProMotion.entranceDelay(index + 1)) : nil,
                         value: appeared
                     )
                 }
             } else if snapshot.isOperationalLoading {
                 streamingState
+                    .transition(.opacity)
             } else if scope.hasCapabilities {
                 allClearNotice
+                    .transition(.opacity)
             }
         }
+        // Rank/lead changes animate by domain identity; badge-only refreshes
+        // never replay the entrance or create replacement command state.
+        .animation(workspaceAnimation, value: [scope.leadSignal?.id ?? ""] + scope.ledger.map(\.id))
     }
 
     private var streamingState: some View {
@@ -5891,8 +5927,8 @@ struct PPProPulseView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 // Names the lens when one is applied, so "nothing pending" is
                 // scoped rather than an unqualified claim about everything.
-                if let lens = scope.lens {
-                    Text(lens.title)
+                if let lensTitle = scope.lensTitle {
+                    Text(lensTitle)
                         .font(PPProType.regular(11, relativeTo: .caption))
                         .foregroundStyle(palette.secondary)
                         .lineLimit(2)
@@ -6146,6 +6182,7 @@ private struct PPProMoreDestinationView: View {
             avatarURLString: snapshot.avatarURLString,
             supportUnreadCount: snapshot.supportUnreadCount,
             inboxUnreadCount: snapshot.inboxUnreadCount,
+            workspaceCount: snapshot.workspaceCount,
             palette: palette,
             isRTL: snapshot.isRTL,
             onRoute: onRoute,
@@ -6197,6 +6234,7 @@ private struct PPProMoreView: View {
     var avatarURLString: String = ""
     var supportUnreadCount: Int = 0
     var inboxUnreadCount: Int = 0
+    var workspaceCount: Int = 0
     let palette: PPProPalette
     let isRTL: Bool
     let onRoute: (String) -> Void
@@ -6500,7 +6538,7 @@ private struct PPProMoreView: View {
                         .background(Color(uiColor: .ppSuccess).opacity(0.12), in: Capsule())
                     }
 
-                    Text(String(format: Language.get("ProMore_Active_Workspaces_Format", alter: "%d مساحات عمل مفعلة"), capabilities.count))
+                    Text(String(format: Language.get("ProMore_Active_Workspaces_Format", alter: "%d مساحات عمل مفعلة"), workspaceCount))
                         .font(PPProType.medium(12, relativeTo: .caption))
                         .foregroundStyle(palette.secondary)
                 }
@@ -6617,7 +6655,7 @@ private struct PPProMoreView: View {
                 HStack(spacing: 12) {
                     vitalBadge(
                         title: Language.get("ProMore_Active_Workspaces_Format", alter: "%d مساحات"),
-                        value: "\(capabilities.count)",
+                        value: "\(workspaceCount)",
                         symbol: "square.grid.2x2.fill",
                         tint: palette.accent
                     )

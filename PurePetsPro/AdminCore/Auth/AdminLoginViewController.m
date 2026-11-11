@@ -87,6 +87,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 @property (nonatomic, copy) NSString *countryCode;
 @property (nonatomic, copy) NSString *phoneText;
 @property (nonatomic, assign) BOOL isAuthenticating;
+@property (nonatomic, assign) BOOL resumePartnerApplicationAfterAuth;
 @property (nonatomic, assign) NSInteger appleRetryCount;
 @property (nonatomic, assign) NSInteger noPermissionAttempts;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> combinedReg;
@@ -253,6 +254,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 }
 
 - (void)proLoginSurfaceDidTapProviderApplication:(PPProLoginSurfaceController *)controller {
+    self.resumePartnerApplicationAfterAuth = YES;
     [controller focusLoginFormCard];
 }
 
@@ -858,7 +860,8 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 - (void)pp_continueToProviderOnboarding {
     PPAdminSetLoginInProgress(NO);
     PPProviderApplicationStatusViewController *statusController = [[PPProviderApplicationStatusViewController alloc] init];
-    statusController.prefersAutoPresentBecomeProvider = NO;
+    statusController.prefersAutoPresentBecomeProvider = self.resumePartnerApplicationAfterAuth;
+    self.resumePartnerApplicationAfterAuth = NO;
     [self.navigationController setViewControllers:@[statusController] animated:YES];
 }
 
@@ -983,11 +986,19 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                     return;
                 }
 
+                if (self.resumePartnerApplicationAfterAuth) {
+                    [self pp_continueToProviderOnboarding];
+                    return;
+                }
                 [self pp_preflightDeliveryCompanyMembershipForUID:uid];
                 return;
             }
 
             DLog(@"[ProGate] service provider access granted uid=%@", uid);
+            if (self.resumePartnerApplicationAfterAuth) {
+                [self pp_continueToProviderOnboarding];
+                return;
+            }
             [self pp_finishLoginAndStartUserStream];
         });
     }];

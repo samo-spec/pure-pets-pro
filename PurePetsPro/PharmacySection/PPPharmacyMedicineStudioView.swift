@@ -403,7 +403,7 @@ public struct PPPharmacyMedicineStudioView: View {
                 }
             } label: {
                 HStack(spacing: 6) {
-                    Image(systemName: isRTL ? "arrow.right" : "arrow.left")
+                    Image(systemName: "chevron.backward")
                         .font(.system(size: 15, weight: .semibold))
                 }
                 .foregroundStyle(Color(UIColor.label))
@@ -413,7 +413,7 @@ public struct PPPharmacyMedicineStudioView: View {
             }
 
             // Screen Title & Subtitle
-            VStack(alignment: isRTL ? .trailing : .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(medicineToEdit != nil ? (isRTL ? "تعديل مستحضر دوائي" : "Edit Clinical Medicine") : (isRTL ? "إضافة دواء جديد" : "New Clinical Medicine"))
                         .font(PPFont.bold(19, relativeTo: .title3))
@@ -513,7 +513,7 @@ public struct PPPharmacyMedicineStudioView: View {
                 }
 
                 // Live Dossier Specs & Mirror
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 5) {
                     // Category & Form Capsule
                     HStack(spacing: 6) {
                         Text("\(activeCategoryPreset.emoji) \(activeCategoryPreset.localizedTitle)")
@@ -538,7 +538,7 @@ public struct PPPharmacyMedicineStudioView: View {
                         .font(PPFont.bold(16, relativeTo: .headline))
                         .foregroundStyle(title.isEmpty ? Color(UIColor.placeholderText) : Color(UIColor.label))
                         .lineLimit(2)
-                        .multilineTextAlignment(isRTL ? .trailing : .leading)
+                        .multilineTextAlignment(.leading)
 
                     if !strength.isEmpty || !packSize.isEmpty {
                         Text([strength, packSize].filter { !$0.isEmpty }.joined(separator: " • "))
@@ -638,7 +638,7 @@ public struct PPPharmacyMedicineStudioView: View {
     // MARK: - Dosage Form & Route Carousel
 
     private var dosageFormRouteRibbon: some View {
-        VStack(alignment: isRTL ? .trailing : .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "pills.circle.fill")
@@ -710,7 +710,7 @@ public struct PPPharmacyMedicineStudioView: View {
     // MARK: - Therapeutic Category Rail
 
     private var therapeuticCategoryRail: some View {
-        VStack(alignment: isRTL ? .trailing : .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "tag.circle.fill")
@@ -770,7 +770,7 @@ public struct PPPharmacyMedicineStudioView: View {
     // MARK: - Core Medical Details Card
 
     private var coreMedicalDetailsCard: some View {
-        VStack(alignment: isRTL ? .trailing : .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {
                 Image(systemName: "doc.text.fill")
                     .foregroundStyle(categoryColor)
@@ -781,7 +781,7 @@ public struct PPPharmacyMedicineStudioView: View {
             }
 
             // Title input
-            VStack(alignment: isRTL ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(isRTL ? "اسم المستحضر الطبي *" : "Medicine Title *")
                     .font(PPFont.bold(12, relativeTo: .caption))
                     .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -808,7 +808,7 @@ public struct PPPharmacyMedicineStudioView: View {
             }
 
             // Scientific / Generic Name
-            VStack(alignment: isRTL ? .trailing : .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: 4) {
                 Text(isRTL ? "الاسم العلمي / المادة الفعالة (اختياري)" : "Generic / Active Ingredient (Optional)")
                     .font(PPFont.bold(12, relativeTo: .caption))
                     .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -826,7 +826,7 @@ public struct PPPharmacyMedicineStudioView: View {
             }
 
             // Description & Medical Protocol
-            VStack(alignment: isRTL ? .trailing : .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 6) {
                 HStack {
                     Text(isRTL ? "الوصف ودواعي الاستعمال" : "Description & Clinical Usage")
                         .font(PPFont.bold(12, relativeTo: .caption))
@@ -911,7 +911,7 @@ public struct PPPharmacyMedicineStudioView: View {
     // MARK: - Pharmacology & Lot Tracking Card
 
     private var pharmacologyAndLotTrackingCard: some View {
-        VStack(alignment: isRTL ? .trailing : .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {
                 Image(systemName: "cross.case.fill")
                     .foregroundStyle(categoryColor)
@@ -923,7 +923,7 @@ public struct PPPharmacyMedicineStudioView: View {
 
             HStack(spacing: 12) {
                 // Strength / Concentration
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(isRTL ? "التركيز الدوائي" : "Strength")
                         .font(PPFont.bold(12, relativeTo: .caption))
                         .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -940,7 +940,7 @@ public struct PPPharmacyMedicineStudioView: View {
                 }
 
                 // Pack Size / Volume
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(isRTL ? "حجم العبوة" : "Pack Size")
                         .font(PPFont.bold(12, relativeTo: .caption))
                         .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -981,7 +981,7 @@ public struct PPPharmacyMedicineStudioView: View {
             // Clinical Lot / Batch & Expiry Date
             HStack(spacing: 12) {
                 // Batch Number
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(isRTL ? "رقم التشغيلة (Batch/Lot)" : "Batch / Lot No.")
                         .font(PPFont.bold(12, relativeTo: .caption))
                         .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -998,7 +998,7 @@ public struct PPPharmacyMedicineStudioView: View {
                 }
 
                 // Expiry Date
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(isRTL ? "تاريخ الصلاحية" : "Expiry Date")
                         .font(PPFont.bold(12, relativeTo: .caption))
                         .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -1025,7 +1025,7 @@ public struct PPPharmacyMedicineStudioView: View {
     // MARK: - Species Target Safety Card
 
     private var speciesTargetSafetyCard: some View {
-        VStack(alignment: isRTL ? .trailing : .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 HStack(spacing: 6) {
                     Image(systemName: "pawprint.circle.fill")
@@ -1091,7 +1091,7 @@ public struct PPPharmacyMedicineStudioView: View {
     // MARK: - Commercial Economics Card
 
     private var commercialEconomicsCard: some View {
-        VStack(alignment: isRTL ? .trailing : .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {
                 Image(systemName: "banknote.fill")
                     .foregroundStyle(primaryBrandColor)
@@ -1104,7 +1104,7 @@ public struct PPPharmacyMedicineStudioView: View {
             // Retail & Wholesale Prices
             HStack(spacing: 12) {
                 // Retail Price (Required)
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(isRTL ? "سعر البيع (QAR) *" : "Retail Price (QAR) *")
                         .font(PPFont.bold(12, relativeTo: .caption))
                         .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -1122,7 +1122,7 @@ public struct PPPharmacyMedicineStudioView: View {
                 }
 
                 // Wholesale Price (Optional)
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(isRTL ? "سعر الجملة / التكلفة" : "Wholesale / Cost")
                         .font(PPFont.bold(12, relativeTo: .caption))
                         .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -1170,7 +1170,7 @@ public struct PPPharmacyMedicineStudioView: View {
                     Image(systemName: "chart.line.uptrend.xyaxis.circle.fill")
                         .foregroundStyle(Color.green)
                         .font(.system(size: 16))
-                    VStack(alignment: isRTL ? .trailing : .leading, spacing: 1) {
+                    VStack(alignment: .leading, spacing: 1) {
                         Text(isRTL ? "هامش الربح المتوقع لكل عبوة:" : "Gross Profit Margin per Unit:")
                             .font(PPFont.medium(11, relativeTo: .caption2))
                             .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -1193,7 +1193,7 @@ public struct PPPharmacyMedicineStudioView: View {
 
             // Stock Quantity Counter
             HStack {
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(isRTL ? "الكمية المتوفرة في المخزون" : "Stock Quantity")
                         .font(PPFont.bold(13, relativeTo: .subheadline))
                         .foregroundStyle(Color(UIColor.label))
@@ -1262,7 +1262,7 @@ public struct PPPharmacyMedicineStudioView: View {
             // SKU & Barcode Inputs
             HStack(spacing: 12) {
                 // SKU
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(isRTL ? "رمز التخزين SKU" : "SKU Code")
                         .font(PPFont.bold(12, relativeTo: .caption))
                         .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -1279,7 +1279,7 @@ public struct PPPharmacyMedicineStudioView: View {
                 }
 
                 // Barcode
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(isRTL ? "الباركود الدولي" : "Barcode (EAN)")
                         .font(PPFont.bold(12, relativeTo: .caption))
                         .foregroundStyle(Color(UIColor.secondaryLabel))
@@ -1307,50 +1307,118 @@ public struct PPPharmacyMedicineStudioView: View {
     // MARK: - Variant Options Matrix Card
 
     private var variantOptionsMatrixCard: some View {
-        VStack(alignment: isRTL ? .trailing : .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
+            // Header Row
             HStack {
-                HStack(spacing: 6) {
-                    Image(systemName: "slider.horizontal.2.square.on.square")
-                        .foregroundStyle(categoryColor)
-                        .font(.system(size: 14))
-                    Text(isRTL ? "خيارات ومصفوفة الدواء" : "Medicine Options & Matrix")
-                        .font(PPFont.bold(14, relativeTo: .subheadline))
-                        .foregroundStyle(Color(UIColor.label))
+                HStack(spacing: 8) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(categoryColor.opacity(0.14))
+                            .frame(width: 30, height: 30)
+                        Image(systemName: "slider.horizontal.2.square.on.square")
+                            .foregroundStyle(categoryColor)
+                            .font(.system(size: 14, weight: .bold))
+                    }
+
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(isRTL ? "مصفوفة وتوليفات المستحضر" : "Medicine Matrix & Variants")
+                            .font(PPFont.bold(14, relativeTo: .subheadline))
+                            .foregroundStyle(Color(UIColor.label))
+
+                        Text(isRTL ? "توليفات دوائية بأسعار ومخزون منفصل" : "Independent pricing & stock per variant")
+                            .font(PPFont.medium(10, relativeTo: .caption2))
+                            .foregroundStyle(Color(UIColor.secondaryLabel))
+                    }
                 }
                 Spacer()
-                Text("MATRIX")
-                    .font(PPFont.bold(10, relativeTo: .caption2))
+                Text("NEXTGEN V9")
+                    .font(PPFont.bold(9, relativeTo: .caption2))
                     .foregroundStyle(categoryColor)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
                     .background(categoryColor.opacity(0.12), in: Capsule())
             }
 
-            Text(isRTL ? "يمكنك إدارة تركيزات متعددة (مثل: 50mg, 100mg) أو أحجام مختلفة لنفس الدواء مع أسعار ومخزون منفصل." : "Manage multiple concentrations (e.g. 50mg, 100mg) or pack sizes with independent pricing and inventory.")
-                .font(PPFont.medium(11, relativeTo: .caption2))
-                .foregroundStyle(Color(UIColor.secondaryLabel))
+            // Matrix Dimension Showcase Pills
+            VStack(alignment: .leading, spacing: 8) {
+                // Dimension 1: Concentrations / Strengths
+                HStack(spacing: 6) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "cross.vial.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(categoryColor)
+                        Text(isRTL ? "التركيز:" : "Strength:")
+                            .font(PPFont.bold(11, relativeTo: .caption2))
+                            .foregroundStyle(Color(UIColor.label))
+                    }
 
+                    ForEach(["25mg", "50mg", "100mg"], id: \.self) { pill in
+                        Text(pill)
+                            .font(PPFont.medium(10, relativeTo: .caption2))
+                            .foregroundStyle(Color(UIColor.secondaryLabel))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color(UIColor.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                }
+
+                // Dimension 2: Pack Sizes
+                HStack(spacing: 6) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "shippingbox.fill")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(Color(red: 0.12, green: 0.68, blue: 0.88))
+                        Text(isRTL ? "العبوة:" : "Pack:")
+                            .font(PPFont.bold(11, relativeTo: .caption2))
+                            .foregroundStyle(Color(UIColor.label))
+                    }
+
+                    ForEach([isRTL ? "٣٠ قرص" : "30 Tab", isRTL ? "٦٠ قرص" : "60 Tab", isRTL ? "١٢٠ قرص" : "120 Tab"], id: \.self) { pill in
+                        Text(pill)
+                            .font(PPFont.medium(10, relativeTo: .caption2))
+                            .foregroundStyle(Color(UIColor.secondaryLabel))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color(UIColor.tertiarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    }
+                }
+            }
+            .padding(10)
+            .background(Color(UIColor.tertiarySystemGroupedBackground).opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            // Studio Sheet Launcher Button
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                 if let handler = onOpenVariantStudio, let currentMed = medicineToEdit {
                     handler(currentMed)
                 } else {
-                    // Pre-save to stage medicine
                     saveMedicineInternal(openMatrixStudioAfter: true)
                 }
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "sparkles")
                         .font(.system(size: 13, weight: .semibold))
-                    Text(isRTL ? "فتح استوديو الخيارات والمصفوفة" : "Open Options & Matrix Studio")
+                    Text(isRTL ? "فتح استوديو مصفوفة التوليفات الدوائية" : "Open Medicine Matrix Studio")
                         .font(PPFont.bold(13, relativeTo: .subheadline))
+                    Spacer()
+                    Image(systemName: isRTL ? "chevron.left" : "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
                 }
                 .foregroundStyle(.white)
+                .padding(.horizontal, 14)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 12)
-                .background(categoryColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: categoryColor.opacity(0.3), radius: 6, x: 0, y: 2)
+                .frame(height: 44)
+                .background(
+                    LinearGradient(
+                        colors: [categoryColor, categoryColor.opacity(0.88)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                )
+                .shadow(color: categoryColor.opacity(0.25), radius: 6, x: 0, y: 2)
             }
+            .buttonStyle(.plain)
         }
         .padding(16)
         .background(
@@ -1363,7 +1431,7 @@ public struct PPPharmacyMedicineStudioView: View {
     // MARK: - Dispensing & Catalog Visibility Card
 
     private var dispensingAndCatalogCard: some View {
-        VStack(alignment: isRTL ? .trailing : .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 6) {
                 Image(systemName: "switch.2")
                     .foregroundStyle(categoryColor)
@@ -1375,7 +1443,7 @@ public struct PPPharmacyMedicineStudioView: View {
 
             // Available Switch
             Toggle(isOn: $isAvailable) {
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(isRTL ? "جاهز للطلب والصرف الفوري" : "Available for Instant Order")
                         .font(PPFont.bold(13, relativeTo: .subheadline))
                         .foregroundStyle(Color(UIColor.label))
@@ -1390,7 +1458,7 @@ public struct PPPharmacyMedicineStudioView: View {
 
             // Published in Search Catalog Switch
             Toggle(isOn: $isPublished) {
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(isRTL ? "الظهور في دليل الصيدلية العام" : "Published in Public Directory")
                         .font(PPFont.bold(13, relativeTo: .subheadline))
                         .foregroundStyle(Color(UIColor.label))
@@ -1433,7 +1501,7 @@ public struct PPPharmacyMedicineStudioView: View {
 
             HStack(spacing: 14) {
                 // Quick Summary Pill
-                VStack(alignment: isRTL ? .trailing : .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 4) {
                         Text(parsedPrice > 0 ? String(format: "%.2f", parsedPrice) : "--")
                             .font(PPFont.bold(17, relativeTo: .headline))

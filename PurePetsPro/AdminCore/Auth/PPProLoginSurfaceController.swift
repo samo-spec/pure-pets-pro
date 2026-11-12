@@ -3511,8 +3511,8 @@ enum PPProPulseRhythm {
 /// so the redesign feels continuous with the login surface.
 enum PPProMotion {
     static let press = Animation.easeOut(duration: 0.12)
-    static let workspaceShift = Animation.spring(response: 0.28, dampingFraction: 0.90)
-    static let lensSwap = Animation.spring(response: 0.40, dampingFraction: 0.88)
+    static let workspaceShift = Animation.spring(response: 0.38, dampingFraction: 0.84)
+    static let lensSwap = Animation.spring(response: 0.40, dampingFraction: 0.86)
     static let dockMorph = Animation.spring(response: 0.38, dampingFraction: 0.84)
     static let stageChange = Animation.spring(response: 0.46, dampingFraction: 0.86)
     static let entrance = Animation.spring(response: 0.58, dampingFraction: 0.90)
@@ -4923,7 +4923,12 @@ private struct PPProWorkspaceBand: View {
                     ForEach(activeCapabilities) { capability in
                         activeRow(capability)
                             .matchedGeometryEffect(id: capability.id, in: orderingNamespace, properties: .position)
-                            .transition(.opacity)
+                            .transition(
+                                .asymmetric(
+                                    insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .center)),
+                                    removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .center))
+                                )
+                            )
                     }
                 }
             }
@@ -4933,7 +4938,12 @@ private struct PPProWorkspaceBand: View {
                     ForEach(idleCapabilities) { capability in
                         idleCell(capability)
                             .matchedGeometryEffect(id: capability.id, in: orderingNamespace, properties: .position)
-                            .transition(.opacity)
+                            .transition(
+                                .asymmetric(
+                                    insertion: .opacity.combined(with: .scale(scale: 0.96, anchor: .center)),
+                                    removal: .opacity.combined(with: .scale(scale: 0.96, anchor: .center))
+                                )
+                            )
                     }
                 }
             }
@@ -5386,7 +5396,12 @@ struct PPProPulseView: View {
         allowsWorkspaceMotion ? PPProMotion.workspaceShift : nil
     }
     private var workspaceContentTransition: AnyTransition {
-        allowsWorkspaceMotion ? .opacity.combined(with: .offset(y: 8)) : .opacity
+        allowsWorkspaceMotion
+            ? .asymmetric(
+                insertion: .opacity.combined(with: .scale(scale: 0.97, anchor: .top)).combined(with: .offset(y: 6)),
+                removal: .opacity.combined(with: .scale(scale: 0.97, anchor: .top))
+            )
+            : .opacity
     }
 
     private enum HomeSection: String, Hashable { case delivery, attention, workspaces }
@@ -5602,9 +5617,12 @@ struct PPProPulseView: View {
             .id(PPDeliveryCompanyService.currentAccountUID())
             .frame(height: showsDeliverySection ? nil : 0)
             .opacity(showsDeliverySection ? 1 : 0)
+            .scaleEffect(showsDeliverySection ? 1.0 : 0.95, anchor: .top)
+            .blur(radius: showsDeliverySection ? 0 : 2)
             .clipped()
             .allowsHitTesting(showsDeliverySection)
             .accessibilityHidden(!showsDeliverySection)
+            .animation(workspaceAnimation, value: showsDeliverySection)
         }
     }
 

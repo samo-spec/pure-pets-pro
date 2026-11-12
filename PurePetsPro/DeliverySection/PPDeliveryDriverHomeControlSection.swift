@@ -156,6 +156,9 @@ struct PPDriverHomeAvailabilitySection: View {
         .background(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous).fill(AdminSurface.card))
         .overlay(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous).stroke(AdminSurface.hairline, lineWidth: 0.5))
         .clipShape(RoundedRectangle(cornerRadius: AdminRadius.card, style: .continuous))
+        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82), value: activeTask?.id)
+        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82), value: activeTask?.stage)
+        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.82), value: activeTask?.status)
         .sensoryFeedback(.selection, trigger: isExpanded)
         .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
         .environment(\.locale, Locale(identifier: Language.currentLanguageCode()))
@@ -757,7 +760,7 @@ private struct PPDriverHomeMissionSummary: View {
                     .foregroundStyle(AdminSurface.primary)
                     .fixedSize(horizontal: false, vertical: true)
                     .contentTransition(.opacity)
-                    .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: task.status)
+                    .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.80), value: task.status)
             }
 
             if task.stage != .unknown {
@@ -777,6 +780,7 @@ private struct PPDriverHomeMissionSummary: View {
             .padding(AdminSpacing.md)
             .background(AdminSurface.backgroundSecondary,
                         in: RoundedRectangle(cornerRadius: AdminRadius.medium, style: .continuous))
+            .animation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.82), value: pickupIsNext)
 
             if !task.customerName.isEmpty || task.cash?.required == true {
                 let layout = dynamicTypeSize.isAccessibilitySize
@@ -819,7 +823,7 @@ private struct PPDriverHomeMissionSummary: View {
                 milestone(index)
             }
         }
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: task.stage)
+        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.80), value: task.stage)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ppDriverFormat("DriverCockpit_Step_Accessibility_Format",
                                            task.stage.railIndex + 1, steps.count,
@@ -839,10 +843,12 @@ private struct PPDriverHomeMissionSummary: View {
             HStack(spacing: 5) {
                 Image(systemName: isPast ? "checkmark.circle.fill" : (isCurrent ? "circle.inset.filled" : "circle"))
                     .font(.system(size: 15, weight: .semibold))
+                    .contentTransition(.symbolEffect(.replace))
                 if !dynamicTypeSize.isAccessibilitySize {
                     Capsule()
                         .fill(color.opacity(isCurrent || isPast ? 0.8 : 0.15))
                         .frame(height: 3)
+                        .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.80), value: task.stage)
                 }
             }
             .foregroundStyle(color)

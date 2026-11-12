@@ -36,3 +36,5 @@
 #import "VeterinarianSection/PPVetManager.h"
 #import "Main Controllers/PPProProfileSettingsViewController.h"
 #import "Main Controllers/PPProviderProfileEditorViewController.h"
+#import "ProviderOnboarding/PPProviderApplicationManager.h"
+#import "ProviderOnboarding/PPBecomeProviderBottomSheetViewController.h"

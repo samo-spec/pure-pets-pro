@@ -14,6 +14,7 @@
 NS_ASSUME_NONNULL_BEGIN
 static NSString * const PPMainKindsUpdatedNotification = @"MainKindsUpdatedNotification";
 @class MainKindsModel;
+@class SubKindModel;
 @protocol FIRListenerRegistration;
 
 

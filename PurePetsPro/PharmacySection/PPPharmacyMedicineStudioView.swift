@@ -155,9 +155,9 @@ private extension Color {
 public struct PPPharmacyMedicineStudioView: View {
     // Input / Output bindings
     private let medicineToEdit: PPVetMedicineModel?
-    private let onSave: (PPVetMedicineModel, UIImage?) -> Void
-    private let onDismiss: () -> Void
-    private let onOpenVariantStudio: ((PPVetMedicineModel) -> Void)?
+    private let onSave: @MainActor (PPVetMedicineModel, UIImage?) -> Void
+    private let onDismiss: @MainActor () -> Void
+    private let onOpenVariantStudio: (@MainActor (PPVetMedicineModel) -> Void)?
 
     // Core Medical States
     @State private var title: String
@@ -201,9 +201,9 @@ public struct PPPharmacyMedicineStudioView: View {
 
     public init(
         medicine: PPVetMedicineModel?,
-        onSave: @escaping (PPVetMedicineModel, UIImage?) -> Void,
-        onDismiss: @escaping () -> Void,
-        onOpenVariantStudio: ((PPVetMedicineModel) -> Void)? = nil
+        onSave: @escaping @MainActor (PPVetMedicineModel, UIImage?) -> Void,
+        onDismiss: @escaping @MainActor () -> Void,
+        onOpenVariantStudio: (@MainActor (PPVetMedicineModel) -> Void)? = nil
     ) {
         self.medicineToEdit = medicine
         self.onSave = onSave
@@ -1699,9 +1699,9 @@ private struct PPUIPHPhotoPicker: UIViewControllerRepresentable {
 public final class PPPharmacyMedicineStudioHostingBridge: NSObject {
     @objc @MainActor public static func makeViewController(
         medicine: PPVetMedicineModel?,
-        onSave: @escaping (PPVetMedicineModel, UIImage?) -> Void,
-        onDismiss: @escaping () -> Void,
-        onOpenVariantStudio: @escaping (PPVetMedicineModel) -> Void
+        onSave: @escaping @MainActor (PPVetMedicineModel, UIImage?) -> Void,
+        onDismiss: @escaping @MainActor () -> Void,
+        onOpenVariantStudio: @escaping @MainActor (PPVetMedicineModel) -> Void
     ) -> UIViewController {
         let studioView = PPPharmacyMedicineStudioView(
             medicine: medicine,

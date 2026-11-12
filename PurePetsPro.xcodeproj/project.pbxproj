@@ -250,6 +250,9 @@
 		F4B10020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */; };
 		F4B10020000000000000000C /* PPProviderServicesReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000C /* PPProviderServicesReinventionView.swift */; };
 		F4B10020000000000000000D /* PPAddEditVetStudioScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000D /* PPAddEditVetStudioScreen.swift */; };
+		F4B100400000000000000001 /* PPBecomePartnerStudioSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200400000000000000001 /* PPBecomePartnerStudioSheet.swift */; };
+		F4B100400000000000000002 /* PPProviderApplicationStatusStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200400000000000000002 /* PPProviderApplicationStatusStudioView.swift */; };
+		F4B100400000000000000003 /* PPProviderSubscriptionStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200400000000000000003 /* PPProviderSubscriptionStudioView.swift */; };
 		F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000001 /* PPAdminDesignCompat.swift */; };
 		F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000002 /* PPAccessoryVariantError.swift */; };
 		F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */; };
@@ -767,6 +770,9 @@
 		F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderMarketItemDetailReinventionView.swift; sourceTree = "<group>"; };
 		F4B20020000000000000000C /* PPProviderServicesReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderServicesReinventionView.swift; sourceTree = "<group>"; };
 		F4B20020000000000000000D /* PPAddEditVetStudioScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAddEditVetStudioScreen.swift; sourceTree = "<group>"; };
+		F4B200400000000000000001 /* PPBecomePartnerStudioSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPBecomePartnerStudioSheet.swift; sourceTree = "<group>"; };
+		F4B200400000000000000002 /* PPProviderApplicationStatusStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderApplicationStatusStudioView.swift; sourceTree = "<group>"; };
+		F4B200400000000000000003 /* PPProviderSubscriptionStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderSubscriptionStudioView.swift; sourceTree = "<group>"; };
 		F4B200300000000000000001 /* PPAdminDesignCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdminDesignCompat.swift; sourceTree = "<group>"; };
 		F4B200300000000000000002 /* PPAccessoryVariantError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantError.swift; sourceTree = "<group>"; };
 		F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantMediaService.swift; sourceTree = "<group>"; };
@@ -1692,12 +1698,15 @@
 				F2CAD1BF2FDCA3E200418D7C /* PPUserMessagesViewController.m */,
 				F310A1032FC1000100111001 /* PPBecomeProviderBottomSheetViewController.h */,
 				F310A1042FC1000100111001 /* PPBecomeProviderBottomSheetViewController.m */,
+				F4B200400000000000000001 /* PPBecomePartnerStudioSheet.swift */,
 				F310A1012FC1000100111001 /* PPProviderApplicationManager.h */,
 				F310A1022FC1000100111001 /* PPProviderApplicationManager.m */,
 				F310A1052FC1000100111001 /* PPProviderApplicationStatusViewController.h */,
 				F310A1062FC1000100111001 /* PPProviderApplicationStatusViewController.m */,
+				F4B200400000000000000002 /* PPProviderApplicationStatusStudioView.swift */,
 				F2B8FCDD2FDE4FC8007E0B01 /* PPProviderSubscriptionManagmetVC.h */,
 				F2B8FCDE2FDE4FCE007E0B01 /* PPProviderSubscriptionManagmetVC.m */,
+				F4B200400000000000000003 /* PPProviderSubscriptionStudioView.swift */,
 			);
 			path = ProviderOnboarding;
 			sourceTree = "<group>";
@@ -2086,6 +2095,9 @@
 				F4B10020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift in Sources */,
 				F4B10020000000000000000C /* PPProviderServicesReinventionView.swift in Sources */,
 				F4B10020000000000000000D /* PPAddEditVetStudioScreen.swift in Sources */,
+				F4B100400000000000000001 /* PPBecomePartnerStudioSheet.swift in Sources */,
+				F4B100400000000000000002 /* PPProviderApplicationStatusStudioView.swift in Sources */,
+				F4B100400000000000000003 /* PPProviderSubscriptionStudioView.swift in Sources */,
 				F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */,
 				F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */,
 				F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */,

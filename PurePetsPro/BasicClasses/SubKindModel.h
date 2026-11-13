@@ -8,7 +8,17 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import "subSubKindModel.h"
+
+#if __has_include(<XLForm/XLFormOptionsObject.h>)
+#import <XLForm/XLFormOptionsObject.h>
+#elif __has_include("XLFormOptionsObject.h")
 #import "XLFormOptionsObject.h"
+#else
+@protocol XLFormOptionObject <NSObject>
+- (NSString *)formDisplayText;
+- (id)formValue;
+@end
+#endif
 
 @class FIRDocumentSnapshot;
 @protocol FIRListenerRegistration;

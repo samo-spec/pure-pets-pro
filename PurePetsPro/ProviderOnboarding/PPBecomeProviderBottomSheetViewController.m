@@ -83,6 +83,18 @@
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self.navigationController setNavigationBarHidden:YES animated:animated];
+#if __has_include(<IQKeyboardManager/IQKeyboardManager.h>)
+    [IQKeyboardManager sharedManager].enable = NO;
+    [IQKeyboardManager sharedManager].enableAutoToolbar = NO;
+#endif
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+#if __has_include(<IQKeyboardManager/IQKeyboardManager.h>)
+    [IQKeyboardManager sharedManager].enable = YES;
+    [IQKeyboardManager sharedManager].enableAutoToolbar = YES;
+#endif
 }
 
 - (UIStatusBarStyle)preferredStatusBarStyle {

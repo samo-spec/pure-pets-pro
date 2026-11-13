@@ -8,6 +8,7 @@
 #import <UIKit/UIKit.h>
 
 @class PPDeliveryCompanyProfile;
+@class FIRUser;
 
 typedef NS_ENUM(NSInteger, AppRoot) {
     AppRootSplash,
@@ -19,6 +20,12 @@ typedef NS_ENUM(NSInteger, AppRoot) {
 @interface SceneDelegate : UIResponder <UIWindowSceneDelegate>
 
 @property (strong, nonatomic) UIWindow * window;
+
+/// Preserve an explicit account-management/onboarding intent against older
+/// access checks and deferred root transitions. Does not change authorization.
+- (void)cancelPendingProAccessRouting;
+/// Re-enters the existing authenticated Pro access gate and root owner.
+- (void)updateRootForUser:(nullable FIRUser *)user animated:(BOOL)animated;
 
 - (void)reloadRootViewControllerForLanguageChange;
 - (void)showDashboardWithDeliveryCompanyProfile:(PPDeliveryCompanyProfile *)profile animated:(BOOL)animated;

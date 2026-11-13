@@ -58,6 +58,10 @@ static void PPProApplyThemePreference(NSString *preference) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.view.clipsToBounds = YES;
+    self.navigationItem.hidesBackButton = YES;
+    self.navigationItem.leftBarButtonItem = nil;
+    self.navigationItem.rightBarButtonItem = nil;
     self.view.backgroundColor = [UIColor ppBackground];
     self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     self.coverImageURLs = [NSMutableArray array];
@@ -131,6 +135,9 @@ static void PPProApplyThemePreference(NSString *preference) {
     if (self.navigationController) {
         [self.navigationController setNavigationBarHidden:YES animated:animated];
     }
+    self.navigationItem.hidesBackButton = YES;
+    self.navigationItem.leftBarButtonItem = nil;
+    self.navigationItem.rightBarButtonItem = nil;
     [self pp_refreshAllContent];
 }
 

@@ -4693,3 +4693,36 @@
 "PartnerSub_Status_cancelled" = "ملغى";
 "PartnerSub_Status_unmanaged" = "المدة غير محددة";
 "PartnerSub_Status_unavailable" = "غير متاح";
+
+/* Pro access and Home subscription card */
+"ProAccess_CheckFailedTitle" = "تعذّر التحقق من صلاحية الوصول إلى تطبيق الشركاء";
+"ProAccess_CheckFailedBody" = "لم نتمكن من إكمال التحقق من صلاحيات هذا الحساب. أعد المحاولة، أو استخدم حساباً آخر، أو افتح طلب انضمام كمقدّم خدمة أو شريك. يتطلب تفعيل الصلاحيات موافقة الفريق.";
+"ProAccess_NotEnabledTitle" = "لا توجد صلاحية مفعّلة لتطبيق الشركاء";
+"ProAccess_NotEnabledBody" = "لا يملك هذا الحساب حالياً صلاحية مفعّلة للعمل في تطبيق الشركاء. يمكنك تسجيل الدخول بحساب آخر، أو التقدّم كمقدّم خدمة أو شريك واختيار الباقة المناسبة.";
+"ProAccess_BecomePartner" = "انضم كمقدّم خدمة أو شريك";
+"ProAccess_UseAnotherAccount" = "تسجيل الدخول بحساب آخر";
+"ProSubscription_Eyebrow" = "الاشتراك والمزايا";
+"ProSubscription_Title" = "إدارة الاشتراك";
+"ProSubscription_Manage" = "عرض الاشتراك والطلبات";
+"ProSubscription_Loading" = "نتحقق من اشتراكك وطلبات الانضمام المتاحة لحسابك.";
+"ProSubscription_LoadFailed" = "تعذّر تحميل حالة الاشتراك. أعد المحاولة للاطّلاع على بيانات حسابك الحالية.";
+"ProSubscription_ProviderAccess" = "صلاحياتك كمقدّم خدمة";
+"ProSubscription_Active" = "راجع اشتراكك وطلباتك، أو تقدّم للحصول على ميزة إضافية تناسب نشاطك.";
+"ProSubscription_Ready" = "اختر نوع نشاطك والباقة المناسبة، ثم أرسل طلب الانضمام للمراجعة.";
+"ProSubscription_DriverTitle" = "وصولك كسائق";
+"ProSubscription_FleetManaged" = "تديره شركة التوصيل";
+"ProSubscription_DriverBody" = "عضويتك في شركة التوصيل تتيح لك العمل كسائق، ولا تعني وجود اشتراك كمقدّم خدمة. يمكنك متابعة طلباتك أو التقدّم لنشاط آخر من هنا.";
+"ProSubscription_DriverRequirement" = "لتقديم خدمات أخرى: اختر نوع النشاط والباقة، وأكمل البيانات المطلوبة، ثم انتظر موافقة الفريق.";
+"ProSubscription_ChangesRequested" = "راجع الملاحظات وحدّث طلبك قبل إعادة إرساله للمراجعة.";
+"ProSubscription_InReview" = "طلبك قيد المراجعة. يمكنك متابعة حالته أو التقدّم لميزة أخرى متاحة، دون التأثير على صلاحياتك الحالية.";
+"ProSubscription_TermFormat" = "نهاية المدة: %@";
+"ProSubscription_AddFeature" = "طلب ميزة إضافية";
+"ProSubscription_NoFeaturesAvailable" = "لا يوجد مسار جديد متاح للتقديم حالياً. راجع اشتراكاتك وطلباتك الحالية وحالة المراجعة.";
+"ProSubscription_NoProviderPlan" = "لا يوجد اشتراك كمقدّم خدمة";
+"ProSubscription_OrdersBlocked" = "استقبال الطلبات موقوف وفق حالة الحساب الحالية.";
+"ProSubscription_PayoutsHeld" = "التحويلات المالية معلّقة وفق حالة الحساب الحالية.";
+"ProSubscription_ChangesTitle" = "تغيير الباقة";
+"ProSubscription_ChangesBody" = "تدير Pure Pets التغييرات على الاشتراكات الحالية بعد المراجعة. عرض باقة أخرى لا يغيّر اشتراكك ولا يرسل طلب تغيير. لطلب نشاط جديد، استخدم «طلب ميزة إضافية» من الرئيسية.";
+"ProSubscription_DriverLoadFailed" = "تدير شركة التوصيل وصولك كسائق. تعذّر تحميل تفاصيل اشتراك مقدّم الخدمة؛ يمكنك إعادة المحاولة أو فتح إدارة الطلبات للاطّلاع على المتطلبات.";
+"ProSubscription_PlansTitle" = "باقات هذا النشاط";
+"ProSubscription_ChangesAction" = "حول تغيير الباقة";

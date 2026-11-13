@@ -347,15 +347,16 @@ public struct PPBecomePartnerStudioSheet: View {
                 ToolbarItem(placement: .principal) {
                     VStack(spacing: 2) {
                         Text(currentStep.localizedTitle)
-                            .font(.system(size: 16, weight: .bold))
+                            .font(PPBrandFont.bold(16, relativeTo: .headline))
                             .foregroundStyle(Color(.label))
                         Text(Language.isRTL() ? "خطوة \(currentStep.rawValue + 1) من 5" : "Step \(currentStep.rawValue + 1) of 5")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(PPBrandFont.medium(11, relativeTo: .caption2))
                             .foregroundStyle(Color.accentColor)
                     }
                 }
             }
             .onAppear {
+                PPBrandFont.registerIfNeeded()
                 setupInitialData()
             }
             .onChange(of: photoPickerItem) { newItem in
@@ -384,9 +385,10 @@ public struct PPBecomePartnerStudioSheet: View {
         }
 
         if let state = state {
-            fullName = state.displayName ?? ""
-            email = state.email ?? ""
-            if let phone = state.phone, !phone.isEmpty {
+            fullName = state.displayName
+            email = state.email
+            let phone = state.phone
+            if !phone.isEmpty {
                 if phone.hasPrefix("+974") {
                     selectedCountryCode = "+974"
                     phoneLocalNumber = String(phone.dropFirst(4))
@@ -397,13 +399,9 @@ public struct PPBecomePartnerStudioSheet: View {
 
             // Check if existing application form or profile has details to prefill
             if let existingApp = state.application(for: selectedType) {
-                if let form = existingApp.form {
-                    prefillFromForm(form)
-                }
+                prefillFromForm(existingApp.form)
             } else if let profile = state.profile(for: selectedType) {
-                if let form = profile.form {
-                    prefillFromForm(form)
-                }
+                prefillFromForm(profile.form)
             }
         }
 
@@ -415,11 +413,11 @@ public struct PPBecomePartnerStudioSheet: View {
             if !draft.legalName.isEmpty { legalName = draft.legalName }
             if !draft.address.isEmpty { address = draft.address }
             if !draft.city.isEmpty { selectedCityID = draft.city }
-            if let license = draft.licenseNumber, !license.isEmpty { licenseNumber = license }
-            if let cr = draft.commercialRegistrationNumber, !cr.isEmpty { commercialRegistrationNumber = cr }
-            if let licURL = draft.licenseDocumentURL, !licURL.isEmpty { licenseDocURL = licURL }
-            if let crURL = draft.commercialRegistrationDocumentURL, !crURL.isEmpty { crDocURL = crURL }
-            if let n = draft.notes, !n.isEmpty { notes = n }
+            if !draft.licenseNumber.isEmpty { licenseNumber = draft.licenseNumber }
+            if !draft.commercialRegistrationNumber.isEmpty { commercialRegistrationNumber = draft.commercialRegistrationNumber }
+            if !draft.licenseDocumentURL.isEmpty { licenseDocURL = draft.licenseDocumentURL }
+            if !draft.commercialRegistrationDocumentURL.isEmpty { crDocURL = draft.commercialRegistrationDocumentURL }
+            if !draft.notes.isEmpty { notes = draft.notes }
         }
 
         reloadPlansForSelectedType()
@@ -442,8 +440,13 @@ public struct PPBecomePartnerStudioSheet: View {
         guard selectedType != .unspecified else { return }
         isLoadingPlans = true
         plansError = nil
-        PPProviderApplicationManager.shared().fetchPlans(for: selectedType) { plans, error in
-            DispatchQueue.main.async {
+        let requestedType = selectedType
+        let uid = PPDeliveryCompanyService.currentAccountUID()
+        // The manager's declared main-actor completion matches its main-queue
+        // delivery contract, so mutable plan models remain on that actor.
+        PPProviderApplicationManager.shared().fetchPlans(for: requestedType) { plans, error in
+                guard selectedType == requestedType,
+                      PPDeliveryCompanyService.currentAccountUID() == uid else { return }
                 self.isLoadingPlans = false
                 if let error = error {
                     self.plansError = error.localizedDescription
@@ -456,7 +459,6 @@ public struct PPBecomePartnerStudioSheet: View {
                     self.availablePlans = []
                     self.plansError = Language.isRTL() ? "لا توجد باقات متاحة لهذا المسار حالياً" : "No plans currently available for this category"
                 }
-            }
         }
     }
 
@@ -468,7 +470,7 @@ public struct PPBecomePartnerStudioSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text(Language.isRTL() ? "اختر مسار الشراكة" : "Select Partner Archetype")
-                        .font(.system(size: 22, weight: .bold))
+                        .font(PPBrandFont.bold(22, relativeTo: .title2))
                         .foregroundStyle(Color(.label))
                     Spacer()
                     Image(systemName: "sparkles")
@@ -476,7 +478,7 @@ public struct PPBecomePartnerStudioSheet: View {
                         .foregroundStyle(Color.accentColor)
                 }
                 Text(Language.isRTL() ? "حدد النشاط التجاري الذي يمثل خدماتك على منصة بيور بيتس لبدء التدقيق والاعتماد." : "Choose the business profile that best represents your services on Pure Pets.")
-                    .font(.system(size: 13.5, weight: .regular))
+                    .font(PPBrandFont.regular(13.5, relativeTo: .subheadline))
                     .foregroundStyle(Color(.secondaryLabel))
             }
             .padding(.vertical, 8)
@@ -518,11 +520,11 @@ public struct PPBecomePartnerStudioSheet: View {
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack(spacing: 8) {
                                     Text(item.localizedTitle)
-                                        .font(.system(size: 16, weight: .bold))
+                                        .font(PPBrandFont.bold(16, relativeTo: .headline))
                                         .foregroundStyle(isSelected ? Color(.label) : Color(.label).opacity(0.85))
 
                                     Text(item.localizedBadge)
-                                        .font(.system(size: 10.5, weight: .bold))
+                                        .font(PPBrandFont.bold(10.5, relativeTo: .caption2))
                                         .padding(.horizontal, 8)
                                         .padding(.vertical, 3)
                                         .background(Color(hex: item.accentColorHex).opacity(0.15))
@@ -531,7 +533,7 @@ public struct PPBecomePartnerStudioSheet: View {
                                 }
 
                                 Text(item.localizedSubtitle)
-                                    .font(.system(size: 12.5, weight: .regular))
+                                    .font(PPBrandFont.regular(12.5, relativeTo: .caption))
                                     .foregroundStyle(Color(.secondaryLabel))
                                     .lineLimit(2)
                             }
@@ -584,10 +586,10 @@ public struct PPBecomePartnerStudioSheet: View {
             // Header
             VStack(alignment: .leading, spacing: 6) {
                 Text(Language.isRTL() ? "اختر باقة الاشتراك" : "Select Subscription Plan")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(PPBrandFont.bold(22, relativeTo: .title2))
                     .foregroundStyle(Color(.label))
                 Text(Language.isRTL() ? "توفر بيور بيتس نماذج مرنة تشمل الاشتراكات الشهرية ونسب العمولة المخفضة." : "Pure Pets offers flexible tiers with transparent commissions and flat rates.")
-                    .font(.system(size: 13.5, weight: .regular))
+                    .font(PPBrandFont.regular(13.5, relativeTo: .subheadline))
                     .foregroundStyle(Color(.secondaryLabel))
             }
             .padding(.vertical, 8)
@@ -597,7 +599,7 @@ public struct PPBecomePartnerStudioSheet: View {
                     ProgressView()
                         .scaleEffect(1.3)
                     Text(Language.isRTL() ? "جارٍ تحميل الباقات المتاحة..." : "Loading available plans...")
-                        .font(.system(size: 14, weight: .medium))
+                        .font(PPBrandFont.medium(14, relativeTo: .body))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
                 .frame(maxWidth: .infinity)
@@ -608,13 +610,13 @@ public struct PPBecomePartnerStudioSheet: View {
                         .font(.system(size: 36))
                         .foregroundStyle(Color.red)
                     Text(error)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(PPBrandFont.medium(14, relativeTo: .body))
                         .foregroundStyle(Color(.secondaryLabel))
                         .multilineTextAlignment(.center)
                     Button(Language.isRTL() ? "إعادة المحاولة" : "Retry") {
                         reloadPlansForSelectedType()
                     }
-                    .font(.system(size: 14, weight: .bold))
+                    .font(PPBrandFont.bold(14, relativeTo: .body))
                     .buttonStyle(.borderedProminent)
                 }
                 .frame(maxWidth: .infinity)
@@ -624,7 +626,7 @@ public struct PPBecomePartnerStudioSheet: View {
                     ForEach(availablePlans, id: \.planID) { plan in
                         let isSelected = selectedPlan?.planID == plan.planID
                         Button {
-                            UIImpactFeedbackGenerator(style: .selection).impactOccurred()
+                            UISelectionFeedbackGenerator().selectionChanged()
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                 selectedPlan = plan
                             }
@@ -634,11 +636,11 @@ public struct PPBecomePartnerStudioSheet: View {
                                 HStack {
                                     VStack(alignment: .leading, spacing: 2) {
                                         Text(plan.localizedName())
-                                            .font(.system(size: 18, weight: .bold))
+                                            .font(PPBrandFont.bold(18, relativeTo: .title3))
                                             .foregroundStyle(Color(.label))
                                         if !plan.localizedDescriptionText().isEmpty {
                                             Text(plan.localizedDescriptionText())
-                                                .font(.system(size: 12.5, weight: .regular))
+                                                .font(PPBrandFont.regular(12.5, relativeTo: .caption))
                                                 .foregroundStyle(Color(.secondaryLabel))
                                                 .lineLimit(2)
                                         }
@@ -651,7 +653,7 @@ public struct PPBecomePartnerStudioSheet: View {
                                             Image(systemName: "star.fill")
                                                 .font(.system(size: 10))
                                             Text(Language.isRTL() ? "الأفضل" : "Top Choice")
-                                                .font(.system(size: 11, weight: .bold))
+                                                .font(PPBrandFont.bold(11, relativeTo: .caption2))
                                         }
                                         .padding(.horizontal, 10)
                                         .padding(.vertical, 5)
@@ -665,35 +667,37 @@ public struct PPBecomePartnerStudioSheet: View {
                                 HStack(alignment: .firstTextBaseline, spacing: 6) {
                                     if plan.costType == .price {
                                         Text(String(format: "%.0f", plan.priceAmount))
-                                            .font(.system(size: 28, weight: .heavy, design: .rounded))
+                                            .font(PPBrandFont.bold(28, relativeTo: .title))
                                             .foregroundStyle(Color.accentColor)
                                         Text(plan.currency.isEmpty ? "QAR" : plan.currency)
-                                            .font(.system(size: 13, weight: .bold))
+                                            .font(PPBrandFont.bold(13, relativeTo: .subheadline))
                                             .foregroundStyle(Color.accentColor.opacity(0.85))
                                         Text("/ " + (plan.billingInterval.isEmpty ? (Language.isRTL() ? "شهري" : "Monthly") : plan.billingInterval))
-                                            .font(.system(size: 13, weight: .medium))
+                                            .font(PPBrandFont.medium(13, relativeTo: .subheadline))
                                             .foregroundStyle(Color(.secondaryLabel))
                                     } else {
+                                        // Percentage pricing: always LTR to prevent bidi reversal of "10% · per item"
                                         Text(String(format: "%.1f%%", plan.costValue > 0 ? plan.costValue : plan.platformCommissionRate))
-                                            .font(.system(size: 28, weight: .heavy, design: .rounded))
+                                            .font(PPBrandFont.bold(28, relativeTo: .title))
                                             .foregroundStyle(Color.accentColor)
+                                            .environment(\.layoutDirection, .leftToRight)
                                         Text(Language.isRTL() ? "عمولة المنصة" : "Platform Commission")
-                                            .font(.system(size: 13, weight: .bold))
+                                            .font(PPBrandFont.bold(13, relativeTo: .subheadline))
                                             .foregroundStyle(Color(.secondaryLabel))
                                     }
                                     Spacer()
                                 }
 
                                 // Feature rows checklist
-                                if let features = plan.features, !features.isEmpty {
+                                if !plan.features.isEmpty {
                                     VStack(alignment: .leading, spacing: 6) {
-                                        ForEach(features.prefix(4), id: \.self) { feat in
+                                        ForEach(Array(plan.features.prefix(4)), id: \.self) { feat in
                                             HStack(spacing: 8) {
                                                 Image(systemName: "checkmark.circle.fill")
                                                     .font(.system(size: 13, weight: .semibold))
                                                     .foregroundStyle(Color.green)
                                                 Text(feat)
-                                                    .font(.system(size: 13, weight: .regular))
+                                                    .font(PPBrandFont.regular(13, relativeTo: .body))
                                                     .foregroundStyle(Color(.label).opacity(0.85))
                                             }
                                         }
@@ -734,10 +738,10 @@ public struct PPBecomePartnerStudioSheet: View {
             // Header
             VStack(alignment: .leading, spacing: 6) {
                 Text(Language.isRTL() ? "الهوية التجارية والاتصال" : "Commercial Identity")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(PPBrandFont.bold(22, relativeTo: .title2))
                     .foregroundStyle(Color(.label))
                 Text(Language.isRTL() ? "بيانات الممثل التجاري المعتمد والموقع الجغرافي داخل دولة قطر." : "Authorized representative, contact and geographic operational details in Qatar.")
-                    .font(.system(size: 13.5, weight: .regular))
+                    .font(PPBrandFont.regular(13.5, relativeTo: .subheadline))
                     .foregroundStyle(Color(.secondaryLabel))
             }
             .padding(.vertical, 8)
@@ -745,7 +749,7 @@ public struct PPBecomePartnerStudioSheet: View {
             // Section 1: Contact
             VStack(alignment: .leading, spacing: 14) {
                 Text(Language.isRTL() ? "بيانات المسؤول المباشر" : "Authorized Person")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(PPBrandFont.bold(14, relativeTo: .subheadline))
                     .foregroundStyle(Color(.secondaryLabel))
 
                 // Full Name
@@ -759,7 +763,7 @@ public struct PPBecomePartnerStudioSheet: View {
                 // Phone with Qatar Flag Selector
                 VStack(alignment: .leading, spacing: 6) {
                     Text(Language.isRTL() ? "رقم الجوال المعتمد *" : "Verified Phone *")
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(PPBrandFont.medium(12.5, relativeTo: .caption))
                         .foregroundStyle(Color(.secondaryLabel))
 
                     HStack(spacing: 8) {
@@ -773,7 +777,7 @@ public struct PPBecomePartnerStudioSheet: View {
                         } label: {
                             HStack(spacing: 6) {
                                 Text(selectedCountryCode)
-                                    .font(.system(size: 14, weight: .bold))
+                                    .font(PPBrandFont.bold(14, relativeTo: .subheadline))
                                     .foregroundStyle(Color(.label))
                                 Image(systemName: "chevron.down")
                                     .font(.system(size: 10, weight: .bold))
@@ -788,7 +792,7 @@ public struct PPBecomePartnerStudioSheet: View {
                         // Local Phone Number
                         TextField(Language.isRTL() ? "مثال: 55123456" : "e.g. 55123456", text: $phoneLocalNumber)
                             .keyboardType(.phonePad)
-                            .font(.system(size: 15, weight: .medium))
+                            .font(PPBrandFont.medium(15, relativeTo: .body))
                             .padding(14)
                             .background(Color(.secondarySystemGroupedBackground))
                             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -812,7 +816,7 @@ public struct PPBecomePartnerStudioSheet: View {
             // Section 2: Business & Legal Entity
             VStack(alignment: .leading, spacing: 14) {
                 Text(Language.isRTL() ? "الكيان التجاري والمنشأة" : "Business & Entity")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(PPBrandFont.bold(14, relativeTo: .subheadline))
                     .foregroundStyle(Color(.secondaryLabel))
 
                 PPStudioTextField(
@@ -849,13 +853,13 @@ public struct PPBecomePartnerStudioSheet: View {
             // Section 3: Qatar City & Coverage
             VStack(alignment: .leading, spacing: 14) {
                 Text(Language.isRTL() ? "المدينة ومناطق التغطية في قطر" : "Qatar Municipality & Coverage")
-                    .font(.system(size: 14, weight: .bold))
+                    .font(PPBrandFont.bold(14, relativeTo: .subheadline))
                     .foregroundStyle(Color(.secondaryLabel))
 
                 // Municipality Selector
                 VStack(alignment: .leading, spacing: 6) {
                     Text(Language.isRTL() ? "البلدية / المدينة *" : "Municipality / City *")
-                        .font(.system(size: 12.5, weight: .semibold))
+                        .font(PPBrandFont.medium(12.5, relativeTo: .caption))
                         .foregroundStyle(Color(.secondaryLabel))
 
                     Menu {
@@ -870,7 +874,7 @@ public struct PPBecomePartnerStudioSheet: View {
                             Image(systemName: "building.columns.fill")
                                 .foregroundStyle(Color.accentColor)
                             Text(PPQatarCityCatalog.city(for: selectedCityID)?.localizedName ?? (Language.isRTL() ? "اختر المدينة" : "Select City"))
-                                .font(.system(size: 15, weight: .semibold))
+                                .font(PPBrandFont.bold(15, relativeTo: .body))
                                 .foregroundStyle(Color(.label))
                             Spacer()
                             Image(systemName: "chevron.up.chevron.down")
@@ -892,13 +896,13 @@ public struct PPBecomePartnerStudioSheet: View {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
                             Text(Language.isRTL() ? "المناطق المشمولة بالخدمة" : "Service Coverage Areas")
-                                .font(.system(size: 12.5, weight: .semibold))
+                                .font(PPBrandFont.medium(12.5, relativeTo: .caption))
                                 .foregroundStyle(Color(.secondaryLabel))
                             Spacer()
                             Button(Language.isRTL() ? "تحديد الكل" : "Select All") {
                                 selectedAreas = Set(activeCity.areas)
                             }
-                            .font(.system(size: 11.5, weight: .bold))
+                            .font(PPBrandFont.bold(11.5, relativeTo: .caption2))
                         }
 
                         // Flow chips
@@ -917,7 +921,7 @@ public struct PPBecomePartnerStudioSheet: View {
                                         Image(systemName: isIncluded ? "checkmark" : "plus")
                                             .font(.system(size: 10, weight: .bold))
                                         Text(area)
-                                            .font(.system(size: 12, weight: isIncluded ? .bold : .medium))
+                                            .font(isIncluded ? PPBrandFont.bold(12, relativeTo: .caption) : PPBrandFont.medium(12, relativeTo: .caption))
                                     }
                                     .padding(.horizontal, 12)
                                     .padding(.vertical, 7)
@@ -941,10 +945,10 @@ public struct PPBecomePartnerStudioSheet: View {
             // Header
             VStack(alignment: .leading, spacing: 6) {
                 Text(Language.isRTL() ? "التراخيص والمستندات الرسمية" : "Licenses & Documents")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(PPBrandFont.bold(22, relativeTo: .title2))
                     .foregroundStyle(Color(.label))
                 Text(Language.isRTL() ? "إرفاق السجل التجاري ورخصة المزاولة لتسريع عملية التدقيق والاعتماد." : "Attach Commercial Registration (CR) and professional practice license for faster approval.")
-                    .font(.system(size: 13.5, weight: .regular))
+                    .font(PPBrandFont.regular(13.5, relativeTo: .subheadline))
                     .foregroundStyle(Color(.secondaryLabel))
             }
             .padding(.vertical, 8)
@@ -984,11 +988,11 @@ public struct PPBecomePartnerStudioSheet: View {
             // Notes View
             VStack(alignment: .leading, spacing: 6) {
                 Text(Language.isRTL() ? "ملاحظات تشغيلية إضافية" : "Operational Remarks & Notes")
-                    .font(.system(size: 12.5, weight: .semibold))
+                    .font(PPBrandFont.medium(12.5, relativeTo: .caption))
                     .foregroundStyle(Color(.secondaryLabel))
 
                 TextEditor(text: $notes)
-                    .font(.system(size: 14, weight: .regular))
+                    .font(PPBrandFont.regular(14, relativeTo: .body))
                     .frame(height: 90)
                     .padding(8)
                     .background(Color(.secondarySystemGroupedBackground))
@@ -1008,10 +1012,10 @@ public struct PPBecomePartnerStudioSheet: View {
             // Header
             VStack(alignment: .leading, spacing: 6) {
                 Text(Language.isRTL() ? "مراجعة الطلب والاعتماد" : "Review & Submit")
-                    .font(.system(size: 22, weight: .bold))
+                    .font(PPBrandFont.bold(22, relativeTo: .title2))
                     .foregroundStyle(Color(.label))
                 Text(Language.isRTL() ? "تأكد من صحة البيانات قبل إرسال طلب الانضمام إلى فريق اعتماد الشركاء." : "Verify all operational credentials before final submission to our review board.")
-                    .font(.system(size: 13.5, weight: .regular))
+                    .font(PPBrandFont.regular(13.5, relativeTo: .subheadline))
                     .foregroundStyle(Color(.secondaryLabel))
             }
             .padding(.vertical, 8)
@@ -1032,10 +1036,10 @@ public struct PPBecomePartnerStudioSheet: View {
 
                         VStack(alignment: .leading, spacing: 3) {
                             Text(archetype.localizedTitle)
-                                .font(.system(size: 17, weight: .bold))
+                                .font(PPBrandFont.bold(17, relativeTo: .headline))
                                 .foregroundStyle(Color(.label))
                             Text(businessName.isEmpty ? (Language.isRTL() ? "منشأة جديدة" : "New Facility") : businessName)
-                                .font(.system(size: 13, weight: .medium))
+                                .font(PPBrandFont.medium(13, relativeTo: .subheadline))
                                 .foregroundStyle(Color(.secondaryLabel))
                         }
                     }
@@ -1046,11 +1050,13 @@ public struct PPBecomePartnerStudioSheet: View {
                     if let plan = selectedPlan {
                         VStack(alignment: .trailing, spacing: 2) {
                             Text(plan.localizedName())
-                                .font(.system(size: 13, weight: .bold))
+                                .font(PPBrandFont.bold(13, relativeTo: .subheadline))
                                 .foregroundStyle(Color.accentColor)
+                            // Price always LTR — prevents Arabic bidi reversal of "10% · per item"
                             Text(plan.localizedPriceLine())
-                                .font(.system(size: 11, weight: .medium))
+                                .font(PPBrandFont.medium(11, relativeTo: .caption2))
                                 .foregroundStyle(Color(.secondaryLabel))
+                                .environment(\.layoutDirection, .leftToRight)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 6)
@@ -1097,10 +1103,10 @@ public struct PPBecomePartnerStudioSheet: View {
                     .foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Language.isRTL() ? "اعتماد رسمي وفق معايير دولة قطر" : "Official Verification Standard")
-                        .font(.system(size: 13, weight: .bold))
+                        .font(PPBrandFont.bold(13, relativeTo: .subheadline))
                         .foregroundStyle(Color(.label))
                     Text(Language.isRTL() ? "يتم تدقيق بيانات السجل التجاري والتراخيص خلال 24 ساعة من الإرسال." : "Credentials are audited by our compliance staff within 24 business hours.")
-                        .font(.system(size: 11.5, weight: .regular))
+                        .font(PPBrandFont.regular(11.5, relativeTo: .caption2))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
             }
@@ -1146,7 +1152,7 @@ public struct PPBecomePartnerStudioSheet: View {
                                 .tint(.white)
                         } else {
                             Text(primaryButtonTitle)
-                                .font(.system(size: 16, weight: .bold))
+                                .font(PPBrandFont.bold(16, relativeTo: .headline))
                             Image(systemName: primaryButtonSymbol)
                                 .font(.system(size: 15, weight: .bold))
                         }
@@ -1166,9 +1172,15 @@ public struct PPBecomePartnerStudioSheet: View {
         .padding(.horizontal, 20)
         .padding(.vertical, 14)
         .background(
-            Rectangle()
-                .fill(.ultraThinMaterial)
+            Color(.systemGroupedBackground)
                 .ignoresSafeArea(edges: .bottom)
+                .overlay(
+                    Rectangle()
+                        .frame(height: 0.75)
+                        .foregroundStyle(Color(.separator).opacity(0.35)),
+                    alignment: .top
+                )
+                .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: -4)
         )
     }
 
@@ -1251,7 +1263,7 @@ public struct PPBecomePartnerStudioSheet: View {
 
     private func saveCurrentDraftLocally() {
         let draft = buildCurrentDraft()
-        PPProviderApplicationManager.shared().saveDraft(draft, for: selectedType)
+        PPProviderApplicationManager.shared().save(draft, for: selectedType)
     }
 
     private func submitApplication() {
@@ -1261,7 +1273,7 @@ public struct PPBecomePartnerStudioSheet: View {
         }
 
         let draft = buildCurrentDraft()
-        let validationError = PPProviderApplicationManager.shared().validateDraft(draft, selectedPlan: plan)
+        let validationError = PPProviderApplicationManager.shared().validate(draft, selectedPlan: plan)
         if let error = validationError {
             errorMessage = error.localizedDescription
             return
@@ -1433,14 +1445,14 @@ private struct PPStudioStepBar: View {
                                 .foregroundStyle(Color.white)
                         } else {
                             Text("\(step.rawValue + 1)")
-                                .font(.system(size: 11, weight: .bold))
+                                .font(PPBrandFont.bold(11, relativeTo: .caption2))
                                 .foregroundStyle(isActive ? Color.white : Color(.secondaryLabel))
                         }
                     }
 
                     if isActive {
                         Text(step.localizedTitle)
-                            .font(.system(size: 12, weight: .bold))
+                            .font(PPBrandFont.bold(12, relativeTo: .caption))
                             .foregroundStyle(Color(.label))
                             .lineLimit(1)
                     }
@@ -1472,7 +1484,7 @@ private struct PPStudioTextField: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title)
-                .font(.system(size: 12.5, weight: .semibold))
+                .font(PPBrandFont.medium(12.5, relativeTo: .caption))
                 .foregroundStyle(Color(.secondaryLabel))
 
             HStack(spacing: 10) {
@@ -1484,7 +1496,7 @@ private struct PPStudioTextField: View {
                 }
 
                 TextField(placeholder, text: $text)
-                    .font(.system(size: 15, weight: .medium))
+                    .font(PPBrandFont.medium(15, relativeTo: .body))
                     .keyboardType(keyboardType)
             }
             .padding(14)
@@ -1510,11 +1522,11 @@ private struct PPStudioDocumentUploadCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(title)
-                .font(.system(size: 14, weight: .bold))
+                .font(PPBrandFont.bold(14, relativeTo: .subheadline))
                 .foregroundStyle(Color(.label))
 
             TextField(numberPlaceholder, text: $number)
-                .font(.system(size: 15, weight: .medium))
+                .font(PPBrandFont.medium(15, relativeTo: .body))
                 .padding(14)
                 .background(Color(.secondarySystemGroupedBackground))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
@@ -1528,7 +1540,7 @@ private struct PPStudioDocumentUploadCard: View {
                 HStack(spacing: 12) {
                     ProgressView()
                     Text(Language.isRTL() ? "جارٍ رفع المستند والتدقيق..." : "Uploading document...")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(PPBrandFont.medium(13, relativeTo: .body))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
                 .padding(14)
@@ -1543,10 +1555,10 @@ private struct PPStudioDocumentUploadCard: View {
 
                     VStack(alignment: .leading, spacing: 2) {
                         Text(Language.isRTL() ? "تم إرفاق المستند بنجاح" : "Document Attached")
-                            .font(.system(size: 13, weight: .bold))
+                            .font(PPBrandFont.bold(13, relativeTo: .subheadline))
                             .foregroundStyle(Color(.label))
                         Text(Language.isRTL() ? "انقر للحذف أو إعادة الرفع" : "Tap to remove or re-upload")
-                            .font(.system(size: 11, weight: .regular))
+                            .font(PPBrandFont.regular(11, relativeTo: .caption2))
                             .foregroundStyle(Color(.secondaryLabel))
                     }
 
@@ -1572,7 +1584,7 @@ private struct PPStudioDocumentUploadCard: View {
                         HStack(spacing: 6) {
                             Image(systemName: "doc.viewfinder.fill")
                             Text(Language.isRTL() ? "مسح ضوئي للكاميرا" : "Scan via Camera")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(PPBrandFont.bold(13, relativeTo: .subheadline))
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -1586,7 +1598,7 @@ private struct PPStudioDocumentUploadCard: View {
                         HStack(spacing: 6) {
                             Image(systemName: "photo.badge.plus")
                             Text(Language.isRTL() ? "اختيار صورة" : "Pick Photo")
-                                .font(.system(size: 13, weight: .bold))
+                                .font(PPBrandFont.bold(13, relativeTo: .subheadline))
                         }
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 12)
@@ -1612,12 +1624,12 @@ private struct PPReviewRow: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: 13, weight: .medium))
+                .font(PPBrandFont.medium(13, relativeTo: .body))
                 .foregroundStyle(Color(.secondaryLabel))
             Spacer()
             HStack(spacing: 6) {
                 Text(value.isEmpty ? "-" : value)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(PPBrandFont.bold(13, relativeTo: .body))
                     .foregroundStyle(Color(.label))
                 if isVerified {
                     Image(systemName: "checkmark.seal.fill")

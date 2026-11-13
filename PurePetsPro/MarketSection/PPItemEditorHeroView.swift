@@ -257,6 +257,7 @@ public struct PPProviderMarketItemStudioScreen: View {
             )
         }
         .onAppear {
+            PPBrandFont.registerIfNeeded()
             seedFormFromItem()
         }
     }
@@ -274,18 +275,21 @@ public struct PPProviderMarketItemStudioScreen: View {
             sku = item.sku ?? ""
             barcode = item.barcode ?? ""
 
-            if let wp = item.wholesalePrice, wp.doubleValue > 0 {
-                wholesalePriceString = String(format: "%.0f", wp.doubleValue)
+            let wpVal = item.wholesalePrice?.doubleValue ?? 0
+            if wpVal > 0 {
+                wholesalePriceString = String(format: "%.0f", wpVal)
             }
 
-            if let dp = item.discountPercent, dp.doubleValue > 0 {
+            let dpVal = item.discountPercent?.doubleValue ?? 0
+            let daVal = item.discountAmount?.doubleValue ?? 0
+            if dpVal > 0 {
                 hasOffer = true
                 discountType = .percent
-                discountPercentString = String(format: "%.0f", dp.doubleValue)
-            } else if let da = item.discountAmount, da.doubleValue > 0 {
+                discountPercentString = String(format: "%.0f", dpVal)
+            } else if daVal > 0 {
                 hasOffer = true
                 discountType = .fixed
-                discountAmountString = String(format: "%.0f", da.doubleValue)
+                discountAmountString = String(format: "%.0f", daVal)
             } else {
                 hasOffer = item.hasOffer
             }

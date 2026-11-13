@@ -482,6 +482,166 @@
 
 @end
 
+#pragma mark - PPAmbientGlowOrbView (Studio-Crafted Radial Atmospheric Glow)
+
+@interface PPAmbientGlowOrbView : UIView
+@property (nonatomic, strong) UIColor *glowColor;
+@property (nonatomic, assign) CGFloat maxAlpha;
+@property (nonatomic, assign) BOOL isBreathing;
+
+- (instancetype)initWithColor:(UIColor *)color maxAlpha:(CGFloat)alpha;
+- (void)updateWithColor:(UIColor *)color maxAlpha:(CGFloat)alpha;
+- (void)startBreathingWithTargetScale:(CGFloat)targetScale duration:(NSTimeInterval)duration delay:(NSTimeInterval)delay;
+- (void)stopBreathing;
+@end
+
+@implementation PPAmbientGlowOrbView
+
++ (Class)layerClass {
+    return [CAGradientLayer class];
+}
+
+- (CAGradientLayer *)gradientLayer {
+    return (CAGradientLayer *)self.layer;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        [self commonInit];
+    }
+    return self;
+}
+
+- (instancetype)initWithColor:(UIColor *)color maxAlpha:(CGFloat)alpha {
+    self = [super initWithFrame:CGRectZero];
+    if (self) {
+        _glowColor = color;
+        _maxAlpha = alpha;
+        [self commonInit];
+        [self updateGradientLayers];
+    }
+    return self;
+}
+
+- (void)commonInit {
+    self.translatesAutoresizingMaskIntoConstraints = NO;
+    self.backgroundColor = UIColor.clearColor;
+    self.userInteractionEnabled = NO;
+    self.accessibilityElementsHidden = YES;
+    self.clipsToBounds = NO;
+    
+    CAGradientLayer *layer = self.gradientLayer;
+    if (@available(iOS 12.0, *)) {
+        layer.type = kCAGradientLayerRadial;
+    }
+    layer.startPoint = CGPointMake(0.5, 0.5);
+    layer.endPoint = CGPointMake(1.0, 1.0);
+}
+
+- (void)updateWithColor:(UIColor *)color maxAlpha:(CGFloat)alpha {
+    self.glowColor = color;
+    self.maxAlpha = alpha;
+    [self updateGradientLayers];
+}
+
+- (void)updateGradientLayers {
+    UIColor *base = self.glowColor ?: AppPrimaryClr;
+    CGFloat peak = self.maxAlpha > 0 ? self.maxAlpha : 0.16;
+    
+    CAGradientLayer *layer = self.gradientLayer;
+    layer.colors = @[
+        (id)[base colorWithAlphaComponent:peak].CGColor,
+        (id)[base colorWithAlphaComponent:peak * 0.62].CGColor,
+        (id)[base colorWithAlphaComponent:peak * 0.25].CGColor,
+        (id)[base colorWithAlphaComponent:peak * 0.06].CGColor,
+        (id)UIColor.clearColor.CGColor
+    ];
+    layer.locations = @[@0.0, @0.28, @0.56, @0.82, @1.0];
+}
+
+- (void)startBreathingWithTargetScale:(CGFloat)targetScale duration:(NSTimeInterval)duration delay:(NSTimeInterval)delay {
+    [self stopBreathing];
+    if (PPMotionReduced()) return;
+    self.isBreathing = YES;
+    
+    CAKeyframeAnimation *scale = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
+    scale.values = @[@(1.0), @(targetScale), @(1.0)];
+    scale.keyTimes = @[@(0.0), @(0.5), @(1.0)];
+    scale.duration = duration;
+    scale.beginTime = CACurrentMediaTime() + delay;
+    scale.repeatCount = HUGE_VALF;
+    scale.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    scale.removedOnCompletion = NO;
+    [self.layer addAnimation:scale forKey:@"ppOrbBreathingScale"];
+    
+    CAKeyframeAnimation *opacity = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+    opacity.values = @[@(1.0), @(0.82), @(1.0)];
+    opacity.keyTimes = @[@(0.0), @(0.5), @(1.0)];
+    opacity.duration = duration;
+    opacity.beginTime = CACurrentMediaTime() + delay;
+    opacity.repeatCount = HUGE_VALF;
+    opacity.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    opacity.removedOnCompletion = NO;
+    [self.layer addAnimation:opacity forKey:@"ppOrbBreathingOpacity"];
+}
+
+- (void)stopBreathing {
+    self.isBreathing = NO;
+    [self.layer removeAnimationForKey:@"ppOrbBreathingScale"];
+    [self.layer removeAnimationForKey:@"ppOrbBreathingOpacity"];
+}
+
+@end
+
+#pragma mark - PPSpecularSheenView (Frosted Glass Rim Light)
+
+@interface PPSpecularSheenView : UIView
+- (void)updateColors;
+@end
+
+@implementation PPSpecularSheenView
+
++ (Class)layerClass {
+    return [CAGradientLayer class];
+}
+
+- (CAGradientLayer *)gradientLayer {
+    return (CAGradientLayer *)self.layer;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        self.translatesAutoresizingMaskIntoConstraints = NO;
+        self.backgroundColor = UIColor.clearColor;
+        self.userInteractionEnabled = NO;
+        self.accessibilityElementsHidden = YES;
+        CAGradientLayer *layer = self.gradientLayer;
+        layer.startPoint = CGPointMake(0.0, 0.5);
+        layer.endPoint = CGPointMake(1.0, 0.5);
+        [self updateColors];
+    }
+    return self;
+}
+
+- (void)updateColors {
+    BOOL isDark = NO;
+    if (@available(iOS 12.0, *)) {
+        isDark = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark);
+    }
+    UIColor *sheenColor = isDark ? [UIColor colorWithWhite:1.0 alpha:0.18] : [UIColor colorWithWhite:1.0 alpha:0.55];
+    self.gradientLayer.colors = @[
+        (id)UIColor.clearColor.CGColor,
+        (id)sheenColor.CGColor,
+        (id)sheenColor.CGColor,
+        (id)UIColor.clearColor.CGColor
+    ];
+    self.gradientLayer.locations = @[@0.0, @0.25, @0.75, @1.0];
+}
+
+@end
+
 #pragma mark - PPDeliveryCompanySetupViewController Main Implementation
 
 @interface PPDeliveryCompanySetupViewController () <UITextFieldDelegate>
@@ -492,6 +652,10 @@
 
 // Hero section
 @property (nonatomic, strong) UIView *heroView;
+@property (nonatomic, strong) UIView *heroAtmosphereContainer;
+@property (nonatomic, strong) PPAmbientGlowOrbView *heroTopGlowOrb;
+@property (nonatomic, strong) PPAmbientGlowOrbView *heroBottomGlowOrb;
+@property (nonatomic, strong) PPSpecularSheenView *heroSpecularSheenView;
 @property (nonatomic, strong) UIView *heroTopGlowView;
 @property (nonatomic, strong) UIView *heroBottomGlowView;
 @property (nonatomic, strong) UIView *heroIconSurface;
@@ -577,11 +741,24 @@
     [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:kLang(@"DeliveryCompany_Setup_NavTitle") showBack:YES];
     [self renderStateAnimated:NO];
     [self refreshAutoDiscoveryForce:NO];
+    [self pp_startAmbientGlowAnimations];
+    [self pp_updateHeroAtmosphereForCurrentState];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     [self runEntranceIfNeeded];
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+    [super viewDidDisappear:animated];
+    [self pp_stopAmbientGlowAnimations];
+}
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    [self pp_updateHeroAtmosphereForCurrentState];
+    [self.heroSpecularSheenView updateColors];
 }
 
 #pragma mark - UI Architecture
@@ -640,17 +817,34 @@
     surface.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
     PPStyleCardSurface(surface, PPCornerHero);
 
-    self.heroTopGlowView = [[UIView alloc] init];
-    self.heroTopGlowView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.heroTopGlowView.backgroundColor = AppPrimaryClrWithAlpha(0.08);
-    PPApplyContinuousCorners(self.heroTopGlowView, 96.0);
-    [surface addSubview:self.heroTopGlowView];
+    // 1. Atmosphere Container (Clips radial glows strictly to card's continuous squircle)
+    self.heroAtmosphereContainer = [[UIView alloc] init];
+    self.heroAtmosphereContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.heroAtmosphereContainer.backgroundColor = UIColor.clearColor;
+    self.heroAtmosphereContainer.layer.cornerRadius = PPCornerHero;
+    if (@available(iOS 13.0, *)) {
+        self.heroAtmosphereContainer.layer.cornerCurve = kCACornerCurveContinuous;
+    }
+    self.heroAtmosphereContainer.clipsToBounds = YES;
+    self.heroAtmosphereContainer.userInteractionEnabled = NO;
+    self.heroAtmosphereContainer.accessibilityElementsHidden = YES;
+    [surface addSubview:self.heroAtmosphereContainer];
 
-    self.heroBottomGlowView = [[UIView alloc] init];
-    self.heroBottomGlowView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.heroBottomGlowView.backgroundColor = AppPrimaryClrWithAlpha(0.04);
-    PPApplyContinuousCorners(self.heroBottomGlowView, 120.0);
-    [surface addSubview:self.heroBottomGlowView];
+    // 2. Primary Luminous Ambient Orb (Top Trailing - radiates behind the status badge & card corner)
+    CGFloat topAlpha = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) ? 0.22 : 0.16;
+    self.heroTopGlowOrb = [[PPAmbientGlowOrbView alloc] initWithColor:AppPrimaryClr maxAlpha:topAlpha];
+    [self.heroAtmosphereContainer addSubview:self.heroTopGlowOrb];
+    self.heroTopGlowView = self.heroTopGlowOrb;
+
+    // 3. Secondary Diffuse Counter-Glow Orb (Bottom Leading - warm atmospheric balance)
+    CGFloat bottomAlpha = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) ? 0.12 : 0.08;
+    self.heroBottomGlowOrb = [[PPAmbientGlowOrbView alloc] initWithColor:AppPrimaryClr maxAlpha:bottomAlpha];
+    [self.heroAtmosphereContainer addSubview:self.heroBottomGlowOrb];
+    self.heroBottomGlowView = self.heroBottomGlowOrb;
+
+    // 4. Specular Top Rim Light (Tactile Glass Sheen)
+    self.heroSpecularSheenView = [[PPSpecularSheenView alloc] initWithFrame:CGRectZero];
+    [self.heroAtmosphereContainer addSubview:self.heroSpecularSheenView];
 
     self.heroIconSurface = [[UIView alloc] init];
     self.heroIconSurface.translatesAutoresizingMaskIntoConstraints = NO;
@@ -699,15 +893,29 @@
     [NSLayoutConstraint activateConstraints:@[
         [surface.heightAnchor constraintGreaterThanOrEqualToConstant:230.0],
 
-        [self.heroTopGlowView.widthAnchor constraintEqualToConstant:190.0],
-        [self.heroTopGlowView.heightAnchor constraintEqualToConstant:190.0],
-        [self.heroTopGlowView.topAnchor constraintEqualToAnchor:surface.topAnchor constant:-50.0],
-        [self.heroTopGlowView.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor constant:45.0],
+        // Atmosphere Container pins to card surface
+        [self.heroAtmosphereContainer.topAnchor constraintEqualToAnchor:surface.topAnchor],
+        [self.heroAtmosphereContainer.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor],
+        [self.heroAtmosphereContainer.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor],
+        [self.heroAtmosphereContainer.bottomAnchor constraintEqualToAnchor:surface.bottomAnchor],
 
-        [self.heroBottomGlowView.widthAnchor constraintEqualToConstant:240.0],
-        [self.heroBottomGlowView.heightAnchor constraintEqualToConstant:240.0],
-        [self.heroBottomGlowView.bottomAnchor constraintEqualToAnchor:surface.bottomAnchor constant:70.0],
-        [self.heroBottomGlowView.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor constant:-65.0],
+        // Top Trailing Ambient Orb (clipped strictly inside card)
+        [self.heroTopGlowOrb.widthAnchor constraintEqualToConstant:280.0],
+        [self.heroTopGlowOrb.heightAnchor constraintEqualToConstant:280.0],
+        [self.heroTopGlowOrb.centerXAnchor constraintEqualToAnchor:self.heroAtmosphereContainer.trailingAnchor constant:-10.0],
+        [self.heroTopGlowOrb.centerYAnchor constraintEqualToAnchor:self.heroAtmosphereContainer.topAnchor constant:25.0],
+
+        // Bottom Leading Ambient Orb (counter-glow)
+        [self.heroBottomGlowOrb.widthAnchor constraintEqualToConstant:320.0],
+        [self.heroBottomGlowOrb.heightAnchor constraintEqualToConstant:320.0],
+        [self.heroBottomGlowOrb.centerXAnchor constraintEqualToAnchor:self.heroAtmosphereContainer.leadingAnchor constant:15.0],
+        [self.heroBottomGlowOrb.centerYAnchor constraintEqualToAnchor:self.heroAtmosphereContainer.bottomAnchor constant:30.0],
+
+        // Specular Rim Light
+        [self.heroSpecularSheenView.topAnchor constraintEqualToAnchor:self.heroAtmosphereContainer.topAnchor],
+        [self.heroSpecularSheenView.leadingAnchor constraintEqualToAnchor:self.heroAtmosphereContainer.leadingAnchor],
+        [self.heroSpecularSheenView.trailingAnchor constraintEqualToAnchor:self.heroAtmosphereContainer.trailingAnchor],
+        [self.heroSpecularSheenView.heightAnchor constraintEqualToConstant:1.5],
 
         [self.heroIconSurface.topAnchor constraintEqualToAnchor:surface.topAnchor constant:22.0],
         [self.heroIconSurface.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor constant:22.0],
@@ -1192,6 +1400,57 @@
     return surface;
 }
 
+#pragma mark - Ambient Hero Atmosphere & Glow Coordination
+
+- (void)pp_updateHeroAtmosphereForCurrentState {
+    PPDeliveryCompanyProfile *verified = PPDeliveryCompanyService.shared.verifiedProfile;
+    BOOL isConnected = verified.companyID.length > 0;
+    BOOL isDark = NO;
+    if (@available(iOS 12.0, *)) {
+        isDark = (self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark);
+    }
+    
+    UIColor *glowColor;
+    CGFloat topPeak;
+    CGFloat bottomPeak;
+    
+    if (isConnected) {
+        glowColor = [UIColor ppSuccess];
+        topPeak = isDark ? 0.22 : 0.15;
+        bottomPeak = isDark ? 0.12 : 0.07;
+    } else if (self.isDiscoveringMemberships) {
+        glowColor = AppPrimaryClr;
+        topPeak = isDark ? 0.28 : 0.20;
+        bottomPeak = isDark ? 0.15 : 0.09;
+    } else if (PPDeliveryCompanyService.shared.discoveredProfiles.count > 0) {
+        glowColor = AppPrimaryClr;
+        topPeak = isDark ? 0.24 : 0.16;
+        bottomPeak = isDark ? 0.14 : 0.08;
+    } else {
+        glowColor = AppPrimaryClr;
+        topPeak = isDark ? 0.20 : 0.14;
+        bottomPeak = isDark ? 0.12 : 0.06;
+    }
+    
+    [self.heroTopGlowOrb updateWithColor:glowColor maxAlpha:topPeak];
+    [self.heroBottomGlowOrb updateWithColor:glowColor maxAlpha:bottomPeak];
+}
+
+- (void)pp_startAmbientGlowAnimations {
+    if (PPMotionReduced()) {
+        [self.heroTopGlowOrb stopBreathing];
+        [self.heroBottomGlowOrb stopBreathing];
+        return;
+    }
+    [self.heroTopGlowOrb startBreathingWithTargetScale:1.07 duration:4.8 delay:0.0];
+    [self.heroBottomGlowOrb startBreathingWithTargetScale:1.05 duration:6.2 delay:1.2];
+}
+
+- (void)pp_stopAmbientGlowAnimations {
+    [self.heroTopGlowOrb stopBreathing];
+    [self.heroBottomGlowOrb stopBreathing];
+}
+
 #pragma mark - State Management & Presentation
 
 - (void)renderStateAnimated:(BOOL)animated {
@@ -1232,6 +1491,7 @@
         self.heroTitle.text = kLang(@"DeliveryCompany_Setup_Title");
         self.heroSubtitle.text = kLang(@"DeliveryCompany_Setup_Subtitle");
     }
+    [self pp_updateHeroAtmosphereForCurrentState];
 
     // 2. Connected Fleet VIP Card
     if (isConnected) {

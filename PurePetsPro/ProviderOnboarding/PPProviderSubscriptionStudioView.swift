@@ -11,6 +11,19 @@
 import SwiftUI
 import UIKit
 
+/// Immutable presentation values keep mutable Objective-C plan models out of
+/// cross-actor SwiftUI state. Formatting remains owned by PPProviderPlan.
+private struct PPSubscriptionPlanOption: Sendable {
+    let planID: String
+    let title: String
+    let subtitle: String
+    let priceLine: String
+    let recommended: Bool
+    /// True when the price is a percentage (e.g. "10% · per item") —
+    /// numeric/symbol strings must always render LTR regardless of locale.
+    let isPercentagePricing: Bool
+}
+
 // MARK: - Main SwiftUI Subscription Studio View
 
 public struct PPProviderSubscriptionStudioView: View {
@@ -19,9 +32,13 @@ public struct PPProviderSubscriptionStudioView: View {
 
     // Observed State
     @State private var state: PPProviderOnboardingState? = nil
-    @State private var availablePlans: [PPProviderPlan] = []
+    @State private var availablePlans: [PPSubscriptionPlanOption] = []
     @State private var isLoading: Bool = true
     @State private var errorMessage: String? = nil
+    @State private var cancelObservation: (() -> Void)?
+    @State private var observationGeneration = UUID()
+    @State private var plansProviderType: PPProviderType = .unspecified
+    @State private var plansRequestGeneration = UUID()
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.layoutDirection) private var layoutDirection
@@ -59,7 +76,7 @@ public struct PPProviderSubscriptionStudioView: View {
                 }
                 ToolbarItem(placement: .principal) {
                     Text(Language.isRTL() ? "إدارة اشتراك الشريك" : "Subscription Management")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(PPBrandFont.bold(16, relativeTo: .headline))
                         .foregroundStyle(Color(.label))
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -73,28 +90,60 @@ public struct PPProviderSubscriptionStudioView: View {
                 }
             }
             .onAppear {
+                PPBrandFont.registerIfNeeded()
                 startObserving()
             }
+            .onDisappear { stopObserving() }
         }
     }
 
     // MARK: - State Observation
 
     private func startObserving() {
+        stopObserving()
+        let generation = observationGeneration
+        let uid = PPDeliveryCompanyService.currentAccountUID()
+        state = nil
+        availablePlans = []
+        plansProviderType = .unspecified
         isLoading = true
         errorMessage = nil
-        PPProviderApplicationManager.shared().observeProviderStateForCurrentUser { newState, error in
+        let registration = PPProviderApplicationManager.shared().observeProviderState(forCurrentUser: { newState, error in
             DispatchQueue.main.async {
-                self.isLoading = false
+                guard generation == observationGeneration,
+                      PPDeliveryCompanyService.currentAccountUID() == uid,
+                      newState == nil || newState?.uid == uid else { return }
+                self.isLoading = error == nil && newState?.initialDataAuthoritative != true
                 if let error = error {
                     self.errorMessage = error.localizedDescription
-                } else if let newState = newState {
+                    self.state = nil
+                    self.availablePlans = []
+                    self.plansProviderType = .unspecified
+                    self.plansRequestGeneration = UUID()
+                } else if let newState = newState, newState.initialDataAuthoritative {
                     self.state = newState
                     self.errorMessage = nil
                     self.fetchPlansForActiveProfile(state: newState)
                 }
             }
+        })
+        cancelObservation = { registration.remove() }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+            guard generation == observationGeneration, isLoading,
+                  PPDeliveryCompanyService.currentAccountUID() == uid else { return }
+            isLoading = false
+            state = nil
+            availablePlans = []
+            plansProviderType = .unspecified
+            plansRequestGeneration = UUID()
+            errorMessage = Language.get("ProSubscription_LoadFailed", alter: nil)
         }
+    }
+
+    private func stopObserving() {
+        observationGeneration = UUID()
+        cancelObservation?()
+        cancelObservation = nil
     }
 
     private func refreshData() {
@@ -103,25 +152,41 @@ public struct PPProviderSubscriptionStudioView: View {
     }
 
     private func fetchPlansForActiveProfile(state: PPProviderOnboardingState) {
+        let generation = observationGeneration
+        let uid = state.uid
         let activeType = primaryActiveProviderType(state: state)
+        guard activeType != plansProviderType else { return }
+        plansProviderType = activeType
+        plansRequestGeneration = UUID()
+        let requestGeneration = plansRequestGeneration
+        availablePlans = []
         guard activeType != .unspecified else { return }
 
         PPProviderApplicationManager.shared().fetchPlans(for: activeType) { plans, _ in
+            let options = (plans ?? []).map { plan in
+                PPSubscriptionPlanOption(planID: plan.planID, title: plan.localizedName(),
+                                         subtitle: plan.localizedDescriptionText(),
+                                         priceLine: plan.localizedPriceLine(),
+                                         recommended: plan.recommended,
+                                         isPercentagePricing: plan.costType == PPProviderPlanCostTypePercentage)
+            }
             DispatchQueue.main.async {
-                if let plans = plans {
-                    self.availablePlans = plans
-                }
+                guard generation == observationGeneration,
+                      requestGeneration == plansRequestGeneration,
+                      plansProviderType == activeType,
+                      PPDeliveryCompanyService.currentAccountUID() == uid else { return }
+                self.availablePlans = options
             }
         }
     }
 
     private func primaryActiveProviderType(state: PPProviderOnboardingState) -> PPProviderType {
-        for typeNum in state.eligibleProviderTypes {
-            if let type = PPProviderType(rawValue: typeNum.intValue), state.isActive(for: type) {
-                return type
-            }
+        let types: [PPProviderType] = [.marketplace, .deliveryCompany, .vet, .pharmacy, .service, .deliverySubscription]
+        let enabled = types.filter { PPProviderTypeIsEnabledInProApp($0) }
+        if let active = enabled.first(where: { state.isActive(for: $0) && state.profile(for: $0) != nil }) {
+            return active
         }
-        return state.eligibleProviderTypes.first.flatMap { PPProviderType(rawValue: $0.intValue) } ?? .deliverySubscription
+        return enabled.first(where: { state.profile(for: $0) != nil }) ?? .unspecified
     }
 
     // MARK: - Main Scroll View
@@ -133,8 +198,11 @@ public struct PPProviderSubscriptionStudioView: View {
                 activePlanHeroDossier
 
                 // 2. Compliance / Expiring Documents Notice (if any)
-                if let profile = activeProfile, let expiring = profile.expiringDocuments(withinDays: 30), !expiring.isEmpty {
-                    expiringDocumentsWarning(docs: expiring)
+                if let profile = activeProfile {
+                    let expiring = profile.expiringDocuments(withinDays: 30)
+                    if !expiring.isEmpty {
+                        expiringDocumentsWarning(docs: expiring)
+                    }
                 }
 
                 // 3. Operational Restrictions (if any)
@@ -159,12 +227,25 @@ public struct PPProviderSubscriptionStudioView: View {
         return state.profile(for: type)
     }
 
+    private func subscriptionDateText(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: Language.isRTL() ? "ar" : "en")
+        formatter.dateStyle = .medium
+        return formatter.string(from: date)
+    }
+
     // MARK: - 1. Active Plan Hero Dossier
 
     private var activePlanHeroDossier: some View {
         let profile = activeProfile
-        let planName = profile?.localizedPlanName() ?? (Language.isRTL() ? "باقة الشريك القياسية" : "Standard Partner Tier")
+        let sourcePlanName = profile?.localizedPlanName() ?? ""
+        let planName = sourcePlanName.isEmpty ? Language.get("ProSubscription_Title", alter: nil) : sourcePlanName
         let activeType = primaryActiveProviderType(state: state ?? PPProviderOnboardingState())
+        let status = profile.map {
+            $0.hasManagedSubscription()
+                ? Language.get("PartnerSub_Status_" + $0.effectiveSubscriptionStatus(), alter: nil)
+                : PPProviderApplicationManager.localizedStatusTitle($0.status)
+        } ?? Language.get("ProSubscription_NoProviderPlan", alter: nil)
 
         return VStack(spacing: 16) {
             HStack(spacing: 14) {
@@ -180,22 +261,24 @@ public struct PPProviderSubscriptionStudioView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(planName)
-                            .font(.system(size: 18, weight: .bold))
+                            .font(PPBrandFont.bold(18, relativeTo: .title3))
                             .foregroundStyle(Color(.label))
 
-                        Text(Language.isRTL() ? "نشطة" : "Active")
-                            .font(.system(size: 11, weight: .bold))
+                        Text(status)
+                            .font(PPBrandFont.bold(11, relativeTo: .caption2))
                             .padding(.horizontal, 8)
                             .padding(.vertical, 3)
-                            .background(Color.green.opacity(0.14))
-                            .foregroundStyle(Color.green)
+                            .background(Color.accentColor.opacity(0.14))
+                            .foregroundStyle(Color.accentColor)
                             .clipShape(Capsule())
                     }
 
-                    Text(PPProviderApplicationManager.localizedTitle(for: activeType))
-                        .font(.system(size: 13, weight: .medium))
+                    Text(activeType == .unspecified ? Language.get("ProSubscription_NoProviderPlan", alter: nil)
+                         : PPProviderApplicationManager.localizedTitle(for: activeType))
+                        .font(PPBrandFont.medium(13, relativeTo: .subheadline))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
 
                 Spacer()
             }
@@ -207,32 +290,27 @@ public struct PPProviderSubscriptionStudioView: View {
                 if let profile = profile, profile.hasManagedSubscription() {
                     PPSubscriptionDetailRow(
                         title: Language.isRTL() ? "حالة الاشتراك" : "Subscription Status",
-                        value: profile.effectiveSubscriptionStatus()
+                        value: status
                     )
                     if let expires = profile.subscriptionExpiresAt() {
-                        let formatter = DateFormatter()
-                        formatter.dateStyle = .medium
                         PPSubscriptionDetailRow(
                             title: Language.isRTL() ? "تاريخ التجديد القادم" : "Next Renewal Date",
-                            value: formatter.string(from: expires)
+                            value: subscriptionDateText(expires)
                         )
                     }
-                } else if let profile = profile {
+                } else if profile != nil {
                     PPSubscriptionDetailRow(
-                        title: Language.isRTL() ? "قيمة الباقة" : "Plan Fee",
-                        value: profile.priceAmount > 0 ? "\(Int(profile.priceAmount)) \(profile.currency ?? "QAR") / \(profile.billingInterval ?? "")" : (Language.isRTL() ? "حسب العمولة" : "Commission Based")
+                        title: Language.get("ProviderSubscriptionCardStatusCaption", alter: nil),
+                        value: Language.get("PartnerSub_UnmanagedHint", alter: nil)
                     )
                 }
 
-                PPSubscriptionDetailRow(
-                    title: Language.isRTL() ? "حالة استقبال الطلبات" : "Order Receiving",
-                    value: (profile?.areNewOrdersBlocked() == true) ? (Language.isRTL() ? "موقوف مؤقتاً" : "Blocked") : (Language.isRTL() ? "متاح ومستمر" : "Active")
-                )
-
-                PPSubscriptionDetailRow(
-                    title: Language.isRTL() ? "التحويلات المالية" : "Payouts Status",
-                    value: (profile?.arePayoutsBlocked() == true) ? (Language.isRTL() ? "معلقة" : "Held") : (Language.isRTL() ? "تسوية أسبوعية منتظمة" : "Regular Weekly Payouts")
-                )
+                if profile?.areNewOrdersBlocked() == true {
+                    Text(Language.get("ProSubscription_OrdersBlocked", alter: nil))
+                }
+                if profile?.arePayoutsBlocked() == true {
+                    Text(Language.get("ProSubscription_PayoutsHeld", alter: nil))
+                }
             }
         }
         .padding(20)
@@ -256,12 +334,12 @@ public struct PPProviderSubscriptionStudioView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(Color.orange)
                 Text(Language.isRTL() ? "تنبيه اقتراب انتهاء التراخيص" : "License Expiry Alert")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(PPBrandFont.bold(15, relativeTo: .headline))
                     .foregroundStyle(Color(.label))
             }
 
             Text(Language.isRTL() ? "يوجد لديك مستندات رسمية تقترب من تاريخ انتهائها خلال 30 يوماً. يرجى تجديدها لتجنب إيقاف استقبال الطلبات." : "Some official credentials are near expiration. Renew them to maintain continuous operation.")
-                .font(.system(size: 13, weight: .regular))
+                .font(PPBrandFont.regular(13, relativeTo: .body))
                 .foregroundStyle(Color(.secondaryLabel))
         }
         .padding(16)
@@ -279,11 +357,11 @@ public struct PPProviderSubscriptionStudioView: View {
                     .font(.system(size: 18))
                     .foregroundStyle(Color.red)
                 Text(Language.isRTL() ? "تنبيه القيود التشغيلية" : "Operational Restrictions")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(PPBrandFont.bold(15, relativeTo: .headline))
                     .foregroundStyle(Color(.label))
             }
             Text(Language.isRTL() ? "يوجد قيد نشط على هذا الحساب يمنع البيع أو التحويلات. تواصل مع الدعم لرفع القيد." : "A restriction is active on this account. Contact support to resolve.")
-                .font(.system(size: 13, weight: .regular))
+                .font(PPBrandFont.regular(13, relativeTo: .body))
                 .foregroundStyle(Color(.secondaryLabel))
         }
         .padding(16)
@@ -297,15 +375,15 @@ public struct PPProviderSubscriptionStudioView: View {
     private var availableTiersSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(Language.isRTL() ? "باقات الترقية المتاحة" : "Available Upgrade Tiers")
-                    .font(.system(size: 16, weight: .bold))
+                Text(Language.get("ProSubscription_PlansTitle", alter: nil))
+                    .font(PPBrandFont.bold(16, relativeTo: .headline))
                     .foregroundStyle(Color(.label))
                 Spacer()
             }
 
             if availablePlans.isEmpty {
                 Text(Language.isRTL() ? "لا توجد باقات ترقية بديلة حالياً." : "No alternate plans available right now.")
-                    .font(.system(size: 13, weight: .regular))
+                    .font(PPBrandFont.regular(13, relativeTo: .body))
                     .foregroundStyle(Color(.secondaryLabel))
                     .padding(.vertical, 8)
             } else {
@@ -313,23 +391,24 @@ public struct PPProviderSubscriptionStudioView: View {
                     let isCurrent = activeProfile?.planID == plan.planID
 
                     VStack(alignment: .leading, spacing: 12) {
-                        HStack {
+                        // ── Plan name + badge row ──────────────────────────
+                        HStack(alignment: .top, spacing: 8) {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(plan.localizedName())
-                                    .font(.system(size: 16, weight: .bold))
+                                Text(plan.title)
+                                    .font(PPBrandFont.bold(16, relativeTo: .headline))
                                     .foregroundStyle(Color(.label))
-                                if !plan.localizedDescriptionText().isEmpty {
-                                    Text(plan.localizedDescriptionText())
-                                        .font(.system(size: 12, weight: .regular))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                if !plan.subtitle.isEmpty {
+                                    Text(plan.subtitle)
+                                        .font(PPBrandFont.regular(12, relativeTo: .caption))
                                         .foregroundStyle(Color(.secondaryLabel))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
                                 }
                             }
 
-                            Spacer()
-
                             if isCurrent {
                                 Text(Language.isRTL() ? "باقتك الحالية" : "Current Plan")
-                                    .font(.system(size: 11, weight: .bold))
+                                    .font(PPBrandFont.bold(11, relativeTo: .caption2))
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 4)
                                     .background(Color.green.opacity(0.14))
@@ -337,7 +416,7 @@ public struct PPProviderSubscriptionStudioView: View {
                                     .clipShape(Capsule())
                             } else if plan.recommended {
                                 Text(Language.isRTL() ? "موصى بها" : "Recommended")
-                                    .font(.system(size: 11, weight: .bold))
+                                    .font(PPBrandFont.bold(11, relativeTo: .caption2))
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 4)
                                     .background(Color.orange.opacity(0.14))
@@ -346,12 +425,16 @@ public struct PPProviderSubscriptionStudioView: View {
                             }
                         }
 
-                        // Pricing Line
-                        HStack(alignment: .firstTextBaseline, spacing: 6) {
-                            Text(plan.localizedPriceLine())
-                                .font(.system(size: 18, weight: .heavy, design: .rounded))
+                        // ── Price + CTA row ────────────────────────────────
+                        HStack(alignment: .center, spacing: 8) {
+                            // Price always LTR: percentages & numbers must
+                            // never get mirrored by the Arabic bidi algorithm.
+                            Text(plan.priceLine)
+                                .font(PPBrandFont.bold(18, relativeTo: .title3))
                                 .foregroundStyle(Color.accentColor)
-                            Spacer()
+                                .environment(\.layoutDirection, .leftToRight)
+                                .multilineTextAlignment(.leading)
+                                .frame(maxWidth: .infinity, alignment: .leading)
 
                             if !isCurrent {
                                 Button {
@@ -359,8 +442,8 @@ public struct PPProviderSubscriptionStudioView: View {
                                     let activeType = primaryActiveProviderType(state: state ?? PPProviderOnboardingState())
                                     onUpgradePlanTapped(activeType)
                                 } label: {
-                                    Text(Language.isRTL() ? "ترقية الباقة" : "Upgrade")
-                                        .font(.system(size: 13, weight: .bold))
+                                    Text(Language.get("ProSubscription_ChangesAction", alter: nil))
+                                        .font(PPBrandFont.bold(13, relativeTo: .subheadline))
                                         .padding(.horizontal, 16)
                                         .padding(.vertical, 8)
                                         .background(Color.accentColor)
@@ -382,21 +465,26 @@ public struct PPProviderSubscriptionStudioView: View {
     // MARK: - 5. Billing Guarantees
 
     private var billingGuaranteesCard: some View {
-        HStack(spacing: 12) {
+        HStack(alignment: .top, spacing: 12) {
             Image(systemName: "checkmark.shield.fill")
                 .font(.system(size: 22))
                 .foregroundStyle(Color.accentColor)
+                .padding(.top, 1)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(Language.isRTL() ? "ضمان التسوية وشفافية العمولات" : "Platform Payout Guarantee")
-                    .font(.system(size: 13, weight: .bold))
+                Text(Language.get("ProSubscription_ChangesTitle", alter: nil))
+                    .font(PPBrandFont.bold(13, relativeTo: .subheadline))
                     .foregroundStyle(Color(.label))
-                Text(Language.isRTL() ? "تتم المعاملات المالية والتسويات بموجب لوائح مصرف قطر المركزي." : "All payouts follow Qatar Central Bank certified processing.")
-                    .font(.system(size: 11.5, weight: .regular))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                Text(Language.get("ProSubscription_ChangesBody", alter: nil))
+                    .font(PPBrandFont.regular(11.5, relativeTo: .caption2))
                     .foregroundStyle(Color(.secondaryLabel))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.tertiarySystemFill).opacity(0.7))
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
@@ -408,7 +496,7 @@ public struct PPProviderSubscriptionStudioView: View {
             ProgressView()
                 .scaleEffect(1.4)
             Text(Language.isRTL() ? "جارٍ تحميل تفاصيل الاشتراك..." : "Loading subscription details...")
-                .font(.system(size: 14, weight: .medium))
+                .font(PPBrandFont.medium(14, relativeTo: .body))
                 .foregroundStyle(Color(.secondaryLabel))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -420,15 +508,15 @@ public struct PPProviderSubscriptionStudioView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(Color.red)
             Text(Language.isRTL() ? "تعذر تحميل بيانات الاشتراك" : "Failed to load subscription")
-                .font(.system(size: 18, weight: .bold))
+                .font(PPBrandFont.bold(18, relativeTo: .title3))
             Text(error)
-                .font(.system(size: 13.5, weight: .regular))
+                .font(PPBrandFont.regular(13.5, relativeTo: .body))
                 .foregroundStyle(Color(.secondaryLabel))
                 .multilineTextAlignment(.center)
             Button(Language.isRTL() ? "إعادة المحاولة" : "Retry") {
                 refreshData()
             }
-            .font(.system(size: 14, weight: .bold))
+            .font(PPBrandFont.bold(14, relativeTo: .body))
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -442,14 +530,15 @@ private struct PPSubscriptionDetailRow: View {
     let value: String
 
     var body: some View {
-        HStack {
+        HStack(alignment: .firstTextBaseline) {
             Text(title)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(PPBrandFont.medium(12.5, relativeTo: .caption))
                 .foregroundStyle(Color(.secondaryLabel))
-            Spacer()
+                .frame(maxWidth: .infinity, alignment: .leading)
             Text(value)
-                .font(.system(size: 13, weight: .bold))
+                .font(PPBrandFont.bold(13, relativeTo: .body))
                 .foregroundStyle(Color(.label))
+                .multilineTextAlignment(.trailing)
         }
     }
 }

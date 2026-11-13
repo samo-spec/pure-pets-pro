@@ -4664,3 +4664,36 @@
 "PartnerSub_Status_cancelled" = "Cancelled";
 "PartnerSub_Status_unmanaged" = "Term not set";
 "PartnerSub_Status_unavailable" = "Unavailable";
+
+/* Pro access and Home subscription card */
+"ProAccess_CheckFailedTitle" = "Couldn’t verify Pro access";
+"ProAccess_CheckFailedBody" = "We couldn’t finish checking this account’s access. Try again, use another account, or open a provider or partner application. Access requires team approval.";
+"ProAccess_NotEnabledTitle" = "Pro access isn’t enabled";
+"ProAccess_NotEnabledBody" = "This account doesn’t currently have active access to the providers app. Sign in with another account, or apply as a provider or partner and choose a suitable plan.";
+"ProAccess_BecomePartner" = "Become a provider or partner";
+"ProAccess_UseAnotherAccount" = "Sign in with another account";
+"ProSubscription_Eyebrow" = "Subscription & features";
+"ProSubscription_Title" = "Manage subscription";
+"ProSubscription_Manage" = "View subscription & applications";
+"ProSubscription_Loading" = "Checking your subscription and provider applications.";
+"ProSubscription_LoadFailed" = "Couldn’t load your subscription status. Try again to see the current account details.";
+"ProSubscription_ProviderAccess" = "Your provider access";
+"ProSubscription_Active" = "Review your subscription and applications, or apply for another feature for your business.";
+"ProSubscription_Ready" = "Choose your provider type and plan, then submit an application for review.";
+"ProSubscription_DriverTitle" = "Your driver access";
+"ProSubscription_FleetManaged" = "Managed by your fleet";
+"ProSubscription_DriverBody" = "Your fleet membership gives you driver access. It does not create a provider subscription. Review your applications or apply for another provider activity here.";
+"ProSubscription_DriverRequirement" = "To offer other services: choose a provider type and plan, complete the required details, and wait for team approval.";
+"ProSubscription_ChangesRequested" = "Review the feedback and update your application before submitting it again.";
+"ProSubscription_InReview" = "Your application is under review. Track its status or apply for another eligible feature. Your current access stays in place.";
+"ProSubscription_TermFormat" = "Term end: %@";
+"ProSubscription_AddFeature" = "Apply for another feature";
+"ProSubscription_NoFeaturesAvailable" = "No new provider application is available right now. Review your current subscriptions, applications, and review status.";
+"ProSubscription_NoProviderPlan" = "No provider subscription";
+"ProSubscription_OrdersBlocked" = "New orders are blocked by the current account status.";
+"ProSubscription_PayoutsHeld" = "Payouts are held by the current account status.";
+"ProSubscription_ChangesTitle" = "Plan changes";
+"ProSubscription_ChangesBody" = "Pure Pets manages changes to existing subscriptions after review. Viewing another plan does not change your subscription or submit a change request. To apply for a new provider activity, use “Apply for another feature” on Home.";
+"ProSubscription_DriverLoadFailed" = "Your fleet manages driver access. Provider subscription details couldn’t load. Try again, or open application management to review the requirements.";
+"ProSubscription_PlansTitle" = "Plans for this activity";
+"ProSubscription_ChangesAction" = "About plan changes";

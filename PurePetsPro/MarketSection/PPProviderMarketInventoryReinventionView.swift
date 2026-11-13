@@ -23,15 +23,18 @@ import UIKit
 
 public enum PPFont {
     public static func bold(_ size: CGFloat, relativeTo style: Font.TextStyle = .body) -> Font {
-        Font.custom("Beiruti-Bold", size: size, relativeTo: style)
+        PPBrandFont.registerIfNeeded()
+        return Font.custom("Beiruti-Bold", size: size, relativeTo: style)
     }
 
     public static func medium(_ size: CGFloat, relativeTo style: Font.TextStyle = .body) -> Font {
-        Font.custom("Beiruti-Medium", size: size, relativeTo: style)
+        PPBrandFont.registerIfNeeded()
+        return Font.custom("Beiruti-Medium", size: size, relativeTo: style)
     }
 
     public static func regular(_ size: CGFloat, relativeTo style: Font.TextStyle = .body) -> Font {
-        Font.custom("Beiruti-Regular", size: size, relativeTo: style)
+        PPBrandFont.registerIfNeeded()
+        return Font.custom("Beiruti-Regular", size: size, relativeTo: style)
     }
 }
 

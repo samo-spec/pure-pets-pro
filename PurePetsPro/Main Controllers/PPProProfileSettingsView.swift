@@ -135,21 +135,25 @@ public struct PPProProfileSettingsView: View {
 
     public var body: some View {
         GeometryReader { geometry in
-            let isPad = UIDevice.current.userInterfaceIdiom == .pad && geometry.size.width > 680
+            let screenWidth = geometry.size.width
+            let screenHeight = geometry.size.height
+            let isPad = UIDevice.current.userInterfaceIdiom == .pad && screenWidth > 680
 
-            ZStack {
+            ZStack(alignment: .top) {
                 Color(uiColor: .ppBackground)
                     .ignoresSafeArea()
 
                 // Ambient Radial Atmospheric Lighting
-                ambientAtmosphericLighting
+                ambientAtmosphericLighting(width: screenWidth, height: screenHeight)
 
                 if isPad {
                     iPadSpatialCockpitLayout(geometry: geometry)
                 } else {
-                    iPhoneSensoryDeckLayout
+                    iPhoneSensoryDeckLayout(width: screenWidth)
                 }
             }
+            .frame(width: screenWidth, height: screenHeight, alignment: .top)
+            .clipped()
         }
         .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
         .confirmationDialog(
@@ -170,7 +174,7 @@ public struct PPProProfileSettingsView: View {
 
     // MARK: - Ambient Atmospheric Lighting
 
-    private var ambientAtmosphericLighting: some View {
+    private func ambientAtmosphericLighting(width: CGFloat, height: CGFloat) -> some View {
         ZStack {
             Circle()
                 .fill(
@@ -178,11 +182,11 @@ public struct PPProProfileSettingsView: View {
                         colors: [Color(uiColor: .ppPrimary).opacity(colorScheme == .dark ? 0.16 : 0.08), Color.clear],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 280
+                        endRadius: 200
                     )
                 )
-                .frame(width: 480, height: 480)
-                .offset(x: Language.isRTL() ? 150 : -150, y: -240)
+                .frame(width: 320, height: 320)
+                .offset(x: Language.isRTL() ? 100 : -100, y: -180)
                 .allowsHitTesting(false)
 
             Circle()
@@ -191,23 +195,26 @@ public struct PPProProfileSettingsView: View {
                         colors: [Color.blue.opacity(colorScheme == .dark ? 0.12 : 0.05), Color.clear],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 240
+                        endRadius: 180
                     )
                 )
-                .frame(width: 400, height: 400)
-                .offset(x: Language.isRTL() ? -140 : 140, y: 320)
+                .frame(width: 280, height: 280)
+                .offset(x: Language.isRTL() ? -90 : 90, y: 240)
                 .allowsHitTesting(false)
         }
+        .frame(width: width, height: height)
+        .clipped()
     }
 
     // MARK: - iPhone Sensory Deck Layout
 
-    private var iPhoneSensoryDeckLayout: some View {
+    private func iPhoneSensoryDeckLayout(width: CGFloat) -> some View {
         VStack(spacing: 0) {
             sovereignNavigationBar
+                .frame(width: width)
 
             ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 18) {
+                VStack(spacing: 16) {
                     // 1. Living Operator Identity Hero
                     operatorIdentityHeroCard
                         .padding(.top, 4)
@@ -234,15 +241,21 @@ public struct PPProProfileSettingsView: View {
                     Spacer().frame(height: 50)
                 }
                 .padding(.horizontal, 16)
+                .frame(width: width)
             }
+            .frame(width: width)
         }
+        .frame(width: width)
     }
 
     // MARK: - iPad Spatial Cockpit Layout
 
     private func iPadSpatialCockpitLayout(geometry: GeometryProxy) -> some View {
-        VStack(spacing: 0) {
+        let width = geometry.size.width
+        let col1Width = max(min(width * 0.40, 400), 320)
+        return VStack(spacing: 0) {
             sovereignNavigationBar
+                .frame(width: width)
 
             HStack(alignment: .top, spacing: 20) {
                 // Leading Column: Identity, Company Bridge & Security (40%)
@@ -254,8 +267,9 @@ public struct PPProProfileSettingsView: View {
                         Spacer().frame(height: 40)
                     }
                     .padding(.top, 4)
+                    .frame(width: col1Width)
                 }
-                .frame(width: max(geometry.size.width * 0.40, 320))
+                .frame(width: col1Width)
 
                 // Trailing Column: Personal Credentials & Preferences (60%)
                 ScrollView(.vertical, showsIndicators: false) {
@@ -271,13 +285,15 @@ public struct PPProProfileSettingsView: View {
                 .frame(maxWidth: .infinity)
             }
             .padding(.horizontal, 24)
+            .frame(width: width)
         }
+        .frame(width: width)
     }
 
     // MARK: - Sovereign Navigation Bar
 
     private var sovereignNavigationBar: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             // Circular Glass Back Button
             Button {
                 UIImpactFeedbackGenerator(style: .light).impactOccurred()
@@ -286,7 +302,7 @@ public struct PPProProfileSettingsView: View {
                 ZStack {
                     RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(Color(uiColor: .ppSurface))
-                        .frame(width: 42, height: 42)
+                        .frame(width: 40, height: 40)
                         .overlay(
                             RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1)
@@ -305,8 +321,10 @@ public struct PPProProfileSettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
                     Text(Language.isRTL() ? "الحساب والإعدادات الشخصية" : "User Profile & Account")
-                        .font(PPFont.bold(18, relativeTo: .headline))
+                        .font(PPFont.bold(16.5, relativeTo: .headline))
                         .foregroundColor(Color(uiColor: .ppTextPrimary))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
 
                     // Pro Indicator
                     HStack(spacing: 3) {
@@ -314,11 +332,11 @@ public struct PPProProfileSettingsView: View {
                             .fill(Color.white)
                             .frame(width: 4, height: 4)
                         Text("PRO")
-                            .font(.system(size: 9.5, weight: .black))
+                            .font(.system(size: 9, weight: .black))
                     }
                     .foregroundColor(.white)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 2.5)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
                     .background(
                         LinearGradient(
                             colors: [Color(uiColor: .ppPrimary), Color(uiColor: .ppPrimary).opacity(0.85)],
@@ -328,38 +346,42 @@ public struct PPProProfileSettingsView: View {
                         in: Capsule()
                     )
                     .shadow(color: Color(uiColor: .ppPrimary).opacity(0.35), radius: 4, y: 1.5)
+                    .fixedSize(horizontal: true, vertical: false)
                 }
 
                 Text(Language.isRTL() ? "إدارة حساب المشغل المعتمد والتهيئة الشخصية" : "Verified Operator Identity & Personal Governance")
-                    .font(PPFont.regular(11.5, relativeTo: .caption2))
+                    .font(PPFont.regular(10.5, relativeTo: .caption2))
                     .foregroundColor(Color(uiColor: .ppTextSecondary))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
+            .layoutPriority(0.5)
 
-            Spacer()
+            Spacer(minLength: 6)
 
             // Dynamic Adaptive Save Action Pill
             Button {
                 viewModel.saveTriggered()
             } label: {
-                HStack(spacing: 6) {
+                HStack(spacing: 5) {
                     if viewModel.isSaving {
                         ProgressView()
                             .progressViewStyle(CircularProgressViewStyle(tint: .white))
-                            .scaleEffect(0.75)
+                            .scaleEffect(0.7)
                     } else if viewModel.hasEdits {
                         Image(systemName: "checkmark")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: 10, weight: .bold))
                     }
 
                     Text(viewModel.hasEdits
-                         ? (Language.isRTL() ? "حفظ التغييرات" : "Save")
+                         ? (Language.isRTL() ? "حفظ" : "Save")
                          : (Language.isRTL() ? "محفوظ" : "Saved")
                     )
-                    .font(PPFont.bold(13, relativeTo: .callout))
+                    .font(PPFont.bold(12.5, relativeTo: .callout))
                 }
                 .foregroundColor(viewModel.hasEdits ? .white : Color(uiColor: .ppTextSecondary))
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
                 .background(
                     viewModel.hasEdits
                         ? LinearGradient(
@@ -392,6 +414,8 @@ public struct PPProProfileSettingsView: View {
             .buttonStyle(PlainButtonStyle())
             .disabled(!viewModel.hasEdits || viewModel.isSaving)
             .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.hasEdits)
+            .fixedSize(horizontal: true, vertical: false)
+            .layoutPriority(1.0)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
@@ -404,8 +428,8 @@ public struct PPProProfileSettingsView: View {
     // MARK: - 1. Living Operator Identity Hero
 
     private var operatorIdentityHeroCard: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 14) {
+        VStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
                 // Operator Avatar with Halo Ring
                 ZStack {
                     Circle()
@@ -415,9 +439,9 @@ public struct PPProProfileSettingsView: View {
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             ),
-                            lineWidth: 2.5
+                            lineWidth: 2.2
                         )
-                        .frame(width: 78, height: 78)
+                        .frame(width: 68, height: 68)
 
                     if let avatar = viewModel.snapshot.avatarURL, let url = URL(string: avatar), !avatar.isEmpty {
                         AsyncImage(url: url) { phase in
@@ -428,7 +452,7 @@ public struct PPProProfileSettingsView: View {
                                 avatarInitialsFallback
                             }
                         }
-                        .frame(width: 70, height: 70)
+                        .frame(width: 60, height: 60)
                         .clipShape(Circle())
                     } else {
                         avatarInitialsFallback
@@ -442,15 +466,16 @@ public struct PPProProfileSettingsView: View {
                             ZStack {
                                 Circle()
                                     .fill(Color(uiColor: .systemBackground))
-                                    .frame(width: 22, height: 22)
+                                    .frame(width: 20, height: 20)
                                 Image(systemName: "checkmark.seal.fill")
-                                    .font(.system(size: 16))
+                                    .font(.system(size: 15))
                                     .foregroundColor(Color(uiColor: .ppPrimary))
                             }
                         }
                     }
-                    .frame(width: 78, height: 78)
+                    .frame(width: 68, height: 68)
                 }
+                .frame(width: 68, height: 68)
 
                 // Operator Text Info Stack
                 VStack(alignment: .leading, spacing: 4) {
@@ -459,62 +484,63 @@ public struct PPProProfileSettingsView: View {
                              ? (Language.isRTL() ? "مشغل بيور بتس" : "PurePets Operator")
                              : viewModel.snapshot.displayName
                         )
-                        .font(PPFont.bold(18, relativeTo: .title3))
+                        .font(PPFont.bold(16.5, relativeTo: .headline))
                         .foregroundColor(Color(uiColor: .ppTextPrimary))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.85)
 
-                        Spacer()
+                        Spacer(minLength: 4)
 
                         // Role Tag
                         HStack(spacing: 4) {
                             Circle()
                                 .fill(Color.green)
-                                .frame(width: 6, height: 6)
+                                .frame(width: 5, height: 5)
                             Text(viewModel.snapshot.roleName.isEmpty ? (Language.isRTL() ? "مشغل معتمد" : "Operator") : viewModel.snapshot.roleName)
-                                .font(PPFont.bold(10.5, relativeTo: .caption2))
+                                .font(PPFont.bold(10, relativeTo: .caption2))
                                 .foregroundColor(Color(uiColor: .ppPrimary))
+                                .lineLimit(1)
                         }
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, 7)
                         .padding(.vertical, 3)
                         .background(Color(uiColor: .ppPrimary).opacity(0.12), in: Capsule())
                         .overlay(Capsule().stroke(Color(uiColor: .ppPrimary).opacity(0.24), lineWidth: 0.8))
+                        .fixedSize(horizontal: true, vertical: false)
                     }
 
                     Text(Language.isRTL()
                          ? "حساب المشغل الإداري المعتمد لإدارة المنظومة والعمليات."
                          : "Authorized administrative operator account for platform management."
                     )
-                    .font(PPFont.regular(11.5, relativeTo: .caption2))
+                    .font(PPFont.regular(11, relativeTo: .caption2))
                     .foregroundColor(Color(uiColor: .ppTextSecondary))
                     .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    // Contact Meta Line
-                    HStack(spacing: 8) {
+                    // Contact Meta Lines (compact vertical stack to prevent overflow)
+                    VStack(alignment: .leading, spacing: 2.5) {
                         if !viewModel.snapshot.phone.isEmpty {
-                            HStack(spacing: 3) {
+                            HStack(spacing: 4) {
                                 Image(systemName: "phone.fill")
-                                    .font(.system(size: 9))
+                                    .font(.system(size: 8.5))
                                     .foregroundColor(Color(uiColor: .ppPrimary))
                                 Text(viewModel.snapshot.phone)
-                                    .font(.system(size: 11, weight: .semibold))
+                                    .font(.system(size: 10.5, weight: .semibold))
                                     .monospacedDigit()
+                                    .lineLimit(1)
                             }
                             .foregroundColor(Color(uiColor: .ppTextSecondary))
                         }
 
-                        if !viewModel.snapshot.phone.isEmpty && !viewModel.snapshot.email.isEmpty {
-                            Text("•")
-                                .foregroundColor(Color(uiColor: .ppSurfaceBorder))
-                        }
-
                         if !viewModel.snapshot.email.isEmpty {
-                            HStack(spacing: 3) {
+                            HStack(spacing: 4) {
                                 Image(systemName: "envelope.fill")
-                                    .font(.system(size: 9))
+                                    .font(.system(size: 8.5))
                                     .foregroundColor(Color(uiColor: .ppPrimary))
                                 Text(viewModel.snapshot.email)
-                                    .font(.system(size: 11, weight: .medium))
+                                    .font(.system(size: 10.5, weight: .medium))
                                     .lineLimit(1)
+                                    .truncationMode(.middle)
                             }
                             .foregroundColor(Color(uiColor: .ppTextSecondary))
                         }
@@ -523,7 +549,8 @@ public struct PPProProfileSettingsView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             Color(uiColor: .ppSurface),
             in: RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -539,11 +566,11 @@ public struct PPProProfileSettingsView: View {
         ZStack {
             Circle()
                 .fill(Color(uiColor: .ppPrimary).opacity(0.14))
-                .frame(width: 70, height: 70)
+                .frame(width: 60, height: 60)
 
             let initial = viewModel.snapshot.displayName.prefix(1)
             Text(initial.isEmpty ? "P" : String(initial).uppercased())
-                .font(PPFont.bold(26, relativeTo: .title2))
+                .font(PPFont.bold(22, relativeTo: .title3))
                 .foregroundColor(Color(uiColor: .ppPrimary))
         }
     }
@@ -555,10 +582,10 @@ public struct PPProProfileSettingsView: View {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             viewModel.onEditProviderProfile?()
         } label: {
-            HStack(spacing: 14) {
+            HStack(spacing: 12) {
                 // Facility Plate Icon
                 ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(
                             LinearGradient(
                                 colors: [Color(uiColor: .ppPrimary).opacity(0.18), Color.blue.opacity(0.12)],
@@ -566,48 +593,51 @@ public struct PPProProfileSettingsView: View {
                                 endPoint: .bottomTrailing
                             )
                         )
-                        .frame(width: 52, height: 52)
+                        .frame(width: 46, height: 46)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
                                 .stroke(Color(uiColor: .ppPrimary).opacity(0.3), lineWidth: 1)
                         )
 
                     Image(systemName: "building.2.crop.circle.fill")
-                        .font(.system(size: 24, weight: .semibold))
+                        .font(.system(size: 22, weight: .semibold))
                         .foregroundColor(Color(uiColor: .ppPrimary))
                 }
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
                         Text(Language.isRTL() ? "ملف المنشأة والمركز التجاري" : "Company & Facility Profile")
-                            .font(PPFont.bold(15, relativeTo: .subheadline))
+                            .font(PPFont.bold(14.5, relativeTo: .subheadline))
                             .foregroundColor(Color(uiColor: .ppTextPrimary))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.9)
 
-                        HStack(spacing: 3) {
-                            Text(Language.isRTL() ? "مدخل مستقل" : "Separate Entry")
-                                .font(PPFont.bold(9.5, relativeTo: .caption2))
-                        }
-                        .foregroundColor(Color(uiColor: .ppPrimary))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color(uiColor: .ppPrimary).opacity(0.10), in: Capsule())
+                        Text(Language.isRTL() ? "مدخل مستقل" : "Separate Entry")
+                            .font(PPFont.bold(9, relativeTo: .caption2))
+                            .foregroundColor(Color(uiColor: .ppPrimary))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color(uiColor: .ppPrimary).opacity(0.10), in: Capsule())
+                            .fixedSize(horizontal: true, vertical: false)
                     }
 
                     Text(Language.isRTL()
                          ? "تعديل الاسم التجاري، الشعار، صور المعرض، ونطاق الخدمة في قطر"
                          : "Manage trade name, company logo, cover showcase and Qatar location")
-                        .font(PPFont.regular(11.5, relativeTo: .caption2))
+                        .font(PPFont.regular(11, relativeTo: .caption2))
                         .foregroundColor(Color(uiColor: .ppTextSecondary))
                         .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                Spacer(minLength: 0)
+                Spacer(minLength: 4)
 
                 Image(systemName: Language.isRTL() ? "chevron.left" : "chevron.right")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundColor(Color(uiColor: .ppTextSecondary))
             }
             .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 Color(uiColor: .ppSurface),
                 in: RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -626,6 +656,7 @@ public struct PPProProfileSettingsView: View {
             .shadow(color: Color(uiColor: .ppPrimary).opacity(0.08), radius: 8, y: 2)
         }
         .buttonStyle(PlainButtonStyle())
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - 3. Personal Credentials Deck
@@ -672,10 +703,12 @@ public struct PPProProfileSettingsView: View {
                     }
                 }
                 .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .background(Color(uiColor: .ppElevatedSurface), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.7), lineWidth: 0.8))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Mobile Number
             VStack(alignment: .leading, spacing: 6) {
@@ -699,10 +732,12 @@ public struct PPProProfileSettingsView: View {
                     .environment(\.layoutDirection, .leftToRight)
                 }
                 .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .background(Color(uiColor: .ppElevatedSurface), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.7), lineWidth: 0.8))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             // Email (Read-only / Auth bound)
             VStack(alignment: .leading, spacing: 6) {
@@ -733,12 +768,15 @@ public struct PPProProfileSettingsView: View {
                     .environment(\.layoutDirection, .leftToRight)
                 }
                 .padding(.horizontal, 14)
+                .frame(maxWidth: .infinity)
                 .frame(height: 50)
                 .background(Color(uiColor: .ppElevatedSurface), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.7), lineWidth: 0.8))
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1))
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.04), radius: 10, y: 3)
@@ -759,8 +797,10 @@ public struct PPProProfileSettingsView: View {
                 appearanceSegmentButton(title: Language.isRTL() ? "نهاري" : "Light", key: "light", icon: "sun.max.fill")
                 appearanceSegmentButton(title: Language.isRTL() ? "ليلي" : "Dark", key: "dark", icon: "moon.fill")
             }
+            .frame(maxWidth: .infinity)
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1))
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.04), radius: 10, y: 3)
@@ -773,11 +813,13 @@ public struct PPProProfileSettingsView: View {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             viewModel.onSelectTheme?(key)
         } label: {
-            HStack(spacing: 6) {
+            HStack(spacing: 5) {
                 Image(systemName: icon)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 12, weight: .bold))
                 Text(title)
-                    .font(PPFont.bold(13, relativeTo: .caption))
+                    .font(PPFont.bold(12, relativeTo: .caption))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
             }
             .foregroundColor(isSelected ? .white : Color(uiColor: .ppTextPrimary))
             .frame(maxWidth: .infinity)
@@ -795,6 +837,7 @@ public struct PPProProfileSettingsView: View {
             .shadow(color: isSelected ? Color(uiColor: .ppPrimary).opacity(0.25) : .clear, radius: 4, y: 2)
         }
         .buttonStyle(PlainButtonStyle())
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - 5. Language & Regional Preferences
@@ -815,27 +858,33 @@ public struct PPProProfileSettingsView: View {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     if !isArabic { viewModel.onSelectLanguage?("ar") }
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 7) {
                         Text("🇶🇦")
-                            .font(.system(size: 18))
+                            .font(.system(size: 17))
                         VStack(alignment: .leading, spacing: 1) {
                             Text("العربية")
-                                .font(PPFont.bold(14, relativeTo: .body))
+                                .font(PPFont.bold(13, relativeTo: .body))
+                                .lineLimit(1)
                             Text("قطر • RTL")
-                                .font(PPFont.regular(10.5, relativeTo: .caption2))
+                                .font(PPFont.regular(9.5, relativeTo: .caption2))
                                 .foregroundColor(Color(uiColor: .ppTextSecondary))
+                                .lineLimit(1)
                         }
-                        Spacer()
+                        Spacer(minLength: 2)
                         if isArabic {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(Color(uiColor: .ppPrimary))
+                                .font(.system(size: 13))
                         }
                     }
-                    .padding(12)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 11)
+                    .frame(maxWidth: .infinity)
                     .background(isArabic ? Color(uiColor: .ppPrimary).opacity(0.12) : Color(uiColor: .ppElevatedSurface), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(isArabic ? Color(uiColor: .ppPrimary) : Color(uiColor: .ppSurfaceBorder).opacity(0.7), lineWidth: isArabic ? 1.5 : 0.8))
                 }
                 .buttonStyle(PlainButtonStyle())
+                .frame(maxWidth: .infinity)
                 .foregroundColor(Color(uiColor: .ppTextPrimary))
 
                 // English Option
@@ -843,31 +892,39 @@ public struct PPProProfileSettingsView: View {
                     UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     if isArabic { viewModel.onSelectLanguage?("en") }
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 7) {
                         Text("🇺🇸")
-                            .font(.system(size: 18))
+                            .font(.system(size: 17))
                         VStack(alignment: .leading, spacing: 1) {
                             Text("English")
-                                .font(PPFont.bold(14, relativeTo: .body))
+                                .font(PPFont.bold(13, relativeTo: .body))
+                                .lineLimit(1)
                             Text("US • LTR")
-                                .font(PPFont.regular(10.5, relativeTo: .caption2))
+                                .font(PPFont.regular(9.5, relativeTo: .caption2))
                                 .foregroundColor(Color(uiColor: .ppTextSecondary))
+                                .lineLimit(1)
                         }
-                        Spacer()
+                        Spacer(minLength: 2)
                         if !isArabic {
                             Image(systemName: "checkmark.circle.fill")
                                 .foregroundColor(Color(uiColor: .ppPrimary))
+                                .font(.system(size: 13))
                         }
                     }
-                    .padding(12)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 11)
+                    .frame(maxWidth: .infinity)
                     .background(!isArabic ? Color(uiColor: .ppPrimary).opacity(0.12) : Color(uiColor: .ppElevatedSurface), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(!isArabic ? Color(uiColor: .ppPrimary) : Color(uiColor: .ppSurfaceBorder).opacity(0.7), lineWidth: !isArabic ? 1.5 : 0.8))
                 }
                 .buttonStyle(PlainButtonStyle())
+                .frame(maxWidth: .infinity)
                 .foregroundColor(Color(uiColor: .ppTextPrimary))
             }
+            .frame(maxWidth: .infinity)
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1))
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.04), radius: 10, y: 3)
@@ -906,11 +963,13 @@ public struct PPProProfileSettingsView: View {
                     .foregroundColor(Color(uiColor: .ppTextSecondary))
             }
             .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1))
             .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.04), radius: 8, y: 2)
         }
         .buttonStyle(PlainButtonStyle())
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - 7. Session Governance & Security
@@ -951,8 +1010,10 @@ public struct PPProProfileSettingsView: View {
                 .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Color.red.opacity(0.24), lineWidth: 0.8))
             }
             .buttonStyle(PlainButtonStyle())
+            .frame(maxWidth: .infinity)
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1))
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.04), radius: 10, y: 3)
@@ -1003,10 +1064,12 @@ public final class PPProProfileSettingsHostController: UIViewController {
     public override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .ppBackground
+        view.clipsToBounds = true
 
         let swiftUIView = PPProProfileSettingsView(viewModel: viewModel)
         let host = UIHostingController(rootView: swiftUIView)
         host.view.backgroundColor = .clear
+        host.view.clipsToBounds = true
         addChild(host)
         view.addSubview(host.view)
         host.view.translatesAutoresizingMaskIntoConstraints = false

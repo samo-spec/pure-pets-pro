@@ -11,6 +11,7 @@
 #import "PPBecomeProviderBottomSheetViewController.h"
 #import "PPDesignTokens.h"
 #import "Language.h"
+#import "PPAlertHelper.h"
 #import "PurePetsPro-Swift.h"
 
 @interface PPProviderSubscriptionManagmetVC () <PPBecomeProviderBottomSheetViewControllerDelegate>
@@ -28,7 +29,7 @@
 
     __weak typeof(self) weakSelf = self;
     self.hostingController = [[PPProviderSubscriptionStudioHostingController alloc]
-                              initWithOnUpgradePlan:^(PPProviderType type) {
+                              initOnUpgradePlan:^(PPProviderType type) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         [strongSelf pp_presentBecomeProviderForUpgradeWithType:type];
@@ -70,12 +71,10 @@
 #pragma mark - Plan Upgrade Presentation
 
 - (void)pp_presentBecomeProviderForUpgradeWithType:(PPProviderType)type {
-    PPBecomeProviderBottomSheetViewController *sheet = [[PPBecomeProviderBottomSheetViewController alloc]
-                                                        initWithState:nil
-                                                        eligibleProviderTypes:@[]
-                                                        preferredProviderType:type];
-    sheet.delegate = self;
-    [self presentViewController:sheet animated:YES completion:nil];
+    // The application endpoint creates new provider tracks; it cannot change
+    // an existing paid term. Do not submit a duplicate application as an upgrade.
+    [PPAlertHelper showInfoIn:self title:kLang(@"ProSubscription_ChangesTitle")
+                    subtitle:kLang(@"ProSubscription_ChangesBody")];
 }
 
 #pragma mark - PPBecomeProviderBottomSheetViewControllerDelegate

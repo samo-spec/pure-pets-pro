@@ -88,6 +88,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 @property (nonatomic, copy) NSString *phoneText;
 @property (nonatomic, assign) BOOL isAuthenticating;
 @property (nonatomic, assign) BOOL resumePartnerApplicationAfterAuth;
+@property (nonatomic, assign) BOOL hasProviderApplicationInReview;
 @property (nonatomic, assign) NSInteger appleRetryCount;
 @property (nonatomic, assign) NSInteger noPermissionAttempts;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> combinedReg;
@@ -858,6 +859,8 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 #pragma mark - Service Provider Gate
 
 - (void)pp_continueToProviderOnboarding {
+    SceneDelegate *sceneDelegate = (SceneDelegate *)self.view.window.windowScene.delegate;
+    if ([sceneDelegate isKindOfClass:SceneDelegate.class]) [sceneDelegate cancelPendingProAccessRouting];
     PPAdminSetLoginInProgress(NO);
     PPProviderApplicationStatusViewController *statusController = [[PPProviderApplicationStatusViewController alloc] init];
     statusController.prefersAutoPresentBecomeProvider = self.resumePartnerApplicationAfterAuth;
@@ -911,23 +914,48 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
             // Failure to check membership is not evidence of no membership.
             PPAdminSetLoginInProgress(NO);
             [self pp_setInteractionEnabled:YES];
-            [PPAlertHelper showConfirmationIn:self
-                                        title:kLang(@"DeliveryLogin_CheckFailed_Title")
-                                     subtitle:kLang(@"DeliveryLogin_CheckFailed_Body")
-                                confirmButton:kLang(@"TryAgain")
-                                 cancelButton:kLang(@"DeliveryLogin_UseAnotherAccount")
-                                         icon:nil
-                                 confirmBlock:^(NSString * _Nullable text, BOOL didConfirm) {
+            [PPAlertHelper showThreeActionConfirmationIn:self
+                                        title:kLang(@"ProAccess_CheckFailedTitle")
+                                     subtitle:kLang(@"ProAccess_CheckFailedBody")
+                                primaryButton:kLang(@"TryAgain")
+                                 primaryStyle:UIAlertActionStyleDefault
+                              secondaryButton:kLang(@"ProAccess_BecomePartner")
+                               secondaryStyle:UIAlertActionStyleDefault
+                               tertiaryButton:kLang(@"ProAccess_UseAnotherAccount")
+                                tertiaryStyle:UIAlertActionStyleDefault
+                                 primaryBlock:^{
                 __strong typeof(weakSelf) retrySelf = weakSelf;
-                if (!didConfirm || !retrySelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                if (!retrySelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
                 PPAdminSetLoginInProgress(YES);
-                [retrySelf pp_preflightDeliveryCompanyMembershipForUID:uid];
-            } cancelBlock:^{
+                [retrySelf pp_gatekeepServiceProviderForUID:uid];
+            } secondaryBlock:^{
+                __strong typeof(weakSelf) onboardingSelf = weakSelf;
+                if (!onboardingSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                onboardingSelf.resumePartnerApplicationAfterAuth = YES;
+                [onboardingSelf pp_continueToProviderOnboarding];
+            } tertiaryBlock:^{
                 if ([[FIRAuth auth].currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
             }];
             return;
         }
-        [self pp_continueToProviderOnboarding];
+        PPAdminSetLoginInProgress(NO);
+        [self pp_setInteractionEnabled:YES];
+        if (self.hasProviderApplicationInReview) {
+            [self pp_continueToProviderOnboarding];
+            return;
+        }
+        [PPAlertHelper showInfoIn:self title:kLang(@"ProAccess_NotEnabledTitle")
+                         subtitle:kLang(@"ProAccess_NotEnabledBody")
+                    primaryButton:kLang(@"ProAccess_BecomePartner")
+                  secondaryButton:kLang(@"ProAccess_UseAnotherAccount")
+                     primaryBlock:^{
+            __strong typeof(weakSelf) onboardingSelf = weakSelf;
+            if (!onboardingSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+            onboardingSelf.resumePartnerApplicationAfterAuth = YES;
+            [onboardingSelf pp_continueToProviderOnboarding];
+        } secondaryBlock:^{
+            if ([[FIRAuth auth].currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+        }];
     }];
 }
 
@@ -990,6 +1018,11 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                     [self pp_continueToProviderOnboarding];
                     return;
                 }
+                NSDictionary *onboarding = [userDoc[@"onboarding"] isKindOfClass:NSDictionary.class] ? userDoc[@"onboarding"] : @{};
+                NSDictionary *applicationRoot = onboarding.count > 0 ? onboarding : userDoc;
+                NSString *applicationStatus = [PPSafeString(applicationRoot[@"partnerApplicationStatus"]).lowercaseString
+                                              stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+                self.hasProviderApplicationInReview = [@[@"pending", @"under_review"] containsObject:applicationStatus];
                 [self pp_preflightDeliveryCompanyMembershipForUID:uid];
                 return;
             }

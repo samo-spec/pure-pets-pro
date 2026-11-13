@@ -43,8 +43,13 @@ void PPAdminSetLoginInProgress(BOOL inProgress) { _pp_adminLoginInProgress = inP
 @property (nonatomic, copy, nullable) NSString *pp_lastNotificationRouteSignature;
 @property (nonatomic) CFTimeInterval pp_lastNotificationRouteAt;
 @property (nonatomic) BOOL pp_isResolvingCompanyDeliveryNotification;
+@property (nonatomic) NSUInteger pp_proAccessRoutingGeneration;
+@property (nonatomic) NSUInteger pp_rootTransitionGeneration;
+- (void)setRoot:(AppRoot)target animated:(BOOL)animated completion:(void (^ _Nullable)(void))completion;
+- (void)pp_installRoot:(AppRoot)target animated:(BOOL)animated generation:(NSUInteger)generation completion:(void (^ _Nullable)(void))completion;
 - (void)pp_routeAfterDeliveryCompanyPreflightForUID:(NSString *)uid
                                             userDoc:(NSDictionary *)userDoc
+                                  hasProviderAccess:(BOOL)hasProviderAccess
                                        fallbackRoot:(AppRoot)fallbackRoot
                              autoPresentOnboarding:(BOOL)autoPresentOnboarding
                                             animated:(BOOL)animated;
@@ -256,9 +261,11 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      }
 
      __weak typeof(self) weakSelf = self;
+     NSUInteger routingGeneration = ++self.pp_proAccessRoutingGeneration;
      [AppMgr checkIfUserWithUID:authUser.uid canAccessPro:^(BOOL isAllowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
           dispatch_async(dispatch_get_main_queue(), ^{
-                if (!weakSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:authUser.uid]) {
+                if (!weakSelf || routingGeneration != weakSelf.pp_proAccessRoutingGeneration ||
+                    ![[FIRAuth auth].currentUser.uid isEqualToString:authUser.uid]) {
                      return;
                 }
                 // Re-check: login controller may have started between the async gap
@@ -290,6 +297,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
                      [weakSelf pp_routeAfterDeliveryCompanyPreflightForUID:authUser.uid
                                                                     userDoc:userDoc ?: @{}
+                                                          hasProviderAccess:NO
                                                                fallbackRoot:AppRootProviderStatus
                                                     autoPresentOnboarding:!PPSceneUserDocHasPartnerApplicationInReview(userDoc ?: @{})
                                                                    animated:animated];
@@ -306,6 +314,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
 - (void)pp_routeAfterDeliveryCompanyPreflightForUID:(NSString *)uid
                                              userDoc:(NSDictionary *)userDoc
+                                   hasProviderAccess:(BOOL)hasProviderAccess
                                         fallbackRoot:(AppRoot)fallbackRoot
                              autoPresentOnboarding:(BOOL)autoPresentOnboarding
                                             animated:(BOOL)animated {
@@ -315,11 +324,12 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           return;
      }
 
+     NSUInteger routingGeneration = ++self.pp_proAccessRoutingGeneration;
      __weak typeof(self) weakSelf = self;
      [PPDeliveryCompanyService.shared discoverCompanyMembershipsWithCompletion:^(NSArray<PPDeliveryCompanyProfile *> * _Nullable profiles,
                                                                                   NSError * _Nullable error) {
           __strong typeof(weakSelf) self = weakSelf;
-          if (!self || PPAdminLoginInProgress()) {
+          if (!self || routingGeneration != self.pp_proAccessRoutingGeneration || PPAdminLoginInProgress()) {
                return;
           }
 
@@ -348,21 +358,59 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           }
 
           if (error) {
-               // Keep a failed membership check recoverable; onboarding is
-               // reached only after a successful response confirms no fleet.
+               // A provider grant does not depend on the optional fleet lookup.
+               // No driver capability is added without a resolved membership.
+               if (hasProviderAccess) {
+                    self.pp_autoPresentProviderStatusOnNextRoot = NO;
+                    [self setRoot:fallbackRoot animated:animated];
+                    return;
+               }
                self.pp_autoPresentProviderStatusOnNextRoot = NO;
-               [self setRoot:AppRootLogin animated:animated];
-               [PPAlertHelper showConfirmationIn:self.window.rootViewController
-                                           title:kLang(@"DeliveryLogin_CheckFailed_Title")
-                                        subtitle:kLang(@"DeliveryLogin_CheckFailed_Body")
-                                   confirmButton:kLang(@"TryAgain")
-                                    cancelButton:kLang(@"DeliveryLogin_UseAnotherAccount")
-                                            icon:nil
-                                    confirmBlock:^(NSString * _Nullable text, BOOL didConfirm) {
-                    if (!didConfirm || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+               [self setRoot:AppRootLogin animated:animated completion:^{
+               __strong typeof(weakSelf) self = weakSelf;
+               if (!self || self.currentRoot != AppRootLogin || PPAdminLoginInProgress() ||
+                   ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+               [PPAlertHelper showThreeActionConfirmationIn:self.window.rootViewController
+                                           title:kLang(@"ProAccess_CheckFailedTitle")
+                                        subtitle:kLang(@"ProAccess_CheckFailedBody")
+                                   primaryButton:kLang(@"TryAgain")
+                                    primaryStyle:UIAlertActionStyleDefault
+                                 secondaryButton:kLang(@"ProAccess_BecomePartner")
+                                  secondaryStyle:UIAlertActionStyleDefault
+                                  tertiaryButton:kLang(@"ProAccess_UseAnotherAccount")
+                                   tertiaryStyle:UIAlertActionStyleDefault
+                                    primaryBlock:^{
+                    if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
                     [weakSelf pp_applyAdminRoutingForAuthUser:[FIRAuth auth].currentUser animated:YES];
-               } cancelBlock:^{
+               } secondaryBlock:^{
+                    if (!weakSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                    [weakSelf cancelPendingProAccessRouting];
+                    weakSelf.pp_autoPresentProviderStatusOnNextRoot = YES;
+                    [weakSelf setRoot:AppRootProviderStatus animated:YES];
+               } tertiaryBlock:^{
                     if ([[FIRAuth auth].currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+               }];
+               }];
+               return;
+          }
+          if (!hasProviderAccess && fallbackRoot == AppRootProviderStatus && autoPresentOnboarding) {
+               self.pp_autoPresentProviderStatusOnNextRoot = NO;
+               [self setRoot:AppRootLogin animated:animated completion:^{
+               __strong typeof(weakSelf) self = weakSelf;
+               if (!self || self.currentRoot != AppRootLogin || PPAdminLoginInProgress() ||
+                   ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+               [PPAlertHelper showInfoIn:self.window.rootViewController title:kLang(@"ProAccess_NotEnabledTitle")
+                                subtitle:kLang(@"ProAccess_NotEnabledBody")
+                           primaryButton:kLang(@"ProAccess_BecomePartner")
+                         secondaryButton:kLang(@"ProAccess_UseAnotherAccount")
+                            primaryBlock:^{
+                    if (!weakSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                    [weakSelf cancelPendingProAccessRouting];
+                    weakSelf.pp_autoPresentProviderStatusOnNextRoot = YES;
+                    [weakSelf setRoot:AppRootProviderStatus animated:YES];
+               } secondaryBlock:^{
+                    if ([[FIRAuth auth].currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+               }];
                }];
                return;
           }
@@ -377,6 +425,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           return;
      }
 
+     [self cancelPendingProAccessRouting];
      self.currentRoot = AppRootDashboard;
      // Official root UITabBarController (replaces single UINavigationController)
      PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
@@ -802,7 +851,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           case AppRootDashboard: root = [[AdminDashboardViewController alloc] init]; break;
           case AppRootProviderStatus: {
                PPProviderApplicationStatusViewController *statusController = [[PPProviderApplicationStatusViewController alloc] init];
-               statusController.prefersAutoPresentBecomeProvider = NO;
+               statusController.prefersAutoPresentBecomeProvider = self.pp_autoPresentProviderStatusOnNextRoot;
 
                self.pp_autoPresentProviderStatusOnNextRoot = NO;
                root = statusController;
@@ -852,9 +901,11 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      [self setRoot:AppRootSplash animated:animated]; // keep splash while loading
      
      NSString *authUID = user.uid;
+     NSUInteger routingGeneration = ++self.pp_proAccessRoutingGeneration;
      __weak typeof(self) weakSelf = self;
      [UserManager.shared loadUserByUIDOrID:authUID completion:^(UserModel * _Nullable user, NSError * _Nullable error) {
-          if (!weakSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:authUID]) return;
+          if (!weakSelf || routingGeneration != weakSelf.pp_proAccessRoutingGeneration ||
+              ![[FIRAuth auth].currentUser.uid isEqualToString:authUID]) return;
           weakSelf.awaitingModel = NO;
           
           UserModel *effectiveUser = user;
@@ -869,7 +920,8 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                BOOL shouldShowProviderStatus = PPSceneUserHasPartnerApplicationInReview(effectiveUser);
                [AppMgr checkIfUserWithUID:authUID canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                         if (!weakSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:authUID]) return;
+                         if (!weakSelf || routingGeneration != weakSelf.pp_proAccessRoutingGeneration ||
+                             ![[FIRAuth auth].currentUser.uid isEqualToString:authUID]) return;
                          if (error) {
                               [weakSelf setRoot:AppRootLogin animated:YES];
                               return;
@@ -882,12 +934,14 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                               }
                               [weakSelf pp_routeAfterDeliveryCompanyPreflightForUID:authUID
                                                                              userDoc:userDoc ?: @{}
+                                                                   hasProviderAccess:NO
                                                                         fallbackRoot:AppRootProviderStatus
                                                              autoPresentOnboarding:!(shouldShowProviderStatus || PPSceneUserDocHasPartnerApplicationInReview(userDoc ?: @{}))
                                                                             animated:YES];
                          } else {
                               [weakSelf pp_routeAfterDeliveryCompanyPreflightForUID:authUID
                                                                              userDoc:userDoc ?: @{}
+                                                                   hasProviderAccess:YES
                                                                         fallbackRoot:(shouldShowProviderStatus ? AppRootProviderStatus : AppRootDashboard)
                                                              autoPresentOnboarding:NO
                                                                             animated:YES];
@@ -903,7 +957,25 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 #pragma mark - Root switching
 
 - (void)setRoot:(AppRoot)target animated:(BOOL)animated {
-     if (target == self.currentRoot && self.window.rootViewController) return;
+     [self setRoot:target animated:animated completion:nil];
+}
+
+- (void)setRoot:(AppRoot)target animated:(BOOL)animated completion:(void (^ _Nullable)(void))completion {
+     NSUInteger generation = ++self.pp_rootTransitionGeneration;
+     [self pp_installRoot:target animated:animated generation:generation completion:completion];
+}
+
+- (void)cancelPendingProAccessRouting {
+     self.pp_proAccessRoutingGeneration += 1;
+     self.pp_rootTransitionGeneration += 1;
+}
+
+- (void)pp_installRoot:(AppRoot)target animated:(BOOL)animated generation:(NSUInteger)generation completion:(void (^ _Nullable)(void))completion {
+     if (generation != self.pp_rootTransitionGeneration) return;
+     if (target == self.currentRoot && self.window.rootViewController) {
+          if (completion) completion();
+          return;
+     }
 
      // If transitioning away from splash, respect minimum display time
      if (self.currentRoot == AppRootSplash && target != AppRootSplash && self.pp_splashAppearDate) {
@@ -914,9 +986,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                AppRoot capturedTarget = target;
                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(remaining * NSEC_PER_SEC)),
                               dispatch_get_main_queue(), ^{
-                    // Reset currentRoot so the guard at the top doesn't skip
-                    weakSelf.currentRoot = AppRootSplash;
-                    [weakSelf setRoot:capturedTarget animated:animated];
+                    [weakSelf pp_installRoot:capturedTarget animated:animated generation:generation completion:completion];
                });
                return;
           }
@@ -936,7 +1006,11 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                                  duration:0.25
                                   options:UIViewAnimationOptionTransitionCrossDissolve|UIViewAnimationOptionAllowAnimatedContent
                                animations:nil
-                               completion:nil];
+                               completion:^(__unused BOOL finished) {
+                    if (generation == self.pp_rootTransitionGeneration && completion) completion();
+               }];
+          } else if (completion) {
+               completion();
           }
           return;
      }
@@ -947,7 +1021,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           case AppRootDashboard: root = [[AdminDashboardViewController alloc] init]; break;
           case AppRootProviderStatus: {
                PPProviderApplicationStatusViewController *statusController = [[PPProviderApplicationStatusViewController alloc] init];
-               statusController.prefersAutoPresentBecomeProvider = NO;
+               statusController.prefersAutoPresentBecomeProvider = self.pp_autoPresentProviderStatusOnNextRoot;
 
                self.pp_autoPresentProviderStatusOnNextRoot = NO;
                root = statusController;
@@ -966,7 +1040,11 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                             duration:0.25
                              options:UIViewAnimationOptionTransitionCrossDissolve|UIViewAnimationOptionAllowAnimatedContent
                           animations:nil
-                          completion:nil];
+                          completion:^(__unused BOOL finished) {
+               if (generation == self.pp_rootTransitionGeneration && completion) completion();
+          }];
+     } else if (completion) {
+          completion();
      }
 }
 

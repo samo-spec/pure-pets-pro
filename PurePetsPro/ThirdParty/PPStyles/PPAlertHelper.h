@@ -114,6 +114,14 @@ typedef void (^PPAlertSimpleActionBlock)(void);
     NS_SWIFT_NAME(showWarning(in:title:subtitle:));
 + (void)showInfoIn:(UIViewController * _Nullable)vc title:(NSString *)title subtitle:(NSString * _Nullable)subtitle
     NS_SWIFT_NAME(showInfo(in:title:subtitle:));
+/// Two explicit actions. Tapping outside the alert never chooses either action.
++ (void)showInfoIn:(UIViewController * _Nullable)vc
+             title:(NSString *)title
+          subtitle:(NSString *)subtitle
+     primaryButton:(NSString *)primaryTitle
+   secondaryButton:(NSString *)secondaryTitle
+      primaryBlock:(PPAlertSimpleActionBlock)primaryBlock
+    secondaryBlock:(PPAlertSimpleActionBlock)secondaryBlock;
 + (void)showSuccessIn:(UIViewController * _Nullable)vc
                 title:(NSString *)title
              subtitle:(NSString *)subtitle

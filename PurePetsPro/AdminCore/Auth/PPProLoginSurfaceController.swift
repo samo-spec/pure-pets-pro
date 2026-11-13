@@ -1176,6 +1176,23 @@ public final class PPProCommandSignalDescriptor: NSObject {
 }
 
 @objcMembers
+public final class PPProSubscriptionCardDescriptor: NSObject {
+    public var title = ""
+    public var status = ""
+    public var message = ""
+    public var detail = ""
+    public var symbolName = "rectangle.stack.badge.person.crop"
+    public var isLoading = true
+    public var actionTitle = ""
+    public var actionRoute = "__subscription"
+    public var additionalActionTitle = ""
+    public var additionalActionRoute = "__providerApplication"
+    public var pendingCount: Int = 0
+    public var pendingActionTitle = ""
+    public var pendingActionRoute = "__providerApplicationStatus"
+}
+
+@objcMembers
 public final class PPProCommandCenterSnapshotDescriptor: NSObject {
     public var workspaceEyebrow: String = ""
     public var greeting: String = ""
@@ -1192,6 +1209,7 @@ public final class PPProCommandCenterSnapshotDescriptor: NSObject {
     public var canRetryOperationalData: Bool = false
     public var capabilities: [PPProCommandCapabilityDescriptor] = []
     public var signals: [PPProCommandSignalDescriptor] = []
+    public var subscriptionCard: PPProSubscriptionCardDescriptor?
 }
 
 struct PPProCommandCapability: Identifiable, Equatable {
@@ -1384,6 +1402,22 @@ struct PPProCommandSignal: Identifiable, Equatable {
     let actionTarget: PPProCommandActionTarget
 }
 
+struct PPProSubscriptionSummary: Equatable {
+    let title: String
+    let status: String
+    let message: String
+    let detail: String
+    let symbolName: String
+    let isLoading: Bool
+    let actionTitle: String
+    let actionRoute: String
+    let additionalActionTitle: String
+    let additionalActionRoute: String
+    let pendingCount: Int
+    let pendingActionTitle: String
+    let pendingActionRoute: String
+}
+
 struct PPProCommandCenterSnapshot: Equatable {
     var workspaceEyebrow = ""
     var greeting = ""
@@ -1400,6 +1434,7 @@ struct PPProCommandCenterSnapshot: Equatable {
     var canRetryOperationalData = false
     var capabilities: [PPProCommandCapability] = []
     var signals: [PPProCommandSignal] = []
+    var subscriptionCard: PPProSubscriptionSummary? = nil
 
     static var placeholder: PPProCommandCenterSnapshot { PPProCommandCenterSnapshot() }
 }
@@ -1446,6 +1481,31 @@ private extension PPProCommandCenterSnapshotDescriptor {
                         descriptor: $0.actionTarget,
                         fallbackWorkspaceRouteTag: $0.routeTag
                     )
+                )
+            },
+            subscriptionCard: subscriptionCard.map {
+                let pendingTitle: String
+                if !$0.pendingActionTitle.isEmpty {
+                    pendingTitle = $0.pendingActionTitle
+                } else if $0.pendingCount > 0 {
+                    pendingTitle = Language.isRTL() ? "\($0.pendingCount) قيد الانتظار" : "\($0.pendingCount) pending"
+                } else {
+                    pendingTitle = ""
+                }
+                return PPProSubscriptionSummary(
+                    title: $0.title,
+                    status: $0.status,
+                    message: $0.message,
+                    detail: $0.detail,
+                    symbolName: $0.symbolName,
+                    isLoading: $0.isLoading,
+                    actionTitle: $0.actionTitle,
+                    actionRoute: $0.actionRoute,
+                    additionalActionTitle: $0.additionalActionTitle,
+                    additionalActionRoute: $0.additionalActionRoute,
+                    pendingCount: $0.pendingCount,
+                    pendingActionTitle: pendingTitle,
+                    pendingActionRoute: $0.pendingActionRoute.isEmpty ? "__providerApplicationStatus" : $0.pendingActionRoute
                 )
             }
         )
@@ -5331,6 +5391,138 @@ private struct PPProPulseDock: View {
 // the same three delegate calls as the surface it replaces.
 // ═══════════════════════════════════════════════════════════════════════════
 
+/// Account-level provider information. The dashboard snapshot owns every fact;
+/// this view neither infers entitlements nor starts another subscription listener.
+private struct PPProSubscriptionHomeCard: View {
+    let summary: PPProSubscriptionSummary
+    let palette: PPProPalette
+    let onRoute: (String) -> Void
+
+    @Environment(\.sizeCategory) private var sizeCategory
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 14) {
+                Image(systemName: summary.symbolName)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(palette.accentText)
+                    .frame(width: 48, height: 48)
+                    .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 16))
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Language.get("ProSubscription_Eyebrow", alter: nil))
+                        .font(PPProType.medium(13, relativeTo: .subheadline))
+                        .foregroundStyle(palette.secondary)
+                    Text(summary.title)
+                        .font(PPProType.bold(24, relativeTo: .title2))
+                        .foregroundStyle(palette.text)
+                        .accessibilityAddTraits(.isHeader)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        if summary.isLoading {
+                            ProgressView().tint(palette.accentText)
+                                .accessibilityHidden(true)
+                        }
+                        Text(summary.status)
+                            .font(PPProType.bold(15, relativeTo: .subheadline))
+                            .foregroundStyle(palette.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Text(summary.message)
+                        .font(PPProType.regular(16, relativeTo: .body))
+                        .foregroundStyle(palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if !summary.detail.isEmpty {
+                        Text(summary.detail)
+                            .font(PPProType.medium(14, relativeTo: .subheadline))
+                            .foregroundStyle(palette.text)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .accessibilityElement(children: .combine)
+
+                if summary.pendingCount > 0 && !summary.pendingActionTitle.isEmpty {
+                    Button {
+                        onRoute(summary.pendingActionRoute)
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(palette.accentText)
+                            Text(summary.pendingActionTitle)
+                                .font(PPProType.medium(14, relativeTo: .subheadline))
+                                .foregroundStyle(palette.text)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 4)
+                            Image(systemName: layoutDirection == .rightToLeft ? "chevron.left" : "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(palette.secondary)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                        .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(PPProHomeControlStyle())
+                    .accessibilityHint(Language.isRTL() ? "اضغط لعرض حالة الطلب" : "Tap to view application status")
+                    .accessibilityIdentifier("pro.home.subscription.pendingRequest")
+                }
+            }
+
+            Rectangle().fill(palette.hairline).frame(height: 1)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Button { onRoute(summary.actionRoute) } label: {
+                    HStack(spacing: 12) {
+                        Text(summary.actionTitle)
+                            .font(PPProType.bold(17, relativeTo: .headline))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 8)
+                        Image(systemName: layoutDirection == .rightToLeft ? "arrow.left" : "arrow.right")
+                            .font(.system(size: 16, weight: .semibold))
+                            .accessibilityHidden(true)
+                    }
+                    .foregroundStyle(palette.accentText)
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .disabled(summary.isLoading)
+                .accessibilityIdentifier("pro.home.subscription.manage")
+
+                if !summary.additionalActionTitle.isEmpty {
+                    Button { onRoute(summary.additionalActionRoute) } label: {
+                        Label(summary.additionalActionTitle, systemImage: "plus.circle")
+                            .font(PPProType.medium(16, relativeTo: .body))
+                            .foregroundStyle(palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityIdentifier("pro.home.subscription.addFeature")
+                }
+            }
+            .buttonStyle(PPProHomeControlStyle())
+        }
+        .padding(sizeCategory.isAccessibilityCategory ? 18 : 22)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: PPProRadius.card, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: PPProRadius.card, style: .continuous)
+                .stroke(palette.hairline, lineWidth: 1)
+        }
+        .accessibilityIdentifier("pro.home.subscription")
+    }
+}
+
 struct PPProPulseView: View {
     @ObservedObject var store: PPProCommandCenterStore
     let onRoute: (String) -> Void
@@ -5450,7 +5642,7 @@ struct PPProPulseView: View {
     /// had no exit. The ladder below always terminates.
     private var phase: Phase {
         let hasNoCapabilities = snapshot.capabilities.isEmpty
-        if hasNoCapabilities && !snapshot.isOperationalLoading { return .locked }
+        if hasNoCapabilities && !snapshot.isOperationalLoading && snapshot.subscriptionCard == nil { return .locked }
         let isFirstPaint = snapshot.isOperationalLoading
             && snapshot.displayName.isEmpty
             && hasNoCapabilities
@@ -5539,6 +5731,9 @@ struct PPProPulseView: View {
                 }
                 .animation(workspaceAnimation, value: store.selectedWorkspaceID)
                 .padding(.horizontal, PPProPulseRhythm.screenMargin)
+
+                subscriptionCard
+                    .padding(.horizontal, PPProPulseRhythm.screenMargin)
             }
             .padding(.top, 8)
             .padding(.bottom, 28)
@@ -5580,6 +5775,7 @@ struct PPProPulseView: View {
                 // Trailing Flank: Expansive Pro Capability Matrix & Operational Launchpad
                 VStack(alignment: .leading, spacing: PPProPulseRhythm.spineGap) {
                     workspaceBand
+                    subscriptionCard
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -5588,6 +5784,13 @@ struct PPProPulseView: View {
             .padding(.bottom, 32)
         }
         .accessibilityHidden(store.focusedSignal != nil)
+    }
+
+    @ViewBuilder
+    private var subscriptionCard: some View {
+        if let summary = snapshot.subscriptionCard {
+            PPProSubscriptionHomeCard(summary: summary, palette: palette, onRoute: activate)
+        }
     }
 
     @ViewBuilder

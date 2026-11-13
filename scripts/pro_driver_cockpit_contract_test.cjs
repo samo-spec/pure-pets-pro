@@ -509,12 +509,15 @@ check('member-only drivers register for delivery pushes without provider feature
 check('membership-check failure is recoverable and never treated as confirmed onboarding', () => {
   const preflight = method(login, '- (void)pp_preflightDeliveryCompanyMembershipForUID:', '- (void)pp_gatekeepServiceProviderForUID:');
   const failure = slice(preflight, 'if (error) {', '[self pp_continueToProviderOnboarding];');
-  assert(failure.includes('DeliveryLogin_CheckFailed_Body'));
-  assert(failure.includes('[retrySelf pp_preflightDeliveryCompanyMembershipForUID:uid]'));
+  assert(failure.includes('ProAccess_CheckFailedBody'));
+  assert(!failure.includes('ProAccess_NotEnabledTitle'));
+  assert(failure.includes('secondaryBlock:'));
+  assert(failure.includes('[retrySelf pp_gatekeepServiceProviderForUID:uid]'));
   assert(failure.includes('return;'));
   const scenePreflight = method(scene, '- (void)pp_routeAfterDeliveryCompanyPreflightForUID:', '- (void)showDashboardWithDeliveryCompanyProfile:');
   const sceneFailure = slice(scenePreflight, 'if (error) {', 'self.pp_autoPresentProviderStatusOnNextRoot = autoPresentOnboarding;');
-  assert(sceneFailure.includes('DeliveryLogin_CheckFailed_Body'));
+  assert(sceneFailure.includes('ProAccess_CheckFailedBody'));
+  assert(sceneFailure.includes('if (hasProviderAccess)'));
   assert(sceneFailure.includes('setRoot:AppRootLogin'));
   assert(sceneFailure.includes('pp_applyAdminRoutingForAuthUser:'));
   assert(sceneFailure.includes('return;'));

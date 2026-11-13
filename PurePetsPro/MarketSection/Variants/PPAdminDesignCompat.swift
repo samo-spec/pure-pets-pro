@@ -447,6 +447,22 @@ public enum PPBrandFont {
         bold(size: size, relativeTo: textStyle)
     }
 
+    public static func semibold(_ size: CGFloat, relativeTo textStyle: Font.TextStyle = .body) -> Font {
+        bold(size: size, relativeTo: textStyle)
+    }
+
+    public static func semibold(size: CGFloat, relativeTo textStyle: Font.TextStyle = .body) -> Font {
+        bold(size: size, relativeTo: textStyle)
+    }
+
+    public static func heavy(_ size: CGFloat, relativeTo textStyle: Font.TextStyle = .body) -> Font {
+        bold(size: size, relativeTo: textStyle)
+    }
+
+    public static func heavy(size: CGFloat, relativeTo textStyle: Font.TextStyle = .body) -> Font {
+        bold(size: size, relativeTo: textStyle)
+    }
+
     public static func medium(_ size: CGFloat, relativeTo textStyle: Font.TextStyle = .body) -> Font {
         medium(size: size, relativeTo: textStyle)
     }

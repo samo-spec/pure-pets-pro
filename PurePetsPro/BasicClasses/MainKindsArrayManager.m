@@ -6,6 +6,8 @@
 //
 
 #import "MainKindsArrayManager.h"
+#import "MainKindsModel.h"
+#import "SubKindModel.h"
 #import "PPFirebaseCompat.h"
 static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
 

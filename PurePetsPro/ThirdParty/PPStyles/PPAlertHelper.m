@@ -489,7 +489,11 @@ static NSString *PPAlertTrimmedText(NSString *value) {
 #pragma mark - Action Buttons & iPad Pointer Interactions
 
 - (void)buildActions {
-    self.buttonStackView.axis = (self.actionItems.count >= 3) ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal;
+    BOOL needsStackedActions = self.actionItems.count >= 3 || UIContentSizeCategoryIsAccessibilityCategory(self.traitCollection.preferredContentSizeCategory);
+    for (PPAlertActionItem *item in self.actionItems) {
+        if (item.title.length > 18) needsStackedActions = YES;
+    }
+    self.buttonStackView.axis = needsStackedActions ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal;
     self.buttonStackView.spacing = 10.0;
 
     for (NSInteger idx = 0; idx < self.actionItems.count; idx += 1) {
@@ -498,7 +502,7 @@ static NSString *PPAlertTrimmedText(NSString *value) {
         button.tag = idx;
         [button addTarget:self action:@selector(actionButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
         [self.buttonStackView addArrangedSubview:button];
-        [button.heightAnchor constraintEqualToConstant:50.0].active = YES;
+        [button.heightAnchor constraintGreaterThanOrEqualToConstant:50.0].active = YES;
 
         // iPad Pointer Hover Integration
         if (@available(iOS 13.4, *)) {
@@ -515,6 +519,10 @@ static NSString *PPAlertTrimmedText(NSString *value) {
     button.layer.cornerCurve = kCACornerCurveContinuous;
     button.titleLabel.font = (item.style == PPAlertActionStylePrimary || item.style == PPAlertActionStyleDestructive) ? PPFontBold(16.0) : PPFontMedium(15.5);
     button.titleLabel.adjustsFontForContentSizeCategory = YES;
+    button.titleLabel.numberOfLines = 0;
+    button.titleLabel.textAlignment = NSTextAlignmentCenter;
+    button.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
+    button.contentEdgeInsets = UIEdgeInsetsMake(12.0, 14.0, 12.0, 14.0);
     [button setTitle:item.title forState:UIControlStateNormal];
 
     switch (item.style) {
@@ -868,6 +876,23 @@ static NSString *PPAlertTrimmedText(NSString *value) {
              title:(NSString *)title
           subtitle:(NSString * _Nullable)subtitle {
     [self showInfoIn:vc title:title subtitle:subtitle completion:nil];
+}
+
++ (void)showInfoIn:(UIViewController *)vc
+             title:(NSString *)title
+          subtitle:(NSString *)subtitle
+     primaryButton:(NSString *)primaryTitle
+   secondaryButton:(NSString *)secondaryTitle
+      primaryBlock:(PPAlertSimpleActionBlock)primaryBlock
+    secondaryBlock:(PPAlertSimpleActionBlock)secondaryBlock {
+    NSArray<PPAlertActionItem *> *actions = @[
+        [PPAlertActionItem itemWithTitle:primaryTitle style:PPAlertActionStylePrimary completion:nil simpleCompletion:primaryBlock],
+        [PPAlertActionItem itemWithTitle:secondaryTitle style:PPAlertActionStyleSecondary completion:nil simpleCompletion:secondaryBlock]
+    ];
+    PPAlert *alert = [[PPAlert alloc] initWithType:PPAlertTypeInfo title:title subtitle:subtitle icon:nil
+                                       actions:actions placeholder:nil initialText:nil secureEntry:NO
+                                  keyboardType:UIKeyboardTypeDefault shouldDismissOnBackgroundTap:NO];
+    [alert showInViewController:vc];
 }
 
 + (void)showInfoIn:(UIViewController *)vc

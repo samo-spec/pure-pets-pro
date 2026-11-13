@@ -27,6 +27,7 @@
     if (self) {
         _isCreate = YES;
         _initialAccessKindType = 1;
+        self.hidesBottomBarWhenPushed = YES;
     }
     return self;
 }
@@ -37,6 +38,7 @@
         _isCreate = NO;
         _item = item;
         _initialAccessKindType = item.accessKindType > 0 ? item.accessKindType : 1;
+        self.hidesBottomBarWhenPushed = YES;
     }
     return self;
 }
@@ -94,14 +96,23 @@
 #pragma mark - Compatibility Helpers
 
 - (UIColor *)pp_canvasColor {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor systemGroupedBackgroundColor];
+    }
     return [UIColor ppBackground];
 }
 
 - (UIColor *)pp_surfaceColor {
+    if (@available(iOS 13.0, *)) {
+        return [UIColor secondarySystemGroupedBackgroundColor];
+    }
     return [UIColor ppElevatedSurface];
 }
 
 - (UIColor *)pp_borderColor {
+    if (@available(iOS 13.0, *)) {
+        return [[UIColor separatorColor] colorWithAlphaComponent:0.6];
+    }
     return [[UIColor ppSurfaceBorder] colorWithAlphaComponent:0.6];
 }
 

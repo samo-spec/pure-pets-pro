@@ -9,7 +9,6 @@
 // MainKindsArrayManager.h
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
-#import "SubKindModel.h"
 
 NS_ASSUME_NONNULL_BEGIN
 static NSString * const PPMainKindsUpdatedNotification = @"MainKindsUpdatedNotification";

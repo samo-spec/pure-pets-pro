@@ -27,7 +27,7 @@ public struct PPReviewMilestoneItem: Identifiable, Hashable, Sendable {
     public var localizedSubtitle: String { Language.isRTL() ? subtitleAr : subtitleEn }
 }
 
-public enum PPReviewMilestoneStatus {
+public enum PPReviewMilestoneStatus: Hashable, Sendable {
     case completed
     case inProgress
     case pending
@@ -90,7 +90,7 @@ public struct PPProviderApplicationStatusStudioView: View {
                 }
                 ToolbarItem(placement: .principal) {
                     Text(Language.isRTL() ? "حالة الشريك والاعتماد" : "Partner Status & Onboarding")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(PPBrandFont.bold(16, relativeTo: .headline))
                         .foregroundStyle(Color(.label))
                 }
                 ToolbarItem(placement: .primaryAction) {
@@ -104,6 +104,7 @@ public struct PPProviderApplicationStatusStudioView: View {
                 }
             }
             .onAppear {
+                PPBrandFont.registerIfNeeded()
                 startObservingState()
             }
         }
@@ -114,7 +115,7 @@ public struct PPProviderApplicationStatusStudioView: View {
     private func startObservingState() {
         isLoading = true
         errorMessage = nil
-        PPProviderApplicationManager.shared().observeProviderStateForCurrentUser { newState, error in
+        PPProviderApplicationManager.shared().observeProviderState(forCurrentUser: { newState, error in
             DispatchQueue.main.async {
                 self.isLoading = false
                 if let error = error {
@@ -129,7 +130,7 @@ public struct PPProviderApplicationStatusStudioView: View {
                     }
                 }
             }
-        }
+        })
     }
 
     private func refreshData() {
@@ -139,13 +140,9 @@ public struct PPProviderApplicationStatusStudioView: View {
 
     private func isFullyActiveAndReady(_ state: PPProviderOnboardingState) -> Bool {
         // Active when there's an active profile and setup is not required
-        guard !state.isSetupRequired else { return false }
-        for type in state.eligibleProviderTypes {
-            if let typeVal = PPProviderType(rawValue: type.intValue), state.isActive(for: typeVal) {
-                return true
-            }
-        }
-        return false
+        guard state.initialDataAuthoritative, !state.isBlocked, !state.isSetupRequired(),
+              !isCurrentUnderReview else { return false }
+        return hasActiveProfile(state)
     }
 
     private var isCurrentUnderReview: Bool {
@@ -179,9 +176,9 @@ public struct PPProviderApplicationStatusStudioView: View {
                         changesRequestedCard
                     } else if isCurrentUnderReview {
                         reviewTimelineCard
-                    } else if state.isSetupRequired {
+                    } else if state.isSetupRequired() {
                         guidedSetupCard(state: state)
-                    } else if state.applications.isEmpty && state.eligibleProviderTypes.count > 0 {
+                    } else if state.applications.isEmpty && state.eligibleProviderTypes().count > 0 {
                         readyToApplyCard(state: state)
                     } else if hasActiveProfile(state) {
                         activePartnerSuccessCard
@@ -235,7 +232,7 @@ public struct PPProviderApplicationStatusStudioView: View {
             VStack(spacing: 6) {
                 // Status Pill
                 Text(info.badgeText)
-                    .font(.system(size: 11.5, weight: .bold))
+                    .font(PPBrandFont.bold(11.5, relativeTo: .caption2))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 4)
                     .background(info.accentColor.opacity(0.14))
@@ -243,12 +240,12 @@ public struct PPProviderApplicationStatusStudioView: View {
                     .clipShape(Capsule())
 
                 Text(info.headline)
-                    .font(.system(size: 22, weight: .bold))
+                    .font(PPBrandFont.bold(22, relativeTo: .title2))
                     .foregroundStyle(Color(.label))
                     .multilineTextAlignment(.center)
 
                 Text(info.subtitle)
-                    .font(.system(size: 13.5, weight: .regular))
+                    .font(PPBrandFont.regular(13.5, relativeTo: .subheadline))
                     .foregroundStyle(Color(.secondaryLabel))
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 12)
@@ -311,13 +308,13 @@ public struct PPProviderApplicationStatusStudioView: View {
                 symbol: "clock.badge.checkmark.fill",
                 accentColor: .blue
             )
-        } else if state.isSetupRequired {
+        } else if state.isSetupRequired() {
             return HeroPresentationInfo(
-                badgeText: state.isReadyForActivation ? (Language.isRTL() ? "جاهز للتفعيل" : "Ready for Launch") : (Language.isRTL() ? "إعداد الحساب" : "Setup Required"),
-                headline: state.isReadyForActivation ? (Language.isRTL() ? "حسابك جاهز للإطلاق الرسمي!" : "Ready to Launch!") : (Language.isRTL() ? "أكمل خطوات جاهزية الشريك" : "Complete Launch Checklist"),
+                badgeText: state.isReadyForActivation() ? (Language.isRTL() ? "جاهز للتفعيل" : "Ready for Launch") : (Language.isRTL() ? "إعداد الحساب" : "Setup Required"),
+                headline: state.isReadyForActivation() ? (Language.isRTL() ? "حسابك جاهز للإطلاق الرسمي!" : "Ready to Launch!") : (Language.isRTL() ? "أكمل خطوات جاهزية الشريك" : "Complete Launch Checklist"),
                 subtitle: Language.isRTL() ? "أكمل خطوات الإعداد لتفعيل المتجر واستقبال الحجوزات والطلبات." : "Complete the remaining steps to start receiving bookings and orders.",
-                symbol: state.isReadyForActivation ? "checkmark.seal.fill" : "checklist",
-                accentColor: state.isReadyForActivation ? .green : .accentColor
+                symbol: state.isReadyForActivation() ? "checkmark.seal.fill" : "checklist",
+                accentColor: state.isReadyForActivation() ? .green : .accentColor
             )
         } else if hasActiveProfile(state) {
             return HeroPresentationInfo(
@@ -344,12 +341,8 @@ public struct PPProviderApplicationStatusStudioView: View {
     }
 
     private func hasActiveProfile(_ state: PPProviderOnboardingState) -> Bool {
-        for type in state.eligibleProviderTypes {
-            if let typeVal = PPProviderType(rawValue: type.intValue), state.isActive(for: typeVal) {
-                return true
-            }
-        }
-        return false
+        let types: [PPProviderType] = [.marketplace, .deliveryCompany, .vet, .pharmacy, .service, .deliverySubscription]
+        return types.contains { PPProviderTypeIsEnabledInProApp($0) && state.isActive(for: $0) }
     }
 
     // MARK: - 2. Changes Requested Banner
@@ -363,13 +356,13 @@ public struct PPProviderApplicationStatusStudioView: View {
                     .font(.system(size: 20))
                     .foregroundStyle(Color.orange)
                 Text(Language.isRTL() ? "ملاحظات فريق التدقيق" : "Reviewer Findings")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(PPBrandFont.bold(16, relativeTo: .headline))
                     .foregroundStyle(Color(.label))
             }
 
             if let notes = app?.reviewNotes, !notes.isEmpty {
                 Text(notes)
-                    .font(.system(size: 13.5, weight: .medium))
+                    .font(PPBrandFont.medium(13.5, relativeTo: .subheadline))
                     .foregroundStyle(Color(.label).opacity(0.85))
                     .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -377,7 +370,7 @@ public struct PPProviderApplicationStatusStudioView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
                 Text(Language.isRTL() ? "يرجى مراجعة وتحديث صور المستندات أو البيانات غير المطابقة." : "Please review and re-upload matching credentials or corrected details.")
-                    .font(.system(size: 13.5, weight: .regular))
+                    .font(PPBrandFont.regular(13.5, relativeTo: .subheadline))
                     .foregroundStyle(Color(.secondaryLabel))
             }
 
@@ -390,7 +383,7 @@ public struct PPProviderApplicationStatusStudioView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "arrow.clockwise.circle.fill")
                     Text(Language.isRTL() ? "تعديل الطلب وإعادة الإرسال" : "Update & Resubmit")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(PPBrandFont.bold(15, relativeTo: .body))
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 48)
@@ -415,7 +408,7 @@ public struct PPProviderApplicationStatusStudioView: View {
     private var reviewTimelineCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(Language.isRTL() ? "مسار تدقيق واعتماد الشريك" : "Verification Milestones")
-                .font(.system(size: 16, weight: .bold))
+                .font(PPBrandFont.bold(16, relativeTo: .headline))
                 .foregroundStyle(Color(.label))
 
             VStack(spacing: 12) {
@@ -446,7 +439,7 @@ public struct PPProviderApplicationStatusStudioView: View {
                     .font(.system(size: 14))
                     .foregroundStyle(Color.blue)
                 Text(Language.isRTL() ? "المدة المقدرة للمراجعة: أقل من 24 ساعة عمل." : "Estimated review time: Within 24 business hours.")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(PPBrandFont.medium(12, relativeTo: .caption))
                     .foregroundStyle(Color(.secondaryLabel))
             }
             .padding(.top, 4)
@@ -465,10 +458,10 @@ public struct PPProviderApplicationStatusStudioView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Language.isRTL() ? "خطوات الجاهزية للتشغيل" : "Launch Readiness Checklist")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(PPBrandFont.bold(16, relativeTo: .headline))
                         .foregroundStyle(Color(.label))
                     Text(Language.isRTL() ? "أكمل هذه الخطوات لتفعيل المتجر وبدء استقبال العملاء." : "Complete these requirements to start receiving pet owners.")
-                        .font(.system(size: 12.5, weight: .regular))
+                        .font(PPBrandFont.regular(12.5, relativeTo: .caption))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
                 Spacer()
@@ -515,15 +508,15 @@ public struct PPProviderApplicationStatusStudioView: View {
                     } else {
                         Image(systemName: "checkmark.seal.fill")
                         Text(Language.isRTL() ? "تفعيل حساب الشريك الآن" : "Activate Partner Account Now")
-                            .font(.system(size: 15, weight: .bold))
+                            .font(PPBrandFont.bold(15, relativeTo: .body))
                     }
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .background(state.isReadyForActivation ? Color.green : Color.accentColor)
+                .background(state.isReadyForActivation() ? Color.green : Color.accentColor)
                 .foregroundStyle(Color.white)
                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .shadow(color: (state.isReadyForActivation ? Color.green : Color.accentColor).opacity(0.3), radius: 8, x: 0, y: 4)
+                .shadow(color: (state.isReadyForActivation() ? Color.green : Color.accentColor).opacity(0.3), radius: 8, x: 0, y: 4)
             }
             .buttonStyle(.plain)
             .disabled(isActivating)
@@ -571,22 +564,22 @@ public struct PPProviderApplicationStatusStudioView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Language.isRTL() ? "ابدأ رحلة الشراكة" : "Start Your Partnership")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(PPBrandFont.bold(16, relativeTo: .headline))
                         .foregroundStyle(Color(.label))
                     Text(Language.isRTL() ? "قدّم طلبك الآن للانضمام إلى نخبة مزودي خدمات الحيوانات في قطر." : "Apply now to join verified pet providers across Qatar.")
-                        .font(.system(size: 12.5, weight: .regular))
+                        .font(PPBrandFont.regular(12.5, relativeTo: .caption))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
             }
 
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                let target = state.eligibleProviderTypes.first.flatMap { PPProviderType(rawValue: $0.intValue) } ?? .deliverySubscription
+                let target = state.eligibleProviderTypes().first.flatMap { PPProviderType(rawValue: $0.intValue) } ?? .deliverySubscription
                 onPresentApply(target)
             } label: {
                 HStack(spacing: 8) {
                     Text(Language.isRTL() ? "تقديم طلب شريك جديد" : "Apply as a Partner")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(PPBrandFont.bold(15, relativeTo: .body))
                     Image(systemName: Language.isRTL() ? "arrow.left" : "arrow.right")
                         .font(.system(size: 14, weight: .bold))
                 }
@@ -615,10 +608,10 @@ public struct PPProviderApplicationStatusStudioView: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(Language.isRTL() ? "حسابك معتمد ونشط" : "Partner Workspace Active")
-                        .font(.system(size: 16, weight: .bold))
+                        .font(PPBrandFont.bold(16, relativeTo: .headline))
                         .foregroundStyle(Color(.label))
                     Text(Language.isRTL() ? "يمكنك الدخول إلى لوحة التحكم ومتابعة العمليات اليومية." : "You can enter your operational cockpit and start serving customers.")
-                        .font(.system(size: 12.5, weight: .regular))
+                        .font(PPBrandFont.regular(12.5, relativeTo: .caption))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
                 Spacer()
@@ -629,7 +622,7 @@ public struct PPProviderApplicationStatusStudioView: View {
             } label: {
                 HStack(spacing: 8) {
                     Text(Language.isRTL() ? "فتح لوحة التحكم" : "Open Partner Cockpit")
-                        .font(.system(size: 15, weight: .bold))
+                        .font(PPBrandFont.bold(15, relativeTo: .body))
                     Image(systemName: Language.isRTL() ? "arrow.left" : "arrow.right")
                         .font(.system(size: 14, weight: .bold))
                 }
@@ -656,11 +649,11 @@ public struct PPProviderApplicationStatusStudioView: View {
                     .font(.system(size: 20))
                     .foregroundStyle(Color.red)
                 Text(Language.isRTL() ? "الحساب مقيد حالياً" : "Account Suspended")
-                    .font(.system(size: 16, weight: .bold))
+                    .font(PPBrandFont.bold(16, relativeTo: .headline))
                     .foregroundStyle(Color(.label))
             }
             Text(Language.isRTL() ? "تم تقييد التقديم أو العمليات لهذا الحساب. يرجى التواصل مع فريق الدعم والامتثال في بيور بيتس لمعرفة التفاصيل." : "Operations and new applications are blocked. Please reach out to Pure Pets support.")
-                .font(.system(size: 13, weight: .regular))
+                .font(PPBrandFont.regular(13, relativeTo: .body))
                 .foregroundStyle(Color(.secondaryLabel))
         }
         .padding(18)
@@ -674,7 +667,7 @@ public struct PPProviderApplicationStatusStudioView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Text(Language.isRTL() ? "بيانات الحساب المسجل" : "Registered Account Identity")
-                    .font(.system(size: 15, weight: .bold))
+                    .font(PPBrandFont.bold(15, relativeTo: .headline))
                     .foregroundStyle(Color(.label))
                 Spacer()
                 Image(systemName: "person.badge.shield.checkmark.fill")
@@ -704,7 +697,7 @@ public struct PPProviderApplicationStatusStudioView: View {
     private func applicationsHistoryDeck(apps: [PPProviderApplication]) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(Language.isRTL() ? "الطلبات والمسارات المسجلة" : "Submitted Applications")
-                .font(.system(size: 15, weight: .bold))
+                .font(PPBrandFont.bold(15, relativeTo: .headline))
                 .foregroundStyle(Color(.label))
 
             ForEach(apps, id: \.applicationID) { app in
@@ -721,10 +714,10 @@ public struct PPProviderApplicationStatusStudioView: View {
 
                     VStack(alignment: .leading, spacing: 3) {
                         Text(PPProviderApplicationManager.localizedTitle(for: app.providerType))
-                            .font(.system(size: 15, weight: .bold))
+                            .font(PPBrandFont.bold(15, relativeTo: .body))
                             .foregroundStyle(Color(.label))
                         Text(app.localizedPlanName())
-                            .font(.system(size: 12.5, weight: .medium))
+                            .font(PPBrandFont.medium(12.5, relativeTo: .caption))
                             .foregroundStyle(Color(.secondaryLabel))
                     }
 
@@ -732,7 +725,7 @@ public struct PPProviderApplicationStatusStudioView: View {
 
                     // Status Badge
                     Text(PPProviderApplicationManager.localizedStatusTitle(app.status))
-                        .font(.system(size: 11, weight: .bold))
+                        .font(PPBrandFont.bold(11, relativeTo: .caption2))
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                         .background(statusBadgeColor(for: app.status).opacity(0.15))
@@ -769,7 +762,7 @@ public struct PPProviderApplicationStatusStudioView: View {
                 Image(systemName: "headphones")
                     .font(.system(size: 13))
                 Text(Language.isRTL() ? "هل تحتاج مساعدة؟ تواصل مع دعم الشركاء" : "Need assistance? Contact Partner Support")
-                    .font(.system(size: 12.5, weight: .medium))
+                    .font(PPBrandFont.medium(12.5, relativeTo: .caption))
             }
             .foregroundStyle(Color(.secondaryLabel))
             .padding(.vertical, 10)
@@ -784,7 +777,7 @@ public struct PPProviderApplicationStatusStudioView: View {
             ProgressView()
                 .scaleEffect(1.4)
             Text(Language.isRTL() ? "جارٍ تحميل حالة الحساب والاعتماد..." : "Loading partner state...")
-                .font(.system(size: 14, weight: .medium))
+                .font(PPBrandFont.medium(14, relativeTo: .body))
                 .foregroundStyle(Color(.secondaryLabel))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -796,17 +789,17 @@ public struct PPProviderApplicationStatusStudioView: View {
                 .font(.system(size: 40))
                 .foregroundStyle(Color.red)
             Text(Language.isRTL() ? "تعذر تحميل حالة الشريك" : "Failed to load partner status")
-                .font(.system(size: 18, weight: .bold))
+                .font(PPBrandFont.bold(18, relativeTo: .title3))
                 .foregroundStyle(Color(.label))
             Text(error)
-                .font(.system(size: 13.5, weight: .regular))
+                .font(PPBrandFont.regular(13.5, relativeTo: .body))
                 .foregroundStyle(Color(.secondaryLabel))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 24)
             Button(Language.isRTL() ? "إعادة المحاولة" : "Retry") {
                 refreshData()
             }
-            .font(.system(size: 14, weight: .bold))
+            .font(PPBrandFont.bold(14, relativeTo: .body))
             .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -863,17 +856,17 @@ private struct PPMilestoneRow: View {
                         .tint(.white)
                 } else {
                     Text("\(step)")
-                        .font(.system(size: 12, weight: .bold))
+                        .font(PPBrandFont.bold(12, relativeTo: .caption))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
             }
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 14, weight: .bold))
+                    .font(PPBrandFont.bold(14, relativeTo: .body))
                     .foregroundStyle(Color(.label))
                 Text(subtitle)
-                    .font(.system(size: 12, weight: .regular))
+                    .font(PPBrandFont.regular(12, relativeTo: .caption))
                     .foregroundStyle(Color(.secondaryLabel))
             }
             Spacer()
@@ -903,7 +896,7 @@ private struct PPChecklistTaskRow: View {
                     .foregroundStyle(isDone ? Color.green : Color(.separator))
 
                 Text(title)
-                    .font(.system(size: 13.5, weight: isDone ? .bold : .medium))
+                    .font(isDone ? PPBrandFont.bold(13.5, relativeTo: .body) : PPBrandFont.medium(13.5, relativeTo: .body))
                     .foregroundStyle(isDone ? Color(.label) : Color(.label).opacity(0.85))
                     .strikethrough(isDone, color: Color(.secondaryLabel))
 
@@ -924,11 +917,11 @@ private struct PPStatusIdentityRow: View {
     var body: some View {
         HStack {
             Text(title)
-                .font(.system(size: 12.5, weight: .medium))
+                .font(PPBrandFont.medium(12.5, relativeTo: .caption))
                 .foregroundStyle(Color(.secondaryLabel))
             Spacer()
             Text(value)
-                .font(.system(size: 13, weight: .bold))
+                .font(PPBrandFont.bold(13, relativeTo: .body))
                 .foregroundStyle(Color(.label))
         }
     }

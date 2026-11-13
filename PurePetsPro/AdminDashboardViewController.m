@@ -31,6 +31,8 @@
 #import "PPServicesListViewController.h"
 #import "PPProviderApplicationManager.h"
 #import "PPProviderSubscriptionManagmetVC.h"
+#import "PPProviderApplicationStatusViewController.h"
+#import "SceneDelegate.h"
 #import "PPVetsListViewController.h"
 #import "PPPharmacyMedicinesViewController.h"
 #import "PPMarketplaceBranchesViewController.h"
@@ -204,6 +206,7 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 @property (nonatomic, strong) PPProviderOnboardingState *providerSubscriptionState;
 @property (nonatomic, strong) NSError *providerSubscriptionError;
 @property (nonatomic, assign) BOOL isProviderSubscriptionLoading;
+@property (nonatomic, assign) NSUInteger providerSubscriptionObservationGeneration;
 @property (nonatomic, assign) BOOL hasUnseenFulfillmentQuickAction;
 @property (nonatomic, assign) BOOL hasUnseenDeliveryQuickAction;
 @property (nonatomic, assign) BOOL didPlayDashboardEntrance;
@@ -1639,23 +1642,40 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 
 - (void)pp_startProviderSubscriptionObserver {
     [self pp_stopProviderSubscriptionObserver];
+    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    if (!uid.length) return;
+    NSUInteger generation = self.providerSubscriptionObservationGeneration;
     self.isProviderSubscriptionLoading = YES;
     self.providerSubscriptionError = nil;
     [self pp_renderSubscriptionFooter];
+    [self pp_refreshCommandCenterSnapshot];
 
     __weak typeof(self) weakSelf = self;
     self.providerSubscriptionStateListener = [[PPProviderApplicationManager shared] observeProviderStateForCurrentUser:^(PPProviderOnboardingState * _Nullable state, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        strongSelf.isProviderSubscriptionLoading = NO;
+        if (!strongSelf || generation != strongSelf.providerSubscriptionObservationGeneration ||
+            ![[FIRAuth auth].currentUser.uid isEqualToString:uid] ||
+            (state && ![state.uid isEqualToString:uid])) return;
+        strongSelf.isProviderSubscriptionLoading = !error && (!state || !state.initialDataAuthoritative);
         strongSelf.providerSubscriptionState = state;
         strongSelf.providerSubscriptionError = error;
         [strongSelf pp_renderSubscriptionFooter];
         [strongSelf pp_refreshCommandCenterSnapshot];
     }];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || generation != self.providerSubscriptionObservationGeneration || !self.isProviderSubscriptionLoading ||
+            ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+        self.isProviderSubscriptionLoading = NO;
+        self.providerSubscriptionError = [NSError errorWithDomain:@"PurePetsPro.ProviderSubscription" code:1
+                                                        userInfo:@{NSLocalizedDescriptionKey:kLang(@"ProSubscription_LoadFailed")}];
+        [self pp_renderSubscriptionFooter];
+        [self pp_refreshCommandCenterSnapshot];
+    });
 }
 
 - (void)pp_stopProviderSubscriptionObserver {
+    self.providerSubscriptionObservationGeneration += 1;
     [self.providerSubscriptionStateListener remove];
     self.providerSubscriptionStateListener = nil;
 }
@@ -1664,7 +1684,6 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     if (!user) return NO;
     BOOL isStaffOrOfficial = [user.accountType isEqualToString:@"staff"] ||
                              [user.accountType isEqualToString:@"official"] ||
-                             user.isAdmin || user.isSuperAdmin || user.isOwner ||
                              [user.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
                              [user.email.lowercaseString isEqualToString:@"admin@pure-pets.net"];
     if (isStaffOrOfficial) return YES;
@@ -2124,6 +2143,9 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_openSubscriptionManagement {
+    if (![self pp_activeDashboardUser]) return;
+    SceneDelegate *sceneDelegate = (SceneDelegate *)self.view.window.windowScene.delegate;
+    if ([sceneDelegate isKindOfClass:SceneDelegate.class]) [sceneDelegate cancelPendingProAccessRouting];
     [PPFunc pp_playTapEffect];
     if (!UIAccessibilityIsReduceMotionEnabled()) {
         [UIView animateWithDuration:0.10 animations:^{
@@ -2140,6 +2162,24 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         }];
     }
 
+    // Fleet membership alone is not a provider subscription. Pending applicants
+    // and driver-only users review their real application state in the status hub.
+    PPProviderOnboardingState *state = self.providerSubscriptionState;
+    BOOL hasProviderProfile = NO;
+    if ([state.uid isEqualToString:[FIRAuth auth].currentUser.uid]) {
+        for (PPProviderProfile *profile in state.profilesByType.allValues) {
+            if (PPProviderTypeIsEnabledInProApp(profile.providerType)) {
+                hasProviderProfile = YES;
+                break;
+            }
+        }
+    }
+    if (!hasProviderProfile) {
+        PPProviderApplicationStatusViewController *controller = [[PPProviderApplicationStatusViewController alloc] init];
+        controller.suppressAutoDashboardTransition = YES;
+        [self.navigationController pushViewController:controller animated:YES];
+        return;
+    }
     PPProviderSubscriptionManagmetVC *controller = [[PPProviderSubscriptionManagmetVC alloc] init];
     controller.prefersAutoPresentBecomeProvider = NO;
     controller.suppressAutoDashboardTransition = YES;
@@ -4826,6 +4866,114 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     self.isExecutingCommandCenterAction = NO;
 }
 
+- (PPProSubscriptionCardDescriptor *)pp_subscriptionCardForUser:(UserModel *)user {
+    PPProSubscriptionCardDescriptor *card = [[PPProSubscriptionCardDescriptor alloc] init];
+    card.title = kLang(@"ProSubscription_Title");
+    card.status = kLang(@"ProviderSubscriptionCardChecking");
+    card.message = kLang(@"ProSubscription_Loading");
+    card.actionTitle = kLang(@"ProSubscription_Manage");
+    card.isLoading = YES;
+    BOOL hasDriverWorkspace = self.deliveryCompanyContext.prefersDriverCockpit;
+    if (hasDriverWorkspace) {
+        card.title = kLang(@"ProSubscription_DriverTitle");
+        card.message = kLang(@"ProSubscription_DriverBody");
+        card.detail = kLang(@"ProSubscription_DriverRequirement");
+    }
+
+    PPProviderOnboardingState *state = [self.providerSubscriptionState.uid isEqualToString:user.uid]
+        ? self.providerSubscriptionState : nil;
+    if (self.providerSubscriptionError) {
+        card.isLoading = NO;
+        card.status = kLang(@"ProviderHeroErrorBadge");
+        card.message = kLang(@"ProSubscription_LoadFailed");
+        card.symbolName = @"arrow.triangle.2.circlepath";
+        card.actionTitle = kLang(@"TryAgain");
+        card.actionRoute = @"__retrySubscription";
+        if (hasDriverWorkspace) {
+            card.status = kLang(@"ProSubscription_FleetManaged");
+            card.message = kLang(@"ProSubscription_DriverLoadFailed");
+            card.actionTitle = kLang(@"ProSubscription_Manage");
+            card.actionRoute = @"__subscription";
+            card.additionalActionTitle = kLang(@"TryAgain");
+            card.additionalActionRoute = @"__retrySubscription";
+        }
+        return card;
+    }
+    if (self.isProviderSubscriptionLoading || !state.initialDataAuthoritative) return card;
+
+    card.isLoading = NO;
+    card.detail = @"";
+    if (state.isBlocked) {
+        card.status = kLang(@"ProviderHeroBlockedBadge");
+        card.message = kLang(@"ProviderSubscriptionCardBlockedSubtitle");
+        card.symbolName = @"lock.shield";
+        return card;
+    }
+
+    PPProviderProfile *activeProfile = nil;
+    PPProviderProfile *managedProfile = nil;
+    BOOL hasActiveFeature = NO;
+    for (NSNumber *type in [self pp_providerTypeDisplayOrder]) {
+        PPProviderProfile *profile = [state profileForType:type.integerValue];
+        if ([state isActiveForType:type.integerValue]) {
+            hasActiveFeature = YES;
+            if (!activeProfile && profile) activeProfile = profile;
+        }
+        if (!managedProfile && profile.hasManagedSubscription) managedProfile = profile;
+    }
+    NSUInteger pendingCount = [self pp_pendingProviderApplicationCountForState:state];
+    BOOL needsChanges = NO;
+    for (PPProviderApplication *application in state.applications) {
+        if (application.isChangesRequested || application.isRejected) { needsChanges = YES; break; }
+    }
+    BOOL driverOnly = self.deliveryCompanyContext.prefersDriverCockpit && !hasActiveFeature && !managedProfile;
+    card.status = kLang(@"ProviderHeroReadyBadge");
+    card.message = kLang(@"ProSubscription_Ready");
+    if (hasActiveFeature) {
+        card.status = kLang(@"ProviderStatusActive");
+        card.title = activeProfile.localizedPlanName.length ? activeProfile.localizedPlanName : kLang(@"ProSubscription_ProviderAccess");
+        card.message = kLang(@"ProSubscription_Active");
+        card.symbolName = @"checkmark.seal";
+    } else if (managedProfile) {
+        card.title = managedProfile.localizedPlanName.length ? managedProfile.localizedPlanName : kLang(@"ProSubscription_Title");
+        card.status = kLang([@"PartnerSub_Status_" stringByAppendingString:managedProfile.effectiveSubscriptionStatus]);
+        card.message = managedProfile.localizedSubscriptionSummary;
+        card.symbolName = @"doc.text.magnifyingglass";
+    } else if (driverOnly) {
+        card.title = kLang(@"ProSubscription_DriverTitle");
+        card.status = kLang(@"ProSubscription_FleetManaged");
+        card.message = kLang(@"ProSubscription_DriverBody");
+        card.symbolName = @"person.crop.rectangle.badge.checkmark";
+    }
+    if (needsChanges && !hasActiveFeature && !managedProfile) {
+        card.status = kLang(@"ProviderHeroChangesRequestedBadge");
+        card.message = kLang(@"ProSubscription_ChangesRequested");
+        card.symbolName = @"doc.badge.ellipsis";
+    } else if (pendingCount > 0 && !hasActiveFeature && !managedProfile) {
+        card.status = kLang(@"ProviderHeroReviewBadge");
+        card.message = kLang(@"ProSubscription_InReview");
+        card.symbolName = @"clock";
+    }
+    PPProviderProfile *termProfile = activeProfile.hasManagedSubscription ? activeProfile : managedProfile;
+    if (termProfile) {
+        card.detail = [NSString stringWithFormat:kLang(@"ProSubscription_TermFormat"), [self pp_nextRenewalTextForProfile:termProfile]];
+    }
+    if (pendingCount > 0) {
+        NSString *pending = [NSString stringWithFormat:kLang(@"ProviderSubscriptionCardPendingCountFormat"), (unsigned long)pendingCount];
+        card.pendingCount = (NSInteger)pendingCount;
+        card.pendingActionTitle = pending;
+        card.pendingActionRoute = @"__providerApplicationStatus";
+    }
+    if (driverOnly) {
+        // Keep the workforce/provider distinction visible even during review.
+        card.detail = kLang(@"ProSubscription_DriverRequirement");
+    }
+    if (state.eligibleProviderTypes.count > 0) {
+        card.additionalActionTitle = kLang(driverOnly ? @"ProAccess_BecomePartner" : @"ProSubscription_AddFeature");
+    }
+    return card;
+}
+
 - (void)pp_refreshCommandCenterSnapshot {
     if (![NSThread isMainThread]) {
         __weak typeof(self) weakSelf = self;
@@ -5169,6 +5317,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     snapshot.canRetryOperationalData = isOperationalDegraded && !isOperationalLoading;
     snapshot.capabilities = capabilities.copy;
     snapshot.signals = signals.copy;
+    snapshot.subscriptionCard = [self pp_subscriptionCardForUser:user];
 
     NSString *avatarURL = @"";
     if ([user.UserImageUrl isKindOfClass:NSURL.class]) {
@@ -5254,6 +5403,33 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
 
     if ([route isEqualToString:@"__subscription"]) {
         [self pp_openSubscriptionManagement];
+        return;
+    }
+
+    if ([route isEqualToString:@"__retrySubscription"]) {
+        [self pp_startProviderSubscriptionObserver];
+        return;
+    }
+
+    if ([route isEqualToString:@"__providerApplication"]) {
+        SceneDelegate *sceneDelegate = (SceneDelegate *)self.view.window.windowScene.delegate;
+        if ([sceneDelegate isKindOfClass:SceneDelegate.class]) [sceneDelegate cancelPendingProAccessRouting];
+        PPProviderApplicationStatusViewController *controller = [[PPProviderApplicationStatusViewController alloc] init];
+        controller.prefersAutoPresentBecomeProvider = YES;
+        controller.suppressAutoDashboardTransition = YES;
+        [self.navigationController pushViewController:controller animated:YES];
+        return;
+    }
+
+    if ([route isEqualToString:@"__providerApplicationStatus"] ||
+        [route isEqualToString:@"__applicationStatus"]) {
+        SceneDelegate *sceneDelegate = (SceneDelegate *)self.view.window.windowScene.delegate;
+        if ([sceneDelegate isKindOfClass:SceneDelegate.class]) [sceneDelegate cancelPendingProAccessRouting];
+        [PPFunc pp_playTapEffect];
+        PPProviderApplicationStatusViewController *controller = [[PPProviderApplicationStatusViewController alloc] init];
+        controller.prefersAutoPresentBecomeProvider = NO;
+        controller.suppressAutoDashboardTransition = YES;
+        [self.navigationController pushViewController:controller animated:YES];
         return;
     }
 

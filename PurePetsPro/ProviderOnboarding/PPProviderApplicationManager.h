@@ -214,7 +214,7 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 
 - (id<FIRListenerRegistration>)observeProviderStateForCurrentUser:(void(^)(PPProviderOnboardingState * _Nullable state, NSError * _Nullable error))completion;
 - (void)fetchPlansForProviderType:(PPProviderType)providerType
-                       completion:(void(^)(NSArray<PPProviderPlan *> * _Nullable plans, NSError * _Nullable error))completion;
+                       completion:(void(^ NS_SWIFT_UI_ACTOR)(NSArray<PPProviderPlan *> * _Nullable plans, NSError * _Nullable error))completion;
 - (NSError * _Nullable)validateDraft:(PPProviderApplicationDraft *)draft
                         selectedPlan:(PPProviderPlan * _Nullable)selectedPlan;
 - (void)submitDraft:(PPProviderApplicationDraft *)draft

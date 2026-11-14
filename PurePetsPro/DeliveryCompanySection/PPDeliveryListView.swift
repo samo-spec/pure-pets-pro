@@ -2779,11 +2779,7 @@ private struct DeliveryDriverDetailSheet: View {
         }
         .padding(.horizontal, AdminSpacing.screenMargin)
         .frame(height: 56)
-        .background(AdminSurface.surface)
-        .overlay(alignment: .bottom) {
-            Divider().background(AdminSurface.hairline)
-        }
-        .shadow(color: Color.black.opacity(0.04), radius: 6, y: 3)
+        .background(Color.clear)
     }
 
     private func presentDriverCommandAlert(for pending: PendingDriverCommand) {

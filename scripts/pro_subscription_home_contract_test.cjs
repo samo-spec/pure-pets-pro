@@ -93,10 +93,12 @@ check('driver membership does not fabricate a plan or block the management entry
   assert(card.includes('ProSubscription_DriverRequirement'));
   assert(card.includes('ProSubscription_DriverLoadFailed'));
   assert(!/priceAmount|\[\[PPProviderProfile alloc\] init\]/.test(card));
-  assert(card.includes('profile.hasManagedSubscription'));
+  assert(card.includes('self.ownedSubscriptions'));
+  assert(card.includes('[owned.userID isEqualToString:user.uid]'));
+  assert(!card.includes('PPProviderProfile *activeProfile'));
   const route = section(dashboard, '- (void)pp_openSubscriptionManagement {', '- (');
-  assert(route.includes('if (!hasProviderProfile)'));
-  assert(route.includes('PPProviderApplicationStatusViewController'));
+  assert(route.includes('PPProviderSubscriptionManagmetVC'));
+  assert(!route.includes('if (!hasProviderProfile)'));
   assert(route.includes('suppressAutoDashboardTransition = YES'));
 });
 
@@ -114,25 +116,42 @@ check('onboarding intent waits for current authoritative eligibility and cancels
   assert(status.includes('15 * NSEC_PER_SEC'));
 });
 
-check('subscription observation and plan results stay with the current account and selected type', () => {
+check('owned inventory, selected detail and request results stay with their account and profile', () => {
   assert(dashboard.includes('generation != strongSelf.providerSubscriptionObservationGeneration'));
   assert(studio.includes('cancelObservation = { registration.remove() }'));
   assert(studio.includes('.onDisappear { stopObserving() }'));
-  assert(studio.includes('requestGeneration == plansRequestGeneration'));
-  assert(studio.includes('plansProviderType == activeType'));
-  const resolution = section(studio, 'private func primaryActiveProviderType', '// MARK: - Main Scroll View');
+  assert(studio.includes('generation == requestGeneration'));
+  assert(studio.includes('record.profile.profileID == profileID'));
+  assert(studio.includes('generation == submissionGeneration'));
+  const resolution = section(studio, 'private func reloadData(', 'private func prepareRequest');
   assert(!resolution.includes('eligibleProviderTypes'));
-  assert(resolution.includes('PPProviderTypeIsEnabledInProApp'));
+  assert(resolution.includes('fetchOwnedSubscriptions'));
+  assert(resolution.includes('fetchSubscriptionOptions(forProfileID: profileID)'));
+  assert(!studio.includes('primaryActiveProviderType'));
   assert(!/Standard Partner Tier|Regular Weekly Payouts|certified processing|Commission Based/.test(studio));
   const upgrade = section(read('PurePetsPro/ProviderOnboarding/PPProviderSubscriptionManagmetVC.m'), '- (void)pp_presentBecomeProviderForUpgradeWithType:', '#pragma mark - PPBecome');
   assert(upgrade.includes('showInfoIn:self'));
   assert(!/submitDraft|initWithState:nil/.test(upgrade));
 });
 
+check('provider requests freeze the reviewed identity and retry only that intent', () => {
+  const submit = section(studio, 'private func submit(', 'private func showPendingMessage');
+  assert(submit.includes('if reviewedPayload == nil'));
+  for (const field of ['profileId', 'expectedPlanHash', 'expectedVersion', 'idempotencyKey']) assert(submit.includes('"' + field + '"'));
+  assert(submit.includes('submitSubscriptionRequest(payload)'));
+  assert(!submit.includes('submitDraft'));
+  const rebinding = section(studio, 'private func startObserving()', 'private func reloadData(');
+  assert(rebinding.includes('isSubmitting = false'));
+  assert(rebinding.includes('reviewedPayload = nil'));
+  assert(rebinding.includes('submissionGeneration = UUID()'));
+  assert(studio.includes('onDismiss: showPendingMessage'));
+  assert(!studio.includes('.alert('));
+});
+
 check('new Arabic and English copy is unique and format-compatible', () => {
   const localized = ['ar', 'en'].map(lang => read(`PurePetsPro/${lang}.lproj/Localizable.strings`));
   const sources = [home, dashboard, login, scene, status, studio, read('PurePetsPro/ProviderOnboarding/PPProviderSubscriptionManagmetVC.m')].join('\n');
-  const keys = [...new Set(sources.match(/Pro(?:Access|Subscription)_[A-Za-z]+/g))];
+  const keys = [...new Set(sources.match(/Pro(?:Access|Subscriptions?)_[A-Za-z_]+/g))].filter(key => !key.endsWith('_'));
   for (const key of keys) {
     const values = localized.map((text, i) => {
       const rows = [...text.matchAll(new RegExp(`^"${key}"\\s*=\\s*"(.*)";`, 'gm'))];

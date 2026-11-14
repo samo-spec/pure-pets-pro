@@ -894,6 +894,7 @@ public struct PPDeliveryCashCollectionSheet: View {
                 .padding(.bottom, 20)
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(Language.get("Cancel", alter: "إلغاء")) {
@@ -1006,6 +1007,7 @@ public struct PPDeliveryDriverControlView: View {
             }
             .navigationTitle(Language.get("Deliv_Cockpit_Title", alter: "غرفة عمليات التوصيل"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: {

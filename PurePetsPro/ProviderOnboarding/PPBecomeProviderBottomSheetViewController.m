@@ -10,6 +10,9 @@
 #import "PPBecomeProviderBottomSheetViewController.h"
 #import "PPDesignTokens.h"
 #import "Language.h"
+#if __has_include(<IQKeyboardManager/IQKeyboardManager.h>)
+#import <IQKeyboardManager/IQKeyboardManager.h>
+#endif
 #import "PurePetsPro-Swift.h"
 
 @interface PPBecomeProviderBottomSheetViewController ()
@@ -17,6 +20,8 @@
 @property (nonatomic, copy) NSArray<NSNumber *> *eligibleProviderTypes;
 @property (nonatomic, assign) PPProviderType preferredProviderType;
 @property (nonatomic, strong) PPBecomePartnerStudioHostingController *hostingController;
+@property (nonatomic, assign) BOOL previousIQEnabled;
+@property (nonatomic, assign) BOOL previousToolbarEnabled;
 @end
 
 @implementation PPBecomeProviderBottomSheetViewController
@@ -84,6 +89,8 @@
     [super viewWillAppear:animated];
     [self.navigationController setNavigationBarHidden:YES animated:animated];
 #if __has_include(<IQKeyboardManager/IQKeyboardManager.h>)
+    self.previousIQEnabled = [IQKeyboardManager sharedManager].enable;
+    self.previousToolbarEnabled = [IQKeyboardManager sharedManager].enableAutoToolbar;
     [IQKeyboardManager sharedManager].enable = NO;
     [IQKeyboardManager sharedManager].enableAutoToolbar = NO;
 #endif
@@ -92,8 +99,8 @@
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
 #if __has_include(<IQKeyboardManager/IQKeyboardManager.h>)
-    [IQKeyboardManager sharedManager].enable = YES;
-    [IQKeyboardManager sharedManager].enableAutoToolbar = YES;
+    [IQKeyboardManager sharedManager].enable = self.previousIQEnabled;
+    [IQKeyboardManager sharedManager].enableAutoToolbar = self.previousToolbarEnabled;
 #endif
 }
 

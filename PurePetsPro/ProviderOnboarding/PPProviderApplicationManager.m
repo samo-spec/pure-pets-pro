@@ -322,6 +322,7 @@ static BOOL PPProviderBool(id value) {
 - (void)pp_populateWithDictionary:(NSDictionary *)dictionary documentID:(NSString *)documentID {
     NSDictionary *planSnapshot = [dictionary[@"planSnapshot"] isKindOfClass:NSDictionary.class] ? dictionary[@"planSnapshot"] : @{};
     self.planID = documentID ?: @"";
+    self.subscriptionPlanHash = PPSafeString(dictionary[@"planHash"]);
     self.providerType = PPProviderTypeFromIdentifier(PPSafeString(dictionary[@"providerType"]));
     self.status = PPSafeString(dictionary[@"status"]);
     self.name = PPSafeDict(dictionary[@"name"]).count ? PPSafeDict(dictionary[@"name"]) : PPSafeDict(planSnapshot[@"name"]);
@@ -996,6 +997,9 @@ static BOOL PPProviderBool(id value) {
 
 @end
 
+@implementation PPProviderOwnedSubscription
+@end
+
 @interface PPProviderApplicationManager ()
 @property (nonatomic, strong) FIRFirestore *db;
 - (void)pp_fetchPlansForProviderType:(PPProviderType)providerType
@@ -1011,6 +1015,132 @@ static BOOL PPProviderBool(id value) {
 @end
 
 @implementation PPProviderApplicationManager
+
+#pragma mark - Owned subscription inventory and reviewed requests
+
++ (BOOL)isDefinitiveSubscriptionRequestError:(NSError *)error {
+    return [error.domain isEqualToString:FIRFunctionsErrorDomain] &&
+        [@[@(FIRFunctionsErrorCodeInvalidArgument), @(FIRFunctionsErrorCodeNotFound), @(FIRFunctionsErrorCodeAlreadyExists),
+           @(FIRFunctionsErrorCodePermissionDenied), @(FIRFunctionsErrorCodeFailedPrecondition), @(FIRFunctionsErrorCodeAborted),
+           @(FIRFunctionsErrorCodeUnauthenticated)] containsObject:@(error.code)];
+}
+
+- (void)pp_callSubscriptionFunction:(NSString *)name payload:(NSDictionary *)payload
+                         completion:(void(^)(NSDictionary *, NSError *))completion {
+    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    if (!uid.length) {
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, PPProviderError(kLang(@"Please login first"))); });
+        return;
+    }
+    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:name];
+    callable.timeoutInterval = 20;
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult *result, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+                completion(nil, PPProviderError(kLang(@"ProSubscriptions_AccountChanged")));
+            } else {
+                completion(error ? nil : PPSafeDict(result.data), error);
+            }
+        });
+    }];
+}
+
+- (PPProviderOwnedSubscription *)pp_ownedSubscriptionFromDictionary:(NSDictionary *)record uid:(NSString *)uid {
+    if (![PPSafeString(record[@"userId"]) isEqualToString:uid] || !PPSafeString(record[@"profileId"]).length ||
+        !PPProviderTypeIsEnabledInProApp(PPProviderTypeFromIdentifier(PPSafeString(record[@"providerType"])))) return nil;
+    NSDictionary *subscription = PPSafeDict(record[@"subscription"]);
+    NSDictionary *snapshot = PPSafeDict(subscription[@"planSnapshot"]);
+    if (!snapshot.count) snapshot = @{@"name": PPSafeDict(record[@"planName"])};
+    PPProviderProfile *profile = [[PPProviderProfile alloc] init];
+    [profile pp_populateWithDictionary:@{@"providerType": PPSafeString(record[@"providerType"]),
+        @"status": PPSafeString(record[@"operationalStatus"]), @"operationalState": PPSafeString(record[@"operationalStatus"]),
+        @"planId": PPSafeString(record[@"planId"]), @"planSnapshot": snapshot, @"subscription": subscription,
+        @"form": @{@"businessName": PPSafeString(record[@"displayName"])}}
+                             documentID:PPSafeString(record[@"profileId"])];
+    PPProviderOwnedSubscription *owned = [[PPProviderOwnedSubscription alloc] init];
+    owned.profile = profile;
+    owned.userID = uid;
+    owned.displayName = PPSafeString(record[@"displayName"]);
+    owned.operationalStatus = PPSafeString(record[@"operationalStatus"]);
+    owned.subscriptionStatus = PPSafeString(record[@"status"]);
+    owned.currentPriceLine = @"";
+    id amount = snapshot[@"costValue"] ?: snapshot[@"priceAmount"];
+    if ([amount isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)amount) != CFBooleanGetTypeID() &&
+        isfinite([amount doubleValue]) && [amount doubleValue] >= 0 && PPSafeString(snapshot[@"currency"]).length) {
+        PPProviderPlan *currentPlan = [[PPProviderPlan alloc] init];
+        [currentPlan pp_populateWithDictionary:snapshot documentID:profile.planID];
+        owned.currentPriceLine = currentPlan.localizedPriceLine;
+    }
+    owned.version = [PPSafeNumber(record[@"version"]) integerValue];
+    NSArray *actions = [record[@"requestActions"] isKindOfClass:NSArray.class] ? record[@"requestActions"] : @[];
+    owned.requestActions = [actions filteredArrayUsingPredicate:[NSPredicate predicateWithBlock:^BOOL(id item, __unused NSDictionary *bindings) {
+        return [item isKindOfClass:NSString.class] && [@[@"renew", @"change_plan"] containsObject:item];
+    }]];
+    owned.subscriptionRequest = PPSafeDict(record[@"subscriptionRequest"]);
+    return owned;
+}
+
+- (void)fetchOwnedSubscriptionsWithCompletion:(void(^)(NSArray<PPProviderOwnedSubscription *> *, NSError *))completion {
+    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    [self pp_fetchOwnedSubscriptionsAfter:@"" uid:uid records:[NSMutableDictionary dictionary]
+                                  cursors:[NSMutableSet set] completion:completion];
+}
+
+- (void)pp_fetchOwnedSubscriptionsAfter:(NSString *)cursor uid:(NSString *)uid
+                                records:(NSMutableDictionary<NSString *, PPProviderOwnedSubscription *> *)records
+                                cursors:(NSMutableSet<NSString *> *)cursors
+                             completion:(void(^)(NSArray<PPProviderOwnedSubscription *> *, NSError *))completion {
+    [self pp_callSubscriptionFunction:@"getMyProviderSubscriptions" payload:cursor.length ? @{@"after": cursor} : @{}
+                           completion:^(NSDictionary *result, NSError *error) {
+        if (error || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+            completion(nil, error ?: PPProviderError(kLang(@"ProSubscriptions_AccountChanged"))); return;
+        }
+        NSArray *items = [result[@"partners"] isKindOfClass:NSArray.class] ? result[@"partners"] : @[];
+        for (id item in items) {
+            if (![item isKindOfClass:NSDictionary.class]) continue;
+            PPProviderOwnedSubscription *owned = [self pp_ownedSubscriptionFromDictionary:item uid:uid];
+            if (owned) records[owned.profile.profileID] = owned;
+        }
+        NSString *next = PPSafeString(result[@"nextCursor"]);
+        if (next.length) {
+            if ([cursors containsObject:next]) { completion(nil, PPProviderError(kLang(@"ProSubscription_LoadFailed"))); return; }
+            [cursors addObject:next];
+            [self pp_fetchOwnedSubscriptionsAfter:next uid:uid records:records cursors:cursors completion:completion];
+            return;
+        }
+        NSArray *ordered = [records.allValues sortedArrayUsingComparator:^NSComparisonResult(PPProviderOwnedSubscription *a, PPProviderOwnedSubscription *b) {
+            NSComparisonResult type = [PPProviderTypeIdentifier(a.profile.providerType) compare:PPProviderTypeIdentifier(b.profile.providerType)];
+            return type == NSOrderedSame ? [a.profile.profileID compare:b.profile.profileID] : type;
+        }];
+        completion(ordered, nil);
+    }];
+}
+
+- (void)fetchSubscriptionOptionsForProfileID:(NSString *)profileID
+                                completion:(void(^)(PPProviderOwnedSubscription *, NSArray<PPProviderPlan *> *, NSError *))completion {
+    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    [self pp_callSubscriptionFunction:@"getMyProviderSubscriptions" payload:@{@"profileId": profileID ?: @""}
+                           completion:^(NSDictionary *result, NSError *error) {
+        PPProviderOwnedSubscription *owned = error ? nil : [self pp_ownedSubscriptionFromDictionary:PPSafeDict(result[@"partner"]) uid:uid];
+        if (!owned || ![owned.profile.profileID isEqualToString:profileID]) {
+            completion(nil, nil, error ?: PPProviderError(kLang(@"ProSubscriptions_Unavailable"))); return;
+        }
+        NSMutableArray *plans = [NSMutableArray array];
+        for (id row in [result[@"plans"] isKindOfClass:NSArray.class] ? result[@"plans"] : @[]) {
+            if (![row isKindOfClass:NSDictionary.class]) continue;
+            PPProviderPlan *plan = [[PPProviderPlan alloc] init];
+            [plan pp_populateWithDictionary:row documentID:PPSafeString(row[@"id"])];
+            if (plan.providerType == owned.profile.providerType && plan.planID.length && plan.subscriptionPlanHash.length == 64) [plans addObject:plan];
+        }
+        completion(owned, plans.copy, nil);
+    }];
+}
+
+- (void)submitSubscriptionRequest:(NSDictionary *)request completion:(void(^)(NSDictionary *, NSError *))completion {
+    // The request identity is supplied by the reviewed intent and reused on a
+    // retry. Never retry this write by silently generating another identity.
+    [self pp_callSubscriptionFunction:@"submitMyProviderSubscriptionRequest" payload:request completion:completion];
+}
 
 + (instancetype)shared {
     static PPProviderApplicationManager *manager = nil;

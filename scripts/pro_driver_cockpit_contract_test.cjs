@@ -524,11 +524,12 @@ check('membership-check failure is recoverable and never treated as confirmed on
   assert(!preflight.includes('continuing onboarding:') && !scenePreflight.includes('continuing onboarding:'));
 });
 
-check('restricted drivers keep an explanatory availability surface without a client grant', () => {
+check('restricted drivers keep cockpit recovery without creating a Home delivery grant', () => {
   const companyView = read('PurePetsPro/DeliveryCompanySection/PPDeliveryListView.swift');
   assert(dashboard.includes('hasResolvedDeliveryMembership'));
   assert(dashboard.includes('[deliveryCompanyProfile.role isEqualToString:PPDeliveryCompanyRoleDriver]'));
-  assert(dashboard.includes('[self.deliveryCompanyContext.role isEqualToString:PPDeliveryCompanyRoleDriver]'));
+  assert(dashboard.includes('BOOL hasDriverDelivery = hasDeliveryCompany && PPDeliveryCompanyService.shared.hasDiscoveredDriverWorkspace;'));
+  assert(dashboard.includes('if (hasDriverDelivery && ![fleetRouteTag isEqualToString:@"driverCockpit"])'));
   assert(legacyHome.includes('if case .noWorkspace(let reason) = store.phase'));
   assert(view.includes('DriverAvailability_AccessRequired'));
   assert(view.includes('.disabled(!store.canChangeAvailability)'));

@@ -1190,6 +1190,10 @@ public final class PPProSubscriptionCardDescriptor: NSObject {
     public var pendingCount: Int = 0
     public var pendingActionTitle = ""
     public var pendingActionRoute = "__providerApplicationStatus"
+    public var subscriptionCount = 0
+    public var activeCount = 0
+    public var attentionCount = 0
+    public var reviewCount = 0
 }
 
 @objcMembers
@@ -1416,6 +1420,10 @@ struct PPProSubscriptionSummary: Equatable {
     let pendingCount: Int
     let pendingActionTitle: String
     let pendingActionRoute: String
+    let subscriptionCount: Int
+    let activeCount: Int
+    let attentionCount: Int
+    let reviewCount: Int
 }
 
 struct PPProCommandCenterSnapshot: Equatable {
@@ -1505,7 +1513,11 @@ private extension PPProCommandCenterSnapshotDescriptor {
                     additionalActionRoute: $0.additionalActionRoute,
                     pendingCount: $0.pendingCount,
                     pendingActionTitle: pendingTitle,
-                    pendingActionRoute: $0.pendingActionRoute.isEmpty ? "__providerApplicationStatus" : $0.pendingActionRoute
+                    pendingActionRoute: $0.pendingActionRoute.isEmpty ? "__providerApplicationStatus" : $0.pendingActionRoute,
+                    subscriptionCount: $0.subscriptionCount,
+                    activeCount: $0.activeCount,
+                    attentionCount: $0.attentionCount,
+                    reviewCount: $0.reviewCount
                 )
             }
         )
@@ -3882,9 +3894,11 @@ private struct PPProVitalsStrip: View {
 
 /// Touch feedback stays bound to the button's pressed state, so cancellation
 /// and rapid taps never leave a delayed animation or a second selection owner.
-private struct PPProHomeControlStyle: ButtonStyle {
+struct PPProHomeControlStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+
+    init() {}
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -5397,129 +5411,128 @@ private struct PPProSubscriptionHomeCard: View {
     let summary: PPProSubscriptionSummary
     let palette: PPProPalette
     let onRoute: (String) -> Void
-
     @Environment(\.sizeCategory) private var sizeCategory
     @Environment(\.layoutDirection) private var layoutDirection
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: summary.symbolName)
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(palette.accentText)
-                    .frame(width: 48, height: 48)
-                    .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 16))
-                    .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(Language.get("ProSubscription_Eyebrow", alter: nil))
-                        .font(PPProType.medium(13, relativeTo: .subheadline))
-                        .foregroundStyle(palette.secondary)
-                    Text(summary.title)
-                        .font(PPProType.bold(24, relativeTo: .title2))
-                        .foregroundStyle(palette.text)
-                        .accessibilityAddTraits(.isHeader)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 8) {
-                        if summary.isLoading {
-                            ProgressView().tint(palette.accentText)
-                                .accessibilityHidden(true)
-                        }
-                        Text(summary.status)
-                            .font(PPProType.bold(15, relativeTo: .subheadline))
-                            .foregroundStyle(palette.text)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Text(summary.message)
-                        .font(PPProType.regular(16, relativeTo: .body))
-                        .foregroundStyle(palette.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if !summary.detail.isEmpty {
-                        Text(summary.detail)
-                            .font(PPProType.medium(14, relativeTo: .subheadline))
-                            .foregroundStyle(palette.text)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                .accessibilityElement(children: .combine)
-
-                if summary.pendingCount > 0 && !summary.pendingActionTitle.isEmpty {
-                    Button {
-                        onRoute(summary.pendingActionRoute)
-                    } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "clock")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(palette.accentText)
-                            Text(summary.pendingActionTitle)
-                                .font(PPProType.medium(14, relativeTo: .subheadline))
-                                .foregroundStyle(palette.text)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 4)
-                            Image(systemName: layoutDirection == .rightToLeft ? "chevron.left" : "chevron.right")
-                                .font(.system(size: 11, weight: .semibold))
+        VStack(alignment: .leading, spacing: 0) {
+            // The whole summary is one selection control. Secondary actions are
+            // siblings, so neither touch nor VoiceOver has nested buttons.
+            Button { onRoute(summary.actionRoute) } label: {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(alignment: .top, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(summary.title)
+                                .font(PPProType.medium(15, relativeTo: .subheadline))
                                 .foregroundStyle(palette.secondary)
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                if summary.isLoading { ProgressView().tint(palette.accentText) }
+                                Text(summary.status)
+                                    .font(PPProType.bold(summary.subscriptionCount > 0 ? 30 : 22, relativeTo: .title2))
+                                    .foregroundStyle(palette.text)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                        .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .contentShape(Rectangle())
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: summary.symbolName)
+                            .font(.system(size: 23, weight: .medium))
+                            .foregroundStyle(palette.accentText)
+                            .frame(width: 48, height: 48)
+                            .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 16))
+                            .accessibilityHidden(true)
                     }
-                    .buttonStyle(PPProHomeControlStyle())
-                    .accessibilityHint(Language.isRTL() ? "اضغط لعرض حالة الطلب" : "Tap to view application status")
-                    .accessibilityIdentifier("pro.home.subscription.pendingRequest")
-                }
-            }
-
-            Rectangle().fill(palette.hairline).frame(height: 1)
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Button { onRoute(summary.actionRoute) } label: {
-                    HStack(spacing: 12) {
-                        Text(summary.actionTitle)
-                            .font(PPProType.bold(17, relativeTo: .headline))
+                    if !summary.message.isEmpty {
+                        Text(summary.message)
+                            .font(PPProType.regular(16, relativeTo: .body))
+                            .foregroundStyle(palette.secondary)
                             .fixedSize(horizontal: false, vertical: true)
-                        Spacer(minLength: 8)
+                    }
+                    if summary.subscriptionCount > 0 {
+                        if sizeCategory.isAccessibilityCategory {
+                            VStack(alignment: .leading, spacing: 10) { metrics }
+                        } else {
+                            HStack(alignment: .top, spacing: 16) { metrics }
+                        }
+                    }
+                    if !summary.detail.isEmpty {
+                        Label(summary.detail, systemImage: "calendar")
+                            .font(PPProType.medium(14, relativeTo: .subheadline))
+                            .foregroundStyle(palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    HStack(spacing: 10) {
+                        Text(summary.actionTitle)
+                            .font(PPProType.bold(16, relativeTo: .headline))
+                            .fixedSize(horizontal: false, vertical: true)
+                        Spacer(minLength: 4)
                         Image(systemName: layoutDirection == .rightToLeft ? "arrow.left" : "arrow.right")
-                            .font(.system(size: 16, weight: .semibold))
+                            .font(.system(size: 15, weight: .semibold))
                             .accessibilityHidden(true)
                     }
                     .foregroundStyle(palette.accentText)
-                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                    .contentShape(Rectangle())
+                    .frame(minHeight: 44)
                 }
-                .disabled(summary.isLoading)
-                .accessibilityIdentifier("pro.home.subscription.manage")
-
-                if !summary.additionalActionTitle.isEmpty {
-                    Button { onRoute(summary.additionalActionRoute) } label: {
-                        Label(summary.additionalActionTitle, systemImage: "plus.circle")
-                            .font(PPProType.medium(16, relativeTo: .body))
-                            .foregroundStyle(palette.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
-                            .contentShape(Rectangle())
-                    }
-                    .accessibilityIdentifier("pro.home.subscription.addFeature")
-                }
+                .padding(sizeCategory.isAccessibilityCategory ? 18 : 22)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(PPProHomeControlStyle())
+            .disabled(summary.isLoading)
+            .accessibilityHint(Language.get("ProSubscriptions_ChooseHint", alter: nil))
+            .accessibilityIdentifier("pro.home.subscription.manage")
+
+            if summary.pendingCount > 0 || !summary.additionalActionTitle.isEmpty {
+                Rectangle().fill(palette.hairline).frame(height: 1).padding(.horizontal, 22)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    if summary.pendingCount > 0 && !summary.pendingActionTitle.isEmpty {
+                        Button { onRoute(summary.pendingActionRoute) } label: {
+                            Label(summary.pendingActionTitle, systemImage: "clock")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityIdentifier("pro.home.subscription.pendingRequest")
+                    }
+                    if !summary.additionalActionTitle.isEmpty {
+                        Button { onRoute(summary.additionalActionRoute) } label: {
+                            Label(summary.additionalActionTitle, systemImage: "plus.circle")
+                                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                                .contentShape(Rectangle())
+                        }
+                        .accessibilityIdentifier("pro.home.subscription.addFeature")
+                    }
+                }
+                .font(PPProType.medium(15, relativeTo: .body))
+                .foregroundStyle(palette.secondary)
+                .buttonStyle(PPProHomeControlStyle())
+                .padding(.horizontal, 22).padding(.vertical, 10)
+            }
         }
-        .padding(sizeCategory.isAccessibilityCategory ? 18 : 22)
-        .frame(maxWidth: .infinity, alignment: .leading)
         .background(palette.surface, in: RoundedRectangle(cornerRadius: PPProRadius.card, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: PPProRadius.card, style: .continuous)
-                .stroke(palette.hairline, lineWidth: 1)
+            RoundedRectangle(cornerRadius: PPProRadius.card, style: .continuous).stroke(palette.hairline, lineWidth: 1)
         }
         .accessibilityIdentifier("pro.home.subscription")
+    }
+
+    @ViewBuilder private var metrics: some View {
+        metric(summary.activeCount, key: "ProSubscriptions_ActiveTerms")
+        metric(summary.attentionCount, key: "ProSubscriptions_NeedsAttention")
+        metric(summary.reviewCount, key: "ProSubscriptions_UnderReview")
+    }
+
+    private func metric(_ count: Int, key: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(count, format: .number.locale(Locale(identifier: Language.isRTL() ? "ar" : "en")))
+                .font(PPProType.bold(20, relativeTo: .title3))
+                .foregroundStyle(palette.text)
+            Text(Language.get(key, alter: nil))
+                .font(PPProType.regular(13, relativeTo: .caption))
+                .foregroundStyle(palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -5578,8 +5591,8 @@ struct PPProPulseView: View {
     }
 
     private var showsDeliverySection: Bool {
-        hasDeliveryCapability && (store.selectedWorkspaceID == "all" ||
-                                 store.selectedWorkspaceID == PPProWorkspaceLens.deliveryID)
+        hasDeliveryCapability && driverWorkspaceRoute != nil &&
+            (store.selectedWorkspaceID == "all" || store.selectedWorkspaceID == PPProWorkspaceLens.deliveryID)
     }
 
     private var showsWorkspaceRail: Bool { store.workspaceLenses.count > 1 || hasDeliveryCapability }
@@ -5681,6 +5694,7 @@ struct PPProPulseView: View {
             driverHomeStore?.setVisible(false)
         }
         .onChange(of: hasDeliveryCapability) { _, _ in reconcileDriverHomeStore() }
+        .onChange(of: driverWorkspaceRoute) { _, _ in reconcileDriverHomeStore() }
         .onChange(of: PPDeliveryCompanyService.currentAccountUID()) { _, _ in reconcileDriverHomeStore() }
         .transaction { transaction in
             if reduceMotion || !isOnScreen || scenePhase != .active {
@@ -5804,18 +5818,10 @@ struct PPProPulseView: View {
 
     @ViewBuilder
     private var deliverySection: some View {
-        if hasDeliveryCapability, let driverHomeStore,
+        if hasDeliveryCapability, let driverRoute = driverWorkspaceRoute, let driverHomeStore,
            driverHomeStore.boundUID == PPDeliveryCompanyService.currentAccountUID() {
-            Group {
-                if let driverRoute = driverWorkspaceRoute {
-                    PPDriverHomeAvailabilitySection(store: driverHomeStore, isActive: showsDeliverySection) {
-                        activate(driverRoute)
-                    }
-                } else {
-                    PPDeliveryHomeEntrySection(driverStore: driverHomeStore, isActive: showsDeliverySection,
-                                               onOpenDriverCockpit: { activate("driverCockpit") },
-                                               onOpenProviderCockpit: { activate("delivery") })
-                }
+            PPDriverHomeAvailabilitySection(store: driverHomeStore, isActive: showsDeliverySection) {
+                activate(driverRoute)
             }
             .id(PPDeliveryCompanyService.currentAccountUID())
             .frame(height: showsDeliverySection ? nil : 0)
@@ -5844,7 +5850,7 @@ struct PPProPulseView: View {
 
     private func reconcileDriverHomeStore() {
         let uid = PPDeliveryCompanyService.currentAccountUID()
-        guard hasDeliveryCapability, !uid.isEmpty else {
+        guard hasDeliveryCapability, driverWorkspaceRoute != nil, !uid.isEmpty else {
             driverHomeStore?.setVisible(false)
             driverHomeStore = nil
             return

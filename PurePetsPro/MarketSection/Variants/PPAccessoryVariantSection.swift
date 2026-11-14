@@ -1987,6 +1987,7 @@ struct PPAccessoryVariantStudioSheet: View {
                 .background(AdminSurface.background.ignoresSafeArea())
                 .safeAreaInset(edge: .bottom, spacing: 0) { studioSaveDock(proxy: proxy) }
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbarBackground(.hidden, for: .navigationBar)
                 .toolbar {
                     ToolbarItem(placement: .principal) {
                         Text(Language.get("Variant_Studio_Workspace", alter: "تحرير المتغير"))
@@ -2834,6 +2835,7 @@ struct PPAccessoryVariantColorEditorSheet: View {
             .background(AdminSurface.background.ignoresSafeArea())
             .navigationTitle(Language.get("Variant_ChooseColor", alter: "اختيار اللون"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text(Language.get("Variant_ChooseColor", alter: "اختيار اللون"))

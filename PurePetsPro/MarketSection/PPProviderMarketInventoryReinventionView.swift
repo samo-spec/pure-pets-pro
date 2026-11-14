@@ -827,7 +827,7 @@ public struct PPProviderMarketInventoryView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(Color(red: 0.965, green: 0.968, blue: 0.975))
+        .background(Color.clear)
     }
 
     // MARK: - 2. The Pulse Canopy (Hero Telemetry Cockpit)

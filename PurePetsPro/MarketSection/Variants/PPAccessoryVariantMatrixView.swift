@@ -1042,6 +1042,7 @@ struct PPAccessoryBulkPricingSheet: View {
                 studioActionDock
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text(Language.get("Variant_Bulk_Pricing_Title", alter: "تسعير جماعي"))
@@ -1910,6 +1911,7 @@ struct PPAccessoryCreateCombinationSheet: View {
                 studioActionDock
             }
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text(Language.get("Variant_Studio_Hero_Title", alter: "إنشاء وتثبيت المتغير"))
@@ -2857,6 +2859,7 @@ struct PPProviderVariantStockSheet: View {
             }
             .navigationTitle(item.name)
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(Language.get("Cancel", alter: "إلغاء")) { dismiss() }

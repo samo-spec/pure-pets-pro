@@ -344,10 +344,7 @@ public struct PPAddEditVetStudioScreen: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(
-            surfaceBackground.opacity(0.92)
-                .background(.ultraThinMaterial)
-        )
+        .background(Color.clear)
         .onAppear {
             DispatchQueue.main.async {
                 pulseBeacon = true

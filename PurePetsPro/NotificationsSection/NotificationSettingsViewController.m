@@ -191,16 +191,18 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
     // Constraints Sets
     self.iphoneConstraints = @[
         [self.iphoneStack.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor constant:16.0],
-        [self.iphoneStack.leadingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.leadingAnchor constant:18.0],
-        [self.iphoneStack.trailingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.trailingAnchor constant:-18.0],
-        [self.iphoneStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-32.0],
+        [self.iphoneStack.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor constant:18.0],
+        [self.iphoneStack.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor constant:-18.0],
+        [self.iphoneStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-90.0],
+        [self.iphoneStack.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor constant:-36.0],
     ];
 
     self.ipadConstraints = @[
         [self.ipadContainer.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor constant:24.0],
-        [self.ipadContainer.leadingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.leadingAnchor constant:28.0],
-        [self.ipadContainer.trailingAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.trailingAnchor constant:-28.0],
-        [self.ipadContainer.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-40.0],
+        [self.ipadContainer.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor constant:28.0],
+        [self.ipadContainer.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor constant:-28.0],
+        [self.ipadContainer.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-90.0],
+        [self.ipadContainer.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor constant:-56.0],
 
         [self.ipadLeadingTower.topAnchor constraintEqualToAnchor:self.ipadContainer.topAnchor],
         [self.ipadLeadingTower.leadingAnchor constraintEqualToAnchor:self.ipadContainer.leadingAnchor],
@@ -503,16 +505,20 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
     sectionTitle.text = [sectionTitle.text uppercaseString];
     [headerRow addSubview:sectionTitle];
 
+    UIView *pillCapsule = [[UIView alloc] init];
+    pillCapsule.translatesAutoresizingMaskIntoConstraints = NO;
+    pillCapsule.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
+    pillCapsule.layer.cornerRadius = 8.0;
+    pillCapsule.layer.cornerCurve = kCACornerCurveContinuous;
+    pillCapsule.clipsToBounds = YES;
+    [headerRow addSubview:pillCapsule];
+
     self.categorySummaryPill = [self pp_labelWithText:@""
                                                  font:PPFontBold(11.0)
                                                 color:AppPrimaryClr
                                                 lines:1];
-    self.categorySummaryPill.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.08];
-    self.categorySummaryPill.layer.cornerRadius = 8.0;
-    self.categorySummaryPill.layer.cornerCurve = kCACornerCurveContinuous;
-    self.categorySummaryPill.clipsToBounds = YES;
     self.categorySummaryPill.textAlignment = NSTextAlignmentCenter;
-    [headerRow addSubview:self.categorySummaryPill];
+    [pillCapsule addSubview:self.categorySummaryPill];
 
     UIView *card = [self pp_surfaceCardWithCornerRadius:24.0];
     [wrapper addSubview:card];
@@ -529,9 +535,13 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
         [sectionTitle.leadingAnchor constraintEqualToAnchor:headerRow.leadingAnchor],
         [sectionTitle.centerYAnchor constraintEqualToAnchor:headerRow.centerYAnchor],
 
-        [self.categorySummaryPill.trailingAnchor constraintEqualToAnchor:headerRow.trailingAnchor],
-        [self.categorySummaryPill.centerYAnchor constraintEqualToAnchor:headerRow.centerYAnchor],
-        [self.categorySummaryPill.heightAnchor constraintEqualToConstant:20.0],
+        [pillCapsule.trailingAnchor constraintEqualToAnchor:headerRow.trailingAnchor],
+        [pillCapsule.centerYAnchor constraintEqualToAnchor:headerRow.centerYAnchor],
+        [pillCapsule.heightAnchor constraintEqualToConstant:22.0],
+
+        [self.categorySummaryPill.leadingAnchor constraintEqualToAnchor:pillCapsule.leadingAnchor constant:10.0],
+        [self.categorySummaryPill.trailingAnchor constraintEqualToAnchor:pillCapsule.trailingAnchor constant:-10.0],
+        [self.categorySummaryPill.centerYAnchor constraintEqualToAnchor:pillCapsule.centerYAnchor],
 
         [card.topAnchor constraintEqualToAnchor:headerRow.bottomAnchor constant:10.0],
         [card.leadingAnchor constraintEqualToAnchor:wrapper.leadingAnchor],
@@ -637,6 +647,7 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
     row.translatesAutoresizingMaskIntoConstraints = NO;
     row.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
     row.accessibilityIdentifier = preferenceKey;
+    row.clipsToBounds = YES;
     [stack addArrangedSubview:row];
 
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(pp_preferenceRowTapped:)];
@@ -662,12 +673,16 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
                                             font:PPFontBold(15.0)
                                            color:PrimaryTextClr
                                            lines:2];
+    [titleLabel setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    [titleLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
     [row addSubview:titleLabel];
 
     UILabel *subtitleLabel = [self pp_labelWithText:subtitle
                                                font:PPFontRegular(12.5)
                                               color:[SeconderyTextClr colorWithAlphaComponent:0.80]
                                               lines:3];
+    [subtitleLabel setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    [subtitleLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
     [row addSubview:subtitleLabel];
 
     UISwitch *toggle = [[UISwitch alloc] init];
@@ -677,6 +692,9 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
     toggle.accessibilityLabel = title;
     toggle.on = [self pp_boolForPreferenceKey:preferenceKey defaultValue:defaultValue];
     [toggle addTarget:self action:@selector(pp_switchChanged:) forControlEvents:UIControlEventValueChanged];
+    [toggle setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [toggle setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [toggle setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisVertical];
     [row addSubview:toggle];
 
     if (@available(iOS 13.4, *)) {
@@ -684,6 +702,9 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
     }
 
     [NSLayoutConstraint activateConstraints:@[
+        [row.leadingAnchor constraintEqualToAnchor:stack.leadingAnchor],
+        [row.trailingAnchor constraintEqualToAnchor:stack.trailingAnchor],
+        [row.widthAnchor constraintEqualToAnchor:stack.widthAnchor],
         [row.heightAnchor constraintGreaterThanOrEqualToConstant:74.0],
 
         [iconSurface.leadingAnchor constraintEqualToAnchor:row.leadingAnchor constant:18.0],
@@ -696,6 +717,8 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
 
         [toggle.trailingAnchor constraintEqualToAnchor:row.trailingAnchor constant:-18.0],
         [toggle.centerYAnchor constraintEqualToAnchor:row.centerYAnchor],
+        [toggle.widthAnchor constraintEqualToConstant:51.0],
+        [toggle.heightAnchor constraintEqualToConstant:31.0],
 
         [titleLabel.topAnchor constraintEqualToAnchor:row.topAnchor constant:15.0],
         [titleLabel.leadingAnchor constraintEqualToAnchor:iconSurface.trailingAnchor constant:13.0],

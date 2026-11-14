@@ -419,10 +419,7 @@ public struct PPProProfileSettingsView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(
-            Color(uiColor: .ppBackground).opacity(0.92)
-                .background(.ultraThinMaterial)
-        )
+        .background(Color.clear)
     }
 
     // MARK: - 1. Living Operator Identity Hero

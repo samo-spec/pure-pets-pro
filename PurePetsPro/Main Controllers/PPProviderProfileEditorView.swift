@@ -138,39 +138,50 @@ public struct PPProviderProfileEditorView: View {
     public var body: some View {
         GeometryReader { geometry in
             let isPad = UIDevice.current.userInterfaceIdiom == .pad && geometry.size.width > 680
+            let availableWidth = geometry.size.width
 
-            ZStack {
+            ZStack(alignment: .top) {
                 Color(uiColor: .ppBackground)
                     .ignoresSafeArea()
 
-                // Ambient Radial Atmospheric Lighting
-                ambientAtmosphericLighting
+                // Ambient Radial Atmospheric Lighting (Bounded & Clipped)
+                ambientAtmosphericLighting(width: availableWidth, height: geometry.size.height)
 
                 VStack(spacing: 0) {
                     // Sovereign Navigation Bar
                     sovereignNavigationBar
+                        .frame(width: availableWidth)
 
                     if isPad {
                         iPadSpatialCockpitLayout(geometry: geometry)
+                            .frame(width: availableWidth)
                     } else {
-                        iPhoneSensoryDeckLayout
+                        iPhoneSensoryDeckLayout(width: availableWidth)
                     }
                 }
+                .frame(width: availableWidth)
 
                 // Sticky Command Save Dock
                 VStack {
                     Spacer()
                     stickyCommandDock
+                        .frame(width: availableWidth)
                 }
+                .frame(width: availableWidth)
                 .ignoresSafeArea(.keyboard, edges: .bottom)
             }
+            .frame(width: availableWidth, height: geometry.size.height, alignment: .top)
+            .clipped()
         }
         .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
+        .onAppear {
+            PPBrandFont.registerIfNeeded()
+        }
     }
 
     // MARK: - Ambient Atmospheric Lighting
 
-    private var ambientAtmosphericLighting: some View {
+    private func ambientAtmosphericLighting(width: CGFloat, height: CGFloat) -> some View {
         ZStack {
             Circle()
                 .fill(
@@ -178,11 +189,11 @@ public struct PPProviderProfileEditorView: View {
                         colors: [Color(uiColor: .ppPrimary).opacity(colorScheme == .dark ? 0.16 : 0.08), Color.clear],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 280
+                        endRadius: 200
                     )
                 )
-                .frame(width: 480, height: 480)
-                .offset(x: Language.isRTL() ? 140 : -140, y: -220)
+                .frame(width: min(width * 0.9, 360), height: min(width * 0.9, 360))
+                .offset(x: Language.isRTL() ? 60 : -60, y: -180)
                 .allowsHitTesting(false)
 
             Circle()
@@ -191,19 +202,22 @@ public struct PPProviderProfileEditorView: View {
                         colors: [Color.purple.opacity(colorScheme == .dark ? 0.12 : 0.05), Color.clear],
                         center: .center,
                         startRadius: 0,
-                        endRadius: 240
+                        endRadius: 180
                     )
                 )
-                .frame(width: 400, height: 400)
-                .offset(x: Language.isRTL() ? -130 : 130, y: 300)
+                .frame(width: min(width * 0.8, 300), height: min(width * 0.8, 300))
+                .offset(x: Language.isRTL() ? -50 : 50, y: 220)
                 .allowsHitTesting(false)
         }
+        .frame(width: width, height: height)
+        .clipped()
     }
 
     // MARK: - iPhone Sensory Deck Layout
 
-    private var iPhoneSensoryDeckLayout: some View {
-        ScrollView(.vertical, showsIndicators: false) {
+    private func iPhoneSensoryDeckLayout(width: CGFloat) -> some View {
+        let cardWidth = max(0, width - 32)
+        return ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 18) {
                 // 1. Live Customer Storefront Hologram (Mirrors Consumer App)
                 liveStorefrontMirrorCard
@@ -224,8 +238,11 @@ public struct PPProviderProfileEditorView: View {
                 // Generous Breathing Space for Sticky Save Dock
                 Spacer().frame(height: 96)
             }
+            .frame(width: cardWidth)
             .padding(.horizontal, 16)
+            .frame(width: width)
         }
+        .frame(width: width)
     }
 
     // MARK: - iPad Spatial Cockpit Layout
@@ -292,6 +309,7 @@ public struct PPProviderProfileEditorView: View {
                         .font(PPFont.bold(17, relativeTo: .headline))
                         .foregroundColor(Color(uiColor: .ppTextPrimary))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.85)
 
                     Text("FACILITY")
                         .font(.system(size: 9, weight: .black))
@@ -317,6 +335,7 @@ public struct PPProviderProfileEditorView: View {
                 .foregroundColor(Color(uiColor: .ppTextSecondary))
                 .lineLimit(1)
             }
+            .layoutPriority(1)
 
             Spacer(minLength: 4)
 
@@ -362,19 +381,18 @@ public struct PPProviderProfileEditorView: View {
                         .font(PPFont.bold(10.5, relativeTo: .caption2))
                         .foregroundColor(Color(uiColor: .ppPrimary))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4.5)
                 .background(Color(uiColor: .ppPrimary).opacity(0.12), in: Capsule())
-                .frame(maxWidth: 120, alignment: .trailing)
+                .lineLimit(1)
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 9)
-        .background(
-            Color(uiColor: .ppBackground).opacity(0.94)
-                .background(.ultraThinMaterial)
-        )
+        .frame(maxWidth: .infinity)
+        .background(Color.clear)
     }
 
     // MARK: - 1. Live Customer Storefront Hologram (Mirrors Consumer App)
@@ -437,10 +455,12 @@ public struct PPProviderProfileEditorView: View {
                                 simulatorCoverArtisticPlaceholder
                             }
                         }
+                        .frame(maxWidth: .infinity)
                         .frame(height: 175)
                         .clipped()
                     } else {
                         simulatorCoverArtisticPlaceholder
+                            .frame(maxWidth: .infinity)
                             .frame(height: 175)
                     }
 
@@ -557,6 +577,7 @@ public struct PPProviderProfileEditorView: View {
                     }
                     .padding(11)
                 }
+                .frame(maxWidth: .infinity)
                 .frame(height: 175)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
@@ -589,6 +610,7 @@ public struct PPProviderProfileEditorView: View {
                 .padding(.vertical, 9)
                 .background(Color(uiColor: .ppElevatedSurface))
             }
+            .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -610,6 +632,7 @@ public struct PPProviderProfileEditorView: View {
             .padding(.horizontal, 2)
         }
         .padding(14)
+        .frame(maxWidth: .infinity)
         .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1))
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.04), radius: 8, y: 2)
@@ -906,6 +929,7 @@ public struct PPProviderProfileEditorView: View {
             }
         }
         .padding(14)
+        .frame(maxWidth: .infinity)
         .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1))
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.04), radius: 8, y: 2)
@@ -1033,6 +1057,7 @@ public struct PPProviderProfileEditorView: View {
             }
         }
         .padding(14)
+        .frame(maxWidth: .infinity)
         .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1))
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.04), radius: 8, y: 2)
@@ -1088,6 +1113,7 @@ public struct PPProviderProfileEditorView: View {
             .buttonStyle(PlainButtonStyle())
         }
         .padding(14)
+        .frame(maxWidth: .infinity)
         .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1))
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.04), radius: 8, y: 2)
@@ -1144,6 +1170,7 @@ public struct PPProviderProfileEditorView: View {
                     .foregroundColor(Color(uiColor: .ppTextSecondary))
             }
             .padding(12)
+            .frame(maxWidth: .infinity)
             .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -1151,6 +1178,7 @@ public struct PPProviderProfileEditorView: View {
             )
             .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.25 : 0.04), radius: 6, y: 2)
         }
+        .frame(maxWidth: .infinity)
         .buttonStyle(PlainButtonStyle())
     }
 
@@ -1272,10 +1300,12 @@ public final class PPProviderProfileEditorHostController: UIViewController {
     public override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .ppBackground
+        view.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage
 
         let swiftUIView = PPProviderProfileEditorView(viewModel: viewModel)
         let host = UIHostingController(rootView: swiftUIView)
         host.view.backgroundColor = .clear
+        host.view.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage
         addChild(host)
         view.addSubview(host.view)
         host.view.translatesAutoresizingMaskIntoConstraints = false

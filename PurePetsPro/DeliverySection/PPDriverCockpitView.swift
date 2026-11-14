@@ -666,6 +666,7 @@ struct PPDriverCockpitView: View {
             .background(AdminSurface.background)
             .navigationTitle(ppDriverText("DriverCockpit_ChooseWorkspace_Title"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(ppDriverText("DriverCockpit_Cancel")) { showsContextChooser = false }

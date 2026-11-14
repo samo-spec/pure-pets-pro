@@ -29,6 +29,8 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 @interface PPProviderPlan : NSObject
 
 @property (nonatomic, copy) NSString *planID;
+/// Present only for server-normalized subscription options.
+@property (nonatomic, copy) NSString *subscriptionPlanHash;
 @property (nonatomic, assign) PPProviderType providerType;
 @property (nonatomic, copy) NSString *status;
 @property (nonatomic, strong) NSDictionary *name;
@@ -132,6 +134,20 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 
 @end
 
+/// Owner-scoped subscription projection. This is presentation/request intent,
+/// never a feature grant or staff command authorization.
+@interface PPProviderOwnedSubscription : NSObject
+@property (nonatomic, strong) PPProviderProfile *profile;
+@property (nonatomic, copy) NSString *userID;
+@property (nonatomic, copy) NSString *displayName;
+@property (nonatomic, copy) NSString *operationalStatus;
+@property (nonatomic, copy) NSString *subscriptionStatus;
+@property (nonatomic, copy) NSString *currentPriceLine;
+@property (nonatomic, assign) NSInteger version;
+@property (nonatomic, copy) NSArray<NSString *> *requestActions;
+@property (nonatomic, copy) NSDictionary *subscriptionRequest;
+@end
+
 @interface PPProviderApplicationDraft : NSObject
 
 @property (nonatomic, assign) PPProviderType providerType;
@@ -212,7 +228,13 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 + (NSString *)localizedStatusTitle:(NSString *)status;
 + (NSString *)symbolNameForProviderType:(PPProviderType)type;
 
-- (id<FIRListenerRegistration>)observeProviderStateForCurrentUser:(void(^)(PPProviderOnboardingState * _Nullable state, NSError * _Nullable error))completion;
+- (id<FIRListenerRegistration>)observeProviderStateForCurrentUser:(void(^ NS_SWIFT_UI_ACTOR)(PPProviderOnboardingState * _Nullable state, NSError * _Nullable error))completion;
+- (void)fetchOwnedSubscriptionsWithCompletion:(void(^ NS_SWIFT_UI_ACTOR)(NSArray<PPProviderOwnedSubscription *> * _Nullable subscriptions, NSError * _Nullable error))completion NS_SWIFT_NAME(fetchOwnedSubscriptions(completion:));
+- (void)fetchSubscriptionOptionsForProfileID:(NSString *)profileID
+                                completion:(void(^ NS_SWIFT_UI_ACTOR)(PPProviderOwnedSubscription * _Nullable subscription, NSArray<PPProviderPlan *> * _Nullable plans, NSError * _Nullable error))completion NS_SWIFT_NAME(fetchSubscriptionOptions(forProfileID:completion:));
+- (void)submitSubscriptionRequest:(NSDictionary *)request
+                      completion:(void(^ NS_SWIFT_UI_ACTOR)(NSDictionary * _Nullable result, NSError * _Nullable error))completion NS_SWIFT_NAME(submitSubscriptionRequest(_:completion:));
++ (BOOL)isDefinitiveSubscriptionRequestError:(NSError *)error NS_SWIFT_NAME(isDefinitiveSubscriptionRequestError(_:));
 - (void)fetchPlansForProviderType:(PPProviderType)providerType
                        completion:(void(^ NS_SWIFT_UI_ACTOR)(NSArray<PPProviderPlan *> * _Nullable plans, NSError * _Nullable error))completion;
 - (NSError * _Nullable)validateDraft:(PPProviderApplicationDraft *)draft

@@ -6,6 +6,8 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, assign) BOOL prefersAutoPresentBecomeProvider;
 @property (nonatomic, assign) BOOL suppressAutoDashboardTransition;
+/// Nil opens the full inventory. A stable ID opens only that owned agreement.
+@property (nonatomic, copy, nullable) NSString *selectedSubscriptionProfileID;
 
 @end
 

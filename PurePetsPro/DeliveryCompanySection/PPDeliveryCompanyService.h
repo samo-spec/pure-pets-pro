@@ -97,6 +97,10 @@ typedef void (^PPDriverCockpitCompletion)(NSDictionary<NSString *, id> * _Nullab
 /// driver workspace in any company (not only the configured one).
 @property (nonatomic, assign, readonly) BOOL hasDiscoveredDriverWorkspace;
 
+/// Home visibility only: the current account's server-resolved driver/fleet
+/// workspace. Provider feature flags and remembered company IDs are not grants.
+@property (nonatomic, assign, readonly) BOOL hasDiscoveredDeliveryWorkspace;
+
 @end
 
 NS_ASSUME_NONNULL_END

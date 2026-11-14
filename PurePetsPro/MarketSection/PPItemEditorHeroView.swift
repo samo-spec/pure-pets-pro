@@ -390,8 +390,7 @@ public struct PPProviderMarketItemStudioScreen: View {
         .padding(.horizontal, 16)
         .padding(.top, 8)
         .padding(.bottom, 10)
-        .background(surfaceBackground)
-        .overlay(Divider().overlay(hairlineColor), alignment: .bottom)
+        .background(Color.clear)
     }
 
     // MARK: - Phone Ergonomic Flow

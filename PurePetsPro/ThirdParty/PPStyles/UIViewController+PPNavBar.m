@@ -253,6 +253,12 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
         navBar.standardAppearance = settle;
         navBar.compactAppearance = settle;
         navBar.scrollEdgeAppearance = settle;
+        if (@available(iOS 15.0, *)) {
+            navBar.compactScrollEdgeAppearance = settle;
+        }
+        navBar.backgroundColor = [UIColor clearColor];
+        navBar.shadowImage = [[UIImage alloc] init];
+        [navBar setBackgroundImage:[[UIImage alloc] init] forBarMetrics:UIBarMetricsDefault];
         navBar.tintColor = AppPrimaryClr;
         navBar.translucent = YES;
     } else {
@@ -261,6 +267,7 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
         navBar.shadowImage = [[UIImage alloc] init];
         [navBar setBackgroundImage:[[UIImage alloc] init] forBarMetrics:UIBarMetricsDefault];
         navBar.tintColor = AppPrimaryClr;
+        navBar.translucent = YES;
         navBar.titleTextAttributes = titleAttrs;
     }
 }

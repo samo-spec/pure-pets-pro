@@ -41,6 +41,8 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 @property (nonatomic, copy) NSString *verifiedUID;
 /// Account for which the last membership discovery found a driver workspace.
 @property (nonatomic, copy) NSString *driverWorkspaceUID;
+/// Full membership discovery, independent of the configured-company profile.
+@property (nonatomic, copy) NSString *deliveryWorkspaceUID;
 @property (nonatomic, assign, readwrite) BOOL isRefreshingProfile;
 @property (nonatomic, strong) NSMutableArray *profileRefreshCompletions;
 /// Memory-only retry identity, scoped to issuer + carrier + target + role.
@@ -243,12 +245,17 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
             return;
         }
         if (error) {
+            // A failed refresh cannot keep a delivery Home grant alive.
+            self.discoveredProfiles = @[];
+            self.driverWorkspaceUID = @"";
+            self.deliveryWorkspaceUID = @"";
             if (completion) completion(nil, error);
             return;
         }
         NSMutableArray<PPDeliveryCompanyProfile *> *profiles = [NSMutableArray array];
         NSArray *items = [result[@"companies"] isKindOfClass:NSArray.class] ? result[@"companies"] : @[];
         BOOL anyDriverWorkspace = NO;
+        BOOL anyDeliveryWorkspace = NO;
         for (NSDictionary *item in items) {
             if (![item isKindOfClass:NSDictionary.class]) {
                 continue;
@@ -257,9 +264,11 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
             if (profile.companyID.length > 0) {
                 [profiles addObject:profile];
                 if (profile.hasDriverWorkspace) anyDriverWorkspace = YES;
+                if (profile.hasDriverWorkspace || profile.hasDispatchWorkspace) anyDeliveryWorkspace = YES;
             }
         }
         self.discoveredProfiles = profiles.copy;
+        self.deliveryWorkspaceUID = anyDeliveryWorkspace ? currentUID : @"";
         self.driverWorkspaceUID = anyDriverWorkspace ? currentUID : @"";
         if (anyDriverWorkspace) {
             [[NSNotificationCenter defaultCenter] postNotificationName:PPDeliveryDriverWorkspaceConfirmedNotification object:self];
@@ -670,6 +679,11 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 - (BOOL)hasDiscoveredDriverWorkspace {
     NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
     return uid.length > 0 && [self.driverWorkspaceUID isEqualToString:uid];
+}
+
+- (BOOL)hasDiscoveredDeliveryWorkspace {
+    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    return uid.length > 0 && [self.deliveryWorkspaceUID isEqualToString:uid];
 }
 
 @end

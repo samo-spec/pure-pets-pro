@@ -13,9 +13,16 @@
 #import "Language.h"
 #import "PPAlertHelper.h"
 #import "PurePetsPro-Swift.h"
+#import "PPProviderApplicationStatusViewController.h"
+#import "PPDeliveryCompanyService.h"
+#import "PPFirebaseCompat.h"
+#import "UserManager.h"
+#import "UserModel.h"
+#import "SceneDelegate.h"
 
 @interface PPProviderSubscriptionManagmetVC () <PPBecomeProviderBottomSheetViewControllerDelegate>
 @property (nonatomic, strong) PPProviderSubscriptionStudioHostingController *hostingController;
+@property (nonatomic, copy) NSString *actorUID;
 @end
 
 @implementation PPProviderSubscriptionManagmetVC
@@ -26,6 +33,7 @@
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor ppBackground];
     self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+    self.actorUID = [FIRAuth auth].currentUser.uid ?: @"";
 
     __weak typeof(self) weakSelf = self;
     self.hostingController = [[PPProviderSubscriptionStudioHostingController alloc]
@@ -43,6 +51,33 @@
         }
     }];
 
+    self.hostingController.selectedSubscriptionProfileID = self.selectedSubscriptionProfileID;
+    UserModel *user = [UserManager shared].currentUser;
+    self.hostingController.workforceOnly = [user.uid isEqualToString:self.actorUID] && [user.accountType isEqualToString:@"staff"];
+    self.hostingController.onSelectSubscription = ^(NSString *profileID) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || ![self.actorUID isEqualToString:[FIRAuth auth].currentUser.uid] || !profileID.length) return;
+        PPProviderSubscriptionManagmetVC *detail = [[PPProviderSubscriptionManagmetVC alloc] init];
+        detail.selectedSubscriptionProfileID = profileID;
+        detail.suppressAutoDashboardTransition = YES;
+        detail.prefersAutoPresentBecomeProvider = NO;
+        [self.navigationController pushViewController:detail animated:YES];
+    };
+    self.hostingController.onApplications = ^(BOOL addFeature) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || ![self.actorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
+        SceneDelegate *scene = (SceneDelegate *)self.view.window.windowScene.delegate;
+        if ([scene isKindOfClass:SceneDelegate.class]) [scene cancelPendingProAccessRouting];
+        PPProviderApplicationStatusViewController *controller = [[PPProviderApplicationStatusViewController alloc] init];
+        controller.prefersAutoPresentBecomeProvider = addFeature;
+        controller.suppressAutoDashboardTransition = YES;
+        [self.navigationController pushViewController:controller animated:YES];
+    };
+    self.hostingController.onMessage = ^(NSString *title, NSString *body) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || ![self.actorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
+        [PPAlertHelper showInfoIn:self title:title subtitle:body];
+    };
     self.hostingController.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
 
     [self addChildViewController:self.hostingController];

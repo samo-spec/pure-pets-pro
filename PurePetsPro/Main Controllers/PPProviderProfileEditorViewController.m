@@ -298,6 +298,7 @@ static BOOL PPProviderProfileEditorFunctionErrorIsNotFound(NSError *error) {
     [self addChildViewController:self.hostingController];
     [self.view addSubview:self.hostingController.view];
     self.hostingController.view.translatesAutoresizingMaskIntoConstraints = NO;
+    self.hostingController.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.hostingController.view.topAnchor constraintEqualToAnchor:self.view.topAnchor],

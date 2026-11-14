@@ -578,12 +578,7 @@ public struct PPMarketplaceBranchesNavBar: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(
-            Color(uiColor: .ppBackground)
-                .opacity(0.96)
-                .background(.ultraThinMaterial)
-                .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 2)
-        )
+        .background(Color.clear)
     }
 }
 
@@ -2493,10 +2488,7 @@ public struct PPMarketplaceBranchEditorNavBar: View {
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
         }
-        .background(
-            Color(uiColor: .ppBackground).opacity(0.96)
-                .background(.ultraThinMaterial)
-        )
+        .background(Color.clear)
     }
 }
 

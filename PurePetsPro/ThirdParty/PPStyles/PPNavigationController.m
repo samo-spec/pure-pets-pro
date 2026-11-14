@@ -87,14 +87,29 @@
         NSForegroundColorAttributeName: PrimaryTextClr
     };
     if (@available(iOS 13.0, *)) {
-        UINavigationBarAppearance *appearance = self.navigationBar.standardAppearance ? [self.navigationBar.standardAppearance copy] : [[UINavigationBarAppearance alloc] init];
+        UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
         [appearance configureWithTransparentBackground];
+        appearance.backgroundColor = [UIColor clearColor];
+        appearance.shadowColor = [UIColor clearColor];
+        appearance.shadowImage = [[UIImage alloc] init];
         appearance.titleTextAttributes = titleAttrs;
         appearance.largeTitleTextAttributes = largeTitleAttrs;
         self.navigationBar.standardAppearance = appearance;
         self.navigationBar.compactAppearance = appearance;
         self.navigationBar.scrollEdgeAppearance = appearance;
+        if (@available(iOS 15.0, *)) {
+            self.navigationBar.compactScrollEdgeAppearance = appearance;
+        }
+        self.navigationBar.backgroundColor = [UIColor clearColor];
+        self.navigationBar.shadowImage = [[UIImage alloc] init];
+        [self.navigationBar setBackgroundImage:[[UIImage alloc] init] forBarMetrics:UIBarMetricsDefault];
+        self.navigationBar.translucent = YES;
     } else {
+        self.navigationBar.barTintColor = [UIColor clearColor];
+        self.navigationBar.backgroundColor = [UIColor clearColor];
+        self.navigationBar.shadowImage = [[UIImage alloc] init];
+        [self.navigationBar setBackgroundImage:[[UIImage alloc] init] forBarMetrics:UIBarMetricsDefault];
+        self.navigationBar.translucent = YES;
         self.navigationBar.titleTextAttributes = titleAttrs;
     }
 }

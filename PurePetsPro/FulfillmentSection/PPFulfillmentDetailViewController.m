@@ -3,6 +3,7 @@
 #import "PPMarketplaceBranchesViewController.h"
 #import "PPFulfillmentModel.h"
 #import "PPFulfillmentManager.h"
+#import "PPFulfillmentPickupStoreViewController.h"
 #import "PPFirebaseCompat.h"
 #import <math.h>
 #import <CoreFoundation/CoreFoundation.h>
@@ -292,6 +293,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
 @property (nonatomic, copy) NSString *pendingTargetStatus;
 @property (nonatomic, copy) NSString *pendingNote;
 @property (nonatomic, copy) NSString *pendingUID;
+@property (nonatomic, copy) NSString *pendingPickupBranchID;
 @property (nonatomic, assign) BOOL submitting;
 @property (nonatomic, assign) BOOL commandAccepted;
 @property (nonatomic, assign) NSUInteger operationGeneration;
@@ -1084,6 +1086,10 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
 }
 
 - (void)confirmAction:(NSString *)action {
+    [self confirmAction:action pickupBranchID:nil pickupSelectionResolved:NO];
+}
+
+- (void)confirmAction:(NSString *)action pickupBranchID:(NSString *)pickupBranchID pickupSelectionResolved:(BOOL)pickupSelectionResolved {
     if (self.submitting || self.pendingAction.length || self.presentedViewController || !self.hasLiveFulfillmentState || ![self.model.availableActions containsObject:action]) return;
     NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
     NSString *source = [self.model.status copy];
@@ -1091,6 +1097,29 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
     NSString *fulfillmentID = [self.model.fulfillmentID copy];
     if (!target.length || ![self isOwnedModel:self.model uid:uid]) return;
     BOOL official = [PPFulfillmentManager isOfficialPlatformFulfillment:self.model forUID:uid];
+    if (official && [action isEqualToString:@"request_delivery"] && !pickupSelectionResolved) {
+        __weak typeof(self) weakSelf = self;
+        PPFulfillmentPickupStoreViewController *picker = [[PPFulfillmentPickupStoreViewController alloc]
+            initWithFulfillment:self.model completion:^(NSString *branchID) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] ||
+                !self.hasLiveFulfillmentState || ![self.model.fulfillmentID isEqualToString:fulfillmentID] ||
+                ![self.model.status isEqualToString:source] || ![self.model.availableActions containsObject:action] ||
+                ![self isOwnedModel:self.model uid:uid] || ![PPFulfillmentManager isOfficialPlatformFulfillment:self.model forUID:uid]) {
+                self.operationMessage = kLang(@"ProFulfillment_StateChanged");
+                [self observeFulfillment];
+                return;
+            }
+            [self confirmAction:action pickupBranchID:branchID pickupSelectionResolved:YES];
+        }];
+        UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:picker];
+        navigation.modalPresentationStyle = UIModalPresentationPageSheet;
+        navigation.sheetPresentationController.detents = @[[UISheetPresentationControllerDetent largeDetent]];
+        navigation.sheetPresentationController.prefersGrabberVisible = YES;
+        [self presentViewController:navigation animated:!UIAccessibilityIsReduceMotionEnabled() completion:nil];
+        return;
+    }
     self.reviewRequiresNote = NO;
     NSString *message = [NSString stringWithFormat:kLang(@"ProFulfillment_ReviewTransition"), self.model.statusDisplayName, [PPFulfillmentModel displayNameForStatus:target]];
     if ([action isEqualToString:@"confirm_handover"]) message = [message stringByAppendingFormat:@"\n\n%@", kLang(@"ProFulfillment_HandoverReview")];
@@ -1115,7 +1144,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
         NSString *note = [text ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] || !self.hasLiveFulfillmentState || ![self.model.fulfillmentID isEqualToString:fulfillmentID] || ![self.model.status isEqualToString:source] || ![self.model.availableActions containsObject:action]) {
+        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] || !self.hasLiveFulfillmentState || ![self.model.fulfillmentID isEqualToString:fulfillmentID] || ![self.model.status isEqualToString:source] || ![self.model.availableActions containsObject:action] || official != [PPFulfillmentManager isOfficialPlatformFulfillment:self.model forUID:uid]) {
             self.operationMessage = kLang(@"ProFulfillment_StateChanged");
             [self observeFulfillment];
             return;
@@ -1131,6 +1160,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
         self.pendingTargetStatus = target;
         self.pendingNote = note;
         self.pendingUID = uid;
+        self.pendingPickupBranchID = pickupBranchID;
         self.commandAccepted = NO;
         [self executeAction:action note:note];
     }];
@@ -1191,7 +1221,10 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
         @"FULFILLMENT_RESERVATION_REVIEW_REQUIRED": @"ProFulfillment_ReservationReview",
         @"FULFILLMENT_CANCELLATION_REVIEW_REQUIRED": @"ProFulfillment_CancellationReview",
         @"FULFILLMENT_CASH_RECONCILIATION_REQUIRED": @"ProFulfillment_CashReview",
-        @"FULFILLMENT_DELIVERY_EVIDENCE_REQUIRED": @"ProFulfillment_DeliveryEvidenceRequired"
+        @"FULFILLMENT_DELIVERY_EVIDENCE_REQUIRED": @"ProFulfillment_DeliveryEvidenceRequired",
+        @"PICKUP_STORE_UNAVAILABLE": @"ProPickup_SelectionInvalid",
+        @"PICKUP_STORE_OUT_OF_SCOPE": @"ProPickup_Denied",
+        @"PICKUP_STORE_ADDRESS_REQUIRED": @"ProPickup_AddressRequired"
     };
     NSString *key = reasons[domainCode];
     if (key.length) return kLang(key);
@@ -1207,6 +1240,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
 - (void)clearPendingIntent {
     self.pendingAction = nil; self.pendingFromStatus = nil; self.pendingTargetStatus = nil;
     self.pendingNote = nil; self.pendingUID = nil; self.commandAccepted = NO;
+    self.pendingPickupBranchID = nil;
 }
 
 - (void)verifyPendingIntent {
@@ -1437,7 +1471,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
         return;
     }
     if ([PPFulfillmentManager isOfficialPlatformFulfillment:self.model forUID:uid]) {
-        [[PPFulfillmentManager sharedManager] performOfficialPlatformTransitionAction:action fulfillmentID:self.model.fulfillmentID expectedStatus:self.pendingFromStatus note:self.pendingNote completion:completion];
+        [[PPFulfillmentManager sharedManager] performOfficialPlatformTransitionAction:action fulfillmentID:self.model.fulfillmentID expectedStatus:self.pendingFromStatus note:self.pendingNote pickupBranchID:self.pendingPickupBranchID completion:completion];
     } else {
         [[PPFulfillmentManager sharedManager] performTransitionAction:action fulfillmentID:self.model.fulfillmentID expectedStatus:self.pendingFromStatus commandID:nil note:self.pendingNote completion:completion];
     }

@@ -7,6 +7,13 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		F2ADOPT001MODELS0000002 /* PPAdoptProModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2ADOPT001MODELS0000001 /* PPAdoptProModels.swift */; };
+		F2ADOPT002STORE00000002 /* PPAdoptProStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2ADOPT002STORE00000001 /* PPAdoptProStore.swift */; };
+		F2ADOPT003CTRL000000002 /* PPAdoptProControlCenterView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2ADOPT003CTRL000000001 /* PPAdoptProControlCenterView.swift */; };
+		F2ADOPT004DETAIL0000002 /* PPAdoptProDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2ADOPT004DETAIL0000001 /* PPAdoptProDetailView.swift */; };
+		F2ADOPT005EDIT000000002 /* PPAdoptProEditSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2ADOPT005EDIT000000001 /* PPAdoptProEditSheet.swift */; };
+		F2ADOPT006APPS000000002 /* PPAdoptProApplicationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2ADOPT006APPS000000001 /* PPAdoptProApplicationsView.swift */; };
+		F2ADOPT007BRIDGE0000002 /* PPAdoptProBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2ADOPT007BRIDGE0000001 /* PPAdoptProBridge.swift */; };
 		2260E2338E45DC3B89B24190 /* QBVideoIndicatorView.m in Sources */ = {isa = PBXBuildFile; fileRef = 294016D134F03A5C420FA7F3 /* QBVideoIndicatorView.m */; };
 		25C7C405B2192F6EC79745BC /* QB.m in Sources */ = {isa = PBXBuildFile; fileRef = 07DD358CFAD6FBBAB5CD3504 /* QB.m */; };
 		36FADF15B587D56DABE98527 /* PPColorUtils.m in Sources */ = {isa = PBXBuildFile; fileRef = 7DB9D83B879A58F4F60D242D /* PPColorUtils.m */; };
@@ -42,7 +49,6 @@
 		F21799B72E6D85B300AB5017 /* PPCellWithButtons.m in Sources */ = {isa = PBXBuildFile; fileRef = F21799B62E6D859A00AB5017 /* PPCellWithButtons.m */; };
 		F22482452E57C8980018025A /* AdminCell.m in Sources */ = {isa = PBXBuildFile; fileRef = F22482442E57C8890018025A /* AdminCell.m */; };
 		F22482482E57C9210018025A /* XLAdminCell.m in Sources */ = {isa = PBXBuildFile; fileRef = F22482472E57C9120018025A /* XLAdminCell.m */; };
-		F23115682F90D15A000A8757 /* RecaptchaEnterprise in Frameworks */ = {isa = PBXBuildFile; productRef = F23115672F90D15A000A8757 /* RecaptchaEnterprise */; };
 		F23BF9282E62F36700D7BA85 /* UserRoles.json in Resources */ = {isa = PBXBuildFile; fileRef = F23BF9272E62F36700D7BA85 /* UserRoles.json */; };
 		F23DDE6E2F8BEC670020D4F4 /* PPAgentModel.m in Sources */ = {isa = PBXBuildFile; fileRef = F23DDE6C2F8BEC670020D4F4 /* PPAgentModel.m */; };
 		F251FCD82E765E1D00DFA8DB /* PPNotificationsManager.m in Sources */ = {isa = PBXBuildFile; fileRef = F251FCD72E765E1D00DFA8DB /* PPNotificationsManager.m */; };
@@ -156,6 +162,7 @@
 		F2A347C82E585B6300C6713D /* PetAccessory.m in Sources */ = {isa = PBXBuildFile; fileRef = F2A347C72E585B6300C6713D /* PetAccessory.m */; };
 		F2A462672F8D1B1800C15EBD /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = F2A462662F8D1B1800C15EBD /* GoogleService-Info.plist */; };
 		F2A91B142FA94D7E00A6D2C0 /* PPProviderCompaniesBottomSearchBar.m in Sources */ = {isa = PBXBuildFile; fileRef = F2A91B162FA94D7E00A6D2C0 /* PPProviderCompaniesBottomSearchBar.m */; };
+		F2A9D1AC30AA73F200A6E2D7 /* RecaptchaEnterprise in Frameworks */ = {isa = PBXBuildFile; productRef = F2A9D1AB30AA73F200A6E2D7 /* RecaptchaEnterprise */; };
 		F2ALERT0001HELPER00B00001 /* PPAlertHelper.m in Sources */ = {isa = PBXBuildFile; fileRef = F2ALERT0001HELPER00M00001 /* PPAlertHelper.m */; };
 		F2B198472E6049FE0023ABAF /* PPSubtitleSwitchCell.m in Sources */ = {isa = PBXBuildFile; fileRef = F2B198462E6049FE0023ABAF /* PPSubtitleSwitchCell.m */; };
 		F2B8FCDF2FDE4FCE007E0B01 /* PPProviderSubscriptionManagmetVC.m in Sources */ = {isa = PBXBuildFile; fileRef = F2B8FCDE2FDE4FCE007E0B01 /* PPProviderSubscriptionManagmetVC.m */; };
@@ -184,6 +191,7 @@
 		F2CCF44D2F8CA17F007FBAD4 /* PPFulfillmentManager.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4482F8CA17F007FBAD4 /* PPFulfillmentManager.m */; };
 		F2CCF44E2F8CA17F007FBAD4 /* PPFulfillmentModel.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF44A2F8CA17F007FBAD4 /* PPFulfillmentModel.m */; };
 		F2CCF44F2F8CA17F007FBAD4 /* PPFulfillmentDetailViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4442F8CA17F007FBAD4 /* PPFulfillmentDetailViewController.m */; };
+		E41611160000000000000001 /* PPFulfillmentPickupStoreViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = E41611160000000000000003 /* PPFulfillmentPickupStoreViewController.m */; };
 		F2CCF4502F8CA17F007FBAD4 /* PPProviderMarketItem.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4532F8CA17F007FBAD4 /* PPProviderMarketItem.m */; };
 		F2CCF4512F8CA17F007FBAD4 /* PPProviderMarketplaceManager.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4552F8CA17F007FBAD4 /* PPProviderMarketplaceManager.m */; };
 		F2CCF45C2F8CA17F007FBAD4 /* PPProviderMarketItemsViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = F2CCF4572F8CA17F007FBAD4 /* PPProviderMarketItemsViewController.m */; };
@@ -250,9 +258,6 @@
 		F4B10020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */; };
 		F4B10020000000000000000C /* PPProviderServicesReinventionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000C /* PPProviderServicesReinventionView.swift */; };
 		F4B10020000000000000000D /* PPAddEditVetStudioScreen.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B20020000000000000000D /* PPAddEditVetStudioScreen.swift */; };
-		F4B100400000000000000001 /* PPBecomePartnerStudioSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200400000000000000001 /* PPBecomePartnerStudioSheet.swift */; };
-		F4B100400000000000000002 /* PPProviderApplicationStatusStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200400000000000000002 /* PPProviderApplicationStatusStudioView.swift */; };
-		F4B100400000000000000003 /* PPProviderSubscriptionStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200400000000000000003 /* PPProviderSubscriptionStudioView.swift */; };
 		F4B100300000000000000001 /* PPAdminDesignCompat.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000001 /* PPAdminDesignCompat.swift */; };
 		F4B100300000000000000002 /* PPAccessoryVariantError.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000002 /* PPAccessoryVariantError.swift */; };
 		F4B100300000000000000003 /* PPAccessoryVariantMediaService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */; };
@@ -262,6 +267,9 @@
 		F4B100300000000000000007 /* PPAccessoryVariantMatrixView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000007 /* PPAccessoryVariantMatrixView.swift */; };
 		F4B100300000000000000008 /* PPAccessoryVariantSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000008 /* PPAccessoryVariantSection.swift */; };
 		F4B100300000000000000009 /* PPInventoryFamilyGrouping.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200300000000000000009 /* PPInventoryFamilyGrouping.swift */; };
+		F4B100400000000000000001 /* PPBecomePartnerStudioSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200400000000000000001 /* PPBecomePartnerStudioSheet.swift */; };
+		F4B100400000000000000002 /* PPProviderApplicationStatusStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200400000000000000002 /* PPProviderApplicationStatusStudioView.swift */; };
+		F4B100400000000000000003 /* PPProviderSubscriptionStudioView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4B200400000000000000003 /* PPProviderSubscriptionStudioView.swift */; };
 		F4D000100000000000000001 /* PPDeliveryDriverModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000001 /* PPDeliveryDriverModels.swift */; };
 		F4D000100000000000000002 /* PPDeliveryDriverControlView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000002 /* PPDeliveryDriverControlView.swift */; };
 		F4D000100000000000000003 /* PPDeliveryDriverHomeControlSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000003 /* PPDeliveryDriverHomeControlSection.swift */; };
@@ -269,6 +277,11 @@
 		F4D000100000000000000005 /* PPDriverCockpitModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000005 /* PPDriverCockpitModels.swift */; };
 		F4D000100000000000000006 /* PPDriverCockpitView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000006 /* PPDriverCockpitView.swift */; };
 		F4D000100000000000000007 /* PPDeliveryMissionDossierView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000007 /* PPDeliveryMissionDossierView.swift */; };
+		F4D000100000000000000008 /* PPGoogleMapsRouteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000008 /* PPGoogleMapsRouteService.swift */; };
+		F4D000100000000000000009 /* PPDriverLocationTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D000200000000000000009 /* PPDriverLocationTracker.swift */; };
+		F4D00010000000000000000A /* PPInAppGoogleMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D00020000000000000000A /* PPInAppGoogleMapView.swift */; };
+		F4D00010000000000000000B /* PPInAppRouteModalView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D00020000000000000000B /* PPInAppRouteModalView.swift */; };
+		F4D00010000000000000000C /* PPInAppRouteLauncher.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4D00020000000000000000C /* PPInAppRouteLauncher.swift */; };
 		F5A0B1013005000100A0B101 /* PPHero.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5A0B1023005000100A0B102 /* PPHero.swift */; };
 		F5A0B2013005000100A0B201 /* PPProQuickActionsDeck.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5A0B2023005000100A0B202 /* PPProQuickActionsDeck.swift */; };
 		F5A0B3013005000100A0B301 /* PPProProfileSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A6DA4CC7A2BB459BAE2B8EAB /* PPProProfileSettingsView.swift */; };
@@ -296,6 +309,13 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		F2ADOPT001MODELS0000001 /* PPAdoptProModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdoptProModels.swift; sourceTree = "<group>"; };
+		F2ADOPT002STORE00000001 /* PPAdoptProStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdoptProStore.swift; sourceTree = "<group>"; };
+		F2ADOPT003CTRL000000001 /* PPAdoptProControlCenterView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdoptProControlCenterView.swift; sourceTree = "<group>"; };
+		F2ADOPT004DETAIL0000001 /* PPAdoptProDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdoptProDetailView.swift; sourceTree = "<group>"; };
+		F2ADOPT005EDIT000000001 /* PPAdoptProEditSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdoptProEditSheet.swift; sourceTree = "<group>"; };
+		F2ADOPT006APPS000000001 /* PPAdoptProApplicationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdoptProApplicationsView.swift; sourceTree = "<group>"; };
+		F2ADOPT007BRIDGE0000001 /* PPAdoptProBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdoptProBridge.swift; sourceTree = "<group>"; };
 		068FBBDA955D966F979652B5 /* QBVideoIconView.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = QBVideoIconView.m; sourceTree = "<group>"; };
 		07DD358CFAD6FBBAB5CD3504 /* QB.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = QB.m; sourceTree = "<group>"; };
 		082A9B2BA901B0ABA362FD29 /* QB.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = QB.h; sourceTree = "<group>"; };
@@ -653,6 +673,8 @@
 		F2CCF4462F8CA17F007FBAD4 /* PPFulfillmentListViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPFulfillmentListViewController.m; sourceTree = "<group>"; };
 		F2CCF4472F8CA17F007FBAD4 /* PPFulfillmentManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPFulfillmentManager.h; sourceTree = "<group>"; };
 		F2CCF4482F8CA17F007FBAD4 /* PPFulfillmentManager.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPFulfillmentManager.m; sourceTree = "<group>"; };
+		E41611160000000000000002 /* PPFulfillmentPickupStoreViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPFulfillmentPickupStoreViewController.h; sourceTree = "<group>"; };
+		E41611160000000000000003 /* PPFulfillmentPickupStoreViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPFulfillmentPickupStoreViewController.m; sourceTree = "<group>"; };
 		F2CCF4492F8CA17F007FBAD4 /* PPFulfillmentModel.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPFulfillmentModel.h; sourceTree = "<group>"; };
 		F2CCF44A2F8CA17F007FBAD4 /* PPFulfillmentModel.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPFulfillmentModel.m; sourceTree = "<group>"; };
 		F2CCF4522F8CA17F007FBAD4 /* PPProviderMarketItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPProviderMarketItem.h; sourceTree = "<group>"; };
@@ -669,7 +691,6 @@
 		F2CCF4852F8CA17F007FBAD4 /* PPServiceScheduleViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceScheduleViewController.m; sourceTree = "<group>"; };
 		F2CCF4872F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PPServiceTemplatePickerViewController.h; sourceTree = "<group>"; };
 		F2CCF4882F8CA17F007FBAD4 /* PPServiceTemplatePickerViewController.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PPServiceTemplatePickerViewController.m; sourceTree = "<group>"; };
-		F2CDFBE72F9303C30037AD9A /* RecaptchaInterop.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; path = RecaptchaInterop.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		F2D33AE22F3FADE80007EC75 /* PetImageItem.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PetImageItem.h; sourceTree = "<group>"; };
 		F2D33AE32F3FADE80007EC75 /* PetImageItem.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PetImageItem.m; sourceTree = "<group>"; };
 		F2D33AE52F3FB0420007EC75 /* ArabicNormalizer.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = ArabicNormalizer.h; sourceTree = "<group>"; };
@@ -770,9 +791,6 @@
 		F4B20020000000000000000B /* PPProviderMarketItemDetailReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderMarketItemDetailReinventionView.swift; sourceTree = "<group>"; };
 		F4B20020000000000000000C /* PPProviderServicesReinventionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderServicesReinventionView.swift; sourceTree = "<group>"; };
 		F4B20020000000000000000D /* PPAddEditVetStudioScreen.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAddEditVetStudioScreen.swift; sourceTree = "<group>"; };
-		F4B200400000000000000001 /* PPBecomePartnerStudioSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPBecomePartnerStudioSheet.swift; sourceTree = "<group>"; };
-		F4B200400000000000000002 /* PPProviderApplicationStatusStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderApplicationStatusStudioView.swift; sourceTree = "<group>"; };
-		F4B200400000000000000003 /* PPProviderSubscriptionStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderSubscriptionStudioView.swift; sourceTree = "<group>"; };
 		F4B200300000000000000001 /* PPAdminDesignCompat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAdminDesignCompat.swift; sourceTree = "<group>"; };
 		F4B200300000000000000002 /* PPAccessoryVariantError.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantError.swift; sourceTree = "<group>"; };
 		F4B200300000000000000003 /* PPAccessoryVariantMediaService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantMediaService.swift; sourceTree = "<group>"; };
@@ -782,6 +800,9 @@
 		F4B200300000000000000007 /* PPAccessoryVariantMatrixView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantMatrixView.swift; sourceTree = "<group>"; };
 		F4B200300000000000000008 /* PPAccessoryVariantSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPAccessoryVariantSection.swift; sourceTree = "<group>"; };
 		F4B200300000000000000009 /* PPInventoryFamilyGrouping.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPInventoryFamilyGrouping.swift; sourceTree = "<group>"; };
+		F4B200400000000000000001 /* PPBecomePartnerStudioSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPBecomePartnerStudioSheet.swift; sourceTree = "<group>"; };
+		F4B200400000000000000002 /* PPProviderApplicationStatusStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderApplicationStatusStudioView.swift; sourceTree = "<group>"; };
+		F4B200400000000000000003 /* PPProviderSubscriptionStudioView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProviderSubscriptionStudioView.swift; sourceTree = "<group>"; };
 		F4D000200000000000000001 /* PPDeliveryDriverModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverModels.swift; sourceTree = "<group>"; };
 		F4D000200000000000000002 /* PPDeliveryDriverControlView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverControlView.swift; sourceTree = "<group>"; };
 		F4D000200000000000000003 /* PPDeliveryDriverHomeControlSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryDriverHomeControlSection.swift; sourceTree = "<group>"; };
@@ -789,6 +810,11 @@
 		F4D000200000000000000005 /* PPDriverCockpitModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDriverCockpitModels.swift; sourceTree = "<group>"; };
 		F4D000200000000000000006 /* PPDriverCockpitView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDriverCockpitView.swift; sourceTree = "<group>"; };
 		F4D000200000000000000007 /* PPDeliveryMissionDossierView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDeliveryMissionDossierView.swift; sourceTree = "<group>"; };
+		F4D000200000000000000008 /* PPGoogleMapsRouteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPGoogleMapsRouteService.swift; sourceTree = "<group>"; };
+		F4D000200000000000000009 /* PPDriverLocationTracker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPDriverLocationTracker.swift; sourceTree = "<group>"; };
+		F4D00020000000000000000A /* PPInAppGoogleMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPInAppGoogleMapView.swift; sourceTree = "<group>"; };
+		F4D00020000000000000000B /* PPInAppRouteModalView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPInAppRouteModalView.swift; sourceTree = "<group>"; };
+		F4D00020000000000000000C /* PPInAppRouteLauncher.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPInAppRouteLauncher.swift; sourceTree = "<group>"; };
 		F5A0B1023005000100A0B102 /* PPHero.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPHero.swift; sourceTree = "<group>"; };
 		F5A0B2023005000100A0B202 /* PPProQuickActionsDeck.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PPProQuickActionsDeck.swift; sourceTree = "<group>"; };
 		F6E33AEDD7F445E88CB23B22 /* PPFunc+Haptics.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "PPFunc+Haptics.h"; sourceTree = "<group>"; };
@@ -803,7 +829,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B1F2E7D32C99BE04EF9D5A2E /* Pods_PurePetsPro.framework in Frameworks */,
-				F23115682F90D15A000A8757 /* RecaptchaEnterprise in Frameworks */,
+				F2A9D1AC30AA73F200A6E2D7 /* RecaptchaEnterprise in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -827,7 +853,6 @@
 		4CA6DBD4B98B228FE77852BD /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				F2CDFBE72F9303C30037AD9A /* RecaptchaInterop.framework */,
 				C1A000010000000000000104 /* WebKit.framework */,
 				380FB3B9B3805FA82F10A7E3 /* Pods_PurePetsPro.framework */,
 			);
@@ -1480,6 +1505,11 @@
 				F4D000200000000000000005 /* PPDriverCockpitModels.swift */,
 				F4D000200000000000000006 /* PPDriverCockpitView.swift */,
 				F4D000200000000000000007 /* PPDeliveryMissionDossierView.swift */,
+				F4D000200000000000000008 /* PPGoogleMapsRouteService.swift */,
+				F4D000200000000000000009 /* PPDriverLocationTracker.swift */,
+				F4D00020000000000000000A /* PPInAppGoogleMapView.swift */,
+				F4D00020000000000000000B /* PPInAppRouteModalView.swift */,
+				F4D00020000000000000000C /* PPInAppRouteLauncher.swift */,
 			);
 			path = DeliverySection;
 			sourceTree = "<group>";
@@ -1523,6 +1553,8 @@
 				F2CCF4462F8CA17F007FBAD4 /* PPFulfillmentListViewController.m */,
 				F2CCF4472F8CA17F007FBAD4 /* PPFulfillmentManager.h */,
 				F2CCF4482F8CA17F007FBAD4 /* PPFulfillmentManager.m */,
+				E41611160000000000000002 /* PPFulfillmentPickupStoreViewController.h */,
+				E41611160000000000000003 /* PPFulfillmentPickupStoreViewController.m */,
 				F2CCF4492F8CA17F007FBAD4 /* PPFulfillmentModel.h */,
 				F2CCF44A2F8CA17F007FBAD4 /* PPFulfillmentModel.m */,
 			);
@@ -1652,6 +1684,13 @@
 		F2E112412FDD8B8E00F83E77 /* AdoptSection */ = {
 			isa = PBXGroup;
 			children = (
+				F2ADOPT001MODELS0000001 /* PPAdoptProModels.swift */,
+				F2ADOPT002STORE00000001 /* PPAdoptProStore.swift */,
+				F2ADOPT003CTRL000000001 /* PPAdoptProControlCenterView.swift */,
+				F2ADOPT004DETAIL0000001 /* PPAdoptProDetailView.swift */,
+				F2ADOPT005EDIT000000001 /* PPAdoptProEditSheet.swift */,
+				F2ADOPT006APPS000000001 /* PPAdoptProApplicationsView.swift */,
+				F2ADOPT007BRIDGE0000001 /* PPAdoptProBridge.swift */,
 				F2E112352FDD8B8E00F83E77 /* PPAddEditAdoptPetViewController.h */,
 				F2E112362FDD8B8E00F83E77 /* PPAddEditAdoptPetViewController.m */,
 				F2E112372FDD8B8E00F83E77 /* PPAdoptPetCell.h */,
@@ -1801,6 +1840,9 @@
 			dependencies = (
 			);
 			name = PurePetsPro;
+			packageProductDependencies = (
+				F2A9D1AB30AA73F200A6E2D7 /* RecaptchaEnterprise */,
+			);
 			productName = PurePetsPro;
 			productReference = F28AE1112E568FE4007279F5 /* PurePetsPro.app */;
 			productType = "com.apple.product-type.application";
@@ -1874,7 +1916,7 @@
 			mainGroup = F2B41E892E5647BD0054D8CD;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
-				F23115662F90D159000A8757 /* XCRemoteSwiftPackageReference "recaptcha-enterprise-mobile-sdk" */,
+				F2A9D1AA30AA73F200A6E2D7 /* XCRemoteSwiftPackageReference "recaptcha-enterprise-mobile-sdk" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = F2B41E892E5647BD0054D8CD;
@@ -1991,6 +2033,13 @@
 				FA23686D0529430AA2E37709 /* PPVetModel.m in Sources */,
 				6C65E6AFB8534ED2B64E8AC0 /* PPVetManager.m in Sources */,
 				F2E112422FDD8B8E00F83E77 /* PPAdoptPetsListViewController.m in Sources */,
+				F2ADOPT001MODELS0000002 /* PPAdoptProModels.swift in Sources */,
+				F2ADOPT002STORE00000002 /* PPAdoptProStore.swift in Sources */,
+				F2ADOPT003CTRL000000002 /* PPAdoptProControlCenterView.swift in Sources */,
+				F2ADOPT004DETAIL0000002 /* PPAdoptProDetailView.swift in Sources */,
+				F2ADOPT005EDIT000000002 /* PPAdoptProEditSheet.swift in Sources */,
+				F2ADOPT006APPS000000002 /* PPAdoptProApplicationsView.swift in Sources */,
+				F2ADOPT007BRIDGE0000002 /* PPAdoptProBridge.swift in Sources */,
 				F2E112432FDD8B8E00F83E77 /* PPAdoptPetDetailViewController.m in Sources */,
 				F2E112442FDD8B8E00F83E77 /* PPAdoptPetModel.m in Sources */,
 				F2E112452FDD8B8E00F83E77 /* PPAdoptPetCell.m in Sources */,
@@ -2086,6 +2135,7 @@
 				F2CCF44D2F8CA17F007FBAD4 /* PPFulfillmentManager.m in Sources */,
 				F2CCF44E2F8CA17F007FBAD4 /* PPFulfillmentModel.m in Sources */,
 				F2CCF44F2F8CA17F007FBAD4 /* PPFulfillmentDetailViewController.m in Sources */,
+				E41611160000000000000001 /* PPFulfillmentPickupStoreViewController.m in Sources */,
 				F2CCF4502F8CA17F007FBAD4 /* PPProviderMarketItem.m in Sources */,
 				F2CCF4512F8CA17F007FBAD4 /* PPProviderMarketplaceManager.m in Sources */,
 				F4B100010000000000000001 /* PPMarketplaceBranchesViewController.m in Sources */,
@@ -2137,6 +2187,11 @@
 				F4D000100000000000000005 /* PPDriverCockpitModels.swift in Sources */,
 				F4D000100000000000000006 /* PPDriverCockpitView.swift in Sources */,
 				F4D000100000000000000007 /* PPDeliveryMissionDossierView.swift in Sources */,
+				F4D000100000000000000008 /* PPGoogleMapsRouteService.swift in Sources */,
+				F4D000100000000000000009 /* PPDriverLocationTracker.swift in Sources */,
+				F4D00010000000000000000A /* PPInAppGoogleMapView.swift in Sources */,
+				F4D00010000000000000000B /* PPInAppRouteModalView.swift in Sources */,
+				F4D00010000000000000000C /* PPInAppRouteLauncher.swift in Sources */,
 				F421A0010000000000000001 /* PPDeliveryCompanyModels.m in Sources */,
 				F421A0010000000000000002 /* PPDeliveryCompanyService.m in Sources */,
 				F421A0010000000000000003 /* PPDeliveryCompanySetupViewController.m in Sources */,
@@ -2798,20 +2853,20 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		F23115662F90D159000A8757 /* XCRemoteSwiftPackageReference "recaptcha-enterprise-mobile-sdk" */ = {
+		F2A9D1AA30AA73F200A6E2D7 /* XCRemoteSwiftPackageReference "recaptcha-enterprise-mobile-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/GoogleCloudPlatform/recaptcha-enterprise-mobile-sdk";
 			requirement = {
 				kind = upToNextMajorVersion;
-				minimumVersion = 18.8.2;
+				minimumVersion = 18.9.1;
 			};
 		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		F23115672F90D15A000A8757 /* RecaptchaEnterprise */ = {
+		F2A9D1AB30AA73F200A6E2D7 /* RecaptchaEnterprise */ = {
 			isa = XCSwiftPackageProductDependency;
-			package = F23115662F90D159000A8757 /* XCRemoteSwiftPackageReference "recaptcha-enterprise-mobile-sdk" */;
+			package = F2A9D1AA30AA73F200A6E2D7 /* XCRemoteSwiftPackageReference "recaptcha-enterprise-mobile-sdk" */;
 			productName = RecaptchaEnterprise;
 		};
 /* End XCSwiftPackageProductDependency section */

@@ -2,9 +2,8 @@
 //  PPProviderSubscriptionManagmetVC.m
 //  PurePetsPro
 //
-//  First-Principles Category-Defining Reinvention: SwiftyMax NextGen V9.
-//  Hosts the sovereign SwiftUI Provider Subscription & Tier Management Studio (PPProviderSubscriptionStudioView).
-//  Preserves 100% binary and API compatibility for existing UIKit callers.
+//  Hosts the owned subscription inventory or an explicitly selected agreement.
+//  UIKit owns profile navigation; the manager preserves server-owned requests.
 //
 
 #import "PPProviderSubscriptionManagmetVC.h"

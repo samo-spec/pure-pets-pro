@@ -2259,6 +2259,18 @@
 "AdoptPro_UpdatedSuccess" = "Adoption listing updated.";
 "AdoptPro_CreatedSuccess" = "Adoption listing created.";
 "AdoptPro_Error_MissingListing" = "Adoption listing is missing.";
+"AdoptPro_Sanctuary_Title" = "Community Adoption Sanctuary";
+"AdoptPro_Sanctuary_Subtitle" = "Publish listings, review family applications, and verify health standards.";
+"AdoptPro_NewListing" = "New Listing";
+"AdoptPro_Applications_Title" = "Adoption Applications";
+"AdoptPro_Applications_Subtitle" = "Review applicant questionnaires, home suitability, and care routines.";
+"AdoptPro_HealthPassport" = "Health & Medical Passport";
+"AdoptPro_LocationPublisher" = "Location & Publisher";
+"AdoptPro_Species_All" = "All";
+"AdoptPro_Species_Dogs" = "Dogs";
+"AdoptPro_Species_Cats" = "Cats";
+"AdoptPro_Species_Birds" = "Birds";
+"AdoptPro_Species_Other" = "Other";
 
 /* Pro Dashboard Live Hero */
 "DashboardHero_Status_Live" = "Live now";
@@ -4397,6 +4409,15 @@
 "DriverCockpit_Confirm_Cash_Format" = "I collected %@ · Confirm";
 "DriverCockpit_LoadMoreAssigned" = "Show more assigned deliveries";
 "DriverCockpit_Status_customer_unavailable" = "Customer unavailable";
+"DriverCockpit_Items_Title" = "Shipment contents";
+"DriverCockpit_Items_Count_One" = "1 item";
+"DriverCockpit_Items_Count_Format" = "%d items";
+"DriverCockpit_Items_Qty_Format" = "Qty: %d";
+"DriverCockpit_Items_Total_Label" = "Items Total";
+"DriverCockpit_Items_Expand_Hint" = "Tap to view product details and quantities";
+"DriverCockpit_Items_Collapse_Hint" = "Tap to hide product details";
+"DriverCockpit_Items_Default_Product" = "Order items";
+"DriverCockpit_Items_Pill_Format" = "%@, Total %@";
 "DriverCockpit_Status_address_issue" = "Address needs attention";
 "DriverCockpit_Status_payment_issue" = "Payment needs attention";
 "DriverCockpit_Status_return_required" = "Return required";
@@ -4700,10 +4721,17 @@
 
 /* Owned subscription inventory and staff-reviewed requests */
 "ProSubscriptions_HomeTitle" = "Your subscriptions & access";
+"ProSubscriptions_AdminAllFeaturesActive" = "All features and permissions active";
+"ProSubscriptions_AdminAllFeaturesDetail" = "All operational features and permissions are activated for the official Pure Pets admin account.";
+"ProSubscriptions_ReadFailedTitle" = "Couldn’t load subscriptions";
+"ProSubscriptions_AccessDeniedTitle" = "Subscription access unavailable";
+"ProSubscriptions_AccessDeniedMessage" = "We couldn’t confirm subscription access for this account. Try again. If the issue continues, contact support to review your account.";
 "ProSubscriptions_ViewAll" = "View all subscriptions";
 "ProSubscriptions_ChooseHint" = "Choose a subscription to view it or request a change or renewal.";
 "ProSubscriptions_CountFormat" = "%lu subscriptions";
 "ProSubscriptions_ActiveTerms" = "Active terms";
+"ProSubscriptions_TermsNotSet" = "Terms not set";
+"ProSubscriptions_TermsNotRecordedBody" = "Some provider activities don’t yet have recorded subscription terms. Open a subscription to review its details or request a plan.";
 "ProSubscriptions_NeedsAttention" = "Needs attention";
 "ProSubscriptions_UnderReview" = "Requests in review";
 "ProSubscriptions_NextEndFormat" = "%@ · term ends %@";
@@ -4727,6 +4755,8 @@
 "ProSubscriptions_ReviewRequired" = "Staff review your request before applying a change. Sending it does not renew the term, change your access or confirm a payment.";
 "ProSubscriptions_NoPlans" = "No plans are available for this subscription right now. Refresh later.";
 "ProSubscriptions_CurrentPlan" = "Current plan";
+"ProSubscriptions_CurrentPlanUnavailable" = "Your existing plan is shown for reference. It isn’t available in the current plan options.";
+"ProSubscriptions_RequestThisPlan" = "Request this plan";
 "ProSubscriptions_RequestPlan" = "Request plan change";
 "ProSubscriptions_DocumentsExpiring" = "This provider profile has documents expiring within 30 days. Review them to avoid interruption.";
 "ProSubscriptions_Restricted" = "This provider profile has operational restrictions. Renewing its subscription does not automatically lift them.";
@@ -4765,3 +4795,101 @@
 "ProSubscriptions_OneSubscription" = "1 subscription";
 "ProSubscriptions_TwoSubscriptions" = "2 subscriptions";
 "ProSubscriptions_ManyCountFormat" = "%lu subscriptions";
+
+"ProSubscriptions_RequestsUnavailable" = "The team manages subscription changes and renewals. Request options are unavailable right now; you can still review this subscription.";
+
+/* Google Maps In-App Live Route & Directions */
+"DriverCockpit_LiveRoute_Title" = "Live Route & Directions";
+"DriverCockpit_LiveRoute_Subtitle" = "Live Google Maps Navigation";
+"DriverCockpit_LiveRoute_Recenter" = "Fit Route";
+"DriverCockpit_LiveRoute_MyLoc" = "My Location";
+"DriverCockpit_LiveRoute_FocusPickup" = "Pickup Stop";
+"DriverCockpit_LiveRoute_FocusDropoff" = "Dropoff Stop";
+"DriverCockpit_LiveRoute_MapNormal" = "Roadmap";
+"DriverCockpit_LiveRoute_MapSatellite" = "Satellite";
+"DriverCockpit_LiveRoute_MapTerrain" = "Terrain";
+"DriverCockpit_LiveRoute_PickupStop" = "Pickup";
+"DriverCockpit_LiveRoute_DropoffStop" = "Dropoff";
+"DriverCockpit_LiveRoute_Directs" = "Turn-by-Turn Directions";
+"DriverCockpit_LiveRoute_HideDirects" = "Hide Steps";
+"DriverCockpit_LiveRoute_ShowDirects" = "Show All Turn Steps";
+"DriverCockpit_LiveRoute_DistanceRemaining" = "Distance";
+"DriverCockpit_LiveRoute_EstTime" = "Est. Time";
+"DriverCockpit_LiveRoute_TrafficFastest" = "Fastest route with live traffic";
+"DriverCockpit_LiveRoute_ExternalNavigation" = "Open External Navigation";
+"DriverCockpit_LiveRoute_CoordinatesCopied" = "Coordinates copied: %@";
+"DriverCockpit_LiveRoute_CopyCoordinates" = "Copy Coordinates";
+"DriverCockpit_LiveRoute_Calculating" = "Calculating live route & traffic...";
+"DriverCockpit_LiveRoute_Failed" = "Could not load Google Maps route";
+"DriverCockpit_LiveRoute_Retry" = "Retry";
+"DriverCockpit_LiveRoute_Arrived" = "Arrived at destination";
+"DriverCockpit_LiveRoute_Depart" = "Start towards destination";
+"DriverCockpit_LiveRoute_ViewRoute" = "View Live Route & Directions";
+"DriverCockpit_LiveRoute_Close" = "Close";
+
+
+/* Fulfillment delivery pickup review */
+"ProPickup_NavigationTitle" = "Pickup location";
+"ProPickup_Title" = "Where should the courier collect?";
+"ProPickup_Eyebrow" = "Delivery request";
+"ProPickup_OrderReference" = "Order ⁨%@⁩";
+"ProPickup_Intro" = "Review the pickup location and address, or choose another store before requesting delivery.";
+"ProPickup_Continue" = "Continue with this location";
+"ProPickup_ContinueHint" = "Review the note and confirm the delivery request in the next step.";
+"ProPickup_Location" = "Pickup location";
+"ProPickup_Chosen" = "Collect from ⁨%@⁩";
+"ProPickup_ChooseFirst" = "Choose a pickup location to continue";
+"ProPickup_Loading" = "Checking pickup locations…";
+"ProPickup_CurrentUnavailable" = "The current pickup is unavailable. Choose an available store to continue.";
+"ProPickup_DefaultStore" = "Default app inventory store";
+"ProPickup_CurrentStore" = "Current pickup store";
+"ProPickup_SavedLocation" = "Saved pickup location";
+"ProPickup_OtherStores" = "Other stores available to you";
+"ProPickup_Empty" = "No pickup location is available to this account. Review store settings and permissions.";
+"ProPickup_EmptyPage" = "No stores are available on this page. You can load more.";
+"ProPickup_LoadMore" = "Load more stores";
+"ProPickup_Retry" = "Try again";
+"ProPickup_LoadFailed" = "Couldn’t load pickup locations. Check the connection and try again.";
+"ProPickup_Denied" = "You don’t have access to this pickup location. Review your permissions, then reopen the order.";
+"ProPickup_SessionChanged" = "The account changed. Close this sheet and reopen the order.";
+"ProPickup_SelectionInvalid" = "Pickup options changed. Reopen the order and choose the pickup location again.";
+"ProPickup_AddressRequired" = "Add a valid address to the pickup store, then try again.";
+
+/* Pro delivery route review and navigation */
+"ProRoute_Title" = "Route & stops";
+"ProRoute_MapStyle" = "Map style";
+"ProRoute_YourLocation" = "Your current location";
+"ProRoute_MapAccessibility" = "Delivery route map";
+"ProRoute_MapUnavailable" = "Map unavailable";
+"ProRoute_MapUnavailableBody" = "You can still review directions or open Maps to continue.";
+"ProRoute_DriveTime" = "Drive time";
+"ProRoute_RoadDistance" = "Road distance";
+"ProRoute_Review" = "Route review";
+"ProRoute_Start" = "Start route";
+"ProRoute_VoiceNavigationHint" = "Opens Maps for voice navigation.";
+"ProRoute_Locating" = "Finding your location for this route…";
+"ProRoute_AddressUnavailable" = "Destination location unavailable";
+"ProRoute_AddressUnavailableBody" = "An exact destination could not be resolved. Check the order address or contact your fleet manager.";
+"ProRoute_LocationDenied" = "Location access needed";
+"ProRoute_LocationDeniedBody" = "Allow location access to review a route from your current position, or continue in Maps.";
+"ProRoute_LocationUnavailable" = "Current location unavailable";
+"ProRoute_LocationUnavailableBody" = "Check that Location Services are on and try again, or open the destination in Maps.";
+"ProRoute_LocationSettings" = "Location settings";
+"ProRoute_NoDrivingRoute" = "No driving route available";
+"ProRoute_NoDrivingRouteBody" = "Maps did not return a driving route from your location to this stop. Check the address or open Maps for other options.";
+"ProRoute_DirectionsUnavailableBody" = "Check your connection and try again. You can also open the destination in Maps.";
+"ProRoute_MapsOpenFailed" = "Maps could not be opened. Try again or copy the destination coordinates.";
+"ProRoute_ReviewHint" = "Route from your current location. Tap a step to see it on the map.";
+"ProRoute_StepsUnavailable" = "Detailed steps were not supplied for this route. You can review it in Maps.";
+"ProRoute_FocusStep" = "Show this step on the map";
+"ProRoute_StepFocused" = "Route step shown on the map";
+"ProRoute_StepAccessibility" = "Step %ld, %@, %@";
+"ProRoute_OpenMapsReview" = "Review in Maps";
+"ProRoute_Copied" = "Coordinates copied";
+"ProRoute_DistanceMeters" = "%@ m";
+"ProRoute_DistanceKilometers" = "%@ km";
+"ProRoute_StoreToCustomer" = "Store → Customer";
+"ProRoute_ReviewStoreToCustomer" = "Review Store to Customer Route";
+"ProRoute_ReviewStoreToCustomerSubtitle" = "Direct road route from pickup store to delivery dropoff";
+"ProRoute_ReviewStoreHint" = "Route from pickup location to delivery address. Tap a step to view it on the map.";
+"ProRoute_FromStoreToCustomer" = "From Store to Customer";

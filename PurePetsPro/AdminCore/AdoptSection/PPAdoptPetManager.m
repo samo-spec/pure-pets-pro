@@ -16,7 +16,7 @@
 }
 
 - (NSString *)adoptPetsCollection {
-    return @"adopt_pets";
+    return @"adoptionListings";
 }
 
 - (void)fetchAdoptPetsStatus:(NSString *)status completion:(void(^)(NSArray<PPAdoptPetModel *> *, NSError *))completion {

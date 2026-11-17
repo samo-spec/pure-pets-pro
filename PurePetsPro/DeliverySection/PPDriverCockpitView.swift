@@ -248,6 +248,7 @@ struct PPDriverCockpitView: View {
     @State private var confirmation: PPDriverConfirmation?
     @State private var showsContextChooser = false
     @State private var showsHistory = false
+    @State private var activeRouteTask: PPDriverTask?
 
     private var layoutDirection: LayoutDirection { Language.isRTL() ? .rightToLeft : .leftToRight }
 
@@ -269,6 +270,12 @@ struct PPDriverCockpitView: View {
         .sheet(isPresented: $showsContextChooser) {
             contextChooserSheet
                 .environment(\.layoutDirection, layoutDirection)
+        }
+        .fullScreenCover(item: $activeRouteTask) { routeTask in
+            PPInAppRouteModalView(task: routeTask) {
+                activeRouteTask = nil
+            }
+            .environment(\.layoutDirection, layoutDirection)
         }
     }
 
@@ -388,13 +395,14 @@ struct PPDriverCockpitView: View {
 
     @ViewBuilder
     private var readyContent: some View {
-        presenceCard
         if let notice = store.notice {
             noticeBanner(notice)
         }
         syncLine
         if let task = store.focusedTask {
-            PPDriverMissionCard(task: task)
+            PPDriverMissionCard(task: task) { routeTask in
+                activeRouteTask = routeTask
+            }
                 .id("\(task.id)|\(task.status)|\(task.revision)")
                 .transition(.opacity)
                 .animation(reduceMotion ? nil : .easeOut(duration: 0.2), value: task.status)
@@ -426,6 +434,7 @@ struct PPDriverCockpitView: View {
             .disabled(store.isLoadingMoreActive || store.isRefreshing || !store.canSwitchContext)
         }
         historySection
+        presenceCard
     }
 
     // MARK: Presence
@@ -875,7 +884,9 @@ struct PPDriverCockpitView: View {
                     : AnyLayout(HStackLayout(spacing: AdminSpacing.sm))
                 layout {
                     if let mapsURL {
-                        Button { UIApplication.shared.open(mapsURL) } label: {
+                        Button {
+                            activeRouteTask = task
+                        } label: {
                             Label(ppDriverText("DriverCockpit_Navigate"), systemImage: "location.fill")
                         }
                         .buttonStyle(PPDriverSecondaryButtonStyle())
@@ -899,10 +910,236 @@ struct PPDriverCockpitView: View {
     }
 }
 
+// MARK: - Delivery Items Summary Pill (NextGen V10 Living Architecture)
+
+private struct PPDriverDeliveryItemsPill: View {
+    let task: PPDriverTask
+    @State private var isExpanded: Bool = false
+
+    private var effectiveCurrency: String {
+        if !task.currency.isEmpty { return task.currency }
+        if let cash = task.cash, !cash.currency.isEmpty { return cash.currency }
+        return "QAR"
+    }
+
+    private var effectiveTotal: Double {
+        if task.totalAmount > 0 { return task.totalAmount }
+        if let cash = task.cash, let amount = cash.amount, amount > 0 { return amount }
+        return 0.0
+    }
+
+    private var effectiveItems: [PPDriverItem] {
+        if !task.items.isEmpty { return task.items }
+        if effectiveTotal > 0 || task.itemCount > 0 {
+            let count = max(1, task.itemCount)
+            return [
+                PPDriverItem(
+                    id: "default-manifest",
+                    name: ppDriverText("DriverCockpit_Items_Default_Product"),
+                    imageURL: "",
+                    quantity: count,
+                    price: effectiveTotal > 0 ? (effectiveTotal / Double(count)) : 0,
+                    variant: nil
+                )
+            ]
+        }
+        return []
+    }
+
+    private var totalItemsCount: Int {
+        if task.itemCount > 0 { return task.itemCount }
+        let count = effectiveItems.reduce(0) { $0 + $1.quantity }
+        return max(1, count)
+    }
+
+    private var countText: String {
+        if totalItemsCount == 1 {
+            return ppDriverText("DriverCockpit_Items_Count_One")
+        }
+        return ppDriverFormat("DriverCockpit_Items_Count_Format", totalItemsCount)
+    }
+
+    private var priceText: String {
+        ppDriverMoney(effectiveTotal, currency: effectiveCurrency)
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header / Collapsed Tactile Pill Trigger
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    isExpanded.toggle()
+                }
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+            } label: {
+                HStack(spacing: AdminSpacing.sm) {
+                    ZStack {
+                        RoundedRectangle(cornerRadius: AdminRadius.small, style: .continuous)
+                            .fill(AdminSurface.primary.opacity(0.12))
+                            .frame(width: 36, height: 36)
+                        Image(systemName: "shippingbox.fill")
+                            .font(.system(size: 15, weight: .bold))
+                            .foregroundStyle(AdminSurface.primary)
+                    }
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(countText)
+                                .font(AdminType.subheadlineBold)
+                                .foregroundStyle(AdminSurface.primaryText)
+                            Circle()
+                                .fill(AdminSurface.secondaryText.opacity(0.4))
+                                .frame(width: 3, height: 3)
+                            Text(priceText)
+                                .font(AdminType.subheadlineBold)
+                                .foregroundStyle(AdminSurface.primaryText)
+                        }
+                        Text(ppDriverText("DriverCockpit_Items_Title"))
+                            .font(AdminType.caption1)
+                            .foregroundStyle(AdminSurface.secondaryText)
+                    }
+
+                    Spacer()
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(AdminSurface.secondaryText)
+                        .rotationEffect(.degrees(isExpanded ? 180 : 0))
+                        .frame(width: 28, height: 28)
+                        .background(Circle().fill(AdminSurface.card))
+                }
+                .padding(AdminSpacing.sm)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(ppDriverFormat("DriverCockpit_Items_Pill_Format", countText, priceText))
+            .accessibilityHint(isExpanded ? ppDriverText("DriverCockpit_Items_Collapse_Hint") : ppDriverText("DriverCockpit_Items_Expand_Hint"))
+
+            // Expanded Product Manifest Details
+            if isExpanded {
+                VStack(spacing: AdminSpacing.sm) {
+                    Divider()
+                        .overlay(AdminSurface.hairline)
+                        .padding(.horizontal, AdminSpacing.sm)
+
+                    ForEach(effectiveItems) { item in
+                        HStack(alignment: .center, spacing: AdminSpacing.sm) {
+                            // Product Image Thumbnail
+                            itemImage(url: item.imageURL)
+
+                            // Title, Variant, Quantity
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(item.name)
+                                    .font(AdminType.footnoteBold)
+                                    .foregroundStyle(AdminSurface.primaryText)
+                                    .lineLimit(2)
+                                    .multilineTextAlignment(.leading)
+
+                                HStack(spacing: 6) {
+                                    Text(ppDriverFormat("DriverCockpit_Items_Qty_Format", item.quantity))
+                                        .font(AdminType.caption2Bold)
+                                        .foregroundStyle(AdminSurface.primary)
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Capsule().fill(AdminSurface.primary.opacity(0.12)))
+
+                                    if let variant = item.variant, !variant.isEmpty {
+                                        Text(variant)
+                                            .font(AdminType.caption2)
+                                            .foregroundStyle(AdminSurface.secondaryText)
+                                            .lineLimit(1)
+                                    }
+                                }
+                            }
+
+                            Spacer(minLength: 4)
+
+                            // Price
+                            let itemTotal = item.price * Double(item.quantity)
+                            let effectiveItemPrice = itemTotal > 0 ? itemTotal : (effectiveTotal / Double(max(1, effectiveItems.count)))
+                            Text(ppDriverMoney(effectiveItemPrice, currency: effectiveCurrency))
+                                .font(AdminType.footnoteBold)
+                                .foregroundStyle(AdminSurface.primaryText)
+                        }
+                        .padding(.horizontal, AdminSpacing.sm)
+                    }
+
+                    // Total Summary Row
+                    Divider()
+                        .overlay(AdminSurface.hairline)
+                        .padding(.horizontal, AdminSpacing.sm)
+
+                    HStack {
+                        Text(ppDriverText("DriverCockpit_Items_Total_Label"))
+                            .font(AdminType.footnoteBold)
+                            .foregroundStyle(AdminSurface.secondaryText)
+                        Spacer()
+                        Text(priceText)
+                            .font(AdminType.subheadlineBold)
+                            .foregroundStyle(AdminSurface.primaryText)
+                    }
+                    .padding(.horizontal, AdminSpacing.sm)
+                    .padding(.bottom, AdminSpacing.xs)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
+        }
+        .background(
+            RoundedRectangle(cornerRadius: AdminRadius.medium, style: .continuous)
+                .fill(AdminSurface.backgroundSecondary)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: AdminRadius.medium, style: .continuous)
+                .stroke(isExpanded ? AdminSurface.primary.opacity(0.3) : AdminSurface.hairline, lineWidth: isExpanded ? 1 : 0.5)
+        )
+        .clipped()
+    }
+
+    @ViewBuilder
+    private func itemImage(url: String) -> some View {
+        Group {
+            if let validURL = URL(string: url), !url.isEmpty {
+                AsyncImage(url: validURL) { phase in
+                    switch phase {
+                    case .success(let image):
+                        image
+                            .resizable()
+                            .scaledToFill()
+                    case .failure, .empty:
+                        fallbackIcon
+                    @unknown default:
+                        fallbackIcon
+                    }
+                }
+            } else {
+                fallbackIcon
+            }
+        }
+        .frame(width: 44, height: 44)
+        .background(AdminSurface.card)
+        .clipShape(RoundedRectangle(cornerRadius: AdminRadius.small, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: AdminRadius.small, style: .continuous)
+                .stroke(AdminSurface.hairline, lineWidth: 0.5)
+        )
+    }
+
+    private var fallbackIcon: some View {
+        ZStack {
+            AdminSurface.card
+            Image(systemName: "pawprint.fill")
+                .font(.system(size: 16))
+                .foregroundStyle(AdminSurface.secondaryText.opacity(0.5))
+        }
+    }
+}
+
 // MARK: - Mission card
 
 private struct PPDriverMissionCard: View {
     let task: PPDriverTask
+    var onOpenRoute: ((PPDriverTask) -> Void)? = nil
 
     private var emphasizesPickup: Bool { task.stage <= .toPickup }
 
@@ -945,6 +1182,9 @@ private struct PPDriverMissionCard: View {
                     .fill(AdminSurface.backgroundSecondary))
                 .accessibilityElement(children: .combine)
             }
+
+            // Delivery Items Summary Pill (NextGen V10 living architecture)
+            PPDriverDeliveryItemsPill(task: task)
 
             addressBlock(title: ppDriverText("DriverCockpit_Pickup"), symbol: "shippingbox",
                          address: task.pickup, emphasized: emphasizesPickup)
@@ -998,27 +1238,39 @@ private struct PPDriverMissionCard: View {
             }
             return ""
         }()
-        return VStack(alignment: .leading, spacing: 4) {
-            Label(title, systemImage: symbol)
-                .font(AdminType.footnoteBold)
-                .foregroundStyle(emphasized ? AdminSurface.primary : AdminSurface.secondaryText)
-            Text(primaryText)
-                .font(emphasized ? AdminType.bodyBold : AdminType.body)
-                .foregroundStyle(AdminSurface.primaryText)
-                .fixedSize(horizontal: false, vertical: true)
-            if !secondaryText.isEmpty {
-                Text(secondaryText)
-                    .font(AdminType.footnote)
-                    .foregroundStyle(AdminSurface.secondaryText)
+        return Button {
+            onOpenRoute?(task)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Label(title, systemImage: symbol)
+                        .font(AdminType.footnoteBold)
+                        .foregroundStyle(emphasized ? AdminSurface.primary : AdminSurface.secondaryText)
+                    Spacer()
+                    Image(systemName: "map.fill")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(emphasized ? AdminSurface.primary : AdminSurface.secondaryText.opacity(0.6))
+                }
+                Text(primaryText)
+                    .font(emphasized ? AdminType.bodyBold : AdminType.body)
+                    .foregroundStyle(AdminSurface.primaryText)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !secondaryText.isEmpty {
+                    Text(secondaryText)
+                        .font(AdminType.footnote)
+                        .foregroundStyle(AdminSurface.secondaryText)
+                }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(AdminSpacing.md)
+            .background(
+                RoundedRectangle(cornerRadius: AdminRadius.medium, style: .continuous)
+                    .fill(emphasized ? AdminSurface.primary.opacity(0.07) : AdminSurface.backgroundSecondary)
+            )
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(AdminSpacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: AdminRadius.medium, style: .continuous)
-                .fill(emphasized ? AdminSurface.primary.opacity(0.07) : AdminSurface.backgroundSecondary)
-        )
+        .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
+        .accessibilityHint(ppDriverText("DriverCockpit_LiveRoute_ViewRoute"))
     }
 
     private var proofRow: some View {
@@ -1042,6 +1294,8 @@ private struct PPDriverMissionCard: View {
 
 private struct PPDriverStepRail: View {
     let stage: PPDriverStage
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPulsing: Bool = false
 
     private let titles = ["DriverCockpit_Step_Collect", "DriverCockpit_Step_Transit",
                           "DriverCockpit_Step_Deliver", "DriverCockpit_Step_Close"]
@@ -1052,17 +1306,37 @@ private struct PPDriverStepRail: View {
     var body: some View {
         HStack(alignment: .top, spacing: 6) {
             ForEach(0..<titles.count, id: \.self) { index in
+                let isCurrent = index == current && !allDone
+                let isPast = allDone || index < current
                 VStack(spacing: 6) {
-                    Capsule()
-                        .fill(fill(for: index))
-                        .frame(height: 6)
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(fill(for: index))
+                            .frame(height: 6)
+                        if isCurrent {
+                            Capsule()
+                                .fill(LinearGradient(
+                                    colors: [AdminSurface.primary, AdminSurface.primary.opacity(isPulsing ? 0.65 : 0.95), AdminSurface.primary],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                ))
+                                .frame(height: 6)
+                                .shadow(color: AdminSurface.primary.opacity(isPulsing ? 0.5 : 0.15), radius: isPulsing ? 4 : 1.5, x: 0, y: 1)
+                        }
+                    }
                     Text(ppDriverText(titles[index]))
-                        .font(AdminType.caption2Medium)
-                        .foregroundStyle(index == current && !allDone ? AdminSurface.primaryText : AdminSurface.secondaryText)
+                        .font(isCurrent ? AdminType.caption2Bold : AdminType.caption2Medium)
+                        .foregroundStyle(isCurrent ? AdminSurface.primary : (isPast ? AdminSurface.primaryText : AdminSurface.secondaryText))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(maxWidth: .infinity)
+            }
+        }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.3).repeatForever(autoreverses: true)) {
+                isPulsing = true
             }
         }
         .accessibilityElement(children: .ignore)

@@ -266,10 +266,13 @@ public struct PPBecomePartnerStudioSheet: View {
     @State private var notes: String = ""
 
     // Media Upload & Scan State
+    @State private var licenseLocalImage: UIImage? = nil
+    @State private var crLocalImage: UIImage? = nil
     @State private var isUploadingLicense: Bool = false
     @State private var isUploadingCR: Bool = false
     @State private var activeDocumentTag: Int = 0
     @State private var showPhotoPicker: Bool = false
+    @State private var showCameraPicker: Bool = false
     @State private var photoPickerItem: PhotosPickerItem? = nil
     @State private var showDocumentPicker: Bool = false
 
@@ -360,10 +363,44 @@ public struct PPBecomePartnerStudioSheet: View {
                 PPBrandFont.registerIfNeeded()
                 setupInitialData()
             }
-            .onChange(of: photoPickerItem) { newItem in
-                handlePickedPhoto(newItem)
+            .onChange(of: photoPickerItem) { _, newItem in
+                guard let newItem = newItem else { return }
+                let tag = activeDocumentTag
+                Task {
+                    do {
+                        if let data = try await newItem.loadTransferable(type: Data.self),
+                           let image = UIImage(data: data) {
+                            await MainActor.run {
+                                if tag == 100 {
+                                    self.licenseLocalImage = image
+                                } else if tag == 200 {
+                                    self.crLocalImage = image
+                                }
+                                self.uploadDocumentImage(image, tag: tag)
+                                self.photoPickerItem = nil
+                            }
+                        }
+                    } catch {
+                        await MainActor.run {
+                            self.errorMessage = error.localizedDescription
+                            self.photoPickerItem = nil
+                        }
+                    }
+                }
             }
             .photosPicker(isPresented: $showPhotoPicker, selection: $photoPickerItem, matching: .images)
+            .fullScreenCover(isPresented: $showCameraPicker) {
+                PPLivePetCameraPicker { capturedImage in
+                    let tag = activeDocumentTag
+                    if tag == 100 {
+                        self.licenseLocalImage = capturedImage
+                    } else if tag == 200 {
+                        self.crLocalImage = capturedImage
+                    }
+                    self.uploadDocumentImage(capturedImage, tag: tag)
+                }
+                .ignoresSafeArea()
+            }
             .alert(isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
                 Alert(
                     title: Text(Language.isRTL() ? "تنبيه" : "Notice"),
@@ -960,13 +997,23 @@ public struct PPBecomePartnerStudioSheet: View {
                 numberPlaceholder: Language.isRTL() ? "رقم السجل التجاري" : "Enter CR Number",
                 number: $commercialRegistrationNumber,
                 documentURL: $crDocURL,
+                localImage: crLocalImage,
                 isUploading: isUploadingCR,
                 onScanTapped: {
-                    triggerDocumentScanner(forTag: 200)
+                    activeDocumentTag = 200
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        showCameraPicker = true
+                    } else {
+                        showPhotoPicker = true
+                    }
                 },
                 onPickPhotoTapped: {
                     activeDocumentTag = 200
                     showPhotoPicker = true
+                },
+                onDeleteTapped: {
+                    crLocalImage = nil
+                    crDocURL = ""
                 }
             )
 
@@ -976,13 +1023,23 @@ public struct PPBecomePartnerStudioSheet: View {
                 numberPlaceholder: Language.isRTL() ? "رقم الترخيص الرسمي" : "Enter License Number",
                 number: $licenseNumber,
                 documentURL: $licenseDocURL,
+                localImage: licenseLocalImage,
                 isUploading: isUploadingLicense,
                 onScanTapped: {
-                    triggerDocumentScanner(forTag: 100)
+                    activeDocumentTag = 100
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        showCameraPicker = true
+                    } else {
+                        showPhotoPicker = true
+                    }
                 },
                 onPickPhotoTapped: {
                     activeDocumentTag = 100
                     showPhotoPicker = true
+                },
+                onDeleteTapped: {
+                    licenseLocalImage = nil
+                    licenseDocURL = ""
                 }
             )
 
@@ -1079,10 +1136,10 @@ public struct PPBecomePartnerStudioSheet: View {
                         PPReviewRow(title: Language.isRTL() ? "المدينة ومناطق التغطية" : "City & Coverage", value: "\(city.localizedName) (\(selectedAreas.count) مناطق)")
                     }
                     if !commercialRegistrationNumber.isEmpty {
-                        PPReviewRow(title: Language.isRTL() ? "السجل التجاري (CR)" : "CR Number", value: commercialRegistrationNumber, isVerified: !crDocURL.isEmpty)
+                        PPReviewRow(title: Language.isRTL() ? "السجل التجاري (CR)" : "CR Number", value: commercialRegistrationNumber, isVerified: !crDocURL.isEmpty || crLocalImage != nil)
                     }
                     if !licenseNumber.isEmpty {
-                        PPReviewRow(title: Language.isRTL() ? "رخصة النشاط" : "License Number", value: licenseNumber, isVerified: !licenseDocURL.isEmpty)
+                        PPReviewRow(title: Language.isRTL() ? "رخصة النشاط" : "License Number", value: licenseNumber, isVerified: !licenseDocURL.isEmpty || licenseLocalImage != nil)
                     }
                 }
             }
@@ -1516,9 +1573,15 @@ private struct PPStudioDocumentUploadCard: View {
     let numberPlaceholder: String
     @Binding var number: String
     @Binding var documentURL: String
+    var localImage: UIImage? = nil
     let isUploading: Bool
     let onScanTapped: () -> Void
     let onPickPhotoTapped: () -> Void
+    let onDeleteTapped: () -> Void
+
+    private var hasDocument: Bool {
+        localImage != nil || !documentURL.isEmpty
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1537,47 +1600,130 @@ private struct PPStudioDocumentUploadCard: View {
                 )
 
             // Attachment Zone
-            if isUploading {
+            if hasDocument {
+                HStack(spacing: 12) {
+                    // Preview Thumbnail
+                    ZStack(alignment: .bottomTrailing) {
+                        if let img = localImage {
+                            Image(uiImage: img)
+                                .resizable()
+                                .aspectRatio(contentMode: .fill)
+                                .frame(width: 64, height: 64)
+                                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .strokeBorder(Color.white.opacity(0.8), lineWidth: 1.2)
+                                )
+                                .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                        } else if let url = URL(string: documentURL), !documentURL.isEmpty {
+                            AsyncImage(url: url) { phase in
+                                switch phase {
+                                case .success(let image):
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fill)
+                                case .failure(_):
+                                    Color(.tertiarySystemFill)
+                                        .overlay(Image(systemName: "doc.text.fill").font(.system(size: 20)).foregroundStyle(Color(.secondaryLabel)))
+                                case .empty:
+                                    ProgressView().scaleEffect(0.7)
+                                @unknown default:
+                                    Color(.tertiarySystemFill)
+                                }
+                            }
+                            .frame(width: 64, height: 64)
+                            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                    .strokeBorder(Color.white.opacity(0.8), lineWidth: 1.2)
+                            )
+                            .shadow(color: Color.black.opacity(0.08), radius: 4, x: 0, y: 2)
+                        }
+
+                        // Status pill badge
+                        if isUploading {
+                            Circle()
+                                .fill(Color.orange)
+                                .frame(width: 18, height: 18)
+                                .overlay(
+                                    ProgressView()
+                                        .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                        .scaleEffect(0.5)
+                                )
+                                .offset(x: 4, y: 4)
+                        } else {
+                            Circle()
+                                .fill(Color(hex: "#10B981"))
+                                .frame(width: 18, height: 18)
+                                .overlay(
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundStyle(Color.white)
+                                )
+                                .offset(x: 4, y: 4)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        HStack(spacing: 6) {
+                            Text(Language.isRTL() ? "تم إرفاق المستند" : "Document Attached")
+                                .font(PPBrandFont.bold(13.5, relativeTo: .subheadline))
+                                .foregroundStyle(Color(.label))
+
+                            if isUploading {
+                                Text(Language.isRTL() ? "جارٍ الرفع..." : "Uploading...")
+                                    .font(PPBrandFont.medium(11, relativeTo: .caption2))
+                                    .foregroundStyle(Color.orange)
+                            } else {
+                                Text(Language.isRTL() ? "جاهز" : "Ready")
+                                    .font(PPBrandFont.bold(10.5, relativeTo: .caption2))
+                                    .foregroundStyle(Color(hex: "#10B981"))
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color(hex: "#10B981").opacity(0.12), in: Capsule())
+                            }
+                        }
+
+                        Text(Language.isRTL() ? "انقر على أيقونة الحذف لإعادة الاختيار" : "Tap trash icon to replace")
+                            .font(PPBrandFont.regular(11, relativeTo: .caption2))
+                            .foregroundStyle(Color(.secondaryLabel))
+                            .lineLimit(1)
+                    }
+
+                    Spacer(minLength: 4)
+
+                    Button(action: onDeleteTapped) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.red.opacity(0.12))
+                                .frame(width: 34, height: 34)
+                            Image(systemName: "trash.fill")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Color.red)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Language.isRTL() ? "حذف المستند" : "Delete document")
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color(hex: "#10B981").opacity(0.06))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(Color(hex: "#10B981").opacity(0.25), lineWidth: 0.8)
+                )
+            } else if isUploading {
                 HStack(spacing: 12) {
                     ProgressView()
-                    Text(Language.isRTL() ? "جارٍ رفع المستند والتدقيق..." : "Uploading document...")
+                    Text(Language.isRTL() ? "جارٍ معالجة المستند..." : "Processing document...")
                         .font(PPBrandFont.medium(13, relativeTo: .body))
                         .foregroundStyle(Color(.secondaryLabel))
                 }
                 .padding(14)
                 .frame(maxWidth: .infinity)
                 .background(Color(.tertiarySystemFill))
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-            } else if !documentURL.isEmpty {
-                HStack(spacing: 12) {
-                    Image(systemName: "checkmark.seal.fill")
-                        .font(.system(size: 20))
-                        .foregroundStyle(Color.green)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(Language.isRTL() ? "تم إرفاق المستند بنجاح" : "Document Attached")
-                            .font(PPBrandFont.bold(13, relativeTo: .subheadline))
-                            .foregroundStyle(Color(.label))
-                        Text(Language.isRTL() ? "انقر للحذف أو إعادة الرفع" : "Tap to remove or re-upload")
-                            .font(PPBrandFont.regular(11, relativeTo: .caption2))
-                            .foregroundStyle(Color(.secondaryLabel))
-                    }
-
-                    Spacer()
-
-                    Button {
-                        documentURL = ""
-                    } label: {
-                        Image(systemName: "trash.fill")
-                            .font(.system(size: 14))
-                            .foregroundStyle(Color.red)
-                            .padding(8)
-                            .background(Color.red.opacity(0.12))
-                            .clipShape(Circle())
-                    }
-                }
-                .padding(12)
-                .background(Color.green.opacity(0.08))
                 .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
             } else {
                 HStack(spacing: 10) {

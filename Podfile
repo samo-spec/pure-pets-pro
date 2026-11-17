@@ -24,7 +24,7 @@ target 'PurePetsPro' do
   pod 'XLForm'
   pod 'IQKeyboardManager'
   
-  
+
   pod 'SSZipArchive'
   pod 'PopupDialog', '~> 1.1'
   pod 'Firebase/Functions'
@@ -64,6 +64,10 @@ post_install do |installer|
   installer.pods_project.targets.each do |target|
     target.build_configurations.each do |config|
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+      if target.name == 'gRPC-Core' && config.name == 'Debug'
+        # Preserve line-number backtraces without the multi-gigabyte C++ type data.
+        config.build_settings['CLANG_DEBUG_INFORMATION_LEVEL'] = 'line-tables-only'
+      end
       # YYKit bundles an old WebP.framework that lacks a simulator arm64 slice.
       # Keep simulator builds on x86_64 so the vendored binary can still link.
       config.build_settings["EXCLUDED_ARCHS[sdk=iphonesimulator*]"] = 'arm64'

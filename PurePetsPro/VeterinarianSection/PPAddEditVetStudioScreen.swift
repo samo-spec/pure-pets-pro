@@ -240,12 +240,14 @@ public struct PPAddEditVetStudioScreen: View {
         }
         .environment(\.layoutDirection, Language.isRTL() ? .rightToLeft : .leftToRight)
         .photosPicker(isPresented: $showPhotoPicker, selection: $photoPickerItem, matching: .images)
-        .onChange(of: photoPickerItem) { newItem in
+        .onChange(of: photoPickerItem) { _, newItem in
+            guard let newItem = newItem else { return }
             Task {
-                if let data = try? await newItem?.loadTransferable(type: Data.self),
+                if let data = try? await newItem.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {
                     await MainActor.run {
                         self.selectedImage = image
+                        self.photoPickerItem = nil
                     }
                 }
             }

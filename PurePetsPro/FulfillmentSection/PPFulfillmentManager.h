@@ -74,4 +74,18 @@ FOUNDATION_EXPORT NSString * const PPFulfillmentOfficialOwnerUID;
                                            note:(NSString *)note
                                      completion:(void (^)(BOOL success, NSString *message, NSError *error))completion;
 
+/// Same official command, with an explicitly reviewed collection store.
+/// A nil branch retains Infra's current/default pickup resolution.
+- (void)performOfficialPlatformTransitionAction:(NSString *)action
+                                  fulfillmentID:(NSString *)fulfillmentID
+                                 expectedStatus:(NSString *)expectedStatus
+                                           note:(NSString *)note
+                                 pickupBranchID:(nullable NSString *)pickupBranchID
+                                     completion:(void (^)(BOOL success, NSString *message, NSError *error))completion;
+
+/// Server-authorized pickup projection; never reads the branch directory directly.
+- (void)fetchPickupOptionsForFulfillment:(PPFulfillmentModel *)fulfillment
+                         afterBranchID:(nullable NSString *)afterBranchID
+                            completion:(void (^)(NSDictionary * _Nullable result, NSError * _Nullable error))completion;
+
 @end

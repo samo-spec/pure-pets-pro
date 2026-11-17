@@ -1192,6 +1192,7 @@ public final class PPProSubscriptionCardDescriptor: NSObject {
     public var pendingActionRoute = "__providerApplicationStatus"
     public var subscriptionCount = 0
     public var activeCount = 0
+    public var unrecordedTermCount = 0
     public var attentionCount = 0
     public var reviewCount = 0
 }
@@ -1422,6 +1423,7 @@ struct PPProSubscriptionSummary: Equatable {
     let pendingActionRoute: String
     let subscriptionCount: Int
     let activeCount: Int
+    let unrecordedTermCount: Int
     let attentionCount: Int
     let reviewCount: Int
 }
@@ -1516,6 +1518,7 @@ private extension PPProCommandCenterSnapshotDescriptor {
                     pendingActionRoute: $0.pendingActionRoute.isEmpty ? "__providerApplicationStatus" : $0.pendingActionRoute,
                     subscriptionCount: $0.subscriptionCount,
                     activeCount: $0.activeCount,
+                    unrecordedTermCount: $0.unrecordedTermCount,
                     attentionCount: $0.attentionCount,
                     reviewCount: $0.reviewCount
                 )
@@ -3894,17 +3897,17 @@ private struct PPProVitalsStrip: View {
 
 /// Touch feedback stays bound to the button's pressed state, so cancellation
 /// and rapid taps never leave a delayed animation or a second selection owner.
-struct PPProHomeControlStyle: ButtonStyle {
+public struct PPProHomeControlStyle: ButtonStyle {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
 
-    init() {}
+    public init() {}
 
-    func makeBody(configuration: Configuration) -> some View {
+    public func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .opacity(configuration.isPressed ? 0.72 : 1)
             .scaleEffect(configuration.isPressed && !reduceMotion && scenePhase == .active ? 0.97 : 1)
-            .animation(reduceMotion || scenePhase != .active ? nil : PPProMotion.press,
+            .animation(reduceMotion || scenePhase != .active ? nil : .easeOut(duration: 0.12),
                        value: configuration.isPressed)
     }
 }
@@ -5448,14 +5451,14 @@ private struct PPProSubscriptionHomeCard: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
                     if summary.subscriptionCount > 0 {
-                        if sizeCategory.isAccessibilityCategory {
+                        if sizeCategory.isAccessibilityCategory || visibleMetricCount > 3 {
                             VStack(alignment: .leading, spacing: 10) { metrics }
                         } else {
                             HStack(alignment: .top, spacing: 16) { metrics }
                         }
                     }
                     if !summary.detail.isEmpty {
-                        Label(summary.detail, systemImage: "calendar")
+                        Text(summary.detail)
                             .font(PPProType.medium(14, relativeTo: .subheadline))
                             .foregroundStyle(palette.secondary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -5515,10 +5518,16 @@ private struct PPProSubscriptionHomeCard: View {
         .accessibilityIdentifier("pro.home.subscription")
     }
 
+    private var visibleMetricCount: Int {
+        [summary.activeCount, summary.unrecordedTermCount, summary.attentionCount, summary.reviewCount]
+            .filter { $0 > 0 }.count
+    }
+
     @ViewBuilder private var metrics: some View {
-        metric(summary.activeCount, key: "ProSubscriptions_ActiveTerms")
-        metric(summary.attentionCount, key: "ProSubscriptions_NeedsAttention")
-        metric(summary.reviewCount, key: "ProSubscriptions_UnderReview")
+        if summary.activeCount > 0 { metric(summary.activeCount, key: "ProSubscriptions_ActiveTerms") }
+        if summary.unrecordedTermCount > 0 { metric(summary.unrecordedTermCount, key: "ProSubscriptions_TermsNotSet") }
+        if summary.attentionCount > 0 { metric(summary.attentionCount, key: "ProSubscriptions_NeedsAttention") }
+        if summary.reviewCount > 0 { metric(summary.reviewCount, key: "ProSubscriptions_UnderReview") }
     }
 
     private func metric(_ count: Int, key: String) -> some View {

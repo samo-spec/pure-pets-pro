@@ -172,6 +172,8 @@ typedef NS_ENUM(NSInteger, PPDeliveryFilter) {
 - (BOOL)pp_canRevealExactDeliveryLocation;
 - (BOOL)pp_canRevealCustomerPhoneForDeliveryUserID:(NSString *)deliveryUserID;
 - (NSString *)pp_pickupLocationSummary;
+/// Derived from the existing pickup address point, with legacy address fallback.
+- (NSString *)pp_pickupMapQuery;
 - (NSString *)pp_deliveryAreaSummary;
 - (NSString *)pp_visibleCustomerLocationSummary;
 - (NSString *)pp_exactDeliveryLocationText;

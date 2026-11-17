@@ -51,25 +51,35 @@
     [super viewDidLoad];
     self.view.backgroundColor = [self pp_canvasColor];
     self.view.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
-    [self buildBackdrop];
-    [self buildScrollView];
-    [self buildForm];
-    [self buildSaveBar];
-    [self populateForm];
-    [self registerKeyboardNotifications];
-    [self prepareEntranceState];
+
+    // NextGen V10 Category-Defining Adoption Authoring Integration
+    NSDictionary *dict = [self.pet toDictionary];
+    NSString *docId = self.pet.petID;
+    UIViewController *host = [PPAdoptProBridge makeEditControllerWithPetDict:dict documentID:docId];
+    [self addChildViewController:host];
+    [self.view addSubview:host.view];
+    host.view.translatesAutoresizingMaskIntoConstraints = NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [host.view.topAnchor.constraintEqualToAnchor:self.view.topAnchor],
+        [host.view.leadingAnchor.constraintEqualToAnchor:self.view.leadingAnchor],
+        [host.view.trailingAnchor.constraintEqualToAnchor:self.view.trailingAnchor],
+        [host.view.bottomAnchor.constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    [host didMoveToParentViewController:self];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    NSString *title = self.isEditingPet ? kLang(@"AdoptPro_EditNavTitle") : kLang(@"AdoptPro_AddNavTitle");
-    [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:nil title:title showBack:YES];
-    [self prepareEntranceState];
+    if (self.navigationController) {
+        [self.navigationController setNavigationBarHidden:YES animated:animated];
+    }
 }
 
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    [self runEntranceIfNeeded];
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    if (self.navigationController) {
+        [self.navigationController setNavigationBarHidden:NO animated:animated];
+    }
 }
 
 - (void)dealloc {

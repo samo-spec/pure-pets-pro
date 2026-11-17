@@ -1018,6 +1018,14 @@ static BOOL PPProviderBool(id value) {
 
 #pragma mark - Owned subscription inventory and reviewed requests
 
++ (BOOL)isSubscriptionAccessDeniedError:(NSError *)error {
+    return [error.domain isEqualToString:FIRFunctionsErrorDomain] && error.code == FIRFunctionsErrorCodePermissionDenied;
+}
+
++ (NSString *)subscriptionReadErrorMessage:(NSError *)error {
+    return kLang([self isSubscriptionAccessDeniedError:error] ? @"ProSubscriptions_AccessDeniedMessage" : @"ProSubscription_LoadFailed");
+}
+
 + (BOOL)isDefinitiveSubscriptionRequestError:(NSError *)error {
     return [error.domain isEqualToString:FIRFunctionsErrorDomain] &&
         [@[@(FIRFunctionsErrorCodeInvalidArgument), @(FIRFunctionsErrorCodeNotFound), @(FIRFunctionsErrorCodeAlreadyExists),
@@ -1039,7 +1047,12 @@ static BOOL PPProviderBool(id value) {
             if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
                 completion(nil, PPProviderError(kLang(@"ProSubscriptions_AccountChanged")));
             } else {
-                completion(error ? nil : PPSafeDict(result.data), error);
+                NSDictionary *payload = PPSafeDict(result.data);
+                if (!error && (![payload[@"contractVersion"] isKindOfClass:NSNumber.class] || [payload[@"contractVersion"] integerValue] != 1)) {
+                    completion(nil, PPProviderError(kLang(@"ProSubscription_LoadFailed")));
+                    return;
+                }
+                completion(error ? nil : payload, error);
             }
         });
     }];
@@ -1077,6 +1090,7 @@ static BOOL PPProviderBool(id value) {
         return [item isKindOfClass:NSString.class] && [@[@"renew", @"change_plan"] containsObject:item];
     }]];
     owned.subscriptionRequest = PPSafeDict(record[@"subscriptionRequest"]);
+    owned.requestFlowAvailable = [record[@"requestActions"] isKindOfClass:NSArray.class];
     return owned;
 }
 
@@ -1121,6 +1135,24 @@ static BOOL PPProviderBool(id value) {
     NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
     [self pp_callSubscriptionFunction:@"getMyProviderSubscriptions" payload:@{@"profileId": profileID ?: @""}
                            completion:^(NSDictionary *result, NSError *error) {
+        if ([error.domain isEqualToString:FIRFunctionsErrorDomain] && error.code == FIRFunctionsErrorCodeInvalidArgument) {
+            // During a backend-first rollout, the previous owner API accepts
+            // only an inventory read. Preserve exact-ID viewing through that
+            // same authorized endpoint; never invent request availability.
+            [self fetchOwnedSubscriptionsWithCompletion:^(NSArray<PPProviderOwnedSubscription *> *records, NSError *readError) {
+                if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+                    completion(nil, nil, PPProviderError(kLang(@"ProSubscriptions_AccountChanged"))); return;
+                }
+                for (PPProviderOwnedSubscription *record in records) {
+                    if ([record.userID isEqualToString:uid] && [record.profile.profileID isEqualToString:profileID]) {
+                        record.requestActions = @[]; record.requestFlowAvailable = NO;
+                        completion(record, @[], nil); return;
+                    }
+                }
+                completion(nil, nil, readError ?: PPProviderError(kLang(@"ProSubscriptions_Unavailable")));
+            }];
+            return;
+        }
         PPProviderOwnedSubscription *owned = error ? nil : [self pp_ownedSubscriptionFromDictionary:PPSafeDict(result[@"partner"]) uid:uid];
         if (!owned || ![owned.profile.profileID isEqualToString:profileID]) {
             completion(nil, nil, error ?: PPProviderError(kLang(@"ProSubscriptions_Unavailable"))); return;

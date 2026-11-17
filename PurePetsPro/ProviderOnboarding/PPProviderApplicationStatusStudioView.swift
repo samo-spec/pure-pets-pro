@@ -161,15 +161,37 @@ public struct PPProviderApplicationStatusStudioView: View {
         return false
     }
 
+    // MARK: - Filtered Applications
+
+    private var approvedApplications: [PPProviderApplication] {
+        guard let state = state else { return [] }
+        return state.applications.filter { isApplicationApproved($0) }
+    }
+
+    private var nonApprovedApplications: [PPProviderApplication] {
+        guard let state = state else { return [] }
+        return state.applications.filter { !isApplicationApproved($0) }
+    }
+
+    private func isApplicationApproved(_ app: PPProviderApplication) -> Bool {
+        let s = app.status.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        return s == "approved" || s == "active"
+    }
+
     // MARK: - Main Scrollable Content
 
     private var mainContentScrollView: some View {
         ScrollView(.vertical, showsIndicators: false) {
             VStack(spacing: 20) {
-                // 1. Hero Radar Card
+                // 1. Approved Subscriptions (Elevated to top of screen)
+                if !approvedApplications.isEmpty {
+                    approvedSubscriptionsDeck(apps: approvedApplications)
+                }
+
+                // 2. Hero Radar Card
                 heroRadarCard
 
-                // 2. Lifecycle Specific Card
+                // 3. Lifecycle Specific Card
                 if let state = state {
                     if state.isBlocked {
                         blockedStateCard
@@ -186,15 +208,15 @@ public struct PPProviderApplicationStatusStudioView: View {
                     }
                 }
 
-                // 3. Registered Account Identity Dossier
+                // 4. Registered Account Identity Dossier
                 identityDossierCard
 
-                // 4. Applications History Deck
-                if let apps = state?.applications, !apps.isEmpty {
-                    applicationsHistoryDeck(apps: apps)
+                // 5. Remaining / Other Applications Deck (Pending, Under Review, etc.)
+                if !nonApprovedApplications.isEmpty {
+                    applicationsHistoryDeck(apps: nonApprovedApplications)
                 }
 
-                // 5. Contact Support Pill
+                // 6. Contact Support Pill
                 supportActionPill
             }
             .padding(.horizontal, 20)
@@ -691,6 +713,76 @@ public struct PPProviderApplicationStatusStudioView: View {
         .padding(18)
         .background(Color(.secondarySystemGroupedBackground).opacity(0.85))
         .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    // MARK: - Approved Subscriptions Deck (Top of Screen)
+
+    private func approvedSubscriptionsDeck(apps: [PPProviderApplication]) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.seal.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Color.green)
+                Text(Language.isRTL() ? "الاشتراكات المعتمدة" : "Approved Subscriptions")
+                    .font(PPBrandFont.bold(15, relativeTo: .headline))
+                    .foregroundStyle(Color(.label))
+                Spacer()
+                if apps.count > 1 {
+                    Text(Language.isRTL() ? "\(apps.count) معتمد" : "\(apps.count) Approved")
+                        .font(PPBrandFont.bold(11, relativeTo: .caption2))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Color.green.opacity(0.12))
+                        .foregroundStyle(Color.green)
+                        .clipShape(Capsule())
+                }
+            }
+
+            ForEach(apps, id: \.applicationID) { app in
+                HStack(spacing: 12) {
+                    // Type Icon
+                    ZStack {
+                        Circle()
+                            .fill(Color.accentColor.opacity(0.12))
+                            .frame(width: 44, height: 44)
+                        Image(systemName: PPProviderApplicationManager.symbolName(for: app.providerType))
+                            .font(.system(size: 18, weight: .semibold))
+                            .foregroundStyle(Color.accentColor)
+                    }
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(PPProviderApplicationManager.localizedTitle(for: app.providerType))
+                            .font(PPBrandFont.bold(15, relativeTo: .body))
+                            .foregroundStyle(Color(.label))
+                        Text(app.localizedPlanName())
+                            .font(PPBrandFont.medium(12.5, relativeTo: .caption))
+                            .foregroundStyle(Color(.secondaryLabel))
+                    }
+
+                    Spacer()
+
+                    // Status Badge with checkmark
+                    HStack(spacing: 4) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 9, weight: .bold))
+                        Text(PPProviderApplicationManager.localizedStatusTitle(app.status))
+                            .font(PPBrandFont.bold(11, relativeTo: .caption2))
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.green.opacity(0.15))
+                    .foregroundStyle(Color.green)
+                    .clipShape(Capsule())
+                }
+                .padding(14)
+                .background(Color(.secondarySystemGroupedBackground))
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .strokeBorder(Color.green.opacity(0.25), lineWidth: 1)
+                )
+            }
+        }
     }
 
     // MARK: - Applications History Deck

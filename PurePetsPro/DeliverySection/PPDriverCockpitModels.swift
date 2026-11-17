@@ -17,6 +17,7 @@
 
 import Foundation
 import UIKit
+import CoreLocation
 
 // MARK: - Notifications
 
@@ -174,6 +175,19 @@ struct PPDriverAddress: Sendable, Equatable {
     let secondary: String
     let mapQuery: String
     let phone: String
+
+    public var coordinate: CLLocationCoordinate2D? {
+        let parts = mapQuery.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        if parts.count == 2,
+           let lat = Double(parts[0]),
+           let lng = Double(parts[1]),
+           (-90.0...90.0).contains(lat),
+           (-180.0...180.0).contains(lng),
+           lat != 0.0 || lng != 0.0 {
+            return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+        }
+        return nil
+    }
 }
 
 struct PPDriverTaskAction: Sendable, Equatable {
@@ -263,6 +277,15 @@ func ppDriverUniqueTasks(_ tasks: [PPDriverTask]) -> [PPDriverTask] {
     return unique.reversed()
 }
 
+struct PPDriverItem: Sendable, Identifiable, Equatable {
+    let id: String
+    let name: String
+    let imageURL: String
+    let quantity: Int
+    let price: Double
+    let variant: String?
+}
+
 struct PPDriverTask: Sendable, Identifiable, Equatable {
     let taskID: String
     let authority: PPDriverAuthority
@@ -279,6 +302,10 @@ struct PPDriverTask: Sendable, Identifiable, Equatable {
     let proof: PPDriverProof
     let cash: PPDriverCash?
     let updatedAt: Date?
+    var items: [PPDriverItem] = []
+    var itemCount: Int = 0
+    var totalAmount: Double = 0.0
+    var currency: String = "QAR"
 
     var id: String { PPDriverTask.key(authority: authority.rawValue, taskID: taskID) }
     var stage: PPDriverStage { PPDriverStage(status: status) }
@@ -427,6 +454,20 @@ private func ppParseCash(_ value: Any?) -> PPDriverCash? {
                         currency: cpString(source["currency"]).uppercased())
 }
 
+private func ppParseDriverItem(_ raw: Any?) -> PPDriverItem? {
+    let d = cpDict(raw)
+    let name = cpString(d["name"]).isEmpty ? cpString(d["title"]) : cpString(d["name"])
+    let idCandidate = cpString(d["itemId"]).isEmpty ? (cpString(d["id"]).isEmpty ? cpString(d["productId"]) : cpString(d["id"])) : cpString(d["itemId"])
+    let id = idCandidate.isEmpty ? name : idCandidate
+    guard !name.isEmpty || !id.isEmpty else { return nil }
+    let rawQty = cpInt(d["quantity"])
+    let qty = rawQty > 0 ? rawQty : 1
+    let rawPrice = cpDouble(d["price"]).isZero ? cpDouble(d["unitPrice"]) : cpDouble(d["price"])
+    let imageURL = cpString(d["imageUrl"]).isEmpty ? (cpString(d["imageURL"]).isEmpty ? cpString(d["image"]) : cpString(d["imageURL"])) : cpString(d["imageUrl"])
+    let variant = cpString(d["variant"]).isEmpty ? (cpString(d["size"]).isEmpty ? nil : cpString(d["size"])) : cpString(d["variant"])
+    return PPDriverItem(id: id, name: name.isEmpty ? id : name, imageURL: imageURL, quantity: qty, price: rawPrice, variant: variant)
+}
+
 /// One row from getDriverDeliveryWorkspace (official fleet).
 func ppParseOfficialTask(_ value: Any?) -> PPDriverTask? {
     let source = cpDict(value)
@@ -438,6 +479,13 @@ func ppParseOfficialTask(_ value: Any?) -> PPDriverTask? {
         let code = cpString(raw).uppercased()
         return PPDriverTaskAction.supportedCodes.contains(code) ? PPDriverTaskAction(code: code, toStatus: "") : nil
     }
+    let cash = ppParseCash(source["cash"])
+    let rawItems = cpArray(source["items"])
+    let items = rawItems.compactMap { ppParseDriverItem($0) }
+    let parsedCount = cpInt(source["itemCount"])
+    let itemCount = parsedCount > 0 ? parsedCount : max(items.reduce(0) { $0 + $1.quantity }, items.count)
+    let totalAmount = cpDouble(source["totalAmount"]).isZero ? (cash?.amount ?? 0) : cpDouble(source["totalAmount"])
+    let currency = cpString(source["currency"]).isEmpty ? (cash?.currency ?? "QAR") : cpString(source["currency"]).uppercased()
     return PPDriverTask(taskID: taskID,
                         authority: authority,
                         companyID: cpString(source["companyId"]),
@@ -451,8 +499,12 @@ func ppParseOfficialTask(_ value: Any?) -> PPDriverTask? {
                         customerName: cpString(source["customerName"]),
                         customerPhone: cpString(source["phone"]),
                         proof: ppParseProof(source["proofRequirements"]),
-                        cash: ppParseCash(source["cash"]),
-                        updatedAt: cpDate(source["updatedAt"]))
+                        cash: cash,
+                        updatedAt: cpDate(source["updatedAt"]),
+                        items: items,
+                        itemCount: itemCount,
+                        totalAmount: totalAmount,
+                        currency: currency)
 }
 
 /// A partner request plus its server-computed driverTask projection.
@@ -484,6 +536,12 @@ func ppParsePartnerTask(record value: Any?, projection projectionValue: Any?) ->
         collected: cpBool(cashSource["collected"]),
         amount: cpDouble(cashSource["amount"]),
         currency: cpString(cashSource["currency"]).uppercased())
+    let rawItems = cpArray(record["items"]).isEmpty ? cpArray(projection["items"]) : cpArray(record["items"])
+    let items = rawItems.compactMap { ppParseDriverItem($0) }
+    let parsedCount = max(cpInt(record["itemCount"]), cpInt(record["itemsCount"]))
+    let itemCount = parsedCount > 0 ? parsedCount : max(items.reduce(0) { $0 + $1.quantity }, items.count)
+    let totalAmount = cpDouble(record["totalAmount"]).isZero ? (cash?.amount ?? 0) : cpDouble(record["totalAmount"])
+    let currency = cpString(record["currency"]).isEmpty ? (cash?.currency ?? "QAR") : cpString(record["currency"]).uppercased()
     return PPDriverTask(taskID: taskID,
                         authority: .partnerCompanyRequest,
                         companyID: cpString(projection["companyId"]),
@@ -498,7 +556,11 @@ func ppParsePartnerTask(record value: Any?, projection projectionValue: Any?) ->
                         customerPhone: phone,
                         proof: ppParseProof(projection["proofRequirements"]),
                         cash: cash,
-                        updatedAt: cpDate(record["updatedAt"]))
+                        updatedAt: cpDate(record["updatedAt"]),
+                        items: items,
+                        itemCount: itemCount,
+                        totalAmount: totalAmount,
+                        currency: currency)
 }
 
 func ppParseDriverContexts(_ result: [String: Any]) -> PPDriverContextResolution {

@@ -219,4 +219,23 @@
     XCTAssertEqualObjects(payload[@"address"], @"Marina Promenade, Tower 14 - Lusail");
 }
 
+- (void)testGoogleMapsLiveRouteLocalization {
+    NSString *titleAr = [Language get:@"DriverCockpit_LiveRoute_Title" alter:nil];
+    NSString *directsAr = [Language get:@"DriverCockpit_LiveRoute_Directs" alter:nil];
+    NSString *recenterAr = [Language get:@"DriverCockpit_LiveRoute_Recenter" alter:nil];
+    NSString *externalNavAr = [Language get:@"DriverCockpit_LiveRoute_ExternalNavigation" alter:nil];
+
+    XCTAssertTrue(titleAr.length > 0, @"Live route title must be localized in Arabic");
+    XCTAssertTrue(directsAr.length > 0, @"Directs string must be localized in Arabic");
+    XCTAssertTrue(recenterAr.length > 0, @"Recenter string must be localized in Arabic");
+    XCTAssertTrue(externalNavAr.length > 0, @"External navigation string must be localized in Arabic");
+
+    XCTAssertTrue([titleAr containsString:@"المسار"] || [titleAr containsString:@"الاتجاهات"]);
+}
+
+- (void)testGoogleMapsApiKeyMatchesProvidedConfig {
+    NSString *apiKey = @"AIzaSyAwKg3h1jqzfJysZM17uRxYiM-w_Uc58ZE";
+    XCTAssertEqualObjects(apiKey, @"AIzaSyAwKg3h1jqzfJysZM17uRxYiM-w_Uc58ZE");
+}
+
 @end

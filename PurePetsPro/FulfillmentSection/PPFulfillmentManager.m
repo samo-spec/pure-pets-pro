@@ -27,6 +27,23 @@ static NSError *PPFulfillmentManagerError(NSInteger code, NSString *message) {
                            userInfo:message.length > 0 ? @{NSLocalizedDescriptionKey: message} : nil];
 }
 
+static BOOL PPFulfillmentValidPickupBranch(NSString *value) {
+    return [value isKindOfClass:NSString.class] && PPFulfillmentTrimmedString(value).length > 0 &&
+        PPFulfillmentTrimmedString(value).length <= 200 && [value rangeOfString:@"/"].location == NSNotFound;
+}
+
+static NSString *PPPickupFulfillmentCommandID(NSString *uid, NSString *fulfillmentID,
+                                               NSString *status, NSString *action,
+                                               NSString *note, NSString *branchID) {
+    NSData *data = [NSJSONSerialization dataWithJSONObject:@[uid, fulfillmentID, status, action, note, branchID]
+                                                  options:0 error:nil];
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+    NSMutableString *result = [@"pro-official-pickup-v1-" mutableCopy];
+    for (NSUInteger index = 0; index < CC_SHA256_DIGEST_LENGTH; index++) [result appendFormat:@"%02x", digest[index]];
+    return result;
+}
+
 static NSString *PPProviderFulfillmentCommandID(NSString *uid,
                                                 NSString *fulfillmentID,
                                                 NSString *expectedStatus,
@@ -468,6 +485,16 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
                                  expectedStatus:(NSString *)expectedStatus
                                            note:(NSString *)note
                                      completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
+    [self performOfficialPlatformTransitionAction:action fulfillmentID:fulfillmentID
+        expectedStatus:expectedStatus note:note pickupBranchID:nil completion:completion];
+}
+
+- (void)performOfficialPlatformTransitionAction:(NSString *)action
+                                  fulfillmentID:(NSString *)fulfillmentID
+                                 expectedStatus:(NSString *)expectedStatus
+                                           note:(NSString *)note
+                                 pickupBranchID:(NSString *)pickupBranchID
+                                     completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
     NSString *requestUID = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
     NSString *resolvedNote = PPFulfillmentTrimmedString(note);
     UserModel *user = UsrMgr.currentUser ?: AppMgr.currentUser;
@@ -488,13 +515,61 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
                                                         PPFulfillmentTrimmedString(expectedStatus).lowercaseString,
                                                         PPFulfillmentTrimmedString(action).lowercaseString,
                                                         resolvedNote);
+    if (pickupBranchID != nil) {
+        if (!PPFulfillmentValidPickupBranch(pickupBranchID) ||
+            ![PPFulfillmentTrimmedString(action).lowercaseString isEqualToString:@"request_delivery"]) {
+            NSError *error = PPFulfillmentManagerError(422, kLang(@"ProPickup_SelectionInvalid"));
+            if (completion) completion(NO, error.localizedDescription, error);
+            return;
+        }
+        commandID = PPPickupFulfillmentCommandID(requestUID, PPFulfillmentTrimmedString(fulfillmentID),
+            PPFulfillmentTrimmedString(expectedStatus).lowercaseString,
+            PPFulfillmentTrimmedString(action).lowercaseString, resolvedNote, PPFulfillmentTrimmedString(pickupBranchID));
+    }
     [self pp_performTransitionWithCallable:@"staffTransitionOfficialFulfillment"
                                     action:action
                              fulfillmentID:fulfillmentID
                             expectedStatus:expectedStatus
                                  commandID:commandID
                                       note:resolvedNote
+                            pickupBranchID:pickupBranchID
                                 completion:completion];
+}
+
+- (void)fetchPickupOptionsForFulfillment:(PPFulfillmentModel *)fulfillment
+                         afterBranchID:(NSString *)afterBranchID
+                            completion:(void (^)(NSDictionary *, NSError *))completion {
+    NSString *uid = PPFulfillmentTrimmedString(FIRAuth.auth.currentUser.uid);
+    NSString *fulfillmentID = PPFulfillmentTrimmedString(fulfillment.fulfillmentID);
+    NSString *status = PPFulfillmentTrimmedString(fulfillment.status).lowercaseString;
+    if (!uid.length || !fulfillmentID.length ||
+        ![PPFulfillmentManager isOfficialPlatformFulfillment:fulfillment forUID:uid] ||
+        ![status isEqualToString:@"ready_for_pickup"] ||
+        (afterBranchID != nil && !PPFulfillmentValidPickupBranch(afterBranchID))) {
+        if (completion) completion(nil, PPFulfillmentManagerError(403, kLang(@"ProPickup_SelectionInvalid")));
+        return;
+    }
+    NSMutableDictionary *payload = [@{@"fulfillmentID":fulfillmentID, @"expectedStatus":status} mutableCopy];
+    if (afterBranchID.length) payload[@"afterBranchId"] = PPFulfillmentTrimmedString(afterBranchID);
+    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"]
+        HTTPSCallableWithName:@"staffGetOfficialFulfillmentPickupOptions"];
+    callable.timeoutInterval = 30;
+    [callable callWithObject:payload completion:^(FIRHTTPSCallableResult *result, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (![PPFulfillmentTrimmedString(FIRAuth.auth.currentUser.uid) isEqualToString:uid]) {
+                if (completion) completion(nil, PPFulfillmentManagerError(401, kLang(@"ProPickup_SessionChanged")));
+                return;
+            }
+            NSDictionary *data = [result.data isKindOfClass:NSDictionary.class] ? result.data : nil;
+            NSError *failure = error;
+            if (!failure && (![data[@"stores"] isKindOfClass:NSArray.class] ||
+                ![PPFulfillmentTrimmedString(data[@"fulfillmentID"]) isEqualToString:fulfillmentID] ||
+                ![PPFulfillmentTrimmedString(data[@"expectedStatus"]) isEqualToString:status])) {
+                failure = PPFulfillmentManagerError(502, kLang(@"ProPickup_LoadFailed"));
+            }
+            if (completion) completion(failure ? nil : data, failure);
+        });
+    }];
 }
 
 + (BOOL)isOfficialPlatformFulfillment:(PPFulfillmentModel *)fulfillment forUID:(NSString *)uid {
@@ -517,6 +592,18 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
                                commandID:(NSString *)commandID
                                     note:(NSString *)note
                               completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
+    [self pp_performTransitionWithCallable:callableName action:action fulfillmentID:fulfillmentID
+        expectedStatus:expectedStatus commandID:commandID note:note pickupBranchID:nil completion:completion];
+}
+
+- (void)pp_performTransitionWithCallable:(NSString *)callableName
+                                 action:(NSString *)action
+                          fulfillmentID:(NSString *)fulfillmentID
+                         expectedStatus:(NSString *)expectedStatus
+                              commandID:(NSString *)commandID
+                                   note:(NSString *)note
+                         pickupBranchID:(NSString *)pickupBranchID
+                             completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
     NSString *requestUID = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
     NSString *resolvedFulfillmentID = PPFulfillmentTrimmedString(fulfillmentID);
     NSString *resolvedAction = PPFulfillmentTrimmedString(action).lowercaseString;
@@ -546,6 +633,15 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
     payload[@"expectedStatus"] = resolvedExpectedStatus;
     payload[@"commandId"] = resolvedCommandID;
     if (resolvedNote.length > 0) payload[@"note"] = resolvedNote;
+    if (pickupBranchID != nil) {
+        if (![callableName isEqualToString:@"staffTransitionOfficialFulfillment"] ||
+            ![resolvedAction isEqualToString:@"request_delivery"] || !PPFulfillmentValidPickupBranch(pickupBranchID)) {
+            NSError *error = PPFulfillmentManagerError(422, kLang(@"ProPickup_SelectionInvalid"));
+            if (completion) completion(NO, error.localizedDescription, error);
+            return;
+        }
+        payload[@"pickupBranchId"] = PPFulfillmentTrimmedString(pickupBranchID);
+    }
 
     NSLog(@"PPLAB Pro fulfillment command submit callable=%@ fulfillmentID=%@ action=%@ expectedStatus=%@ commandId=%@",
           callableName, resolvedFulfillmentID, resolvedAction, resolvedExpectedStatus, resolvedCommandID);

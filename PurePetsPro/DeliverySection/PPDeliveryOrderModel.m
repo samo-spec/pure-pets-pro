@@ -49,6 +49,24 @@ static NSDictionary * _Nonnull PPOrderModelSafeDictionary(id value) {
     return [value isKindOfClass:[NSDictionary class]] ? (NSDictionary *)value : @{};
 }
 
+// Read-only projection of the canonical delivery address latitude/longitude.
+// This is navigation metadata, never an additional Firestore field or writer.
+static NSString * _Nonnull PPOrderModelCoordinateQuery(NSDictionary *snapshot) {
+    id latitude = snapshot[@"latitude"] ?: snapshot[@"lat"];
+    id longitude = snapshot[@"longitude"] ?: snapshot[@"lng"];
+    NSScanner *latScanner = [NSScanner scannerWithString:PPOrderModelOptionalString(latitude) ?: @""];
+    NSScanner *lngScanner = [NSScanner scannerWithString:PPOrderModelOptionalString(longitude) ?: @""];
+    latScanner.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+    lngScanner.locale = latScanner.locale;
+    double lat = 0, lng = 0;
+    if (![latScanner scanDouble:&lat] || !latScanner.isAtEnd ||
+        ![lngScanner scanDouble:&lng] || !lngScanner.isAtEnd ||
+        !isfinite(lat) || !isfinite(lng) || fabs(lat) > 90 || fabs(lng) > 180 ||
+        (lat == 0 && lng == 0)) return @"";
+    return [[NSString alloc] initWithFormat:@"%.8f,%.8f"
+                                    locale:[NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"], lat, lng];
+}
+
 static NSString * _Nonnull PPOrderModelFirstString(NSDictionary *dict, NSArray<NSString *> *keys) {
     for (NSString *key in keys) {
         NSString *value = PPOrderModelOptionalString(dict[key]);
@@ -176,6 +194,10 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
 
 #pragma mark - PPDeliveryOrderModel
 
+@interface PPDeliveryOrderModel ()
+@property (nonatomic, copy) NSString *pp_pickupCoordinateQuery;
+@end
+
 @implementation PPDeliveryOrderModel
 
 - (id)copyWithZone:(NSZone *)zone {
@@ -224,6 +246,14 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
     m.customerPhone = PPOrderModelSafeString(dict, @[@"customerPhone", @"phone", @"buyerPhone"]);
     m.deliveryAddress = PPOrderModelSafeString(dict, @[@"deliveryAddress", @"shippingAddress", @"address"]);
     m.pickupAddress = PPOrderModelSafeString(dict, @[@"pickupAddress", @"pickup_address", @"storeAddress", @"branchAddress"]);
+    for (NSString *key in @[@"pickupAddress", @"pickup_address", @"storeAddress", @"branchAddress"]) {
+        id value = dict[key];
+        if ([value isKindOfClass:NSString.class] && PPOrderModelOptionalString(value).length) break;
+        NSDictionary *address = PPOrderModelSafeDictionary(value);
+        NSString *point = PPOrderModelCoordinateQuery(address);
+        if (point.length) { m.pp_pickupCoordinateQuery = point; break; }
+        if (PPOrderModelExactAddressFromSnapshot(address).length) break;
+    }
     m.deliveryAreaName = PPOrderModelSafeString(dict, @[@"deliveryAreaName", @"deliveryArea", @"areaName", @"customerAreaName", @"destinationAreaName"]);
     m.deliveryLocationPoint = PPOrderModelSafeString(dict, @[@"deliveryLocationPoint", @"deliveryLocationPoints", @"locationPoints", @"customerLocationPoint"]);
 
@@ -238,12 +268,18 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
     }
     if (m.deliveryLocationPoint.length == 0) {
         m.deliveryLocationPoint = PPOrderModelFirstString(shippingSnapshot, @[@"locationPoints", @"locationPoint", @"coordinates", @"coordinate"]);
+        if (m.deliveryLocationPoint.length == 0) {
+            m.deliveryLocationPoint = PPOrderModelCoordinateQuery(shippingSnapshot);
+        }
     }
 
     // If address is a nested dict, extract formatted
     for (NSString *addrKey in @[@"deliveryAddress", @"shippingAddress", @"address"]) {
         id addrVal = dict[addrKey];
         if ([addrVal isKindOfClass:[NSDictionary class]]) {
+            if (m.deliveryLocationPoint.length == 0) {
+                m.deliveryLocationPoint = PPOrderModelCoordinateQuery((NSDictionary *)addrVal);
+            }
             NSString *formatted = PPOrderModelExactAddressFromSnapshot((NSDictionary *)addrVal);
             if (formatted.length) {
                 m.deliveryAddress = formatted;
@@ -671,6 +707,10 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
         return self.marketplaceProviderID;
     }
     return kLang(@"Deliv_BranchPendingAssignment") ?: @"";
+}
+
+- (NSString *)pp_pickupMapQuery {
+    return self.pp_pickupCoordinateQuery.length ? self.pp_pickupCoordinateQuery : (self.pickupAddress ?: @"");
 }
 
 - (NSString *)pp_deliveryAreaSummary {

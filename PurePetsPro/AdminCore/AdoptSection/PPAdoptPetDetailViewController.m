@@ -42,23 +42,35 @@ static NSString *PPAdoptDetailDisplay(NSString *value) {
     [super viewDidLoad];
     self.view.backgroundColor = [self pp_canvasColor];
     self.view.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage;
-    [self buildBackdrop];
-    [self buildScrollView];
-    [self buildContent];
-    [self buildActionBar];
-    [self prepareEntranceState];
+
+    // NextGen V10 Category-Defining Adoption Dossier Integration
+    NSDictionary *dict = [self.pet toDictionary] ?: @{};
+    NSString *docId = self.pet.petID ?: @"";
+    UIViewController *host = [PPAdoptProBridge makeDetailControllerWithPetDict:dict documentID:docId];
+    [self addChildViewController:host];
+    [self.view addSubview:host.view];
+    host.view.translatesAutoresizingMaskIntoConstraints = NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [host.view.topAnchor.constraintEqualToAnchor:self.view.topAnchor],
+        [host.view.leadingAnchor.constraintEqualToAnchor:self.view.leadingAnchor],
+        [host.view.trailingAnchor.constraintEqualToAnchor:self.view.trailingAnchor],
+        [host.view.bottomAnchor.constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    [host didMoveToParentViewController:self];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:[self editNavButton] title:kLang(@"AdoptPro_DetailNavTitle") showBack:YES];
-    [self refreshContent];
-    [self prepareEntranceState];
+    if (self.navigationController) {
+        [self.navigationController setNavigationBarHidden:YES animated:animated];
+    }
 }
 
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    [self runEntranceIfNeeded];
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    if (self.navigationController) {
+        [self.navigationController setNavigationBarHidden:NO animated:animated];
+    }
 }
 
 #pragma mark - Colors

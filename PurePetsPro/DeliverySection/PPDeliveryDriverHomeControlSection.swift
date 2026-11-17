@@ -742,6 +742,7 @@ private struct PPDriverHomeMissionSummary: View {
     let task: PPDriverTask
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var isPulsing: Bool = false
 
     private let steps = ["DriverCockpit_Step_Collect", "DriverCockpit_Step_Transit",
                          "DriverCockpit_Step_Deliver", "DriverCockpit_Step_Close"]
@@ -823,6 +824,12 @@ private struct PPDriverHomeMissionSummary: View {
                 milestone(index)
             }
         }
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.3).repeatForever(autoreverses: true)) {
+                isPulsing = true
+            }
+        }
         .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.80), value: task.stage)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ppDriverFormat("DriverCockpit_Step_Accessibility_Format",
@@ -841,20 +848,52 @@ private struct PPDriverHomeMissionSummary: View {
             : AnyLayout(VStackLayout(alignment: .leading, spacing: AdminSpacing.sm))
         return layout {
             HStack(spacing: 5) {
-                Image(systemName: isPast ? "checkmark.circle.fill" : (isCurrent ? "circle.inset.filled" : "circle"))
-                    .font(.system(size: 15, weight: .semibold))
-                    .contentTransition(.symbolEffect(.replace))
+                if isPast {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(AdminSurface.emerald)
+                        .frame(width: 20, height: 20)
+                } else if isCurrent {
+                    ZStack {
+                        Circle()
+                            .stroke(AdminSurface.primary.opacity(isPulsing ? 0.0 : 0.45), lineWidth: 2)
+                            .scaleEffect(isPulsing ? 1.6 : 0.95)
+                            .frame(width: 16, height: 16)
+                        Circle()
+                            .fill(AdminSurface.primary)
+                            .frame(width: 14, height: 14)
+                            .shadow(color: AdminSurface.primary.opacity(isPulsing ? 0.45 : 0.15), radius: isPulsing ? 4 : 1.5, x: 0, y: 1)
+                        Circle()
+                            .fill(Color.white)
+                            .frame(width: 5, height: 5)
+                    }
+                    .frame(width: 20, height: 20)
+                } else {
+                    Circle()
+                        .stroke(AdminSurface.secondaryText.opacity(0.35), lineWidth: 1.5)
+                        .frame(width: 13, height: 13)
+                        .frame(width: 20, height: 20)
+                }
                 if !dynamicTypeSize.isAccessibilitySize {
                     Capsule()
-                        .fill(color.opacity(isCurrent || isPast ? 0.8 : 0.15))
-                        .frame(height: 3)
+                        .fill(
+                            isCurrent
+                                ? LinearGradient(
+                                    colors: [AdminSurface.primary, AdminSurface.primary.opacity(0.35)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                  )
+                                : (isPast ? LinearGradient(colors: [AdminSurface.emerald], startPoint: .leading, endPoint: .trailing)
+                                          : LinearGradient(colors: [AdminSurface.secondaryText.opacity(0.18)], startPoint: .leading, endPoint: .trailing))
+                        )
+                        .frame(height: isCurrent ? 3.5 : 3)
                         .animation(reduceMotion ? nil : .spring(response: 0.38, dampingFraction: 0.80), value: task.stage)
                 }
             }
             .foregroundStyle(color)
             Text(ppDriverText(steps[index]))
                 .font(isCurrent ? AdminType.caption1Bold : AdminType.caption1)
-                .foregroundStyle(isCurrent ? AdminSurface.primaryText : AdminSurface.secondaryText)
+                .foregroundStyle(isCurrent ? AdminSurface.primary : (isPast ? AdminSurface.primaryText : AdminSurface.secondaryText))
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

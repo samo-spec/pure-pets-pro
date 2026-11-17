@@ -146,6 +146,7 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 @property (nonatomic, assign) NSInteger version;
 @property (nonatomic, copy) NSArray<NSString *> *requestActions;
 @property (nonatomic, copy) NSDictionary *subscriptionRequest;
+@property (nonatomic, assign) BOOL requestFlowAvailable;
 @end
 
 @interface PPProviderApplicationDraft : NSObject
@@ -235,6 +236,8 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 - (void)submitSubscriptionRequest:(NSDictionary *)request
                       completion:(void(^ NS_SWIFT_UI_ACTOR)(NSDictionary * _Nullable result, NSError * _Nullable error))completion NS_SWIFT_NAME(submitSubscriptionRequest(_:completion:));
 + (BOOL)isDefinitiveSubscriptionRequestError:(NSError *)error NS_SWIFT_NAME(isDefinitiveSubscriptionRequestError(_:));
++ (BOOL)isSubscriptionAccessDeniedError:(NSError *)error NS_SWIFT_NAME(isSubscriptionAccessDeniedError(_:));
++ (NSString *)subscriptionReadErrorMessage:(NSError *)error NS_SWIFT_NAME(subscriptionReadErrorMessage(_:));
 - (void)fetchPlansForProviderType:(PPProviderType)providerType
                        completion:(void(^ NS_SWIFT_UI_ACTOR)(NSArray<PPProviderPlan *> * _Nullable plans, NSError * _Nullable error))completion;
 - (NSError * _Nullable)validateDraft:(PPProviderApplicationDraft *)draft

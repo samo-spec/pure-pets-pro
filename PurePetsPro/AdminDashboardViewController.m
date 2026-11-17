@@ -4926,16 +4926,49 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     card.message = kLang(@"ProSubscription_Loading");
     card.actionTitle = kLang(@"ProSubscriptions_ViewAll");
     card.isLoading = YES;
+    BOOL isOfficialPurePets = [user.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
+                              [[FIRAuth auth].currentUser.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
+                              [user.email.lowercaseString isEqualToString:@"admin@pure-pets.net"];
+    if (isOfficialPurePets) {
+        card.isLoading = NO;
+        card.status = kLang(@"ProSubscriptions_AdminAllFeaturesActive");
+        NSMutableArray<NSString *> *tracks = [NSMutableArray array];
+        for (NSNumber *typeNumber in @[@(PPProviderTypeService),
+                                       @(PPProviderTypeMarketplace),
+                                       @(PPProviderTypeVet),
+                                       @(PPProviderTypePharmacy),
+                                       @(PPProviderTypeDeliveryCompany),
+                                       @(PPProviderTypeDeliverySubscription)]) {
+            NSString *track = [PPProviderApplicationManager localizedTitleForProviderType:typeNumber.integerValue];
+            if (track.length && ![tracks containsObject:track]) {
+                [tracks addObject:track];
+            }
+        }
+        card.message = [tracks componentsJoinedByString:@" · "];
+        card.symbolName = @"checkmark.seal.fill";
+        card.detail = kLang(@"ProSubscriptions_AdminAllFeaturesDetail");
+        card.subscriptionCount = (NSInteger)tracks.count;
+        card.activeCount = (NSInteger)tracks.count;
+        card.unrecordedTermCount = 0;
+        card.attentionCount = 0;
+        card.reviewCount = 0;
+        card.pendingCount = 0;
+        card.actionTitle = kLang(@"ProSubscriptions_ViewAll");
+        card.actionRoute = @"__subscription";
+        card.additionalActionTitle = @"";
+        return card;
+    }
     BOOL hasDriverWorkspace = PPDeliveryCompanyService.shared.hasDiscoveredDriverWorkspace;
     PPProviderOnboardingState *state = [self.providerSubscriptionState.uid isEqualToString:user.uid] ? self.providerSubscriptionState : nil;
     if (self.ownedSubscriptionsError) {
+        BOOL accessDenied = [PPProviderApplicationManager isSubscriptionAccessDeniedError:self.ownedSubscriptionsError];
         card.isLoading = NO;
-        card.status = kLang(@"ProviderHeroErrorBadge");
-        card.message = kLang(@"ProSubscription_LoadFailed");
+        card.status = kLang(accessDenied ? @"ProSubscriptions_AccessDeniedTitle" : @"ProSubscriptions_ReadFailedTitle");
+        card.message = [PPProviderApplicationManager subscriptionReadErrorMessage:self.ownedSubscriptionsError];
         card.actionTitle = kLang(@"TryAgain");
         card.actionRoute = @"__retrySubscription";
         if (hasDriverWorkspace) {
-            card.message = kLang(@"ProSubscription_DriverLoadFailed");
+            if (!accessDenied) card.message = kLang(@"ProSubscription_DriverLoadFailed");
             card.detail = kLang(@"ProSubscription_DriverRequirement");
             card.additionalActionTitle = kLang(@"ProSubscription_Manage");
             card.additionalActionRoute = @"__subscription";
@@ -4956,7 +4989,10 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
         if (![owned.userID isEqualToString:user.uid]) continue;
         card.subscriptionCount += 1;
         if ([owned.subscriptionStatus isEqualToString:@"active"]) card.activeCount += 1;
-        if ([@[@"expired", @"paused", @"cancelled", @"unavailable"] containsObject:owned.subscriptionStatus]) card.attentionCount += 1;
+        if ([owned.subscriptionStatus isEqualToString:@"unmanaged"]) card.unrecordedTermCount += 1;
+        BOOL termNeedsAttention = [@[@"expired", @"paused", @"cancelled", @"unavailable"] containsObject:owned.subscriptionStatus];
+        BOOL activityNeedsAttention = [@[@"setup_required", @"restricted", @"suspended", @"reactivation_review", @"warning", @"paused", @"disabled", @"inactive"] containsObject:owned.operationalStatus];
+        if (termNeedsAttention || activityNeedsAttention) card.attentionCount += 1;
         if ([owned.subscriptionRequest[@"status"] isEqualToString:@"pending"]) card.reviewCount += 1;
         NSString *track = [PPProviderApplicationManager localizedTitleForProviderType:owned.profile.providerType];
         if (track.length && ![tracks containsObject:track]) [tracks addObject:track];
@@ -4976,6 +5012,8 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
         card.detail = [NSString stringWithFormat:kLang(@"ProSubscriptions_NextEndFormat"),
             [PPProviderApplicationManager localizedTitleForProviderType:nextEnding.profile.providerType],
             [formatter stringFromDate:nextEnding.profile.subscriptionExpiresAt]];
+    } else if (card.unrecordedTermCount > 0) {
+        card.detail = kLang(@"ProSubscriptions_TermsNotRecordedBody");
     }
     if (card.subscriptionCount == 0) {
         card.status = kLang(@"ProSubscriptions_NoSubscriptions");

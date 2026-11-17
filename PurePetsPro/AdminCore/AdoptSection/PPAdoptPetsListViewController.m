@@ -56,24 +56,22 @@ typedef NS_ENUM(NSInteger, PPAdoptPetsFilter) {
     self.adoptPets = [NSMutableArray array];
     self.allPets = @[];
 
-    [self buildBackdrop];
-    [self buildHero];
-    [self buildTableView];
-    [self buildStateViews];
-    [self prepareEntranceState];
-    [self setLoading:YES message:kLang(@"AdoptPro_Loading")];
-    [self startListening];
+    // NextGen V10 Category-Defining Adoption Control Center Integration
+    [PPAdoptProBridge embedControlCenterIn:self];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    [self pp_navBarApplyBase:PPNavBarBaseLayoutAuto button:[self pp_addButton] title:kLang(@"AdoptPro_NavTitle") showBack:YES];
-    [self prepareEntranceState];
+    if (self.navigationController) {
+        [self.navigationController setNavigationBarHidden:YES animated:animated];
+    }
 }
 
-- (void)viewDidAppear:(BOOL)animated {
-    [super viewDidAppear:animated];
-    [self runEntranceIfNeeded];
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    if (self.navigationController) {
+        [self.navigationController setNavigationBarHidden:NO animated:animated];
+    }
 }
 
 - (void)dealloc {

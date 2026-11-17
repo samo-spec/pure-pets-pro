@@ -2215,48 +2215,13 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 - (void)startDeliveryNavigation {
     [PPFunc pp_playTapEffect];
     if (![self.order pp_canRevealExactDeliveryLocation]) return;
-
-    CLLocationCoordinate2D coordinate = [self coordinateFromLocationPointString:self.order.deliveryLocationPoint];
-    if (CLLocationCoordinate2DIsValid(coordinate)) {
-        NSURL *coordinateURL = [NSURL URLWithString:[NSString stringWithFormat:@"https://maps.apple.com/?daddr=%f,%f", coordinate.latitude, coordinate.longitude]];
-        if (coordinateURL && [[UIApplication sharedApplication] canOpenURL:coordinateURL]) {
-            [[UIApplication sharedApplication] openURL:coordinateURL options:@{} completionHandler:nil];
-            return;
-        }
-    }
-
-    NSString *address = [self.order pp_exactDeliveryLocationText];
-    if (!address.length) return;
-    NSString *encoded = [address stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-    NSURL *mapsURL = [NSURL URLWithString:[NSString stringWithFormat:@"https://maps.apple.com/?daddr=%@", encoded]];
-    if (mapsURL && [[UIApplication sharedApplication] canOpenURL:mapsURL]) {
-        [[UIApplication sharedApplication] openURL:mapsURL options:@{} completionHandler:nil];
-    }
+    [PPInAppRouteLauncher presentRouteFrom:self order:self.order];
 }
 
 - (void)showDeliveryRoute {
     [PPFunc pp_playTapEffect];
     if (![self.order pp_canRevealExactDeliveryLocation]) return;
-
-    NSString *address = [self.order pp_exactDeliveryLocationText];
-    if (!address.length) return;
-
-    CLLocationCoordinate2D coordinate = CLLocationCoordinate2DIsValid(self.deliveryDestinationCoordinate)
-        ? self.deliveryDestinationCoordinate
-        : [self coordinateFromLocationPointString:self.order.deliveryLocationPoint];
-    if (CLLocationCoordinate2DIsValid(coordinate)) {
-        MKPlacemark *placemark = [[MKPlacemark alloc] initWithCoordinate:coordinate addressDictionary:nil];
-        MKMapItem *mapItem = [[MKMapItem alloc] initWithPlacemark:placemark];
-        mapItem.name = self.order.customerName.length ? self.order.customerName : kLang(@"Deliv_CustomerInfo");
-        [MKMapItem openMapsWithItems:@[mapItem] launchOptions:@{MKLaunchOptionsDirectionsModeKey: MKLaunchOptionsDirectionsModeDriving}];
-        return;
-    }
-
-    NSString *encoded = [address stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-    NSURL *mapsURL = [NSURL URLWithString:[NSString stringWithFormat:@"https://maps.apple.com/?daddr=%@", encoded]];
-    if (mapsURL && [[UIApplication sharedApplication] canOpenURL:mapsURL]) {
-        [[UIApplication sharedApplication] openURL:mapsURL options:@{} completionHandler:nil];
-    }
+    [PPInAppRouteLauncher presentRouteFrom:self order:self.order];
 }
 
 - (void)calculateDeliveryDistance {
@@ -2309,23 +2274,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 - (void)openInMaps {
     [PPFunc pp_playTapEffect];
     if (![self.order pp_canRevealExactDeliveryLocation]) return;
-
-    CLLocationCoordinate2D coordinate = [self coordinateFromLocationPointString:self.order.deliveryLocationPoint];
-    if (CLLocationCoordinate2DIsValid(coordinate)) {
-        NSURL *coordinateURL = [NSURL URLWithString:[NSString stringWithFormat:@"https://maps.apple.com/?q=%f,%f", coordinate.latitude, coordinate.longitude]];
-        if (coordinateURL) {
-            [[UIApplication sharedApplication] openURL:coordinateURL options:@{} completionHandler:nil];
-            return;
-        }
-    }
-
-    NSString *address = [self.order pp_exactDeliveryLocationText];
-    if (!address.length) return;
-    NSString *encoded = [address stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-    NSURL *mapsURL = [NSURL URLWithString:[NSString stringWithFormat:@"https://maps.apple.com/?q=%@", encoded]];
-    if (mapsURL) {
-        [[UIApplication sharedApplication] openURL:mapsURL options:@{} completionHandler:nil];
-    }
+    [PPInAppRouteLauncher presentRouteFrom:self order:self.order];
 }
 
 @end

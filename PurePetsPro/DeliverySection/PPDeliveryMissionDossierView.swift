@@ -100,6 +100,7 @@ struct PPDeliveryMissionDossierView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var cashOrder: PPDeliveryOrderModel?
+    @State private var showInAppRoute: Bool = false
 
     private var isRTL: Bool { Language.isRTL() }
     private var currentUID: String { PPDeliveryCompanyService.currentAccountUID() }
@@ -121,6 +122,14 @@ struct PPDeliveryMissionDossierView: View {
         .sheet(item: $cashOrder) { order in
             PPDeliveryCashCollectionSheet(order: order, state: state)
                 .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
+        }
+        .fullScreenCover(isPresented: $showInAppRoute) {
+            if let order {
+                PPInAppRouteModalView(order: order) {
+                    showInAppRoute = false
+                }
+                .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
+            }
         }
     }
 
@@ -231,6 +240,21 @@ struct PPDeliveryMissionDossierView: View {
                  text: dropoffText,
                  detail: revealed ? nil : ppDossierText("Deliv_ExactLocationAfterAccepting"),
                  emphasized: !toPickup)
+
+            Button {
+                showInAppRoute = true
+            } label: {
+                HStack(spacing: AdminSpacing.xs) {
+                    Image(systemName: "map.fill")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(ppDossierText("DriverCockpit_LiveRoute_ViewRoute"))
+                        .font(AdminType.footnoteBold)
+                }
+                .foregroundStyle(AdminSurface.primary)
+                .frame(maxWidth: .infinity, minHeight: 40)
+                .background(AdminSurface.primary.opacity(0.08))
+                .clipShape(RoundedRectangle(cornerRadius: AdminRadius.button, style: .continuous))
+            }
         }
     }
 

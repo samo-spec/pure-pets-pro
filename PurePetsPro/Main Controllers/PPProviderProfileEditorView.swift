@@ -1300,12 +1300,14 @@ public final class PPProviderProfileEditorHostController: UIViewController {
     public override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .ppBackground
-        view.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage
+        view.semanticContentAttribute = Language
+            .semanticAttributeForCurrentLanguage()
 
         let swiftUIView = PPProviderProfileEditorView(viewModel: viewModel)
         let host = UIHostingController(rootView: swiftUIView)
         host.view.backgroundColor = .clear
-        host.view.semanticContentAttribute = Language.semanticAttributeForCurrentLanguage
+        host.view.semanticContentAttribute = Language
+            .semanticAttributeForCurrentLanguage()
         addChild(host)
         view.addSubview(host.view)
         host.view.translatesAutoresizingMaskIntoConstraints = false

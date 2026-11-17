@@ -263,13 +263,35 @@ public struct PPProviderSubscriptionStudioView: View {
                     .font(PPBrandFont.bold(21, relativeTo: .title3)).accessibilityAddTraits(.isHeader)
                 Text(text("ProSubscriptions_ReviewRequired"))
                     .font(PPBrandFont.regular(15, relativeTo: .body)).foregroundStyle(palette.secondary)
+                if !record.profile.planID.isEmpty && !availablePlans.contains(where: { $0.id == record.profile.planID }) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        currentPlanMarker
+                        Text(title(record)).font(PPBrandFont.bold(20, relativeTo: .headline))
+                        if !record.currentPriceLine.isEmpty {
+                            Text(record.currentPriceLine).font(PPBrandFont.bold(18, relativeTo: .title3))
+                                .foregroundStyle(palette.accentText).environment(\.layoutDirection, .leftToRight)
+                        }
+                        Text(text("ProSubscriptions_CurrentPlanUnavailable"))
+                            .font(PPBrandFont.regular(15, relativeTo: .body)).foregroundStyle(palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                    .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 20))
+                    .overlay { RoundedRectangle(cornerRadius: 20).strokeBorder(palette.accentText, lineWidth: 1.5) }
+                    .accessibilityElement(children: .contain).accessibilityAddTraits(.isSelected)
+                }
                 if availablePlans.isEmpty {
                     notice("ProSubscriptions_NoPlans", symbol: "rectangle.stack")
                 } else {
                     ForEach(availablePlans) { plan in
+                        // The saved plan ID identifies the current agreement
+                        // even when a legacy profile has no managed term yet.
+                        let isCurrentPlan = !record.profile.planID.isEmpty && plan.id == record.profile.planID
                         VStack(alignment: .leading, spacing: 10) {
                             Text(plan.title).font(PPBrandFont.bold(20, relativeTo: .headline))
-                            if plan.recommended {
+                            if isCurrentPlan {
+                                currentPlanMarker
+                            } else if plan.recommended {
                                 Text(text("ProSubscriptions_Recommended")).font(PPBrandFont.medium(14, relativeTo: .subheadline)).foregroundStyle(palette.accentText)
                             }
                             if !plan.subtitle.isEmpty {
@@ -278,21 +300,31 @@ public struct PPProviderSubscriptionStudioView: View {
                             Text(plan.priceLine).font(PPBrandFont.bold(18, relativeTo: .title3))
                                 .foregroundStyle(palette.accentText)
                                 .environment(\.layoutDirection, .leftToRight)
-                            if plan.id == record.profile.planID && ["active", "paused"].contains(record.subscriptionStatus) {
-                                Text(text("ProSubscriptions_CurrentPlan")).font(PPBrandFont.medium(14, relativeTo: .subheadline)).foregroundStyle(palette.secondary)
-                            } else {
-                                action("ProSubscriptions_RequestPlan", symbol: "arrow.triangle.2.circlepath") {
+                            if !isCurrentPlan || !["active", "paused"].contains(record.subscriptionStatus) {
+                                action(isCurrentPlan ? "ProSubscriptions_RequestThisPlan" : "ProSubscriptions_RequestPlan", symbol: "arrow.triangle.2.circlepath") {
                                     prepareRequest(record, action: "change_plan", plan: plan)
                                 }
                             }
                         }
                         .padding(20).frame(maxWidth: .infinity, alignment: .leading)
-                        .background(palette.surface, in: RoundedRectangle(cornerRadius: 20))
+                        .background(isCurrentPlan ? palette.accentSoft : palette.surface, in: RoundedRectangle(cornerRadius: 20))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 20)
+                                .strokeBorder(isCurrentPlan ? palette.accentText : .clear, lineWidth: 1.5)
+                        }
+                        .accessibilityElement(children: .contain)
+                        .accessibilityAddTraits(isCurrentPlan ? .isSelected : [])
                     }
                 }
             }
         }
-        notice("ProSubscriptions_ReviewRequired", symbol: "checkmark.shield")
+        notice(record.requestFlowAvailable ? "ProSubscriptions_ReviewRequired" : "ProSubscriptions_RequestsUnavailable", symbol: "checkmark.shield")
+    }
+
+    private var currentPlanMarker: some View {
+        Label(text("ProSubscriptions_CurrentPlan"), systemImage: "checkmark.circle.fill")
+            .font(PPBrandFont.medium(14, relativeTo: .subheadline)).foregroundStyle(palette.accentText)
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     @ViewBuilder private func selectedProfileWarnings(_ record: PPProviderOwnedSubscription) -> some View {
@@ -421,7 +453,9 @@ public struct PPProviderSubscriptionStudioView: View {
                 isLoading = false; isRefreshing = false
                 guard let record, record.userID == uid, record.profile.profileID == profileID, error == nil else {
                     selectedRecord = nil; availablePlans = []
-                    errorMessage = text("ProSubscriptions_Unavailable"); return
+                    errorMessage = error.map { PPProviderApplicationManager.subscriptionReadErrorMessage($0 as NSError) }
+                        ?? text("ProSubscriptions_Unavailable")
+                    return
                 }
                 selectedRecord = record
                 availablePlans = (plans ?? []).map { plan in
@@ -436,8 +470,14 @@ public struct PPProviderSubscriptionStudioView: View {
                 defer { completion?() }
                 guard generation == requestGeneration, uid == boundUID, uid == PPDeliveryCompanyService.currentAccountUID() else { return }
                 isLoading = false; isRefreshing = false
-                records = (subscriptions ?? []).filter { $0.userID == uid }
-                errorMessage = error == nil ? nil : text("ProSubscription_LoadFailed")
+                let filtered = (subscriptions ?? []).filter { $0.userID == uid }
+                records = filtered.sorted { a, b in
+                    let aActive = a.subscriptionStatus == "active" || a.operationalStatus == "active"
+                    let bActive = b.subscriptionStatus == "active" || b.operationalStatus == "active"
+                    if aActive != bActive { return aActive && !bActive }
+                    return (a.profile.subscriptionExpiresAt() ?? Date.distantPast) > (b.profile.subscriptionExpiresAt() ?? Date.distantPast)
+                }
+                errorMessage = error.map { PPProviderApplicationManager.subscriptionReadErrorMessage($0 as NSError) }
             }
         }
     }

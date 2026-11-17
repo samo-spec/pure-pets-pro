@@ -2289,6 +2289,18 @@
 "AdoptPro_UpdatedSuccess" = "تم تحديث قائمة التبني.";
 "AdoptPro_CreatedSuccess" = "تم إنشاء قائمة التبني.";
 "AdoptPro_Error_MissingListing" = "قائمة التبني غير موجودة.";
+"AdoptPro_Sanctuary_Title" = "محراب التبني ورعاية الحيوانات";
+"AdoptPro_Sanctuary_Subtitle" = "نشر القوائم ومراجعة طلبات الأسر والتحقق من الشروط الصحية بكل طمأنينة.";
+"AdoptPro_NewListing" = "قائمة جديدة";
+"AdoptPro_Applications_Title" = "طلبات التبني المقدمة";
+"AdoptPro_Applications_Subtitle" = "راجع استمارات الأسر المتقدمة وتوافق المنزل وخطة الرعاية لاتخاذ قرار التسكين.";
+"AdoptPro_HealthPassport" = "الجواز الصحي والرعاية الطبية";
+"AdoptPro_LocationPublisher" = "الموقع والجهة المسؤولة";
+"AdoptPro_Species_All" = "الكل";
+"AdoptPro_Species_Dogs" = "كلاب";
+"AdoptPro_Species_Cats" = "قطط";
+"AdoptPro_Species_Birds" = "طيور";
+"AdoptPro_Species_Other" = "أخرى";
 
 /* Pro Dashboard Live Hero */
 "DashboardHero_Status_Live" = "مباشر الآن";
@@ -4426,6 +4438,15 @@
 "DriverCockpit_Confirm_Cash_Format" = "استلمت %@ · تأكيد";
 "DriverCockpit_LoadMoreAssigned" = "عرض المزيد من التوصيلات المسندة";
 "DriverCockpit_Status_customer_unavailable" = "العميل غير متاح";
+"DriverCockpit_Items_Title" = "محتويات الشحنة";
+"DriverCockpit_Items_Count_One" = "صنف واحد";
+"DriverCockpit_Items_Count_Format" = "%d أصناف";
+"DriverCockpit_Items_Qty_Format" = "الكمية: %d";
+"DriverCockpit_Items_Total_Label" = "إجمالي الأصناف";
+"DriverCockpit_Items_Expand_Hint" = "اضغط لعرض تفاصيل المنتجات والكميات";
+"DriverCockpit_Items_Collapse_Hint" = "اضغط لإخفاء تفاصيل المنتجات";
+"DriverCockpit_Items_Default_Product" = "منتجات الطلب";
+"DriverCockpit_Items_Pill_Format" = "%@ ، الإجمالي %@";
 "DriverCockpit_Status_address_issue" = "العنوان يحتاج إلى مراجعة";
 "DriverCockpit_Status_payment_issue" = "الدفع يحتاج إلى مراجعة";
 "DriverCockpit_Status_return_required" = "الإرجاع مطلوب";
@@ -4729,10 +4750,17 @@
 
 /* Owned subscription inventory and staff-reviewed requests */
 "ProSubscriptions_HomeTitle" = "اشتراكاتك ومزاياك";
+"ProSubscriptions_AdminAllFeaturesActive" = "جميع الميزات والصلاحيات مفعّلة";
+"ProSubscriptions_AdminAllFeaturesDetail" = "تم تفعيل كافة الصلاحيات التشغيلية والميزات لحساب مسؤول بيور بتس الرسمي.";
+"ProSubscriptions_ReadFailedTitle" = "تعذّر تحميل الاشتراكات";
+"ProSubscriptions_AccessDeniedTitle" = "الوصول إلى الاشتراكات غير متاح";
+"ProSubscriptions_AccessDeniedMessage" = "تعذّر تأكيد صلاحية هذا الحساب للاطّلاع على الاشتراكات. أعد المحاولة، وإذا استمرت المشكلة فتواصل مع الدعم لمراجعة حسابك.";
 "ProSubscriptions_ViewAll" = "عرض كل الاشتراكات";
 "ProSubscriptions_ChooseHint" = "اختر اشتراكاً لعرض تفاصيله أو طلب تعديله أو تجديده.";
 "ProSubscriptions_CountFormat" = "%lu اشتراكات";
 "ProSubscriptions_ActiveTerms" = "اشتراكات سارية";
+"ProSubscriptions_TermsNotSet" = "مدة الاشتراك غير محددة";
+"ProSubscriptions_TermsNotRecordedBody" = "لم تُسجّل مدة الاشتراك لبعض أنشطتك بعد. افتح الاشتراك لمراجعة تفاصيله أو طلب باقة.";
 "ProSubscriptions_NeedsAttention" = "تحتاج إلى متابعة";
 "ProSubscriptions_UnderReview" = "طلبات قيد المراجعة";
 "ProSubscriptions_NextEndFormat" = "%@ · تنتهي المدة في %@";
@@ -4756,6 +4784,8 @@
 "ProSubscriptions_ReviewRequired" = "يراجع الفريق طلبك قبل تطبيق أي تغيير. إرسال الطلب لا يجدّد الاشتراك ولا يغيّر صلاحياتك أو يؤكد دفعاً.";
 "ProSubscriptions_NoPlans" = "لا توجد باقات متاحة لهذا الاشتراك حالياً. يمكنك تحديث الصفحة لاحقاً.";
 "ProSubscriptions_CurrentPlan" = "الباقة الحالية";
+"ProSubscriptions_CurrentPlanUnavailable" = "نعرض باقتك الحالية للاطّلاع. هذه الباقة غير متاحة ضمن خيارات الباقات الحالية.";
+"ProSubscriptions_RequestThisPlan" = "طلب هذه الباقة";
 "ProSubscriptions_RequestPlan" = "طلب تعديل الباقة";
 "ProSubscriptions_DocumentsExpiring" = "توجد مستندات لهذا النشاط تنتهي خلال ٣٠ يوماً. راجعها لتفادي توقف الخدمة.";
 "ProSubscriptions_Restricted" = "على هذا النشاط قيود تشغيلية. تجديد الاشتراك لا يرفع هذه القيود تلقائياً.";
@@ -4794,3 +4824,101 @@
 "ProSubscriptions_OneSubscription" = "اشتراك واحد";
 "ProSubscriptions_TwoSubscriptions" = "اشتراكان";
 "ProSubscriptions_ManyCountFormat" = "%lu اشتراكاً";
+
+"ProSubscriptions_RequestsUnavailable" = "يدير الفريق تعديلات الاشتراك وتجديده. خيارات إرسال الطلب غير متاحة حالياً؛ يمكنك متابعة عرض تفاصيل هذا الاشتراك.";
+
+/* Google Maps In-App Live Route & Directions */
+"DriverCockpit_LiveRoute_Title" = "المسار المباشر والاتجاهات";
+"DriverCockpit_LiveRoute_Subtitle" = "ملاحة خرائط Google المباشرة";
+"DriverCockpit_LiveRoute_Recenter" = "توسيط المسار";
+"DriverCockpit_LiveRoute_MyLoc" = "موقعي الحالي";
+"DriverCockpit_LiveRoute_FocusPickup" = "موقع الاستلام";
+"DriverCockpit_LiveRoute_FocusDropoff" = "موقع العميل";
+"DriverCockpit_LiveRoute_MapNormal" = "خريطة الطرق";
+"DriverCockpit_LiveRoute_MapSatellite" = "القمر الصناعي";
+"DriverCockpit_LiveRoute_MapTerrain" = "التضاريس";
+"DriverCockpit_LiveRoute_PickupStop" = "نقطة الاستلام";
+"DriverCockpit_LiveRoute_DropoffStop" = "نقطة التسليم";
+"DriverCockpit_LiveRoute_Directs" = "خطوات الاتجاهات";
+"DriverCockpit_LiveRoute_HideDirects" = "إخفاء الخطوات";
+"DriverCockpit_LiveRoute_ShowDirects" = "عرض جميع خطوات الاتجاهات";
+"DriverCockpit_LiveRoute_DistanceRemaining" = "المسافة المتبقية";
+"DriverCockpit_LiveRoute_EstTime" = "الوقت المتوقع";
+"DriverCockpit_LiveRoute_TrafficFastest" = "أسرع مسار حسب حركة المرور المباشرة";
+"DriverCockpit_LiveRoute_ExternalNavigation" = "فتح في تطبيق الخرائط للملاحة الصوتية";
+"DriverCockpit_LiveRoute_CoordinatesCopied" = "تم نسخ الإحداثيات: %@";
+"DriverCockpit_LiveRoute_CopyCoordinates" = "نسخ الإحداثيات";
+"DriverCockpit_LiveRoute_Calculating" = "جارٍ حساب المسار وحركة المرور المباشرة...";
+"DriverCockpit_LiveRoute_Failed" = "تعذر تحميل المسار عبر خرائط Google";
+"DriverCockpit_LiveRoute_Retry" = "إعادة المحاولة";
+"DriverCockpit_LiveRoute_Arrived" = "وصلت إلى الوجهة";
+"DriverCockpit_LiveRoute_Depart" = "الانطلاق نحو الوجهة";
+"DriverCockpit_LiveRoute_ViewRoute" = "عرض المسار المباشر والاتجاهات";
+"DriverCockpit_LiveRoute_Close" = "إغلاق";
+
+
+/* Fulfillment delivery pickup review */
+"ProPickup_NavigationTitle" = "نقطة الاستلام";
+"ProPickup_Title" = "من أين سيستلم المندوب الطلب؟";
+"ProPickup_Eyebrow" = "طلب توصيل";
+"ProPickup_OrderReference" = "طلب ⁨%@⁩";
+"ProPickup_Intro" = "راجع نقطة الاستلام وعنوانها، أو اختر متجراً آخر قبل طلب التوصيل.";
+"ProPickup_Continue" = "المتابعة بهذا الموقع";
+"ProPickup_ContinueHint" = "راجع الملاحظة وأكّد طلب التوصيل في الخطوة التالية.";
+"ProPickup_Location" = "نقطة الاستلام";
+"ProPickup_Chosen" = "الاستلام من ⁨%@⁩";
+"ProPickup_ChooseFirst" = "اختر نقطة الاستلام للمتابعة";
+"ProPickup_Loading" = "جارٍ التحقق من نقاط الاستلام…";
+"ProPickup_CurrentUnavailable" = "نقطة الاستلام الحالية غير متاحة. اختر متجراً متاحاً للمتابعة.";
+"ProPickup_DefaultStore" = "متجر مخزون التطبيق الافتراضي";
+"ProPickup_CurrentStore" = "متجر الاستلام الحالي";
+"ProPickup_SavedLocation" = "نقطة الاستلام المحفوظة";
+"ProPickup_OtherStores" = "متاجر أخرى متاحة لك";
+"ProPickup_Empty" = "لا توجد نقطة استلام متاحة لهذا الحساب. راجع إعدادات المتاجر والصلاحيات.";
+"ProPickup_EmptyPage" = "لا توجد متاجر متاحة في هذه الصفحة. يمكنك تحميل المزيد.";
+"ProPickup_LoadMore" = "تحميل المزيد من المتاجر";
+"ProPickup_Retry" = "أعد المحاولة";
+"ProPickup_LoadFailed" = "تعذر تحميل نقاط الاستلام. تحقق من الاتصال ثم أعد المحاولة.";
+"ProPickup_Denied" = "ليست لديك صلاحية استخدام نقطة الاستلام هذه. راجع صلاحياتك ثم افتح الطلب مجدداً.";
+"ProPickup_SessionChanged" = "تغيّر الحساب. أغلق النافذة وافتح الطلب مجدداً.";
+"ProPickup_SelectionInvalid" = "تغيّرت خيارات الاستلام. افتح الطلب واختر نقطة الاستلام مجدداً.";
+"ProPickup_AddressRequired" = "أضف عنواناً صالحاً لمتجر الاستلام ثم أعد المحاولة.";
+
+/* Pro delivery route review and navigation */
+"ProRoute_Title" = "المسار والوجهات";
+"ProRoute_MapStyle" = "نوع الخريطة";
+"ProRoute_YourLocation" = "موقعك الحالي";
+"ProRoute_MapAccessibility" = "خريطة مسار التوصيل";
+"ProRoute_MapUnavailable" = "تعذّر تحميل الخريطة";
+"ProRoute_MapUnavailableBody" = "يمكنك مراجعة الاتجاهات أو فتح تطبيق الخرائط للمتابعة.";
+"ProRoute_DriveTime" = "وقت القيادة";
+"ProRoute_RoadDistance" = "مسافة الطريق";
+"ProRoute_Review" = "مراجعة المسار";
+"ProRoute_Start" = "بدء الملاحة";
+"ProRoute_VoiceNavigationHint" = "يفتح تطبيق الخرائط للملاحة الصوتية.";
+"ProRoute_Locating" = "جارٍ تحديد موقعك لاحتساب المسار…";
+"ProRoute_AddressUnavailable" = "موقع الوجهة غير متاح";
+"ProRoute_AddressUnavailableBody" = "لم نتمكن من تحديد موقع دقيق لهذه الوجهة. تحقّق من عنوان الطلب أو تواصل مع مسؤول الأسطول.";
+"ProRoute_LocationDenied" = "يلزم السماح بالوصول إلى موقعك";
+"ProRoute_LocationDeniedBody" = "اسمح بالوصول إلى موقعك لعرض المسار من مكانك الحالي، أو تابع في تطبيق الخرائط.";
+"ProRoute_LocationUnavailable" = "تعذّر تحديد موقعك الحالي";
+"ProRoute_LocationUnavailableBody" = "تأكد من تشغيل خدمات الموقع ثم أعد المحاولة، أو افتح الوجهة في تطبيق الخرائط.";
+"ProRoute_LocationSettings" = "إعدادات الموقع";
+"ProRoute_NoDrivingRoute" = "لا يوجد مسار قيادة متاح";
+"ProRoute_NoDrivingRouteBody" = "لم تُرجع الخرائط مسار قيادة بين موقعك وهذه الوجهة. راجع العنوان أو افتح الخرائط لخيارات أخرى.";
+"ProRoute_DirectionsUnavailableBody" = "تحقّق من اتصالك وأعد المحاولة. يمكنك أيضًا فتح الوجهة في تطبيق الخرائط.";
+"ProRoute_MapsOpenFailed" = "تعذّر فتح تطبيق الخرائط. أعد المحاولة أو انسخ إحداثيات الوجهة.";
+"ProRoute_ReviewHint" = "المسار من موقعك الحالي. اضغط على أي خطوة لعرض موقعها على الخريطة.";
+"ProRoute_StepsUnavailable" = "لم تتوفر تفاصيل الخطوات لهذا المسار. يمكنك مراجعتها في تطبيق الخرائط.";
+"ProRoute_FocusStep" = "عرض هذه الخطوة على الخريطة";
+"ProRoute_StepFocused" = "تم عرض خطوة المسار على الخريطة";
+"ProRoute_StepAccessibility" = "الخطوة %ld، %@، %@";
+"ProRoute_OpenMapsReview" = "مراجعة في تطبيق الخرائط";
+"ProRoute_Copied" = "تم نسخ الإحداثيات";
+"ProRoute_DistanceMeters" = "%@ م";
+"ProRoute_DistanceKilometers" = "%@ كم";
+"ProRoute_StoreToCustomer" = "المتجر ← العميل";
+"ProRoute_ReviewStoreToCustomer" = "مراجعة مسار المتجر إلى العميل";
+"ProRoute_ReviewStoreToCustomerSubtitle" = "عرض المسار المباشر من نقطة الاستلام إلى نقطة التسليم";
+"ProRoute_ReviewStoreHint" = "المسار من نقطة الاستلام إلى نقطة التسليم. اضغط على أي خطوة لعرض موقعها على الخريطة.";
+"ProRoute_FromStoreToCustomer" = "من المتجر إلى العميل";

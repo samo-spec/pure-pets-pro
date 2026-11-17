@@ -50916,6 +50916,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = FD2A2761090CC88A5647254EA6BC56EC /* gRPC-Core.debug.xcconfig */;
 			buildSettings = {
+				CLANG_DEBUG_INFORMATION_LEVEL = "line-tables-only";
 				CLANG_ENABLE_OBJC_WEAK = NO;
 				"CODE_SIGN_IDENTITY[sdk=appletvos*]" = "";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "";

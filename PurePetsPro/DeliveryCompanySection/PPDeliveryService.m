@@ -150,6 +150,8 @@ static NSError *PPDeliveryCompanyContextError(void) {
         NSDictionary *source = PPDeliveryDictionary(dictionary);
         _action = [PPDeliveryString(source[@"action"]) uppercaseString];
         _permission = PPDeliveryString(source[@"permission"]);
+        _authority = PPDeliveryString(source[@"authority"]);
+        _expectedDriverUID = PPDeliveryString(source[@"expectedDriverUid"]);
         _expectedRevision = [source[@"expectedRevision"] respondsToSelector:@selector(integerValue)]
             ? [source[@"expectedRevision"] integerValue]
             : -1;
@@ -230,6 +232,12 @@ static NSError *PPDeliveryCompanyContextError(void) {
             for (id rawAction in rawActions) {
                 if (![rawAction isKindOfClass:NSDictionary.class]) continue;
                 PPDeliveryAllowedAction *action = [[PPDeliveryAllowedAction alloc] initWithDictionary:rawAction];
+                if ([action.action isEqualToString:@"REASSIGN"] && [_authority isEqualToString:@"FULFILLMENT_V1"]) {
+                    if (![action.authority isEqualToString:_authority] || action.expectedDriverUID.length == 0 ||
+                        ![action.expectedDriverUID isEqualToString:_assignedDriverUID] || action.expectedRevision != _revision) continue;
+                } else if (action.authority.length > 0 && ![action.authority isEqualToString:_authority]) {
+                    continue;
+                }
                 if (action.action.length > 0 && action.expectedRevision >= 0 && action.expectedState.length > 0) {
                     [actions addObject:action];
                 }
@@ -1063,12 +1071,13 @@ static NSError *PPDeliveryCompanyContextError(void) {
     NSString *act = [allowedAction.action uppercaseString];
     PPDeliveryCompanyService *compService = [PPDeliveryCompanyService shared];
 
-    // Fulfillment acceptance is one server-owned transaction. Its document ID
-    // belongs to FulfillmentOrders, never to the company-request collection.
-    if ([act isEqualToString:@"ACCEPT_AND_ASSIGN"]) {
+    // Fulfillment commands target the child, including when a company request has the same identifier.
+    BOOL officialReplacement = [act isEqualToString:@"REASSIGN"] && [allowedAction.authority isEqualToString:@"FULFILLMENT_V1"];
+    if ([act isEqualToString:@"ACCEPT_AND_ASSIGN"] || officialReplacement) {
         NSString *targetDriver = [driverUID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         if (targetDriver.length == 0 || allowedAction.expectedRevision < 0 ||
-            ![allowedAction.expectedState isEqualToString:@"delivery_requested"]) {
+            (officialReplacement ? allowedAction.expectedDriverUID.length == 0 || [targetDriver isEqualToString:allowedAction.expectedDriverUID]
+                                 : ![allowedAction.expectedState isEqualToString:@"delivery_requested"])) {
             if (completion) completion(nil, PPDeliveryInvalidResponseError());
             return;
         }
@@ -1203,6 +1212,15 @@ static NSError *PPDeliveryCompanyContextError(void) {
         @"expectedState": allowedAction.expectedState ?: @"",
     } mutableCopy];
     if (driverUID.length > 0) payload[@"driverUid"] = driverUID;
+    if ([allowedAction.action isEqualToString:@"REASSIGN"] && [allowedAction.authority isEqualToString:@"FULFILLMENT_V1"]) {
+        if (allowedAction.expectedDriverUID.length == 0 || !payload[@"driverUid"] ||
+            [allowedAction.expectedDriverUID isEqualToString:payload[@"driverUid"]]) {
+            if (completion) completion(nil, PPDeliveryInvalidResponseError());
+            return;
+        }
+        payload[@"authority"] = allowedAction.authority;
+        payload[@"expectedDriverUid"] = allowedAction.expectedDriverUID;
+    }
     if (reason.length > 0) payload[@"reason"] = reason;
     if ([allowedAction.action isEqualToString:@"RECONCILE_COD"]) {
         payload[@"handoverConfirmed"] = @(handoverConfirmed);

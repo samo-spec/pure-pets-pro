@@ -331,6 +331,9 @@ static NSString *PPDCAddressSummary(NSDictionary *address) {
 }
 - (NSString *)dropoffSummary { return PPDCAddressSummary(self.dropoffAddress); }
 - (NSString *)formattedFee {
+    if (self.deliveryFee == 0.0) {
+        return kLang(@"DeliveryCompany_Fee_Free");
+    }
     return self.deliveryFee > 0.0
         ? [NSString stringWithFormat:kLang(@"DeliveryCompany_Fee_Format"), self.deliveryFee]
         : kLang(@"DeliveryCompany_Fee_Unavailable");

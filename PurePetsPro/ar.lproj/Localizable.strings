@@ -2444,6 +2444,7 @@
 "DeliveryCompany_Driver_Format" = "السائق • %@";
 "DeliveryCompany_Unassigned" = "غير معيّن";
 "DeliveryCompany_Fee_Format" = "%.2f ر.ق";
+"DeliveryCompany_Fee_Free" = "توصيل مجاني";
 "DeliveryCompany_Fee_Unavailable" = "رسوم التوصيل غير متاحة";
 "DeliveryCompany_Updated_Format" = "آخر تحديث %@";
 "DeliveryCompany_Dates_Format" = "الإنشاء %@ • التحديث %@";
@@ -4206,6 +4207,13 @@
 "DeliveryCompany_Official_Badge" = "أسطول بيور بتس الرسمي";
 "DeliveryCompany_Official_Name" = "توصيلات بيور بتس الرسمية";
 "DeliveryDetail_AcceptDelivery" = "قبول التوصيل";
+"DeliveryDetail_ChangeDriver" = "تغيير السائق";
+"DeliveryDetail_ChangeDriverHint" = "اختر سائقًا بديلًا مؤهلًا لهذا التوصيل.";
+"DeliveryDetail_CurrentDriverFormat" = "السائق الحالي: %@";
+"DeliveryDetail_ReplacementCandidates" = "اختر السائق البديل";
+"DeliveryDetail_NoReplacement" = "لا يتوفر سائق بديل حاليًا";
+"DeliveryDetail_ReplacementEmptyHint" = "يبقى السائق الحالي معيّنًا. حدّث التفاصيل للتحقق من التوفر مجددًا.";
+"DeliveryDetail_ChangeDriverConfirmation" = "هل تريد تغيير سائق هذا التوصيل من %1$@ إلى %2$@؟";
 "DeliveryDetail_AcceptDriverConfirmation" = "هل تريد قبول هذا التوصيل وتعيينه للسائق %@؟ سيتابع السائق خطوات التوصيل من تطبيقه.";
 "DeliveryDetail_AcceptHint" = "اختر سائقًا مؤهلًا، ثم أكّد قبول التوصيل.";
 "DeliveryDetail_AcceptUnavailable" = "قبول التوصيل غير متاح لصلاحياتك الحالية أو لحالة هذا الطلب. حدّث التفاصيل للتحقق مجددًا.";
@@ -4950,13 +4958,7 @@
 // Delivery dossier route estimate and shipment disclosure.
 "DeliveryDetail_RoadDistance" = "مسافة الطريق";
 "DeliveryDetail_DrivingTime" = "وقت القيادة التقريبي";
-"DeliveryDetail_Estimate_Loading" = "جارٍ حساب مسار القيادة…";
-"DeliveryDetail_Estimate_Calculate" = "حساب تقدير القيادة";
-"DeliveryDetail_Estimate_MissingPoints" = "نحتاج إلى نقطتي الاستلام والمستلم المحفوظتين لحساب تقدير القيادة.";
-"DeliveryDetail_Estimate_Unavailable" = "تقدير القيادة غير متاح.";
-"DeliveryDetail_Estimate_Retry" = "إعادة حساب تقدير القيادة";
 "DeliveryDetail_Estimate_Scope" = "من الاستلام إلى المستلم · تقدير للقيادة";
-"DeliveryDetail_Estimate_Unknown" = "—";
 "DeliveryDetail_Manifest_Title" = "محتويات الشحنة";
 "DeliveryDetail_Manifest_Count" = "عدد الأصناف: %1$@";
 "DeliveryDetail_Manifest_Unknown" = "التفاصيل غير متاحة";

@@ -25,25 +25,23 @@ struct PPDeliveryDossierRouteInput: Hashable, Sendable {
             latitude = coordinate.latitude
             longitude = coordinate.longitude
         }
-        var coordinate: CLLocationCoordinate2D { CLLocationCoordinate2D(latitude: latitude, longitude: longitude) }
     }
     let requestID: String
-    let pickup: Point?
-    let dropoff: Point?
-    let language: String
-    let retry: Int
+    let pickup: Point
+    let dropoff: Point
 
     @MainActor
-    init(record: PPDeliveryRequestRecord, retry: Int) {
+    init?(record: PPDeliveryRequestRecord) {
+        guard !record.requestID.isEmpty,
+              let pickup = Point(ppParseDriverAddress(record.pickupAddress).coordinate),
+              let dropoff = Point(ppParseDriverAddress(record.dropoffAddress).coordinate) else { return nil }
         requestID = record.requestID
-        pickup = Point(ppParseDriverAddress(record.pickupAddress).coordinate)
-        dropoff = Point(ppParseDriverAddress(record.dropoffAddress).coordinate)
-        language = Language.currentLanguageCode()
-        self.retry = retry
+        self.pickup = pickup
+        self.dropoff = dropoff
     }
 }
 
-private struct PPDeliveryDossierDrivingMetrics: Sendable {
+struct PPDeliveryDossierDrivingMetrics: Sendable {
     let distanceMeters: Int
     let durationSeconds: Int
 
@@ -103,125 +101,77 @@ private final class PPDeliveryDossierRouteRequest: @unchecked Sendable {
     }
 }
 
-/// The sheet's .task(id:) owns loading, cancellation and replacement by newer saved stops.
+/// The journey card requests an estimate with each fresh dossier snapshot.
 @MainActor
 final class PPDeliveryDossierRouteEstimate: ObservableObject {
-    enum Phase: Equatable {
-        case idle, loading, missingPoints, unavailable
-        case ready(distance: String, duration: String)
-    }
-    @Published private(set) var phase: Phase = .idle
-    private var activeInput: PPDeliveryDossierRouteInput?
+    @Published private var cached: (input: PPDeliveryDossierRouteInput, metrics: PPDeliveryDossierDrivingMetrics, fetchedAt: Date)?
     private var generation: UInt = 0
-    private var cached: (input: PPDeliveryDossierRouteInput, phase: Phase, fetchedAt: Date)?
+
+    func metrics(for input: PPDeliveryDossierRouteInput?) -> PPDeliveryDossierDrivingMetrics? {
+        guard let input, let cached, cached.input == input,
+              (0..<180).contains(Date().timeIntervalSince(cached.fetchedAt)) else { return nil }
+        return cached.metrics
+    }
 
     func load(_ input: PPDeliveryDossierRouteInput?) async {
         generation &+= 1
         let loadGeneration = generation
-        activeInput = input
-        guard let input else { phase = .idle; return }
-        guard !input.requestID.isEmpty, let pickup = input.pickup, let dropoff = input.dropoff else {
-            phase = .missingPoints
-            return
-        }
-        if let cached, cached.input == input {
-            let age = Date().timeIntervalSince(cached.fetchedAt)
-            if age >= 0 && age < 180 { phase = cached.phase; return }
-        }
-        phase = .loading
-        do {
-            try Task.checkCancellation()
-            let request = PPDeliveryDossierRouteRequest()
-            let metrics = try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { continuation in
-                    guard request.install(continuation) else { return }
-                    guard !Task.isCancelled else { request.finish(.failure(CancellationError())); return }
-                    PPDeliveryService.shared().fetchDrivingRoute(
-                        pickup: ["latitude": pickup.latitude, "longitude": pickup.longitude],
-                        dropoff: ["latitude": dropoff.latitude, "longitude": dropoff.longitude]
-                    ) { response, error in
-                        if let error { request.finish(.failure(error)); return }
-                        guard let metrics = PPDeliveryDossierDrivingMetrics(response) else {
-                            request.finish(.failure(PPDeliveryDossierRouteFailure.unavailable))
-                            return
-                        }
-                        request.finish(.success(metrics))
+        guard let input, metrics(for: input) == nil, !Task.isCancelled else { return }
+        if cached != nil { cached = nil }
+        let request = PPDeliveryDossierRouteRequest()
+        let result = try? await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                guard request.install(continuation) else { return }
+                guard !Task.isCancelled else { request.finish(.failure(CancellationError())); return }
+                PPDeliveryService.shared().fetchDrivingRoute(
+                    pickup: ["latitude": input.pickup.latitude, "longitude": input.pickup.longitude],
+                    dropoff: ["latitude": input.dropoff.latitude, "longitude": input.dropoff.longitude]
+                ) { response, error in
+                    if let error { request.finish(.failure(error)); return }
+                    guard let metrics = PPDeliveryDossierDrivingMetrics(response) else {
+                        request.finish(.failure(PPDeliveryDossierRouteFailure.unavailable))
+                        return
                     }
+                    request.finish(.success(metrics))
                 }
-            } onCancel: {
-                request.finish(.failure(CancellationError()))
             }
-            guard generation == loadGeneration, activeInput == input else { return }
-            try Task.checkCancellation()
-            let isArabic = input.language.hasPrefix("ar")
-            let result = Phase.ready(
-                distance: PPGoogleMapsRouteService.shared.formatDistance(meters: metrics.distanceMeters, isArabic: isArabic),
-                duration: PPGoogleMapsRouteService.shared.formatDuration(seconds: metrics.durationSeconds, isArabic: isArabic))
-            cached = (input, result, Date())
-            phase = result
-        } catch {
-            guard generation == loadGeneration, activeInput == input else { return }
-            phase = Task.isCancelled || error is CancellationError ? .idle : .unavailable
+        } onCancel: {
+            request.finish(.failure(CancellationError()))
         }
+        guard let result, generation == loadGeneration, !Task.isCancelled else { return }
+        cached = (input, result, Date())
     }
 }
 
 struct PPDeliveryDossierRouteFacts: View {
-    let phase: PPDeliveryDossierRouteEstimate.Phase
-    let onRetry: () -> Void
+    let metrics: PPDeliveryDossierDrivingMetrics
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.locale) private var locale
 
     var body: some View {
         VStack(alignment: .leading, spacing: AdminSpacing.sm) {
             let layout = dynamicTypeSize.isAccessibilitySize
                 ? AnyLayout(VStackLayout(alignment: .leading, spacing: AdminSpacing.base))
                 : AnyLayout(HStackLayout(alignment: .top, spacing: AdminSpacing.lg))
+            let isArabic = locale.identifier.hasPrefix("ar")
             layout {
-                metric("DeliveryDetail_RoadDistance", symbol: "point.topleft.down.to.point.bottomright.curvepath", value: values?.0)
-                metric("DeliveryDetail_DrivingTime", symbol: "clock", value: values?.1)
+                metric("DeliveryDetail_RoadDistance", symbol: "point.topleft.down.to.point.bottomright.curvepath",
+                       value: PPGoogleMapsRouteService.shared.formatDistance(meters: metrics.distanceMeters, isArabic: isArabic))
+                metric("DeliveryDetail_DrivingTime", symbol: "clock",
+                       value: PPGoogleMapsRouteService.shared.formatDuration(seconds: metrics.durationSeconds, isArabic: isArabic))
             }
-            switch phase {
-            case .idle:
-                Button(action: onRetry) { Text(briefingText("DeliveryDetail_Estimate_Calculate")) }
-                    .font(AdminType.subheadlineBold).foregroundStyle(AdminSurface.primary)
-                    .frame(minHeight: AdminTouchTarget.minimum)
-            case .loading:
-                HStack(spacing: AdminSpacing.sm) {
-                    ProgressView().tint(AdminSurface.secondaryText).accessibilityHidden(true)
-                    Text(briefingText("DeliveryDetail_Estimate_Loading"))
-                }
-                .font(AdminType.caption1)
-                .foregroundStyle(AdminSurface.secondaryText)
-            case .missingPoints:
-                Text(briefingText("DeliveryDetail_Estimate_MissingPoints"))
-                    .font(AdminType.caption1).foregroundStyle(AdminSurface.secondaryText)
-            case .unavailable:
-                VStack(alignment: .leading, spacing: AdminSpacing.xs) {
-                    Text(briefingText("DeliveryDetail_Estimate_Unavailable"))
-                        .font(AdminType.caption1).foregroundStyle(AdminSurface.secondaryText)
-                    Button(action: onRetry) { Text(briefingText("DeliveryDetail_Estimate_Retry")) }
-                        .font(AdminType.subheadlineBold).foregroundStyle(AdminSurface.primary)
-                        .frame(minHeight: AdminTouchTarget.minimum)
-                }
-            case .ready:
-                Text(briefingText("DeliveryDetail_Estimate_Scope"))
-                    .font(AdminType.caption1).foregroundStyle(AdminSurface.secondaryText)
-            }
+            Text(briefingText("DeliveryDetail_Estimate_Scope"))
+                .font(AdminType.caption1).foregroundStyle(AdminSurface.secondaryText)
         }
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("delivery_dossier_route_metrics")
     }
 
-    private var values: (String, String)? {
-        if case let .ready(distance, duration) = phase { return (distance, duration) }
-        return nil
-    }
-
-    private func metric(_ title: String, symbol: String, value: String?) -> some View {
+    private func metric(_ title: String, symbol: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: AdminSpacing.xs) {
             Label(briefingText(title), systemImage: symbol)
                 .font(AdminType.caption1).foregroundStyle(AdminSurface.secondaryText)
-            Text(ppDriverIsolated(value ?? briefingText("DeliveryDetail_Estimate_Unknown")))
+            Text(ppDriverIsolated(value))
                 .font(AdminType.headline).monospacedDigit().foregroundStyle(AdminSurface.primaryText)
                 .fixedSize(horizontal: false, vertical: true)
         }

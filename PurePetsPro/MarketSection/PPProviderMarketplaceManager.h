@@ -11,6 +11,14 @@
 @property (nonatomic, copy) NSString *nameEn;
 @property (nonatomic, copy) NSString *address;
 @property (nonatomic, copy) NSString *phone;
+@property (nonatomic, assign) double latitude;
+@property (nonatomic, assign) double longitude;
+@property (nonatomic, copy, nullable) NSString *locationPoints;
+@property (nonatomic, assign) BOOL hasCoordinates;
+@property (nonatomic, copy, nullable) NSString *stockMode;
+@property (nonatomic, copy, nullable) NSString *operatingHours;
+@property (nonatomic, copy, nullable) NSString *crNumber;
+@property (nonatomic, copy, nullable) NSString *taxNumber;
 @property (nonatomic, assign) BOOL active;
 @property (nonatomic, assign) BOOL defaultBranch;
 + (instancetype)branchFromDictionary:(NSDictionary *)dictionary;
@@ -54,6 +62,20 @@
                              nameEn:(NSString *)nameEn
                             address:(NSString *)address
                               phone:(NSString *)phone
+                          isDefault:(BOOL)isDefault
+                         completion:(void (^)(BOOL success, NSString *message, NSError *error))completion;
+- (void)saveMarketplaceBranchWithID:(NSString * _Nullable)branchID
+                             nameAr:(NSString *)nameAr
+                             nameEn:(NSString *)nameEn
+                            address:(NSString *)address
+                              phone:(NSString *)phone
+                           latitude:(double)latitude
+                          longitude:(double)longitude
+                     locationPoints:(NSString * _Nullable)locationPoints
+                          stockMode:(NSString * _Nullable)stockMode
+                     operatingHours:(NSString * _Nullable)operatingHours
+                           crNumber:(NSString * _Nullable)crNumber
+                          taxNumber:(NSString * _Nullable)taxNumber
                           isDefault:(BOOL)isDefault
                          completion:(void (^)(BOOL success, NSString *message, NSError *error))completion;
 - (void)setMarketplaceBranchID:(NSString *)branchID

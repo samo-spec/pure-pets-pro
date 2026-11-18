@@ -302,6 +302,8 @@ static NSString *PPDCAddressSummary(NSDictionary *address) {
     model.paymentStatus = PPDCString(dictionary[@"paymentStatus"]);
     model.deliveryNote = PPDCString(dictionary[@"deliveryNote"]);
     model.receiverName = PPDCString(dictionary[@"receiverName"]);
+    model.customerName = [dictionary[@"customerName"] isKindOfClass:NSString.class]
+        ? [dictionary[@"customerName"] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] : @"";
     model.createdAt = PPDeliveryCompanyDateFromValue(dictionary[@"createdAt"]);
     model.updatedAt = PPDeliveryCompanyDateFromValue(dictionary[@"updatedAt"]);
     NSMutableArray *events = [NSMutableArray array];

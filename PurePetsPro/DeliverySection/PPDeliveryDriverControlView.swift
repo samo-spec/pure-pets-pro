@@ -404,7 +404,7 @@ public struct PPDeliveryActiveMissionDeck: View {
                         HStack(spacing: 8) {
                             Button(action: {
                                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                                state.openAppleMapsNavigation(address: order.pp_pickupLocationSummary())
+                                state.openAppleMapsNavigation(address: order.pp_pickupMapQuery())
                             }) {
                                 HStack(spacing: 4) {
                                     Image(systemName: "map.fill")
@@ -418,6 +418,7 @@ public struct PPDeliveryActiveMissionDeck: View {
                                 .foregroundColor(AdminSurface.primary)
                             }
                             .buttonStyle(PPDeliveryTouchButtonStyle())
+                            .disabled(order.pp_pickupMapQuery().isEmpty)
 
                             if let branchPhone = order.marketplaceProviderPhone, !branchPhone.isEmpty {
                                 Button(action: {

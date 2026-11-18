@@ -52,12 +52,12 @@ public final class PPAdoptProBridge: NSObject {
 
     /// Creates and returns a UIHostingController embedding the Edit / Create sheet
     public static func makeEditController(petDict: [String: Any]?, documentID: String?) -> UIViewController {
-        let mode: PPAdoptEditMode = {
-            if let petDict, let documentID, let model = PPAdoptListingModel(dict: petDict, documentID: documentID) {
-                return .edit(model)
-            }
-            return .create
-        }()
+        let mode: PPAdoptEditMode
+        if let petDict, let documentID, let model = PPAdoptListingModel(dict: petDict, documentID: documentID) {
+            mode = .edit(model)
+        } else {
+            mode = .create
+        }
         let view = PPAdoptProEditSheet(mode: mode)
         let host = UIHostingController(rootView: view)
         host.view.backgroundColor = UIColor.ppBackground

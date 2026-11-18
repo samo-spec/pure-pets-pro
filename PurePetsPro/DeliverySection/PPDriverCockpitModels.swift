@@ -462,7 +462,8 @@ private func ppParseDriverItem(_ raw: Any?) -> PPDriverItem? {
     guard !name.isEmpty || !id.isEmpty else { return nil }
     let rawQty = cpInt(d["quantity"])
     let qty = rawQty > 0 ? rawQty : 1
-    let rawPrice = cpDouble(d["price"]).isZero ? cpDouble(d["unitPrice"]) : cpDouble(d["price"])
+    let parsedPrice = cpDouble(d["price"]) ?? 0
+    let rawPrice = parsedPrice > 0 ? parsedPrice : (cpDouble(d["unitPrice"]) ?? 0)
     let imageURL = cpString(d["imageUrl"]).isEmpty ? (cpString(d["imageURL"]).isEmpty ? cpString(d["image"]) : cpString(d["imageURL"])) : cpString(d["imageUrl"])
     let variant = cpString(d["variant"]).isEmpty ? (cpString(d["size"]).isEmpty ? nil : cpString(d["size"])) : cpString(d["variant"])
     return PPDriverItem(id: id, name: name.isEmpty ? id : name, imageURL: imageURL, quantity: qty, price: rawPrice, variant: variant)
@@ -484,7 +485,8 @@ func ppParseOfficialTask(_ value: Any?) -> PPDriverTask? {
     let items = rawItems.compactMap { ppParseDriverItem($0) }
     let parsedCount = cpInt(source["itemCount"])
     let itemCount = parsedCount > 0 ? parsedCount : max(items.reduce(0) { $0 + $1.quantity }, items.count)
-    let totalAmount = cpDouble(source["totalAmount"]).isZero ? (cash?.amount ?? 0) : cpDouble(source["totalAmount"])
+    let parsedTotal = cpDouble(source["totalAmount"]) ?? 0
+    let totalAmount = parsedTotal > 0 ? parsedTotal : (cash?.amount ?? 0)
     let currency = cpString(source["currency"]).isEmpty ? (cash?.currency ?? "QAR") : cpString(source["currency"]).uppercased()
     return PPDriverTask(taskID: taskID,
                         authority: authority,
@@ -540,7 +542,8 @@ func ppParsePartnerTask(record value: Any?, projection projectionValue: Any?) ->
     let items = rawItems.compactMap { ppParseDriverItem($0) }
     let parsedCount = max(cpInt(record["itemCount"]), cpInt(record["itemsCount"]))
     let itemCount = parsedCount > 0 ? parsedCount : max(items.reduce(0) { $0 + $1.quantity }, items.count)
-    let totalAmount = cpDouble(record["totalAmount"]).isZero ? (cash?.amount ?? 0) : cpDouble(record["totalAmount"])
+    let parsedTotal = cpDouble(record["totalAmount"]) ?? 0
+    let totalAmount = parsedTotal > 0 ? parsedTotal : (cash?.amount ?? 0)
     let currency = cpString(record["currency"]).isEmpty ? (cash?.currency ?? "QAR") : cpString(record["currency"]).uppercased()
     return PPDriverTask(taskID: taskID,
                         authority: .partnerCompanyRequest,

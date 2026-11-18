@@ -52,8 +52,15 @@ static NSDictionary * _Nonnull PPOrderModelSafeDictionary(id value) {
 // Read-only projection of the canonical delivery address latitude/longitude.
 // This is navigation metadata, never an additional Firestore field or writer.
 static NSString * _Nonnull PPOrderModelCoordinateQuery(NSDictionary *snapshot) {
-    id latitude = snapshot[@"latitude"] ?: snapshot[@"lat"];
-    id longitude = snapshot[@"longitude"] ?: snapshot[@"lng"];
+    id latitude = snapshot[@"latitude"];
+    id longitude = snapshot[@"longitude"];
+    if (!latitude || latitude == NSNull.null) latitude = snapshot[@"lat"];
+    if (!longitude || longitude == NSNull.null) longitude = snapshot[@"lng"];
+    NSArray<NSString *> *point = [PPOrderModelSafeString(snapshot, @[@"locationPoints"]) componentsSeparatedByString:@","];
+    if (point.count == 2) {
+        if (!latitude || latitude == NSNull.null) latitude = point[0];
+        if (!longitude || longitude == NSNull.null) longitude = point[1];
+    }
     NSScanner *latScanner = [NSScanner scannerWithString:PPOrderModelOptionalString(latitude) ?: @""];
     NSScanner *lngScanner = [NSScanner scannerWithString:PPOrderModelOptionalString(longitude) ?: @""];
     latScanner.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
@@ -63,7 +70,7 @@ static NSString * _Nonnull PPOrderModelCoordinateQuery(NSDictionary *snapshot) {
         ![lngScanner scanDouble:&lng] || !lngScanner.isAtEnd ||
         !isfinite(lat) || !isfinite(lng) || fabs(lat) > 90 || fabs(lng) > 180 ||
         (lat == 0 && lng == 0)) return @"";
-    return [[NSString alloc] initWithFormat:@"%.8f,%.8f"
+    return [[NSString alloc] initWithFormat:@"%.17g,%.17g"
                                     locale:[NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"], lat, lng];
 }
 
@@ -245,14 +252,26 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
     m.customerName  = PPOrderModelSafeString(dict, @[@"customerName", @"userName", @"buyerName", @"name"]);
     m.customerPhone = PPOrderModelSafeString(dict, @[@"customerPhone", @"phone", @"buyerPhone"]);
     m.deliveryAddress = PPOrderModelSafeString(dict, @[@"deliveryAddress", @"shippingAddress", @"address"]);
-    m.pickupAddress = PPOrderModelSafeString(dict, @[@"pickupAddress", @"pickup_address", @"storeAddress", @"branchAddress"]);
-    for (NSString *key in @[@"pickupAddress", @"pickup_address", @"storeAddress", @"branchAddress"]) {
+    // The parent's latest operational snapshot is projected from the selected
+    // fulfillment. Keep its address and numeric point together, ahead of old
+    // inventory-branch text, including after selecting another pickup branch.
+    NSDictionary *pickupSnapshot = @{};
+    m.pickupAddress = @"";
+    for (NSString *key in @[@"deliveryRequestPickupAddressSnapshot", @"pickupAddress", @"providerAddressSnapshot", @"pickup_address", @"storeAddress", @"branchAddress"]) {
         id value = dict[key];
-        if ([value isKindOfClass:NSString.class] && PPOrderModelOptionalString(value).length) break;
+        if ([value isKindOfClass:NSString.class] && PPOrderModelOptionalString(value).length) {
+            m.pickupAddress = PPOrderModelOptionalString(value);
+            break;
+        }
         NSDictionary *address = PPOrderModelSafeDictionary(value);
         NSString *point = PPOrderModelCoordinateQuery(address);
-        if (point.length) { m.pp_pickupCoordinateQuery = point; break; }
-        if (PPOrderModelExactAddressFromSnapshot(address).length) break;
+        NSString *formatted = PPOrderModelExactAddressFromSnapshot(address);
+        if (point.length || formatted.length) {
+            pickupSnapshot = address;
+            m.pickupAddress = formatted;
+            m.pp_pickupCoordinateQuery = point;
+            break;
+        }
     }
     m.deliveryAreaName = PPOrderModelSafeString(dict, @[@"deliveryAreaName", @"deliveryArea", @"areaName", @"customerAreaName", @"destinationAreaName"]);
     m.deliveryLocationPoint = PPOrderModelSafeString(dict, @[@"deliveryLocationPoint", @"deliveryLocationPoints", @"locationPoints", @"customerLocationPoint"]);
@@ -284,19 +303,6 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
             if (formatted.length) {
                 m.deliveryAddress = formatted;
                 break;
-            }
-        }
-    }
-
-    if (m.pickupAddress.length == 0) {
-        for (NSString *addrKey in @[@"pickupAddress", @"pickup_address", @"storeAddress", @"branchAddress"]) {
-            id addrVal = dict[addrKey];
-            if ([addrVal isKindOfClass:[NSDictionary class]]) {
-                NSString *formatted = PPOrderModelExactAddressFromSnapshot((NSDictionary *)addrVal);
-                if (formatted.length) {
-                    m.pickupAddress = formatted;
-                    break;
-                }
             }
         }
     }
@@ -373,6 +379,15 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
     m.deliveryUserName = PPOrderModelSafeString(dict, @[@"deliveryUserName", @"deliveryAgentName"]);
     m.deliveryUserPhone = PPOrderModelSafeString(dict, @[@"deliveryUserPhone", @"deliveryPhone"]);
     m.branchID = PPOrderModelSafeString(dict, @[@"BranchID", @"branchId", @"branch_id"]);
+    for (NSString *key in @[@"deliveryRequestPickupBranchId", @"pickupBranchId"]) {
+        id value = dict[key];
+        if (!value || value == NSNull.null) continue;
+        if ([value isKindOfClass:NSString.class] && PPOrderModelOptionalString(value).length == 0) continue;
+        // An invalid explicit reference stays explicit, so a fallback cannot
+        // quietly route it to the inventory/default branch.
+        m.pickupBranchID = [value isKindOfClass:NSString.class] ? PPOrderModelOptionalString(value) : @"";
+        break;
+    }
     
     // Parse branch name
     id rawBranchName = dict[@"branchName"];
@@ -387,6 +402,16 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
     
     if (m.branchName.length == 0) {
         m.branchName = PPOrderModelSafeString(dict, @[@"storeName", @"shopName", @"branch_name"]);
+    }
+    id pickupName = pickupSnapshot[@"branchName"];
+    NSDictionary *pickupNames = PPOrderModelSafeDictionary(pickupName);
+    NSString *localizedPickupName = Language.isRTL
+        ? PPOrderModelSafeString(pickupNames, @[@"ar", @"en"])
+        : PPOrderModelSafeString(pickupNames, @[@"en", @"ar"]);
+    if (localizedPickupName.length == 0) localizedPickupName = PPOrderModelOptionalString(pickupName);
+    if (localizedPickupName.length || (m.pickupBranchID.length && ![m.pickupBranchID isEqualToString:m.branchID])) {
+        // An inventory branch's name must never label a different pickup.
+        m.branchName = localizedPickupName;
     }
 
     // Timestamps
@@ -700,6 +725,9 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
 - (NSString *)pp_pickupLocationSummary {
     if (self.pickupAddress.length) return self.pickupAddress;
     if (self.branchName.length) return self.branchName;
+    if (self.pickupBranchID != nil) {
+        return self.pickupBranchID.length ? self.pickupBranchID : (kLang(@"Deliv_BranchPendingAssignment") ?: @"");
+    }
     if (self.branchID.length) return self.branchID;
     if (self.marketplaceProviderName.length) return self.marketplaceProviderName;
     if (self.marketplaceProviderID.length &&
@@ -711,6 +739,44 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
 
 - (NSString *)pp_pickupMapQuery {
     return self.pp_pickupCoordinateQuery.length ? self.pp_pickupCoordinateQuery : (self.pickupAddress ?: @"");
+}
+
+- (void)pp_applyPickupBranchFallback:(NSDictionary *)branch {
+    if (![branch isKindOfClass:NSDictionary.class]) return;
+    // A saved address or even a point-only snapshot stays pinned. This method
+    // never changes branchID, a fulfillment, or any remote document.
+    if (self.pickupAddress.length || self.pp_pickupCoordinateQuery.length) return;
+    self.pickupAddress = PPOrderModelExactAddressFromSnapshot(branch);
+    self.pp_pickupCoordinateQuery = PPOrderModelCoordinateQuery(branch);
+    NSDictionary *names = PPOrderModelSafeDictionary(branch[@"name"]);
+    NSString *ar = PPOrderModelSafeString(names, @[@"ar"]);
+    NSString *en = PPOrderModelSafeString(names, @[@"en"]);
+    if (ar.length == 0) ar = PPOrderModelSafeString(branch, @[@"nameAr"]);
+    if (en.length == 0) en = PPOrderModelSafeString(branch, @[@"nameEn"]);
+    NSString *single = PPOrderModelOptionalString(branch[@"name"]);
+    NSString *name = Language.isRTL ? (ar.length ? ar : (en.length ? en : single))
+                                   : (en.length ? en : (ar.length ? ar : single));
+    if (name.length) self.branchName = name;
+}
+
+- (void)pp_applyAssignedPickupOrders:(NSArray<PPDeliveryOrderModel *> *)orders {
+    PPDeliveryOrderModel *first = orders.firstObject;
+    NSString *branchID = first.pickupBranchID ?: (first.branchID.length ? first.branchID : nil);
+    BOOL unique = first != nil;
+    for (PPDeliveryOrderModel *candidate in orders) {
+        NSString *candidateBranchID = candidate.pickupBranchID ?: (candidate.branchID.length ? candidate.branchID : nil);
+        if (![(branchID ?: @"") isEqualToString:candidateBranchID ?: @""] ||
+            ![first.pp_pickupMapQuery isEqualToString:candidate.pp_pickupMapQuery]) {
+            unique = NO;
+            break;
+        }
+    }
+    // Multiple distinct pickups cannot be represented by this legacy one-stop
+    // route. Keep it unavailable rather than navigating to a sibling's point.
+    self.pickupAddress = unique ? first.pickupAddress : @"";
+    self.pp_pickupCoordinateQuery = unique ? first.pp_pickupCoordinateQuery : @"";
+    self.pickupBranchID = unique ? branchID : @"";
+    self.branchName = unique ? first.branchName : nil;
 }
 
 - (NSString *)pp_deliveryAreaSummary {

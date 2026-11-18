@@ -114,6 +114,7 @@ FOUNDATION_EXPORT NSString *PPDeliveryCompanyFilterTitle(PPDeliveryCompanyDashbo
 @property (nonatomic, copy) NSString *paymentStatus;
 @property (nonatomic, copy) NSString *deliveryNote;
 @property (nonatomic, copy) NSString *receiverName;
+@property (nonatomic, copy) NSString *customerName;
 @property (nonatomic, strong, nullable) NSDate *createdAt;
 @property (nonatomic, strong, nullable) NSDate *updatedAt;
 @property (nonatomic, copy) NSArray<PPDeliveryCompanyEvent *> *events;

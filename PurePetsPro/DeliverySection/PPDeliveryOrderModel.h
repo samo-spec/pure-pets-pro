@@ -126,6 +126,8 @@ typedef NS_ENUM(NSInteger, PPDeliveryFilter) {
 @property (nonatomic, copy, nullable) NSString *deliveryUserPhone;
 @property (nonatomic, copy, nullable) NSString *branchID;
 @property (nonatomic, copy, nullable) NSString *branchName;
+/// Operational pickup reference; branchID retains the inventory/accounting identity.
+@property (nonatomic, copy, nullable) NSString *pickupBranchID;
 
 // ── Timestamps ──
 @property (nonatomic, strong, nullable) NSDate *createdAt;
@@ -174,6 +176,10 @@ typedef NS_ENUM(NSInteger, PPDeliveryFilter) {
 - (NSString *)pp_pickupLocationSummary;
 /// Derived from the existing pickup address point, with legacy address fallback.
 - (NSString *)pp_pickupMapQuery;
+/// Read-only enrichment of an unsaved pickup from its authorized branch cache.
+- (void)pp_applyPickupBranchFallback:(NSDictionary *)branch;
+/// Assigned children, rather than a sibling's last parent projection, own this pickup.
+- (void)pp_applyAssignedPickupOrders:(NSArray<PPDeliveryOrderModel *> *)orders;
 - (NSString *)pp_deliveryAreaSummary;
 - (NSString *)pp_visibleCustomerLocationSummary;
 - (NSString *)pp_exactDeliveryLocationText;

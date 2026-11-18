@@ -90,7 +90,10 @@ static UILabel *PPPickupLabel(CGFloat size, BOOL bold, UIColor *color) {
     self.table.delegate = self;
     self.table.rowHeight = UITableViewAutomaticDimension;
     self.table.estimatedRowHeight = 108;
+    self.table.sectionHeaderHeight = UITableViewAutomaticDimension;
+    self.table.estimatedSectionHeaderHeight = 36;
     self.table.accessibilityIdentifier = @"fulfillment.pickup.stores";
+    [self.table registerClass:UITableViewHeaderFooterView.class forHeaderFooterViewReuseIdentifier:@"pickupHeader"];
     [self.view addSubview:self.table];
 
     UIView *dock = UIView.new;
@@ -342,6 +345,35 @@ static UILabel *PPPickupLabel(CGFloat size, BOOL bold, UIColor *color) {
     NSString *source = self.currentChoice[@"source"];
     return kLang([source isEqualToString:@"consumer_stock"] ? @"ProPickup_DefaultStore" :
         ([source isEqualToString:@"saved_pickup"] ? @"ProPickup_SavedLocation" : @"ProPickup_CurrentStore"));
+}
+- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
+    NSString *title = [self tableView:tableView titleForHeaderInSection:section];
+    if (!title.length) return nil;
+    UITableViewHeaderFooterView *header = [tableView dequeueReusableHeaderFooterViewWithIdentifier:@"pickupHeader"];
+    if (!header) header = [[UITableViewHeaderFooterView alloc] initWithReuseIdentifier:@"pickupHeader"];
+    UIListContentConfiguration *content = [UIListContentConfiguration groupedHeaderConfiguration];
+    content.text = title;
+    content.textProperties.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline] scaledFontForFont:[Styling fontBold:15]];
+    content.textProperties.color = [UIColor ppTextSecondary];
+    content.textProperties.numberOfLines = 0;
+    content.textProperties.adjustsFontForContentSizeCategory = YES;
+    header.contentConfiguration = content;
+    header.semanticContentAttribute = self.view.semanticContentAttribute;
+    return header;
+}
+- (void)tableView:(UITableView *)tableView willDisplayHeaderView:(UIView *)view forSection:(NSInteger)section {
+    if ([view isKindOfClass:[UITableViewHeaderFooterView class]]) {
+        UITableViewHeaderFooterView *header = (UITableViewHeaderFooterView *)view;
+        if ([header.contentConfiguration isKindOfClass:[UIListContentConfiguration class]]) {
+            UIListContentConfiguration *config = (UIListContentConfiguration *)header.contentConfiguration;
+            config.textProperties.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline] scaledFontForFont:[Styling fontBold:15]];
+            config.textProperties.color = [UIColor ppTextSecondary];
+            header.contentConfiguration = config;
+        } else {
+            header.textLabel.font = [[UIFontMetrics metricsForTextStyle:UIFontTextStyleSubheadline] scaledFontForFont:[Styling fontBold:15]];
+            header.textLabel.textColor = [UIColor ppTextSecondary];
+        }
+    }
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"pickup"];

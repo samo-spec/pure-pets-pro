@@ -39,16 +39,16 @@ static NSString *PPDeliveryBranchDisplayName(NSDictionary *data) {
     return Language.isRTL ? (ar.length ? ar : en) : (en.length ? en : ar);
 }
 
-static NSString *PPDeliveryBranchAddress(NSDictionary *data) {
-    for (NSString *key in @[@"address", @"formattedAddress", @"fullAddress"]) {
-        NSString *value = PPDeliveryBranchText(data[key]);
-        if (value.length) return value;
-    }
-    return @"";
+static BOOL PPDeliveryUsablePickupBranch(NSDictionary *data) {
+    return data && ![data[@"isActive"] isEqual:@NO] && !PPDeliveryBranchFlag(data, @"isDeleted");
 }
 
 // Mirrors Infra's owner rule: no owner, "platform" or the official account.
 static BOOL PPDeliveryOrderIsPlatformFulfilled(PPDeliveryOrderModel *order) {
+    if ([order.marketplaceOwnerType.lowercaseString isEqualToString:@"partner"]) return NO;
+    NSString *provider = order.marketplaceProviderID ?: @"";
+    if (provider.length && ![provider isEqualToString:@"platform"] &&
+        ![provider isEqualToString:PPDeliveryOfficialSupportUserID]) return NO;
     for (PPDeliveryOrderItem *item in order.items) {
         if ([item.ownerType.lowercaseString isEqualToString:@"partner"]) return NO;
         NSString *owner = item.ownerID ?: @"";
@@ -196,6 +196,8 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> tertiaryListener;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> legacyAssignedListener;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> branchesListener;
+@property (nonatomic, strong, nullable) id<FIRListenerRegistration> consumerStockConfigListener;
+@property (nonatomic, assign) NSUInteger branchListenerGeneration;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> staffListener;
 @property (nonatomic, copy, nullable) PPStaffRole lastStaffAuthorizationRole;
 @property (nonatomic, assign) BOOL lastStaffAuthorizationIsActive;
@@ -211,9 +213,11 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 @property (nonatomic, assign) BOOL deliveryUserAssignedSourceServerReady;
 @property (nonatomic, assign) BOOL driverAliasAssignedSourceServerReady;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *branchNameCache;
-/// Branch whose stock the consumer app sells; the pickup of a Pure Pets order with none set.
-@property (nonatomic, copy, nullable) NSString *consumerStockBranchName;
-@property (nonatomic, copy, nullable) NSString *consumerStockBranchAddress;
+@property (nonatomic, copy) NSDictionary<NSString *, NSDictionary *> *branchPickupCache;
+@property (nonatomic, copy, nullable) NSDictionary *legacyConsumerStockBranch;
+@property (nonatomic, copy, nullable) NSDictionary *consumerStockBranch;
+@property (nonatomic, copy) NSDictionary *consumerStockConfig;
+@property (nonatomic, assign) BOOL hasConsumerStockConfigSnapshot;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *providerNameCache;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UserModel *> *providerUserCache;
 - (void)startOrderListenersForStaff:(PPStaffDoc * _Nullable)staff uid:(NSString *)uid;
@@ -372,12 +376,21 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
 - (void)stopListening {
     self.staffListenerGeneration += 1;
+    self.branchListenerGeneration += 1;
     [self stopOrderListeners];
     [self.branchesListener remove];
+    [self.consumerStockConfigListener remove];
     [self.staffListener remove];
     self.primaryListener = nil;
     self.secondaryListener = nil;
     self.branchesListener = nil;
+    self.consumerStockConfigListener = nil;
+    self.hasConsumerStockConfigSnapshot = NO;
+    self.consumerStockConfig = @{};
+    self.consumerStockBranch = nil;
+    self.legacyConsumerStockBranch = nil;
+    self.branchPickupCache = @{};
+    [self.branchNameCache removeAllObjects];
     self.staffListener = nil;
     self.lastStaffAuthorizationRole = nil;
     self.lastStaffAuthorizationIsActive = NO;
@@ -718,6 +731,12 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
                     PPDeliveryOrderModel *order = [PPDeliveryOrderModel fromDictionary:snapshot.data withID:snapshot.documentID];
                     if (order.fulfillmentVersion == 1) {
                         NSArray<NSString *> *selectedIDs = [statuses.allKeys sortedArrayUsingSelector:@selector(compare:)];
+                        NSMutableArray<PPDeliveryOrderModel *> *pickupOrders = [NSMutableArray arrayWithCapacity:selectedIDs.count];
+                        for (NSString *fulfillmentID in selectedIDs) {
+                            NSDictionary *child = childrenByID[fulfillmentID];
+                            if (child) [pickupOrders addObject:[PPDeliveryOrderModel fromDictionary:child withID:fulfillmentID]];
+                        }
+                        [order pp_applyAssignedPickupOrders:pickupOrders];
                         order.fulfillmentOrderIDs = selectedIDs;
                         order.assignedFulfillmentStatusesByID = statuses.copy;
                         order.deliveryUserId = uid;
@@ -810,7 +829,10 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 #pragma mark - Branch Name Cache
 
 - (void)startBranchesListener {
-    if (self.branchesListener) return;
+    if (self.branchesListener || self.consumerStockConfigListener) return;
+    NSString *uid = [FIRAuth auth].currentUser.uid;
+    if (uid.length == 0) return;
+    NSUInteger generation = ++self.branchListenerGeneration;
 
     FIRFirestore *db = [FIRFirestore firestore];
     FIRCollectionReference *branchesRef = [db collectionWithPath:@"branches"];
@@ -818,9 +840,19 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     __weak typeof(self) weakSelf = self;
     self.branchesListener = [branchesRef addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || error || !snapshot) return;
+        if (!strongSelf || generation != strongSelf.branchListenerGeneration ||
+            ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+        if (error || !snapshot) {
+            [strongSelf.branchNameCache removeAllObjects];
+            strongSelf.branchPickupCache = @{};
+            strongSelf.legacyConsumerStockBranch = nil;
+            [strongSelf refreshConsumerStockBranch];
+            [strongSelf mergeAndPublishOrders];
+            return;
+        }
 
-        BOOL changed = NO;
+        NSMutableDictionary *names = [NSMutableDictionary dictionary];
+        NSMutableDictionary *branches = [NSMutableDictionary dictionary];
         NSDictionary *flaggedStock = nil;
         NSDictionary *primaryBranch = nil;
         for (FIRDocumentSnapshot *doc in snapshot.documents) {
@@ -829,11 +861,8 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
             NSString *docID = doc.documentID;
             NSString *resolvedName = PPDeliveryBranchDisplayName(data);
-
-            if (resolvedName.length > 0 && ![strongSelf.branchNameCache[docID] isEqualToString:resolvedName]) {
-                strongSelf.branchNameCache[docID] = resolvedName;
-                changed = YES;
-            }
+            if (resolvedName.length > 0) names[docID] = resolvedName;
+            branches[docID] = data;
             if (!flaggedStock && (PPDeliveryBranchFlag(data, @"isConsumerAppStock") ||
                                   PPDeliveryBranchFlag(data, @"isUserAppStock") ||
                                   PPDeliveryBranchFlag(data, @"isConsumerStockBranch"))) {
@@ -842,37 +871,60 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
             if (!primaryBranch && PPDeliveryBranchFlag(data, @"isDefault")) primaryBranch = data;
         }
 
-        // Same selection as Admin's consumer stock branch and Infra's
-        // deliveryRouteProjection: the user-app stock branch, else the primary one.
-        NSDictionary *stock = flaggedStock ?: primaryBranch;
-        BOOL usable = stock && ![stock[@"isActive"] isEqual:@NO] && !PPDeliveryBranchFlag(stock, @"isDeleted");
-        NSString *stockName = usable ? PPDeliveryBranchDisplayName(stock) : @"";
-        NSString *stockAddress = usable ? PPDeliveryBranchAddress(stock) : @"";
-        if (![(strongSelf.consumerStockBranchName ?: @"") isEqualToString:stockName] ||
-            ![(strongSelf.consumerStockBranchAddress ?: @"") isEqualToString:stockAddress]) {
-            strongSelf.consumerStockBranchName = stockName;
-            strongSelf.consumerStockBranchAddress = stockAddress;
-            changed = YES;
-        }
-
-        if (changed && (strongSelf.primaryOrders.count > 0 || strongSelf.secondaryOrders.count > 0)) {
-            [strongSelf mergeAndPublishOrders];
-        }
+        strongSelf.branchNameCache = names;
+        strongSelf.branchPickupCache = branches;
+        strongSelf.legacyConsumerStockBranch = flaggedStock ?: primaryBranch;
+        [strongSelf refreshConsumerStockBranch];
+        [strongSelf mergeAndPublishOrders];
     }];
+    FIRDocumentReference *configRef = [[db collectionWithPath:@"AppConfigCol"] documentWithPath:@"ConsumerStockConfig"];
+    self.consumerStockConfigListener = [configRef addSnapshotListener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || generation != strongSelf.branchListenerGeneration ||
+            ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+        strongSelf.hasConsumerStockConfigSnapshot = !error && snapshot != nil;
+        strongSelf.consumerStockConfig = strongSelf.hasConsumerStockConfigSnapshot ? (snapshot.data ?: @{}) : @{};
+        [strongSelf refreshConsumerStockBranch];
+        [strongSelf mergeAndPublishOrders];
+    }];
+}
+
+- (void)refreshConsumerStockBranch {
+    NSDictionary *stock = nil;
+    // Infra gives an explicit config reference precedence, even if it is
+    // malformed or points at an inactive/deleted/missing branch. Never silently
+    // replace that reference with an unrelated flag-based branch.
+    if (self.hasConsumerStockConfigSnapshot) {
+        id reference = self.consumerStockConfig[@"branchId"];
+        if (reference && reference != NSNull.null) {
+            NSString *branchID = PPDeliveryBranchText(reference);
+            if (branchID.length && branchID.length <= 200 && ![branchID containsString:@"/"]) {
+                stock = self.branchPickupCache[branchID];
+            }
+        } else {
+            stock = self.legacyConsumerStockBranch;
+        }
+    }
+    self.consumerStockBranch = PPDeliveryUsablePickupBranch(stock) ? stock : nil;
 }
 
 - (void)applyPickupFallbackToOrder:(PPDeliveryOrderModel *)order {
     if (!order) return;
-    if (order.branchName.length == 0 && order.branchID.length > 0) {
-        NSString *cached = self.branchNameCache[order.branchID];
+    NSString *pickupBranchID = order.pickupBranchID ?: (order.branchID.length ? order.branchID : nil);
+    if (order.branchName.length == 0 && pickupBranchID.length > 0) {
+        NSString *cached = self.branchNameCache[pickupBranchID];
         if (cached.length) order.branchName = [cached copy];
     }
-    // A pickup that was set is never replaced, and a provider's order never
-    // borrows a Pure Pets branch.
-    if (order.pickupAddress.length || order.branchID.length || order.branchName.length) return;
+    // Saved points stay pinned; provider deliveries never borrow a platform branch.
+    if (order.pp_pickupMapQuery.length) return;
     if (!PPDeliveryOrderIsPlatformFulfilled(order)) return;
-    if (self.consumerStockBranchName.length) order.branchName = [self.consumerStockBranchName copy];
-    if (self.consumerStockBranchAddress.length) order.pickupAddress = [self.consumerStockBranchAddress copy];
+    if (pickupBranchID != nil) {
+        if (pickupBranchID.length == 0 || pickupBranchID.length > 200 || [pickupBranchID containsString:@"/"]) return;
+        NSDictionary *branch = self.branchPickupCache[pickupBranchID];
+        if (PPDeliveryUsablePickupBranch(branch)) [order pp_applyPickupBranchFallback:branch];
+        return;
+    }
+    if (self.consumerStockBranch) [order pp_applyPickupBranchFallback:self.consumerStockBranch];
 }
 
 #pragma mark - Filtering

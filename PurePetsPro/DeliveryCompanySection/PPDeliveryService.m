@@ -39,6 +39,65 @@ static NSString *PPDeliveryString(id value) {
     return @"";
 }
 
+static NSString *PPDeliveryDisplayString(id value, NSUInteger limit) {
+    if (![value isKindOfClass:NSString.class]) return @"";
+    NSString *text = [(NSString *)value stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    return text.length > limit ? [text substringToIndex:limit] : text;
+}
+
+static NSDictionary *PPDeliveryLocalizedLabel(id value) {
+    if ([value isKindOfClass:NSString.class]) {
+        NSString *text = PPDeliveryDisplayString(value, 200);
+        return @{@"ar": text, @"en": text};
+    }
+    NSDictionary *source = PPDeliveryDictionary(value);
+    NSString *ar = PPDeliveryDisplayString(source[@"ar"], 200);
+    NSString *en = PPDeliveryDisplayString(source[@"en"], 200);
+    return @{@"ar": ar.length ? ar : en, @"en": en.length ? en : ar};
+}
+
+@implementation PPDeliveryManifestOption
+- (instancetype)initWithDictionary:(NSDictionary *)dictionary {
+    self = [super init];
+    if (self) {
+        NSDictionary *name = PPDeliveryLocalizedLabel(dictionary[@"name"]);
+        NSDictionary *value = PPDeliveryLocalizedLabel(dictionary[@"value"]);
+        _nameAr = name[@"ar"]; _nameEn = name[@"en"];
+        _valueAr = value[@"ar"]; _valueEn = value[@"en"];
+    }
+    return self;
+}
+@end
+
+@implementation PPDeliveryManifestItem
+- (instancetype)initWithDictionary:(NSDictionary *)dictionary {
+    self = [super init];
+    if (self) {
+        NSDictionary *source = PPDeliveryDictionary(dictionary);
+        _lineID = PPDeliveryDisplayString(source[@"lineId"], 300);
+        _itemID = PPDeliveryDisplayString(source[@"itemId"], 128);
+        NSDictionary *name = PPDeliveryLocalizedLabel(source[@"name"]);
+        _nameAr = name[@"ar"]; _nameEn = name[@"en"];
+        id quantity = source[@"quantity"];
+        if ([quantity isKindOfClass:NSNumber.class] && CFGetTypeID((__bridge CFTypeRef)quantity) != CFBooleanGetTypeID()) {
+            double number = [quantity doubleValue];
+            if (isfinite(number) && number > 0 && number <= 1000000 && floor(number) == number) _quantity = quantity;
+        }
+        _variant = PPDeliveryDisplayString(source[@"variant"], 200);
+        NSMutableArray *options = [NSMutableArray array];
+        NSArray *rawOptions = PPDeliveryArray(source[@"options"]);
+        for (id raw in [rawOptions subarrayWithRange:NSMakeRange(0, MIN(rawOptions.count, 20))]) {
+            if (![raw isKindOfClass:NSDictionary.class]) continue;
+            PPDeliveryManifestOption *option = [[PPDeliveryManifestOption alloc] initWithDictionary:raw];
+            if ((option.nameAr.length || option.nameEn.length) && (option.valueAr.length || option.valueEn.length)) [options addObject:option];
+        }
+        _options = options.copy;
+        _optionsTruncated = [source[@"optionsTruncated"] isEqual:@YES] || rawOptions.count > 20;
+    }
+    return self;
+}
+@end
+
 static NSDate * _Nullable PPDeliveryDate(id value) {
     if ([value isKindOfClass:NSDate.class]) return value;
     if ([value isKindOfClass:FIRTimestamp.class]) return [(FIRTimestamp *)value dateValue];
@@ -136,7 +195,25 @@ static NSError *PPDeliveryCompanyContextError(void) {
         if (_carrierName.length == 0) _carrierName = PPDeliveryString(source[@"targetCompanyName"]);
         if (_carrierName.length == 0) _carrierName = PPDeliveryString(source[@"companyName"]);
         _carrierType = PPDeliveryString(source[@"carrierType"]);
-        _customerName = PPDeliveryString(source[@"customerName"]);
+        _customerName = PPDeliveryDisplayString(source[@"customerName"], 200);
+        NSDictionary *manifest = PPDeliveryDictionary(source[@"manifest"]);
+        _manifestAvailable = [manifest[@"version"] isEqual:@1] && [manifest[@"available"] isEqual:@YES] && [manifest[@"items"] isKindOfClass:NSArray.class];
+        NSMutableArray *manifestItems = [NSMutableArray array];
+        NSArray *rawItems = _manifestAvailable ? PPDeliveryArray(manifest[@"items"]) : @[];
+        for (id raw in [rawItems subarrayWithRange:NSMakeRange(0, MIN(rawItems.count, 200))]) {
+            if (![raw isKindOfClass:NSDictionary.class]) continue;
+            PPDeliveryManifestItem *item = [[PPDeliveryManifestItem alloc] initWithDictionary:raw];
+            item.lineID = [NSString stringWithFormat:@"%lu:%@", (unsigned long)manifestItems.count, item.lineID];
+            [manifestItems addObject:item];
+        }
+        _manifestItems = manifestItems.copy;
+        id rawCount = manifest[@"totalLineCount"];
+        double lineCount = [rawCount isKindOfClass:NSNumber.class] ? [rawCount doubleValue] : 0;
+        _manifestLineCount = _manifestItems.count;
+        if (_manifestAvailable && isfinite(lineCount) && lineCount >= 0 && lineCount <= 1000000 && floor(lineCount) == lineCount) {
+            _manifestLineCount = MAX(_manifestItems.count, (NSUInteger)lineCount);
+        }
+        _manifestTruncated = _manifestAvailable && ([manifest[@"truncated"] isEqual:@YES] || rawItems.count > 200 || _manifestLineCount > _manifestItems.count);
         _assignedDriverUID = PPDeliveryString(source[@"assignedDriverUid"]);
         if (_assignedDriverUID.length == 0) _assignedDriverUID = PPDeliveryString(source[@"assignedDriverUID"]);
         _assignedDriverName = PPDeliveryString(source[@"assignedDriverName"]);
@@ -814,6 +891,30 @@ static NSError *PPDeliveryCompanyContextError(void) {
 
 #pragma mark - Dossier (Partner Dual Mode)
 
+- (void)fetchDrivingRouteFromPickup:(NSDictionary *)pickup
+                           dropoff:(NSDictionary *)dropoff
+                        completion:(void(^)(NSDictionary *, NSError *))completion {
+    NSString *uid = [FIRAuth auth].currentUser.uid;
+    NSString *companyID = [self effectiveCompanyID];
+    PPDeliveryCompanyProfile *profile = [PPDeliveryCompanyService shared].verifiedProfile;
+    if (uid.length == 0 || companyID.length == 0 || ![profile.companyID isEqualToString:companyID]) {
+        if (completion) completion(nil, PPDeliveryCompanyContextError());
+        return;
+    }
+    // The existing callable supplies Auth and App Check. No provider credential
+    // or new order read is introduced into the client.
+    NSDictionary *params = @{@"pickup": pickup ?: @{}, @"dropoff": dropoff ?: @{}, @"selectedStop": @"DROPOFF"};
+    [self callFunction:@"getDeliveryDrivingRoutes" params:params completion:^(id result, NSError *error) {
+        if (![[FIRAuth auth].currentUser.uid isEqualToString:uid] ||
+            ![[PPDeliveryCompanyService shared].verifiedProfile.companyID isEqualToString:companyID]) {
+            if (completion) completion(nil, PPDeliveryCompanyContextError());
+            return;
+        }
+        if (completion) completion([result isKindOfClass:NSDictionary.class] ? result : nil,
+                                   error ?: ([result isKindOfClass:NSDictionary.class] ? nil : PPDeliveryInvalidResponseError()));
+    }];
+}
+
 - (void)fetchDossierForRequestID:(NSString *)requestID
                       completion:(void(^)(PPDeliveryDossierSnapshot *, NSError *))completion {
     NSString *safeRequestID = [requestID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
@@ -882,6 +983,8 @@ static NSError *PPDeliveryCompanyContextError(void) {
             jobDict[@"carrierName"] = req.companyName ?: @"";
             jobDict[@"assignedDriverUid"] = req.assignedDriverUID ?: @"";
             jobDict[@"assignedDriverName"] = req.assignedDriverName ?: @"";
+            // Pass through only the authorized response. Offers intentionally omit identity.
+            jobDict[@"customerName"] = req.customerName ?: @"";
             jobDict[@"deliveryFee"] = @(req.deliveryFee);
             jobDict[@"pickupAddress"] = req.pickupAddress ?: @{};
             jobDict[@"dropoffAddress"] = req.dropoffAddress ?: @{};

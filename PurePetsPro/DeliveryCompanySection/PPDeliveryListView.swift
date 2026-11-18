@@ -1829,7 +1829,7 @@ private struct PendingDeliveryAssignment: Identifiable {
 }
 
 private enum DeliveryDetailSection: Hashable {
-    case collection, proof, activity, progress, references
+    case collection, proof, activity, progress, references, manifest
 }
 
 private struct DeliveryDetailEvent: Identifiable {
@@ -1844,6 +1844,9 @@ private struct DeliveryDossierSheet: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @StateObject private var routeEstimate = PPDeliveryDossierRouteEstimate()
+    @State private var routeRetry = 0
     @State private var pendingAssignment: PendingDeliveryAssignment?
     @State private var handoverConfirmed = false
     @State private var expandedSections: Set<DeliveryDetailSection> = []
@@ -1895,6 +1898,13 @@ private struct DeliveryDossierSheet: View {
         .presentationCornerRadius(28)
         .interactiveDismissDisabled(viewModel.isExecuting)
         .accessibilityAction(.escape) { close() }
+        .task(id: routeEstimateInput) { [input = routeEstimateInput] in
+            await routeEstimate.load(input)
+        }
+        .onChange(of: viewModel.selectedRequestID) { _, _ in
+            expandedSections.removeAll()
+            routeRetry = 0
+        }
         .onChange(of: viewModel.dossier?.record.revision) { _, _ in
             handoverConfirmed = false
             pendingAssignment = nil
@@ -1920,6 +1930,12 @@ private struct DeliveryDossierSheet: View {
 
     private var usesInlineFooter: Bool {
         dynamicTypeSize.isAccessibilitySize || verticalSizeClass == .compact
+    }
+
+    private var routeEstimateInput: PPDeliveryDossierRouteInput? {
+        guard scenePhase == .active, !viewModel.isLoadingDossier, viewModel.dossierIncident == nil,
+              let record = viewModel.dossier?.record, record.requestID == viewModel.selectedRequestID else { return nil }
+        return PPDeliveryDossierRouteInput(record: record, retry: routeRetry)
     }
 
     private var canReviewDeliveryDrivers: Bool {
@@ -1961,7 +1977,10 @@ private struct DeliveryDossierSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .accessibilityAddTraits(.isHeader)
-            Button { viewModel.loadDossier() } label: {
+            Button {
+                routeRetry &+= 1
+                viewModel.loadDossier()
+            } label: {
                 ZStack {
                     if viewModel.isLoadingDossier {
                         ProgressView().tint(AdminSurface.primary)
@@ -2166,9 +2185,15 @@ private struct DeliveryDossierSheet: View {
                               ? deliveryText("DeliveryDetail_CustomerMissing") : record.customerName, symbol: "person")
             }
             sectionRule
+            PPDeliveryDossierRouteFacts(phase: routeEstimate.phase) { routeRetry &+= 1 }
+            sectionRule
             dossierFact("DeliveryWorkspace_Fee", record.deliveryFee == nil
                         ? deliveryText("DeliveryWorkspace_Unspecified")
                         : deliveryCurrencyText(record.deliveryFee, currency: record.cod["currency"] as? String ?? "QAR"))
+            PPDeliveryDossierManifest(available: record.manifestAvailable, items: record.manifestItems,
+                                      lineCount: record.manifestLineCount, truncated: record.manifestTruncated,
+                                      expanded: expansion(for: .manifest), refreshing: viewModel.isLoadingDossier,
+                                      onRefresh: { viewModel.loadDossier() })
         }
         .padding(20)
         .frame(maxWidth: .infinity, alignment: .leading)

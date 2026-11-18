@@ -63,7 +63,7 @@ public final class PPAdoptProStore: ObservableObject {
 
     public init() {}
 
-    deinit {
+    isolated deinit {
         listingsListener?.remove()
         legacyListener?.remove()
         applicationsListener?.remove()

@@ -54,6 +54,39 @@ static BOOL PPMarketplaceErrorLooksUnavailable(NSError *error, NSString *message
     branch.nameEn = PPSafeString(name[@"en"]);
     branch.address = PPSafeString(dictionary[@"address"]);
     branch.phone = PPSafeString(dictionary[@"phone"]);
+
+    // Coordinates & Pickup Telemetry
+    double lat = 0.0;
+    double lng = 0.0;
+    BOOL hasCoords = NO;
+    if (dictionary[@"latitude"] != nil && dictionary[@"longitude"] != nil) {
+        lat = [dictionary[@"latitude"] doubleValue];
+        lng = [dictionary[@"longitude"] doubleValue];
+        hasCoords = (fabs(lat) > 0.0001 || fabs(lng) > 0.0001);
+    } else if (dictionary[@"lat"] != nil && dictionary[@"lng"] != nil) {
+        lat = [dictionary[@"lat"] doubleValue];
+        lng = [dictionary[@"lng"] doubleValue];
+        hasCoords = (fabs(lat) > 0.0001 || fabs(lng) > 0.0001);
+    }
+    NSString *locPoints = PPSafeString(dictionary[@"locationPoints"]);
+    if (!hasCoords && locPoints.length > 0) {
+        NSArray *parts = [locPoints componentsSeparatedByString:@","];
+        if (parts.count >= 2) {
+            lat = [[parts[0] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] doubleValue];
+            lng = [[parts[1] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] doubleValue];
+            hasCoords = (fabs(lat) > 0.0001 || fabs(lng) > 0.0001);
+        }
+    }
+    branch.latitude = lat;
+    branch.longitude = lng;
+    branch.hasCoordinates = hasCoords;
+    branch.locationPoints = locPoints.length ? locPoints : (hasCoords ? [NSString stringWithFormat:@"%f,%f", lat, lng] : nil);
+
+    branch.stockMode = PPSafeString(dictionary[@"stockMode"]);
+    branch.operatingHours = PPSafeString(dictionary[@"operatingHours"]);
+    branch.crNumber = PPSafeString(dictionary[@"crNumber"]);
+    branch.taxNumber = PPSafeString(dictionary[@"taxNumber"]);
+
     branch.active = dictionary[@"isActive"] == nil || [dictionary[@"isActive"] boolValue];
     branch.defaultBranch = [dictionary[@"isDefault"] boolValue];
     return branch;
@@ -68,14 +101,20 @@ static BOOL PPMarketplaceErrorLooksUnavailable(NSError *error, NSString *message
 }
 
 - (NSDictionary *)pickupAddressPayload {
-    return @{
+    NSMutableDictionary *payload = [@{
         @"branchId": self.branchID ?: @"",
         @"branchCode": self.code ?: @"",
         @"branchName": @{@"ar": self.nameAr ?: @"", @"en": self.nameEn ?: @""},
         @"displayName": self.address ?: @"",
         @"address": self.address ?: @"",
         @"phone": self.phone ?: @"",
-    };
+    } mutableCopy];
+    if (self.hasCoordinates) {
+        payload[@"latitude"] = @(self.latitude);
+        payload[@"longitude"] = @(self.longitude);
+        payload[@"locationPoints"] = self.locationPoints ?: [NSString stringWithFormat:@"%f,%f", self.latitude, self.longitude];
+    }
+    return [payload copy];
 }
 
 @end
@@ -227,6 +266,13 @@ static BOOL PPMarketplaceErrorLooksUnavailable(NSError *error, NSString *message
                              nameEn:(NSString *)nameEn
                             address:(NSString *)address
                               phone:(NSString *)phone
+                           latitude:(double)latitude
+                          longitude:(double)longitude
+                     locationPoints:(NSString *)locationPoints
+                          stockMode:(NSString *)stockMode
+                     operatingHours:(NSString *)operatingHours
+                           crNumber:(NSString *)crNumber
+                          taxNumber:(NSString *)taxNumber
                           isDefault:(BOOL)isDefault
                          completion:(void (^)(BOOL, NSString *, NSError *))completion {
     NSMutableDictionary *payload = [@{
@@ -237,9 +283,42 @@ static BOOL PPMarketplaceErrorLooksUnavailable(NSError *error, NSString *message
         @"isDefault": @(isDefault),
     } mutableCopy];
     if (branchID.length > 0) payload[@"branchId"] = branchID;
+    if (fabs(latitude) > 0.0001 || fabs(longitude) > 0.0001) {
+        payload[@"latitude"] = @(latitude);
+        payload[@"longitude"] = @(longitude);
+        payload[@"locationPoints"] = locationPoints.length ? locationPoints : [NSString stringWithFormat:@"%f,%f", latitude, longitude];
+    }
+    if (stockMode.length > 0) payload[@"stockMode"] = stockMode;
+    if (operatingHours.length > 0) payload[@"operatingHours"] = operatingHours;
+    if (crNumber.length > 0) payload[@"crNumber"] = crNumber;
+    if (taxNumber.length > 0) payload[@"taxNumber"] = taxNumber;
+
     [self callFunctionResult:@"providerSaveMarketplaceBranch" payload:payload completion:^(NSDictionary *result, NSError *error) {
         if (completion) completion(error == nil, error.localizedDescription, error);
     }];
+}
+
+- (void)saveMarketplaceBranchWithID:(NSString *)branchID
+                             nameAr:(NSString *)nameAr
+                             nameEn:(NSString *)nameEn
+                            address:(NSString *)address
+                              phone:(NSString *)phone
+                          isDefault:(BOOL)isDefault
+                         completion:(void (^)(BOOL, NSString *, NSError *))completion {
+    [self saveMarketplaceBranchWithID:branchID
+                               nameAr:nameAr
+                               nameEn:nameEn
+                              address:address
+                                phone:phone
+                             latitude:0.0
+                            longitude:0.0
+                       locationPoints:nil
+                            stockMode:nil
+                       operatingHours:nil
+                             crNumber:nil
+                            taxNumber:nil
+                            isDefault:isDefault
+                           completion:completion];
 }
 
 - (void)setMarketplaceBranchID:(NSString *)branchID

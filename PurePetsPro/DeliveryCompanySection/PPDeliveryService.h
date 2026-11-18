@@ -12,6 +12,26 @@ FOUNDATION_EXPORT NSString * const PPDeliveryServiceErrorDomain;
 - (instancetype)initWithDictionary:(NSDictionary *)dictionary;
 @end
 
+@interface PPDeliveryManifestOption : NSObject
+@property (nonatomic, copy) NSString *nameAr;
+@property (nonatomic, copy) NSString *nameEn;
+@property (nonatomic, copy) NSString *valueAr;
+@property (nonatomic, copy) NSString *valueEn;
+- (instancetype)initWithDictionary:(NSDictionary *)dictionary;
+@end
+
+@interface PPDeliveryManifestItem : NSObject
+@property (nonatomic, copy) NSString *lineID;
+@property (nonatomic, copy) NSString *itemID;
+@property (nonatomic, copy) NSString *nameAr;
+@property (nonatomic, copy) NSString *nameEn;
+@property (nonatomic, strong, nullable) NSNumber *quantity;
+@property (nonatomic, copy) NSString *variant;
+@property (nonatomic, copy) NSArray<PPDeliveryManifestOption *> *options;
+@property (nonatomic, assign) BOOL optionsTruncated;
+- (instancetype)initWithDictionary:(NSDictionary *)dictionary;
+@end
+
 @interface PPDeliveryRequestRecord : NSObject
 @property (nonatomic, copy) NSString *requestID;
 @property (nonatomic, copy) NSString *orderID;
@@ -30,6 +50,10 @@ FOUNDATION_EXPORT NSString * const PPDeliveryServiceErrorDomain;
 @property (nonatomic, copy) NSString *carrierName;
 @property (nonatomic, copy) NSString *carrierType;
 @property (nonatomic, copy) NSString *customerName;
+@property (nonatomic, assign) BOOL manifestAvailable;
+@property (nonatomic, assign) BOOL manifestTruncated;
+@property (nonatomic, assign) NSUInteger manifestLineCount;
+@property (nonatomic, copy) NSArray<PPDeliveryManifestItem *> *manifestItems;
 @property (nonatomic, copy) NSString *assignedDriverUID;
 @property (nonatomic, copy) NSString *assignedDriverName;
 @property (nonatomic, strong, nullable) NSNumber *deliveryFee;
@@ -243,6 +267,13 @@ FOUNDATION_EXPORT NSString * const PPDeliveryServiceErrorDomain;
                       completion:(void(^)(PPDeliveryDossierSnapshot * _Nullable dossier,
                                            NSError * _Nullable error))completion
     NS_SWIFT_NAME(fetchDossier(requestID:completion:));
+
+/// Display-only driving estimate for the saved points in an authorized dossier.
+- (void)fetchDrivingRouteFromPickup:(NSDictionary *)pickup
+                           dropoff:(NSDictionary *)dropoff
+                        completion:(void(^)(NSDictionary * _Nullable response,
+                                             NSError * _Nullable error))completion
+    NS_SWIFT_NAME(fetchDrivingRoute(pickup:dropoff:completion:));
 
 - (void)executeAllowedAction:(PPDeliveryAllowedAction *)allowedAction
                    requestID:(NSString *)requestID

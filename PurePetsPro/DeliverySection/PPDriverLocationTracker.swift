@@ -23,13 +23,28 @@ public final class PPDriverLocationTracker: NSObject, ObservableObject, @preconc
     private let locationManager = CLLocationManager()
     private var isTracking = false
 
-    /// A cached or invalid fix cannot become the origin of a driving route.
+    /// The most accurate and recent location fix available.
+    public var bestLocation: CLLocation? {
+        if let location = currentLocation, isLocationUsable(location) {
+            return location
+        }
+        if let location = locationManager.location, isLocationUsable(location) {
+            return location
+        }
+        return currentLocation ?? locationManager.location
+    }
+
+    /// A valid location fix for live route viewing.
     public var usableLocation: CLLocation? {
-        guard let location = currentLocation,
-              location.horizontalAccuracy >= 0, location.horizontalAccuracy <= 200,
-              abs(location.timestamp.timeIntervalSinceNow) <= 60,
-              PPGoogleMapsRouteService.isUsable(location.coordinate) else { return nil }
+        guard let location = bestLocation, isLocationUsable(location) else { return nil }
         return location
+    }
+
+    private func isLocationUsable(_ location: CLLocation) -> Bool {
+        location.horizontalAccuracy >= 0 &&
+        location.horizontalAccuracy <= 1500 &&
+        abs(location.timestamp.timeIntervalSinceNow) <= 1800 &&
+        PPGoogleMapsRouteService.isUsable(location.coordinate)
     }
 
     public override init() {
@@ -37,11 +52,17 @@ public final class PPDriverLocationTracker: NSObject, ObservableObject, @preconc
         super.init()
         self.locationManager.delegate = self
         self.locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        self.locationManager.distanceFilter = 3.0 // 3 meters
+        self.locationManager.distanceFilter = 1.0 // continuous telemetry
         self.locationManager.headingFilter = 3.0 // 3 degrees
+        if let initial = locationManager.location, isLocationUsable(initial) {
+            self.currentLocation = initial
+        }
     }
 
     public func startTracking() {
+        if let initial = locationManager.location, isLocationUsable(initial) {
+            self.currentLocation = initial
+        }
         guard !isTracking else { return }
         isTracking = true
         locationFailed = false
@@ -88,20 +109,21 @@ public final class PPDriverLocationTracker: NSObject, ObservableObject, @preconc
             currentLocation = nil
             currentHeading = nil
         }
-        if self.isTracking && (manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways) {
-            self.locationManager.startUpdatingLocation()
-            if CLLocationManager.headingAvailable() {
-                self.locationManager.startUpdatingHeading()
+        if (manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways) {
+            if let initial = manager.location, isLocationUsable(initial) {
+                self.currentLocation = initial
+            }
+            if self.isTracking {
+                self.locationManager.startUpdatingLocation()
+                if CLLocationManager.headingAvailable() {
+                    self.locationManager.startUpdatingHeading()
+                }
             }
         }
     }
 
     public func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let latest = locations.last(where: {
-            $0.horizontalAccuracy >= 0 && $0.horizontalAccuracy <= 200 &&
-            abs($0.timestamp.timeIntervalSinceNow) <= 60 &&
-            PPGoogleMapsRouteService.isUsable($0.coordinate)
-        }) else { return }
+        guard let latest = locations.last(where: { isLocationUsable($0) }) else { return }
         self.locationFailed = false
         self.currentLocation = latest
     }

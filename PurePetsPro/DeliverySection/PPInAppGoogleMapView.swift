@@ -213,6 +213,7 @@ public struct PPInAppGoogleMapView: UIViewRepresentable {
           <script>
             let map, pickupMarker, dropoffMarker, driverMarker, routePolyline, routeGlow;
             let reduceMotionPreference = \(reduceMotion ? "true" : "false");
+            const PIN_SVG_PATH = 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 0 1 0-5 2.5 2.5 0 0 1 0 5z';
 
             function fitVisibleBounds(bounds) {
               if (!reduceMotionPreference) { map.fitBounds(bounds, 28); return; }
@@ -263,13 +264,15 @@ public struct PPInAppGoogleMapView: UIViewRepresentable {
                   position: pPos,
                   map: map,
                   title: pickupLbl,
+                  zIndex: 900,
                   icon: {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    scale: 9,
+                    path: PIN_SVG_PATH,
+                    scale: 1.6,
                     fillColor: '#0284C7',
                     fillOpacity: 1,
                     strokeColor: '#FFFFFF',
-                    strokeWeight: 3
+                    strokeWeight: 1.8,
+                    anchor: (window.google?.maps?.Point ? new google.maps.Point(12, 22) : null)
                   }
                 });
                 bounds.extend(pPos);
@@ -281,20 +284,22 @@ public struct PPInAppGoogleMapView: UIViewRepresentable {
                   position: dPos,
                   map: map,
                   title: dropoffLbl,
+                  zIndex: 950,
                   icon: {
-                    path: google.maps.SymbolPath.CIRCLE,
-                    scale: 9,
+                    path: PIN_SVG_PATH,
+                    scale: 1.6,
                     fillColor: '#E11D48',
                     fillOpacity: 1,
                     strokeColor: '#FFFFFF',
-                    strokeWeight: 3
+                    strokeWeight: 1.8,
+                    anchor: (window.google?.maps?.Point ? new google.maps.Point(12, 22) : null)
                   }
                 });
                 bounds.extend(dPos);
               }
               
               if (polyCoords && polyCoords.length > 0) {
-                // Fit the chosen driving leg, rather than unrelated stop pins.
+                // Fit the chosen driving leg and include stop pins.
                 const routeBounds = new google.maps.LatLngBounds();
                 const path = polyCoords.map(c => new google.maps.LatLng(c.lat, c.lng));
                 
@@ -340,23 +345,19 @@ public struct PPInAppGoogleMapView: UIViewRepresentable {
                   position: pos,
                   map: map,
                   title: \(jsonString(driverTitle)),
+                  zIndex: 999,
                   icon: {
-                    path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                    scale: 6.5,
+                    path: PIN_SVG_PATH,
+                    scale: 1.6,
                     fillColor: '#10B981',
                     fillOpacity: 1,
                     strokeColor: '#FFFFFF',
-                    strokeWeight: 2.5,
-                    rotation: heading || 0
+                    strokeWeight: 1.8,
+                    anchor: (window.google?.maps?.Point ? new google.maps.Point(12, 22) : null)
                   }
                 });
               } else {
                 driverMarker.setPosition(pos);
-                if (heading !== undefined && heading !== null) {
-                  const icon = driverMarker.getIcon();
-                  icon.rotation = heading;
-                  driverMarker.setIcon(icon);
-                }
               }
             }
             

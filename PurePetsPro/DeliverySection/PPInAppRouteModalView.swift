@@ -112,12 +112,10 @@ struct PPInAppRouteModalView: View {
         }
     }
     private var visiblePickupCoordinate: CLLocationCoordinate2D? {
-        if selectedStop == .storeToCustomer { return pickupCoordinate }
-        return !pickupAddress.mapQuery.isEmpty && pickupResolvedQuery == pickupAddress.mapQuery ? pickupCoordinate : nil
+        pickupCoordinate
     }
     private var visibleDropoffCoordinate: CLLocationCoordinate2D? {
-        if selectedStop == .storeToCustomer { return dropoffCoordinate }
-        return !dropoffAddress.mapQuery.isEmpty && dropoffResolvedQuery == dropoffAddress.mapQuery ? dropoffCoordinate : nil
+        dropoffCoordinate
     }
     private var visibleRouteInfo: PPRouteInfo? { loadedRequestID == routeRequestID ? routeInfo : nil }
     private var canOpenDestination: Bool {
@@ -678,11 +676,12 @@ struct PPInAppRouteModalView: View {
     private func loadSelectedRoute() async {
         let requestID = routeRequestID
         let stop = selectedStop
-        routeInfo = nil; routeRevision += 1
-        phase = .locating
+        routeInfo = nil
+        routeRevision += 1
         guard scenePhase == .active else { return }
 
         if stop == .storeToCustomer {
+            phase = .loading
             let pQuery = [pickupAddress.mapQuery, pickupAddress.secondary, pickupAddress.primary]
                 .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty } ?? ""
             let dQuery = [dropoffAddress.mapQuery, dropoffAddress.secondary, dropoffAddress.primary]
@@ -692,35 +691,24 @@ struct PPInAppRouteModalView: View {
                 return
             }
 
-            var pCoord = pickupCoordinate
-            if pCoord == nil {
-                pCoord = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: pQuery)
-                if let pCoord {
-                    pickupCoordinate = pCoord
-                    pickupResolvedQuery = pickupAddress.mapQuery
-                }
-            }
-
-            var dCoord = dropoffCoordinate
-            if dCoord == nil {
-                dCoord = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: dQuery)
-                if let dCoord {
-                    dropoffCoordinate = dCoord
-                    dropoffResolvedQuery = dropoffAddress.mapQuery
-                }
-            }
-
-            guard !Task.isCancelled, requestID == routeRequestID else { return }
-            guard let origin = pCoord, let destination = dCoord else {
+            guard let originEndpoint = PPRouteEndpoint.from(coordinate: pickupCoordinate, address: pQuery),
+                  let destEndpoint = PPRouteEndpoint.from(coordinate: dropoffCoordinate, address: dQuery) else {
                 phase = .addressUnavailable
                 return
             }
 
-            phase = .loading
             do {
                 let info = try await PPGoogleMapsRouteService.shared.fetchRoute(
-                    origin: origin, destination: destination, isArabic: isArabic)
+                    origin: originEndpoint, destination: destEndpoint, isArabic: isArabic)
                 guard !Task.isCancelled, requestID == routeRequestID else { return }
+                if let start = info.startCoordinate {
+                    pickupCoordinate = start
+                    pickupResolvedQuery = pickupAddress.mapQuery
+                }
+                if let end = info.endCoordinate {
+                    dropoffCoordinate = end
+                    dropoffResolvedQuery = dropoffAddress.mapQuery
+                }
                 routeInfo = info
                 loadedRequestID = requestID
                 routeRevision += 1
@@ -730,45 +718,84 @@ struct PPInAppRouteModalView: View {
                 return
             } catch {
                 guard !Task.isCancelled, requestID == routeRequestID else { return }
+                if pickupCoordinate == nil {
+                    pickupCoordinate = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: pQuery)
+                }
+                if dropoffCoordinate == nil {
+                    dropoffCoordinate = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: dQuery)
+                }
                 phase = .failed(error as? PPRouteServiceError ?? .serviceUnavailable)
             }
             return
         }
 
-        let query = activeAddress.mapQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-        // No primary/area-summary fallback: hidden or missing exact destinations stay hidden.
+        let query = [activeAddress.mapQuery, activeAddress.secondary, activeAddress.primary]
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty } ?? ""
         guard !query.isEmpty else { phase = .addressUnavailable; return }
-        var coordinate = activeCoordinate
-        if coordinate == nil { coordinate = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: query) }
-        guard !Task.isCancelled, requestID == routeRequestID else { return }
-        guard let coordinate else { phase = .addressUnavailable; return }
-        if stop == .pickup {
-            pickupCoordinate = coordinate; pickupResolvedQuery = pickupAddress.mapQuery
-        } else {
-            dropoffCoordinate = coordinate; dropoffResolvedQuery = dropoffAddress.mapQuery
+
+        guard let destEndpoint = PPRouteEndpoint.from(coordinate: activeCoordinate, address: query) else {
+            phase = .addressUnavailable
+            return
         }
+
         if tracker.authorizationStatus == .denied || tracker.authorizationStatus == .restricted {
+            if (stop == .pickup ? pickupCoordinate : dropoffCoordinate) == nil {
+                let resolved = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: query)
+                if stop == .pickup { pickupCoordinate = resolved } else { dropoffCoordinate = resolved }
+            }
             phase = .locationDenied
             return
         }
-        guard let origin = tracker.usableLocation else {
-            do { try await Task.sleep(for: .seconds(15)) } catch { return }
+
+        var originLocation = tracker.usableLocation
+        if originLocation == nil {
+            phase = .locating
+            for _ in 0..<20 {
+                do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
+                if let loc = tracker.usableLocation {
+                    originLocation = loc
+                    break
+                }
+            }
+        }
+
+        guard let origin = originLocation else {
+            if (stop == .pickup ? pickupCoordinate : dropoffCoordinate) == nil {
+                let resolved = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: query)
+                if stop == .pickup { pickupCoordinate = resolved } else { dropoffCoordinate = resolved }
+            }
             guard !Task.isCancelled, requestID == routeRequestID else { return }
             phase = .locationUnavailable
             return
         }
+
         phase = .loading
         do {
             let info = try await PPGoogleMapsRouteService.shared.fetchRoute(
-                origin: origin.coordinate, destination: coordinate, isArabic: isArabic)
+                origin: .coordinate(origin.coordinate), destination: destEndpoint, isArabic: isArabic)
             guard !Task.isCancelled, requestID == routeRequestID else { return }
-            routeInfo = info; loadedRequestID = requestID; routeRevision += 1
+            if let end = info.endCoordinate {
+                if stop == .pickup {
+                    pickupCoordinate = end
+                    pickupResolvedQuery = pickupAddress.mapQuery
+                } else {
+                    dropoffCoordinate = end
+                    dropoffResolvedQuery = dropoffAddress.mapQuery
+                }
+            }
+            routeInfo = info
+            loadedRequestID = requestID
+            routeRevision += 1
             phase = .ready
             fitTrigger += 1
         } catch is CancellationError {
             return
         } catch {
             guard !Task.isCancelled, requestID == routeRequestID else { return }
+            if (stop == .pickup ? pickupCoordinate : dropoffCoordinate) == nil {
+                let resolved = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: query)
+                if stop == .pickup { pickupCoordinate = resolved } else { dropoffCoordinate = resolved }
+            }
             phase = .failed(error as? PPRouteServiceError ?? .serviceUnavailable)
         }
     }

@@ -614,9 +614,8 @@ check('dossier commands require a fresh matching server action and recover befor
   for (const token of ['dossier?.record.requestID == selectedRequestID', '!isExecuting', '!isLoadingDossier',
     'dossierIncident == nil', 'commandIncident == nil']) assert(gate.includes(token), token);
   const execute = slice(companyView, 'func execute(_ action:', 'func executeDriver(');
-  assert(execute.includes('selectedRequestID, canExecuteDossierCommands'));
-  assert(execute.includes('$0.expectedRevision == action.expectedRevision'));
-  assert(execute.includes('$0.expectedState == action.expectedState'));
+  assert(execute.includes('canExecuteDossierCommands'));
+  assert(execute.includes('dossier.record.allows(action)'));
   for (const code of ['DELIVERY_REQUEST_NOT_FOUND', 'DELIVERY_AUTHORITY_MISMATCH']) assert(execute.includes(code));
   const load = slice(companyView, 'func loadDossier(', 'func execute(_ action:');
   assert(load.includes('guard let dossier, dossier.record.requestID == requestID'));

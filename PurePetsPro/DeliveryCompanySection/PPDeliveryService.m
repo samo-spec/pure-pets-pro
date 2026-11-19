@@ -768,7 +768,8 @@ static NSError *PPDeliveryCompanyContextError(void) {
         [self fetchPartnerCommandCenterSnapshotWithCompletion:completion];
         return;
     }
-    NSDictionary *params = @{@"pageSize": @100, @"companyId": profile.companyID};
+    NSDictionary *params = @{@"pageSize": @100, @"companyId": profile.companyID,
+                             @"supportsFulfillmentReassignment": @YES};
     NSString *uid = [FIRAuth auth].currentUser.uid;
 
     __weak typeof(self) weakSelf = self;
@@ -941,7 +942,8 @@ static NSError *PPDeliveryCompanyContextError(void) {
         [self fetchPartnerDossierForRequestID:safeRequestID completion:completion];
         return;
     }
-    NSDictionary *params = @{@"requestId": safeRequestID, @"companyId": companyID};
+    NSDictionary *params = @{@"requestId": safeRequestID, @"companyId": companyID,
+                             @"supportsFulfillmentReassignment": @YES};
     NSString *uid = [FIRAuth auth].currentUser.uid;
 
     __weak typeof(self) weakSelf = self;
@@ -1073,11 +1075,22 @@ static NSError *PPDeliveryCompanyContextError(void) {
 
     // Fulfillment commands target the child, including when a company request has the same identifier.
     BOOL officialReplacement = [act isEqualToString:@"REASSIGN"] && [allowedAction.authority isEqualToString:@"FULFILLMENT_V1"];
-    if ([act isEqualToString:@"ACCEPT_AND_ASSIGN"] || officialReplacement) {
+    if ([act isEqualToString:@"ACCEPT_AND_ASSIGN"]) {
         NSString *targetDriver = [driverUID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
         if (targetDriver.length == 0 || allowedAction.expectedRevision < 0 ||
-            (officialReplacement ? allowedAction.expectedDriverUID.length == 0 || [targetDriver isEqualToString:allowedAction.expectedDriverUID]
-                                 : ![allowedAction.expectedState isEqualToString:@"delivery_requested"])) {
+            ![allowedAction.expectedState isEqualToString:@"delivery_requested"]) {
+            if (completion) completion(nil, PPDeliveryInvalidResponseError());
+            return;
+        }
+        [self executeCanonicalAllowedAction:allowedAction requestID:safeRequestID commandID:safeCommandID
+                                 driverUID:targetDriver handoverConfirmed:handoverConfirmed reason:reason completion:completion];
+        return;
+    }
+
+    if (officialReplacement) {
+        NSString *targetDriver = [driverUID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+        if (targetDriver.length == 0 || allowedAction.expectedRevision < 0 ||
+            allowedAction.expectedDriverUID.length == 0 || [targetDriver isEqualToString:allowedAction.expectedDriverUID]) {
             if (completion) completion(nil, PPDeliveryInvalidResponseError());
             return;
         }

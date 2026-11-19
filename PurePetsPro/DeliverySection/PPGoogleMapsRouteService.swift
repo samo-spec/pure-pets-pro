@@ -93,9 +93,41 @@ public struct PPRouteStep: Identifiable, Sendable, Equatable {
     }
 }
 
+// MARK: - Route Endpoint
+
+public enum PPRouteEndpoint: Sendable, Equatable {
+    case coordinate(CLLocationCoordinate2D)
+    case address(String)
+
+    public static func from(coordinate: CLLocationCoordinate2D?, address: String) -> PPRouteEndpoint? {
+        if let coordinate, PPGoogleMapsRouteService.isUsable(coordinate) {
+            return .coordinate(coordinate)
+        }
+        let clean = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return nil }
+        if let coord = PPGoogleMapsRouteService.coordinateQuery(clean) {
+            return .coordinate(coord)
+        }
+        return .address(clean)
+    }
+
+    public static func == (lhs: PPRouteEndpoint, rhs: PPRouteEndpoint) -> Bool {
+        switch (lhs, rhs) {
+        case (.coordinate(let c1), .coordinate(let c2)):
+            return c1.latitude == c2.latitude && c1.longitude == c2.longitude
+        case (.address(let a1), .address(let a2)):
+            return a1 == a2
+        default:
+            return false
+        }
+    }
+}
+
 // MARK: - Route Info
 
 public struct PPRouteInfo: Sendable, Equatable {
+    public let startCoordinate: CLLocationCoordinate2D?
+    public let endCoordinate: CLLocationCoordinate2D?
     public let distanceMeters: Int
     public let distanceFormatted: String
     public let durationSeconds: Int
@@ -103,6 +135,28 @@ public struct PPRouteInfo: Sendable, Equatable {
     public let encodedPolyline: String
     public let polylineCoordinates: [CLLocationCoordinate2D]
     public let steps: [PPRouteStep]
+
+    public init(
+        startCoordinate: CLLocationCoordinate2D? = nil,
+        endCoordinate: CLLocationCoordinate2D? = nil,
+        distanceMeters: Int,
+        distanceFormatted: String,
+        durationSeconds: Int,
+        durationFormatted: String,
+        encodedPolyline: String,
+        polylineCoordinates: [CLLocationCoordinate2D],
+        steps: [PPRouteStep]
+    ) {
+        self.startCoordinate = startCoordinate
+        self.endCoordinate = endCoordinate
+        self.distanceMeters = distanceMeters
+        self.distanceFormatted = distanceFormatted
+        self.durationSeconds = durationSeconds
+        self.durationFormatted = durationFormatted
+        self.encodedPolyline = encodedPolyline
+        self.polylineCoordinates = polylineCoordinates
+        self.steps = steps
+    }
 
     public static func == (lhs: PPRouteInfo, rhs: PPRouteInfo) -> Bool {
         lhs.distanceMeters == rhs.distanceMeters &&
@@ -128,14 +182,29 @@ public final class PPGoogleMapsRouteService: Sendable {
 
     // MARK: - Compute Route
 
-    /// Returns only a real road route. A rejected request is never represented
-    /// as a straight line, an invented ETA, or fabricated driving instructions.
+    private func waypointObject(_ endpoint: PPRouteEndpoint) -> [String: Any]? {
+        switch endpoint {
+        case .coordinate(let coord):
+            guard Self.isUsable(coord) else { return nil }
+            return ["location": ["latLng": ["latitude": coord.latitude, "longitude": coord.longitude]]]
+        case .address(let text):
+            let clean = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !clean.isEmpty else { return nil }
+            if let coord = Self.coordinateQuery(clean) {
+                return ["location": ["latLng": ["latitude": coord.latitude, "longitude": coord.longitude]]]
+            }
+            return ["address": clean]
+        }
+    }
+
+    /// Returns a real road route between two endpoints (coordinates or addresses).
     public func fetchRoute(
-        origin: CLLocationCoordinate2D,
-        destination: CLLocationCoordinate2D,
+        origin: PPRouteEndpoint,
+        destination: PPRouteEndpoint,
         isArabic: Bool
     ) async throws -> PPRouteInfo {
-        guard Self.isUsable(origin), Self.isUsable(destination) else {
+        guard let originDict = waypointObject(origin),
+              let destDict = waypointObject(destination) else {
             throw PPRouteServiceError.invalidCoordinates
         }
         let endpoint = URL(string: "https://routes.googleapis.com/directions/v2:computeRoutes")!
@@ -148,12 +217,13 @@ public final class PPGoogleMapsRouteService: Sendable {
         request.setValue(
             "routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline," +
             "routes.legs.steps.navigationInstruction,routes.legs.steps.localizedValues," +
-            "routes.legs.steps.startLocation,routes.legs.steps.endLocation",
+            "routes.legs.steps.startLocation,routes.legs.steps.endLocation," +
+            "routes.legs.startLocation,routes.legs.endLocation",
             forHTTPHeaderField: "X-Goog-FieldMask"
         )
         request.httpBody = try JSONSerialization.data(withJSONObject: [
-            "origin": ["location": ["latLng": ["latitude": origin.latitude, "longitude": origin.longitude]]],
-            "destination": ["location": ["latLng": ["latitude": destination.latitude, "longitude": destination.longitude]]],
+            "origin": originDict,
+            "destination": destDict,
             "travelMode": "DRIVE",
             "routingPreference": "TRAFFIC_AWARE",
             "languageCode": isArabic ? "ar" : "en"
@@ -179,8 +249,14 @@ public final class PPGoogleMapsRouteService: Sendable {
         }
         let coordinates = decodePolyline(polyline)
         guard coordinates.count >= 2 else { throw PPRouteServiceError.invalidResponse }
+
+        let legs = route["legs"] as? [[String: Any]] ?? []
+        let firstLeg = legs.first
+        let resolvedStart = Self.coordinate(firstLeg?["startLocation"]) ?? coordinates.first
+        let resolvedEnd = Self.coordinate(firstLeg?["endLocation"]) ?? coordinates.last
+
         var parsedSteps: [PPRouteStep] = []
-        for leg in route["legs"] as? [[String: Any]] ?? [] {
+        for leg in legs {
             for item in leg["steps"] as? [[String: Any]] ?? [] {
                 guard let start = Self.coordinate(item["startLocation"]),
                       let end = Self.coordinate(item["endLocation"]) else { continue }
@@ -201,12 +277,22 @@ public final class PPGoogleMapsRouteService: Sendable {
         }
         let meters = distance.intValue
         return PPRouteInfo(
+            startCoordinate: resolvedStart,
+            endCoordinate: resolvedEnd,
             distanceMeters: meters,
             distanceFormatted: formatDistance(meters: meters, isArabic: isArabic),
             durationSeconds: Int(seconds.rounded()),
             durationFormatted: formatDuration(seconds: Int(seconds.rounded()), isArabic: isArabic),
             encodedPolyline: polyline, polylineCoordinates: coordinates, steps: parsedSteps
         )
+    }
+
+    public func fetchRoute(
+        origin: CLLocationCoordinate2D,
+        destination: CLLocationCoordinate2D,
+        isArabic: Bool
+    ) async throws -> PPRouteInfo {
+        try await fetchRoute(origin: .coordinate(origin), destination: .coordinate(destination), isArabic: isArabic)
     }
 
     public static func isUsable(_ coordinate: CLLocationCoordinate2D) -> Bool {
@@ -224,7 +310,7 @@ public final class PPGoogleMapsRouteService: Sendable {
     // MARK: - Geocoding Helpers
 
     /// Exact coordinates and coordinate-bearing map links take precedence over geocoding.
-    /// Unresolvable addresses remain nil; no default city is ever substituted.
+    /// Uses Google Routes API for reliable Arabic street resolution, falling back to CLGeocoder.
     public func resolveCoordinate(address: String) async -> CLLocationCoordinate2D? {
         let clean = address.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty, !Task.isCancelled else { return nil }
@@ -237,15 +323,57 @@ public final class PPGoogleMapsRouteService: Sendable {
             // A URL is not a postal address and must not geocode to an unrelated place.
             return nil
         }
+
+        // Fast resolution via Google Routes API first
+        if let resolved = await resolveViaRoutesAPI(address: clean) {
+            return resolved
+        }
+
+        // Fallback to Apple geocoder with bounded 3-second timeout
         do {
-            let results = try await CLGeocoder().geocodeAddressString(clean)
+            let results = try await withThrowingTaskGroup(of: [CLPlacemark].self) { group in
+                group.addTask { try await CLGeocoder().geocodeAddressString(clean) }
+                group.addTask {
+                    try await Task.sleep(for: .seconds(3))
+                    return []
+                }
+                let first = try await group.next() ?? []
+                group.cancelAll()
+                return first
+            }
             guard !Task.isCancelled, let coordinate = results.first?.location?.coordinate,
                   Self.isUsable(coordinate) else { return nil }
             return coordinate
         } catch { return nil }
     }
 
-    private static func coordinateQuery(_ value: String) -> CLLocationCoordinate2D? {
+    private func resolveViaRoutesAPI(address: String) async -> CLLocationCoordinate2D? {
+        guard let url = URL(string: "https://routes.googleapis.com/directions/v2:computeRoutes") else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 8
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(Self.apiKey, forHTTPHeaderField: "X-Goog-Api-Key")
+        request.setValue("routes.legs.endLocation", forHTTPHeaderField: "X-Goog-FieldMask")
+        let body: [String: Any] = [
+            "origin": ["location": ["latLng": ["latitude": 30.0444, "longitude": 31.2357]]],
+            "destination": ["address": address],
+            "travelMode": "DRIVE"
+        ]
+        guard let httpBody = try? JSONSerialization.data(withJSONObject: body) else { return nil }
+        request.httpBody = httpBody
+        do {
+            let (data, response) = try await urlSession.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
+            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let routes = json["routes"] as? [[String: Any]],
+                  let firstLeg = (routes.first?["legs"] as? [[String: Any]])?.first,
+                  let endCoord = Self.coordinate(firstLeg["endLocation"]) else { return nil }
+            return endCoord
+        } catch { return nil }
+    }
+
+    public static func coordinateQuery(_ value: String) -> CLLocationCoordinate2D? {
         let ascii = value.map { character -> String in
             if let digit = character.wholeNumberValue, (0...9).contains(digit) { return String(digit) }
             return String(character)

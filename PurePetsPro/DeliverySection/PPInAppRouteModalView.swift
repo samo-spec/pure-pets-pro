@@ -48,9 +48,8 @@ struct PPInAppRouteModalView: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
 
-    private enum RoutePhase {
+    private enum RoutePhase: Equatable {
         case locating, locationUnavailable, locationDenied, addressUnavailable, loading, ready
         case failed(PPRouteServiceError)
     }
@@ -61,9 +60,21 @@ struct PPInAppRouteModalView: View {
         let dropoffQuery: String
         let stop: PPDeliveryRouteStop
         let retry: Int
-        let hasLocation: Bool
-        let authorization: Int
-        let active: Bool
+    }
+
+    private func contextualAddressQuery(_ address: PPDriverAddress) -> String {
+        let cleanMap = address.mapQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        if PPGoogleMapsRouteService.coordinateQuery(cleanMap) != nil {
+            return cleanMap
+        }
+        var parts: [String] = []
+        let p = address.primary.trimmingCharacters(in: .whitespacesAndNewlines)
+        let s = address.secondary.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !p.isEmpty { parts.append(p) }
+        if !s.isEmpty && !parts.contains(s) && !p.contains(s) { parts.append(s) }
+        let combined = parts.joined(separator: " ، ")
+        if !combined.isEmpty { return combined }
+        return cleanMap
     }
 
     init(orderNumber: String, pickupAddress: PPDriverAddress, dropoffAddress: PPDriverAddress,
@@ -75,6 +86,8 @@ struct PPInAppRouteModalView: View {
         self.initialStop = initialStop
         self.onClose = onClose
         _selectedStop = State(initialValue: initialStop)
+        _pickupCoordinate = State(initialValue: pickupAddress.coordinate)
+        _dropoffCoordinate = State(initialValue: dropoffAddress.coordinate)
     }
 
     init(task: PPDriverTask, onClose: @escaping @Sendable @MainActor () -> Void) {
@@ -93,7 +106,7 @@ struct PPInAppRouteModalView: View {
             primary: canReveal ? order.pp_exactDeliveryLocationText() : order.pp_deliveryAreaSummary(),
             secondary: "", mapQuery: canReveal ? exactQuery : "", phone: "")
         let atPickup = ["ready_to_ship", "readytoship", "requested", "assigned", "awaiting_handover"]
-            .contains((order.deliveryStatus ?? "").lowercased())
+            .contains(order.deliveryStatus.lowercased())
         self.init(orderNumber: order.bestOrderNumber(), pickupAddress: pickup, dropoffAddress: dropoff,
                   initialStop: atPickup ? .pickup : .dropoff, onClose: onClose)
     }
@@ -120,17 +133,18 @@ struct PPInAppRouteModalView: View {
     private var visibleRouteInfo: PPRouteInfo? { loadedRequestID == routeRequestID ? routeInfo : nil }
     private var canOpenDestination: Bool {
         if selectedStop == .storeToCustomer {
-            let pQ = [pickupAddress.mapQuery, pickupAddress.secondary, pickupAddress.primary].first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? ""
-            let dQ = [dropoffAddress.mapQuery, dropoffAddress.secondary, dropoffAddress.primary].first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty } ?? ""
+            let pQ = contextualAddressQuery(pickupAddress)
+            let dQ = contextualAddressQuery(dropoffAddress)
             return !pQ.isEmpty && !dQ.isEmpty
         }
-        return !activeAddress.mapQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        return !contextualAddressQuery(activeAddress).isEmpty
     }
     private var routeRequestID: RouteRequestID {
-        RouteRequestID(order: orderNumber, pickupQuery: pickupAddress.mapQuery,
-                       dropoffQuery: dropoffAddress.mapQuery, stop: selectedStop,
-                       retry: retryRevision, hasLocation: tracker.usableLocation != nil,
-                       authorization: Int(tracker.authorizationStatus.rawValue), active: scenePhase == .active)
+        RouteRequestID(order: orderNumber,
+                       pickupQuery: contextualAddressQuery(pickupAddress),
+                       dropoffQuery: contextualAddressQuery(dropoffAddress),
+                       stop: selectedStop,
+                       retry: retryRevision)
     }
 
     var body: some View {
@@ -154,8 +168,10 @@ struct PPInAppRouteModalView: View {
         .environment(\.locale, Locale(identifier: Language.currentLanguageCode()))
         .onAppear { tracker.startTracking() }
         .onDisappear { tracker.stopTracking() }
-        .onChange(of: scenePhase) { _, value in
-            if value == .active { tracker.startTracking() } else { tracker.stopTracking() }
+        .onChange(of: tracker.usableLocation != nil) { _, hasLocation in
+            if hasLocation && selectedStop != .storeToCustomer && (phase == .locationUnavailable || phase == .locating) {
+                retryRevision += 1
+            }
         }
         .task(id: routeRequestID) { await loadSelectedRoute() }
         .task(id: copyRevision) {
@@ -476,7 +492,7 @@ struct PPInAppRouteModalView: View {
         case .loading, .locating:
             HStack(spacing: 10) {
                 ProgressView().tint(AdminSurface.primary)
-                Text(ppDriverText(isLoadingDirections ? "DriverCockpit_LiveRoute_Calculating" : "ProRoute_Locating"))
+                Text(ppDriverText((isLoadingDirections || selectedStop == .storeToCustomer) ? "DriverCockpit_LiveRoute_Calculating" : "ProRoute_Locating"))
                     .font(AdminType.footnote).foregroundStyle(AdminSurface.secondaryText)
             }.frame(minHeight: 32)
         default:
@@ -673,42 +689,44 @@ struct PPInAppRouteModalView: View {
         }.buttonStyle(.plain).accessibilityLabel(label)
     }
 
+    private func resolveCoordinateIfNeeded(_ coordinate: CLLocationCoordinate2D?, query: String) async -> CLLocationCoordinate2D? {
+        if let coordinate, PPGoogleMapsRouteService.isUsable(coordinate) {
+            return coordinate
+        }
+        return await PPGoogleMapsRouteService.shared.resolveCoordinate(address: query)
+    }
+
     private func loadSelectedRoute() async {
         let requestID = routeRequestID
         let stop = selectedStop
         routeInfo = nil
         routeRevision += 1
-        guard scenePhase == .active else { return }
 
         if stop == .storeToCustomer {
             phase = .loading
-            let pQuery = [pickupAddress.mapQuery, pickupAddress.secondary, pickupAddress.primary]
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty } ?? ""
-            let dQuery = [dropoffAddress.mapQuery, dropoffAddress.secondary, dropoffAddress.primary]
-                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty } ?? ""
+            let pQuery = contextualAddressQuery(pickupAddress)
+            let dQuery = contextualAddressQuery(dropoffAddress)
             guard !pQuery.isEmpty && !dQuery.isEmpty else {
                 phase = .addressUnavailable
                 return
             }
 
-            guard let originEndpoint = PPRouteEndpoint.from(coordinate: pickupCoordinate, address: pQuery),
-                  let destEndpoint = PPRouteEndpoint.from(coordinate: dropoffCoordinate, address: dQuery) else {
-                phase = .addressUnavailable
-                return
-            }
+            // Concurrently pre-resolve coordinates if either is missing
+            async let resolvedPickup = resolveCoordinateIfNeeded(pickupCoordinate, query: pQuery)
+            async let resolvedDropoff = resolveCoordinateIfNeeded(dropoffCoordinate, query: dQuery)
+            let (pCoord, dCoord) = await (resolvedPickup, resolvedDropoff)
+            if let pCoord { pickupCoordinate = pCoord }
+            if let dCoord { dropoffCoordinate = dCoord }
+
+            let originEndpoint = PPRouteEndpoint.from(coordinate: pCoord, address: pQuery) ?? .address(pQuery)
+            let destEndpoint = PPRouteEndpoint.from(coordinate: dCoord, address: dQuery) ?? .address(dQuery)
 
             do {
                 let info = try await PPGoogleMapsRouteService.shared.fetchRoute(
                     origin: originEndpoint, destination: destEndpoint, isArabic: isArabic)
                 guard !Task.isCancelled, requestID == routeRequestID else { return }
-                if let start = info.startCoordinate {
-                    pickupCoordinate = start
-                    pickupResolvedQuery = pickupAddress.mapQuery
-                }
-                if let end = info.endCoordinate {
-                    dropoffCoordinate = end
-                    dropoffResolvedQuery = dropoffAddress.mapQuery
-                }
+                if let start = info.startCoordinate { pickupCoordinate = start }
+                if let end = info.endCoordinate { dropoffCoordinate = end }
                 routeInfo = info
                 loadedRequestID = requestID
                 routeRevision += 1
@@ -718,30 +736,30 @@ struct PPInAppRouteModalView: View {
                 return
             } catch {
                 guard !Task.isCancelled, requestID == routeRequestID else { return }
-                if pickupCoordinate == nil {
-                    pickupCoordinate = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: pQuery)
-                }
-                if dropoffCoordinate == nil {
-                    dropoffCoordinate = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: dQuery)
-                }
                 phase = .failed(error as? PPRouteServiceError ?? .serviceUnavailable)
+                fitTrigger += 1
             }
             return
         }
 
-        let query = [activeAddress.mapQuery, activeAddress.secondary, activeAddress.primary]
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.first { !$0.isEmpty } ?? ""
+        let query = contextualAddressQuery(activeAddress)
         guard !query.isEmpty else { phase = .addressUnavailable; return }
 
-        guard let destEndpoint = PPRouteEndpoint.from(coordinate: activeCoordinate, address: query) else {
-            phase = .addressUnavailable
-            return
+        // Start resolving active coordinate immediately if not known
+        if activeCoordinate == nil {
+            Task { @MainActor in
+                if let resolved = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: query) {
+                    if stop == .pickup { pickupCoordinate = resolved } else { dropoffCoordinate = resolved }
+                    fitTrigger += 1
+                }
+            }
         }
 
         if tracker.authorizationStatus == .denied || tracker.authorizationStatus == .restricted {
             if (stop == .pickup ? pickupCoordinate : dropoffCoordinate) == nil {
                 let resolved = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: query)
                 if stop == .pickup { pickupCoordinate = resolved } else { dropoffCoordinate = resolved }
+                fitTrigger += 1
             }
             phase = .locationDenied
             return
@@ -750,7 +768,7 @@ struct PPInAppRouteModalView: View {
         var originLocation = tracker.usableLocation
         if originLocation == nil {
             phase = .locating
-            for _ in 0..<20 {
+            for _ in 0..<10 {
                 do { try await Task.sleep(for: .milliseconds(150)) } catch { return }
                 if let loc = tracker.usableLocation {
                     originLocation = loc
@@ -763,6 +781,7 @@ struct PPInAppRouteModalView: View {
             if (stop == .pickup ? pickupCoordinate : dropoffCoordinate) == nil {
                 let resolved = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: query)
                 if stop == .pickup { pickupCoordinate = resolved } else { dropoffCoordinate = resolved }
+                fitTrigger += 1
             }
             guard !Task.isCancelled, requestID == routeRequestID else { return }
             phase = .locationUnavailable
@@ -770,6 +789,7 @@ struct PPInAppRouteModalView: View {
         }
 
         phase = .loading
+        let destEndpoint = PPRouteEndpoint.from(coordinate: activeCoordinate, address: query) ?? .address(query)
         do {
             let info = try await PPGoogleMapsRouteService.shared.fetchRoute(
                 origin: .coordinate(origin.coordinate), destination: destEndpoint, isArabic: isArabic)
@@ -795,6 +815,7 @@ struct PPInAppRouteModalView: View {
             if (stop == .pickup ? pickupCoordinate : dropoffCoordinate) == nil {
                 let resolved = await PPGoogleMapsRouteService.shared.resolveCoordinate(address: query)
                 if stop == .pickup { pickupCoordinate = resolved } else { dropoffCoordinate = resolved }
+                fitTrigger += 1
             }
             phase = .failed(error as? PPRouteServiceError ?? .serviceUnavailable)
         }
@@ -810,9 +831,13 @@ struct PPInAppRouteModalView: View {
             var parts: [String] = []
             if let p = pickupCoordinate {
                 parts.append("Store: \(String(format: "%.6f,%.6f", locale: Locale(identifier: "en_US_POSIX"), p.latitude, p.longitude))")
+            } else {
+                parts.append("Store: \(contextualAddressQuery(pickupAddress))")
             }
             if let d = dropoffCoordinate {
                 parts.append("Customer: \(String(format: "%.6f,%.6f", locale: Locale(identifier: "en_US_POSIX"), d.latitude, d.longitude))")
+            } else {
+                parts.append("Customer: \(contextualAddressQuery(dropoffAddress))")
             }
             if !parts.isEmpty {
                 UIPasteboard.general.string = parts.joined(separator: "\n")
@@ -821,9 +846,12 @@ struct PPInAppRouteModalView: View {
             }
             return
         }
-        guard canOpenDestination, let coordinate = activeCoordinate else { return }
-        UIPasteboard.general.string = String(format: "%.6f,%.6f", locale: Locale(identifier: "en_US_POSIX"),
-                                            coordinate.latitude, coordinate.longitude)
+        if let coordinate = activeCoordinate {
+            UIPasteboard.general.string = String(format: "%.6f,%.6f", locale: Locale(identifier: "en_US_POSIX"),
+                                                coordinate.latitude, coordinate.longitude)
+        } else {
+            UIPasteboard.general.string = contextualAddressQuery(activeAddress)
+        }
         copied = true; copyRevision += 1
         UIAccessibility.post(notification: .announcement, argument: ppDriverText("ProRoute_Copied"))
     }
@@ -840,10 +868,10 @@ struct PPInAppRouteModalView: View {
         let destQuery: String
         let originQuery: String?
         if selectedStop == .storeToCustomer {
-            destQuery = dropoffCoordinate.map { "\($0.latitude),\($0.longitude)" } ?? dropoffAddress.mapQuery
-            originQuery = pickupCoordinate.map { "\($0.latitude),\($0.longitude)" } ?? pickupAddress.mapQuery
+            destQuery = dropoffCoordinate.map { "\($0.latitude),\($0.longitude)" } ?? contextualAddressQuery(dropoffAddress)
+            originQuery = pickupCoordinate.map { "\($0.latitude),\($0.longitude)" } ?? contextualAddressQuery(pickupAddress)
         } else {
-            destQuery = activeCoordinate.map { "\($0.latitude),\($0.longitude)" } ?? activeAddress.mapQuery
+            destQuery = activeCoordinate.map { "\($0.latitude),\($0.longitude)" } ?? contextualAddressQuery(activeAddress)
             originQuery = nil
         }
 
@@ -858,10 +886,12 @@ struct PPInAppRouteModalView: View {
             }
             google.queryItems = gItems
 
-            if startNavigation, let url = google.url, UIApplication.shared.canOpenURL(url),
-               await UIApplication.shared.open(url, options: [:]) {
-                openingMaps = false
-                return
+            if startNavigation, let url = google.url, UIApplication.shared.canOpenURL(url) {
+                let opened = await UIApplication.shared.open(url, options: [:])
+                if opened {
+                    openingMaps = false
+                    return
+                }
             }
 
             var fallback = URLComponents(string: startNavigation ? "https://maps.apple.com/" : "https://www.google.com/maps/dir/")!

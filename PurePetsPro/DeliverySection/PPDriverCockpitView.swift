@@ -963,6 +963,24 @@ private struct PPDriverDeliveryItemsPill: View {
         ppDriverMoney(effectiveTotal, currency: effectiveCurrency)
     }
 
+    private var effectiveItemsTotal: Double {
+        let sum = effectiveItems.reduce(0.0) { $0 + ($1.price * Double($1.quantity)) }
+        if sum > 0 { return sum }
+        if let fee = task.deliveryFee, fee > 0, effectiveTotal > fee {
+            return effectiveTotal - fee
+        }
+        return effectiveTotal
+    }
+
+    private var effectiveDeliveryFee: Double {
+        if let fee = task.deliveryFee, fee > 0 { return fee }
+        let sum = effectiveItems.reduce(0.0) { $0 + ($1.price * Double($1.quantity)) }
+        if sum > 0 && effectiveTotal > sum {
+            return effectiveTotal - sum
+        }
+        return 0.0
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Header / Collapsed Tactile Pill Trigger
@@ -1065,19 +1083,55 @@ private struct PPDriverDeliveryItemsPill: View {
                         .padding(.horizontal, AdminSpacing.sm)
                     }
 
-                    // Total Summary Row
+                    // Total Summary Breakdown
                     Divider()
                         .overlay(AdminSurface.hairline)
                         .padding(.horizontal, AdminSpacing.sm)
 
-                    HStack {
-                        Text(ppDriverText("DriverCockpit_Items_Total_Label"))
-                            .font(AdminType.footnoteBold)
-                            .foregroundStyle(AdminSurface.secondaryText)
-                        Spacer()
-                        Text(priceText)
-                            .font(AdminType.subheadlineBold)
-                            .foregroundStyle(AdminSurface.primaryText)
+                    VStack(spacing: AdminSpacing.xs) {
+                        // 1. Items Total Row
+                        HStack {
+                            Text(ppDriverText("DriverCockpit_Items_Total_Label"))
+                                .font(AdminType.caption1)
+                                .foregroundStyle(AdminSurface.secondaryText)
+                            Spacer()
+                            Text(ppDriverMoney(effectiveItemsTotal, currency: effectiveCurrency))
+                                .font(AdminType.footnoteBold)
+                                .foregroundStyle(AdminSurface.primaryText)
+                        }
+
+                        // 2. Delivery Fee Row (Below Items Total)
+                        HStack {
+                            Text(ppDriverText("DeliveryWorkspace_Fee"))
+                                .font(AdminType.caption1)
+                                .foregroundStyle(AdminSurface.secondaryText)
+                            Spacer()
+                            if effectiveDeliveryFee > 0 {
+                                Text(ppDriverMoney(effectiveDeliveryFee, currency: effectiveCurrency))
+                                    .font(AdminType.footnoteBold)
+                                    .foregroundStyle(AdminSurface.primaryText)
+                            } else {
+                                Text(ppDriverText("DeliveryCompany_Fee_Free"))
+                                    .font(AdminType.footnoteBold)
+                                    .foregroundStyle(Color.green)
+                            }
+                        }
+
+                        // 3. Order Total Row (if breakdown is distinct)
+                        if effectiveDeliveryFee > 0 || (effectiveItemsTotal > 0 && effectiveTotal > effectiveItemsTotal) {
+                            Divider()
+                                .overlay(AdminSurface.hairline.opacity(0.5))
+
+                            HStack {
+                                Text(ppDriverText("Deliv_OrderTotal"))
+                                    .font(AdminType.footnoteBold)
+                                    .foregroundStyle(AdminSurface.primaryText)
+                                Spacer()
+                                Text(priceText)
+                                    .font(AdminType.subheadlineBold)
+                                    .foregroundStyle(AdminSurface.primary)
+                            }
+                        }
                     }
                     .padding(.horizontal, AdminSpacing.sm)
                     .padding(.bottom, AdminSpacing.xs)

@@ -724,7 +724,29 @@ public struct PPProviderMarketInventoryView: View {
         }
     }
 
-    // MARK: - 1. Studio Navigation Bar
+    // MARK: - Helper Formatting & Metrics
+
+    private func formattedCurrency(_ value: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
+        return formatter.string(from: NSNumber(value: value)) ?? String(format: "%.0f", value)
+    }
+
+    private func count(for kind: PPInventoryKind) -> Int {
+        if kind == .all {
+            return viewModel.items.count
+        }
+        return viewModel.items.filter { $0.kind == kind }.count
+    }
+
+    private var healthRatio: CGFloat {
+        guard viewModel.totalProductsCount > 0 else { return 1.0 }
+        let healthy = max(0, viewModel.totalProductsCount - viewModel.stockAlertsCount)
+        return CGFloat(healthy) / CGFloat(viewModel.totalProductsCount)
+    }
+
+    // MARK: - 1. Studio Navigation Bar (Next-Gen V10 Sovereign Header)
 
     private var studioNavigationBar: some View {
         HStack(spacing: 12) {
@@ -737,40 +759,54 @@ public struct PPProviderMarketInventoryView: View {
                 }
             }) {
                 Image(systemName: isRTL ? "arrow.right" : "arrow.left")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(Color(red: 0.15, green: 0.18, blue: 0.22))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(Color(red: 0.12, green: 0.15, blue: 0.20))
                     .frame(width: 42, height: 42)
                     .background(Color.white)
                     .clipShape(Circle())
-                    .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+                    .overlay(
+                        Circle()
+                            .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.04), radius: 8, x: 0, y: 3)
             }
             .accessibilityLabel(isRTL ? "رجوع" : "Back")
 
             // Center: Title & Branch Location Pill
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 7) {
                     Text(isRTL ? "منتجاتي" : "My Catalog")
-                        .font(PPFont.bold(22, relativeTo: .title3))
-                        .foregroundColor(Color(red: 0.10, green: 0.12, blue: 0.15))
+                        .font(PPFont.bold(23, relativeTo: .title3))
+                        .foregroundColor(Color(red: 0.08, green: 0.10, blue: 0.14))
 
-                    // Store / Branch Indicator
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(Color(red: 0.20, green: 0.72, blue: 0.52))
-                            .frame(width: 6, height: 6)
+                    // Store / Branch Indicator with Living Emerald Pulse
+                    HStack(spacing: 5) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(red: 0.20, green: 0.72, blue: 0.52).opacity(0.25))
+                                .frame(width: 12, height: 12)
+                            Circle()
+                                .fill(Color(red: 0.20, green: 0.72, blue: 0.52))
+                                .frame(width: 6, height: 6)
+                        }
+
                         Text(isRTL ? "فرع الدوحة الرئيسي" : "Doha Main Branch")
-                            .font(PPFont.medium(11.5, relativeTo: .caption))
-                            .foregroundColor(Color(red: 0.45, green: 0.48, blue: 0.54))
+                            .font(PPFont.bold(11, relativeTo: .caption))
+                            .foregroundColor(Color(red: 0.35, green: 0.40, blue: 0.48))
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(Color.white.opacity(0.8))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3.5)
+                    .background(Color.white.opacity(0.92))
                     .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color(red: 0.20, green: 0.72, blue: 0.52).opacity(0.25), lineWidth: 1)
+                    )
                 }
 
-                Text(isRTL ? "أدر المخزون والعروض من مساحة واحدة هادئة" : "Manage inventory and offers from one serene space")
-                    .font(PPFont.regular(12, relativeTo: .footnote))
-                    .foregroundColor(Color(red: 0.50, green: 0.54, blue: 0.60))
+                Text(isRTL ? "إدارة المخزون والعمليات والكتالوج الحي" : "Living merchant inventory & catalog telemetry")
+                    .font(PPFont.medium(11.5, relativeTo: .footnote))
+                    .foregroundColor(Color(red: 0.48, green: 0.52, blue: 0.58))
                     .lineLimit(1)
             }
 
@@ -789,11 +825,15 @@ public struct PPProviderMarketInventoryView: View {
                 }) {
                     Image(systemName: viewModel.isBatchMode ? "checkmark.circle.fill" : "checklist")
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(viewModel.isBatchMode ? Color.white : Color(red: 0.30, green: 0.34, blue: 0.40))
+                        .foregroundColor(viewModel.isBatchMode ? Color.white : Color(red: 0.25, green: 0.28, blue: 0.35))
                         .frame(width: 42, height: 42)
                         .background(viewModel.isBatchMode ? Color(red: 0.88, green: 0.22, blue: 0.42) : Color.white)
                         .clipShape(Circle())
-                        .shadow(color: Color.black.opacity(0.04), radius: 6, x: 0, y: 2)
+                        .overlay(
+                            Circle()
+                                .stroke(viewModel.isBatchMode ? Color.clear : Color.black.opacity(0.06), lineWidth: 1)
+                        )
+                        .shadow(color: viewModel.isBatchMode ? Color(red: 0.88, green: 0.22, blue: 0.42).opacity(0.35) : Color.black.opacity(0.04), radius: 8, x: 0, y: 3)
                 }
                 .accessibilityLabel(isRTL ? "تحديد متعدد" : "Batch Select")
 
@@ -806,21 +846,21 @@ public struct PPProviderMarketInventoryView: View {
                     }
                 }) {
                     Image(systemName: "plus")
-                        .font(.system(size: 17, weight: .bold))
+                        .font(.system(size: 18, weight: .bold))
                         .foregroundColor(.white)
                         .frame(width: 42, height: 42)
                         .background(
                             LinearGradient(
                                 colors: [
                                     Color(red: 0.94, green: 0.25, blue: 0.45),
-                                    Color(red: 0.85, green: 0.18, blue: 0.38)
+                                    Color(red: 0.82, green: 0.16, blue: 0.36)
                                 ],
                                 startPoint: .topLeading,
                                 endPoint: .bottomTrailing
                             )
                         )
                         .clipShape(Circle())
-                        .shadow(color: Color(red: 0.94, green: 0.25, blue: 0.45).opacity(0.35), radius: 8, x: 0, y: 4)
+                        .shadow(color: Color(red: 0.94, green: 0.25, blue: 0.45).opacity(0.40), radius: 10, x: 0, y: 4)
                 }
                 .accessibilityLabel(isRTL ? "إضافة منتج جديد" : "Add New Product")
             }
@@ -830,82 +870,107 @@ public struct PPProviderMarketInventoryView: View {
         .background(Color.clear)
     }
 
-    // MARK: - 2. The Pulse Canopy (Hero Telemetry Cockpit)
+    // MARK: - 2. The Pulse Canopy (Hero Telemetry Cockpit - Next-Gen V10)
 
     private var pulseCanopyHero: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 14) {
             // Main Valuation & Live Health Ring
             HStack(spacing: 14) {
                 // Valuation Column
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(isRTL ? "قيمة الكتالوج الإجمالية" : "Total Catalog Valuation")
-                        .font(PPFont.medium(11.5, relativeTo: .caption))
-                        .foregroundColor(Color(red: 0.48, green: 0.52, blue: 0.58))
-
-                    HStack(alignment: .firstTextBaseline, spacing: 4) {
-                        Text(String(format: "%.0f", viewModel.totalCatalogValue))
-                            .font(PPFont.bold(28, relativeTo: .title))
-                            .foregroundColor(Color(red: 0.10, green: 0.12, blue: 0.15))
-
-                        Text(isRTL ? "ر.ق" : "QAR")
-                            .font(PPFont.bold(14, relativeTo: .subheadline))
-                            .foregroundColor(Color(red: 0.20, green: 0.72, blue: 0.52))
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(Color(red: 0.88, green: 0.22, blue: 0.42))
+                            .frame(width: 5, height: 5)
+                        Text(isRTL ? "القيمة الإجمالية للكتالوج" : "Total Catalog Valuation")
+                            .font(PPFont.bold(11, relativeTo: .caption))
+                            .foregroundColor(Color(red: 0.45, green: 0.48, blue: 0.55))
+                            .textCase(.uppercase)
                     }
 
-                    HStack(spacing: 6) {
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(formattedCurrency(viewModel.totalCatalogValue))
+                            .font(PPFont.bold(30, relativeTo: .title))
+                            .foregroundColor(Color(red: 0.08, green: 0.10, blue: 0.14))
+
+                        Text(isRTL ? "ر.ق" : "QAR")
+                            .font(PPFont.bold(13, relativeTo: .subheadline))
+                            .foregroundColor(Color(red: 0.18, green: 0.70, blue: 0.45))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 3)
+                            .background(Color(red: 0.18, green: 0.70, blue: 0.45).opacity(0.12))
+                            .clipShape(Capsule())
+                    }
+
+                    HStack(spacing: 5) {
                         Image(systemName: "chart.line.uptrend.xyaxis")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(Color(red: 0.20, green: 0.72, blue: 0.52))
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundColor(Color(red: 0.18, green: 0.70, blue: 0.45))
                         Text(isRTL ? "مخزون نشط ومتدفق" : "Active Flowing Stock")
-                            .font(PPFont.medium(11, relativeTo: .caption))
-                            .foregroundColor(Color(red: 0.20, green: 0.72, blue: 0.52))
+                            .font(PPFont.bold(11.5, relativeTo: .caption))
+                            .foregroundColor(Color(red: 0.18, green: 0.70, blue: 0.45))
                     }
                 }
 
                 Spacer()
 
-                // Health Triage Radar Arc
+                // Multi-Segment Health Orbital Ring
                 ZStack {
+                    // Outer subtle track
                     Circle()
-                        .stroke(Color.black.opacity(0.05), lineWidth: 6)
-                        .frame(width: 58, height: 58)
+                        .stroke(Color.black.opacity(0.05), lineWidth: 6.5)
+                        .frame(width: 64, height: 64)
 
+                    // Healthy Stock Arc
                     Circle()
-                        .trim(from: 0, to: viewModel.totalProductsCount > 0 ? CGFloat(viewModel.totalProductsCount - viewModel.stockAlertsCount) / CGFloat(viewModel.totalProductsCount) : 1.0)
+                        .trim(from: 0, to: healthRatio)
                         .stroke(
                             AngularGradient(
-                                colors: [Color(red: 0.20, green: 0.72, blue: 0.52), Color(red: 0.35, green: 0.85, blue: 0.65)],
+                                colors: [
+                                    Color(red: 0.20, green: 0.72, blue: 0.52),
+                                    Color(red: 0.35, green: 0.85, blue: 0.65)
+                                ],
                                 center: .center
                             ),
-                            style: StrokeStyle(lineWidth: 6, lineCap: .round)
+                            style: StrokeStyle(lineWidth: 6.5, lineCap: .round)
                         )
                         .rotationEffect(.degrees(-90))
-                        .frame(width: 58, height: 58)
+                        .frame(width: 64, height: 64)
 
+                    // Center stats
                     VStack(spacing: 0) {
                         Text("\(viewModel.totalProductsCount)")
-                            .font(PPFont.bold(16, relativeTo: .headline))
-                            .foregroundColor(Color(red: 0.12, green: 0.14, blue: 0.18))
+                            .font(PPFont.bold(18, relativeTo: .headline))
+                            .foregroundColor(Color(red: 0.10, green: 0.12, blue: 0.16))
                         Text(isRTL ? "منتج" : "items")
-                            .font(PPFont.medium(10, relativeTo: .caption2))
-                            .foregroundColor(Color(red: 0.50, green: 0.54, blue: 0.60))
+                            .font(PPFont.bold(10, relativeTo: .caption2))
+                            .foregroundColor(Color(red: 0.48, green: 0.52, blue: 0.58))
                     }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
+            .padding(.horizontal, 18)
+            .padding(.top, 18)
 
-            Divider()
-                .background(Color.black.opacity(0.06))
+            // Specular Hairline Divider
+            Rectangle()
+                .fill(
+                    LinearGradient(
+                        colors: [Color.clear, Color.black.opacity(0.06), Color.clear],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(height: 1)
+                .padding(.horizontal, 12)
 
-            // Interactive Telemetry Metric Pills (Tappable Quick Filters)
+            // Interactive Telemetry Metric Pillars (The 4 Command Pillars)
             HStack(spacing: 8) {
                 // Metric 1: All Items
                 telemetryFilterPill(
                     title: isRTL ? "الكل" : "All",
                     count: viewModel.totalProductsCount,
                     icon: "shippingbox.fill",
-                    tint: Color(red: 0.40, green: 0.44, blue: 0.52),
+                    tint: Color(red: 0.38, green: 0.42, blue: 0.50),
                     isSelected: viewModel.activeFilterMetric == .all
                 ) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -932,7 +997,7 @@ public struct PPProviderMarketInventoryView: View {
                     title: isRTL ? "عروض نشطة" : "Active Offers",
                     count: viewModel.activeOffersCount,
                     icon: "tag.fill",
-                    tint: Color(red: 0.92, green: 0.30, blue: 0.45),
+                    tint: Color(red: 0.92, green: 0.25, blue: 0.45),
                     isSelected: viewModel.activeFilterMetric == .activeOffersOnly
                 ) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -945,7 +1010,7 @@ public struct PPProviderMarketInventoryView: View {
                     title: isRTL ? "مخفي" : "Hidden",
                     count: viewModel.items.filter { !$0.isListedInApp }.count,
                     icon: "eye.slash.fill",
-                    tint: Color(red: 0.55, green: 0.58, blue: 0.65),
+                    tint: Color(red: 0.50, green: 0.54, blue: 0.62),
                     isSelected: viewModel.activeFilterMetric == .hiddenOnly
                 ) {
                     withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
@@ -953,13 +1018,33 @@ public struct PPProviderMarketInventoryView: View {
                     }
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.bottom, 12)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 14)
         }
         .background(
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.04), radius: 12, x: 0, y: 4)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white, Color(red: 0.99, green: 0.985, blue: 0.99)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 0.88, green: 0.22, blue: 0.42).opacity(0.12),
+                                    Color.black.opacity(0.04)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1
+                        )
+                )
+                .shadow(color: Color.black.opacity(0.045), radius: 14, x: 0, y: 5)
         )
     }
 
@@ -976,34 +1061,34 @@ public struct PPProviderMarketInventoryView: View {
             VStack(spacing: 3) {
                 HStack(spacing: 4) {
                     Image(systemName: icon)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(isSelected ? tint : tint.opacity(0.85))
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(isSelected ? tint : (isAlert ? tint : tint.opacity(0.85)))
 
                     Text("\(count)")
-                        .font(PPFont.bold(14, relativeTo: .subheadline))
-                        .foregroundColor(isSelected ? tint : Color(red: 0.15, green: 0.18, blue: 0.22))
+                        .font(PPFont.bold(14.5, relativeTo: .subheadline))
+                        .foregroundColor(isSelected ? tint : (isAlert ? tint : Color(red: 0.15, green: 0.18, blue: 0.22)))
                 }
 
                 Text(title)
-                    .font(isSelected ? PPFont.bold(11, relativeTo: .caption) : PPFont.medium(11, relativeTo: .caption))
-                    .foregroundColor(isSelected ? tint : Color(red: 0.50, green: 0.54, blue: 0.60))
+                    .font(isSelected ? PPFont.bold(10.5, relativeTo: .caption) : PPFont.medium(10.5, relativeTo: .caption))
+                    .foregroundColor(isSelected ? tint : Color(red: 0.48, green: 0.52, blue: 0.58))
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.vertical, 9)
             .background(
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(isSelected ? tint.opacity(0.12) : Color(red: 0.97, green: 0.975, blue: 0.985))
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(isSelected ? tint.opacity(0.14) : (isAlert ? tint.opacity(0.07) : Color(red: 0.965, green: 0.97, blue: 0.98)))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .stroke(isSelected ? tint.opacity(0.35) : Color.clear, lineWidth: 1.5)
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(isSelected ? tint.opacity(0.40) : (isAlert ? tint.opacity(0.25) : Color.clear), lineWidth: isSelected ? 1.5 : 1)
                     )
             )
         }
         .buttonStyle(ScaleButtonStyle())
     }
 
-    // MARK: - 3. Command & Triage Horizon (Search & Category Strip)
+    // MARK: - 3. Command & Triage Horizon (Search & Category Strip - Next-Gen V10)
 
     private var commandAndTriageHorizon: some View {
         VStack(spacing: 10) {
@@ -1013,14 +1098,14 @@ public struct PPProviderMarketInventoryView: View {
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 15, weight: .medium))
-                        .foregroundColor(Color(red: 0.55, green: 0.58, blue: 0.65))
+                        .foregroundColor(Color(red: 0.50, green: 0.54, blue: 0.60))
 
                     TextField(
                         isRTL ? "ابحث بالاسم، الفئة، السعر، أو الرمز..." : "Search by name, category, price, or SKU...",
                         text: $viewModel.searchText
                     )
                     .font(PPFont.regular(13.5, relativeTo: .body))
-                    .foregroundColor(Color(red: 0.15, green: 0.18, blue: 0.22))
+                    .foregroundColor(Color(red: 0.12, green: 0.15, blue: 0.20))
 
                     if !viewModel.searchText.isEmpty {
                         Button(action: {
@@ -1032,21 +1117,28 @@ public struct PPProviderMarketInventoryView: View {
                         }
                     }
 
-                    // Barcode Scanner Shortcut
+                    // Barcode Scanner Shortcut Capsule
                     Button(action: {
                         // Scanner trigger
                     }) {
                         Image(systemName: "barcode.viewfinder")
-                            .font(.system(size: 16, weight: .medium))
+                            .font(.system(size: 16, weight: .bold))
                             .foregroundColor(Color(red: 0.88, green: 0.22, blue: 0.42))
+                            .frame(width: 32, height: 32)
+                            .background(Color(red: 0.88, green: 0.22, blue: 0.42).opacity(0.10))
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     }
                     .accessibilityLabel(isRTL ? "مسح الباركود" : "Scan Barcode")
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(.vertical, 8)
                 .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 2)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.black.opacity(0.045), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.03), radius: 8, x: 0, y: 2)
 
                 // Sort & Filter Menu Trigger
                 Menu {
@@ -1076,26 +1168,33 @@ public struct PPProviderMarketInventoryView: View {
                         }
                     }
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
+                    HStack(spacing: 5) {
+                        Image(systemName: "line.3.horizontal.decrease.circle.fill")
                             .font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(Color(red: 0.88, green: 0.22, blue: 0.42))
                         Text(isRTL ? "تصفية" : "Filter")
                             .font(PPFont.bold(12.5, relativeTo: .caption))
+                            .foregroundColor(Color(red: 0.20, green: 0.24, blue: 0.30))
                     }
-                    .foregroundColor(Color(red: 0.25, green: 0.28, blue: 0.35))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
+                    .padding(.horizontal, 13)
+                    .padding(.vertical, 11)
                     .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .shadow(color: Color.black.opacity(0.03), radius: 6, x: 0, y: 2)
+                    .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(Color.black.opacity(0.045), lineWidth: 1)
+                    )
+                    .shadow(color: Color.black.opacity(0.03), radius: 8, x: 0, y: 2)
                 }
             }
 
-            // Horizontal Category Pills
+            // Horizontal Category Pills with Live Item Counts
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(PPInventoryKind.allCases) { kind in
                         let isSelected = viewModel.selectedKind == kind
+                        let kindCount = count(for: kind)
+
                         Button(action: {
                             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                 viewModel.selectedKind = kind
@@ -1103,18 +1202,30 @@ public struct PPProviderMarketInventoryView: View {
                         }) {
                             HStack(spacing: 6) {
                                 Image(systemName: kind.iconName)
-                                    .font(.system(size: 12, weight: isSelected ? .bold : .medium))
+                                    .font(.system(size: 12, weight: isSelected ? .bold : .semibold))
 
                                 Text(kind.title(isRTL: isRTL))
-                                    .font(isSelected ? PPFont.bold(12.5, relativeTo: .subheadline) : PPFont.medium(12.5, relativeTo: .subheadline))
+                                    .font(isSelected ? PPFont.bold(13, relativeTo: .subheadline) : PPFont.medium(13, relativeTo: .subheadline))
+
+                                // Item Count Badge inside Pill
+                                Text("\(kindCount)")
+                                    .font(PPFont.bold(11, relativeTo: .caption2))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 1.5)
+                                    .background(isSelected ? Color.white.opacity(0.25) : Color(red: 0.93, green: 0.94, blue: 0.96))
+                                    .clipShape(Capsule())
                             }
-                            .foregroundColor(isSelected ? .white : Color(red: 0.35, green: 0.38, blue: 0.44))
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
+                            .foregroundColor(isSelected ? .white : Color(red: 0.30, green: 0.34, blue: 0.40))
+                            .padding(.horizontal, 13)
+                            .padding(.vertical, 8.5)
                             .background(
-                                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
                                     .fill(isSelected ? kind.themeColor : Color.white)
-                                    .shadow(color: isSelected ? kind.themeColor.opacity(0.3) : Color.black.opacity(0.02), radius: 6, x: 0, y: 2)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                            .stroke(isSelected ? Color.clear : Color.black.opacity(0.05), lineWidth: 1)
+                                    )
+                                    .shadow(color: isSelected ? kind.themeColor.opacity(0.35) : Color.black.opacity(0.02), radius: 8, x: 0, y: 3)
                             )
                         }
                         .buttonStyle(ScaleButtonStyle())
@@ -1172,7 +1283,7 @@ public struct PPProviderMarketInventoryView: View {
         }
     }
 
-    // MARK: - Living Product Card (First-Principles Redesign)
+    // MARK: - Living Product Card (Next-Gen V10 Category-Defining Reinvention)
 
     private func livingProductCard(item: PPInventoryItemModel) -> some View {
         let isSelected = viewModel.selectedItemIDs.contains(item.id)
@@ -1193,8 +1304,8 @@ public struct PPProviderMarketInventoryView: View {
             // Spatial Thumbnail Showcase with Integrated Live Stock Capsule
             ZStack(alignment: .bottom) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(red: 0.94, green: 0.945, blue: 0.96))
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .fill(Color(red: 0.95, green: 0.955, blue: 0.965))
 
                     if let imageURL = item.imageURL, let url = URL(string: imageURL), !imageURL.isEmpty {
                         AsyncImage(url: url) { phase in
@@ -1206,46 +1317,50 @@ public struct PPProviderMarketInventoryView: View {
                                 img
                                     .resizable()
                                     .scaledToFill()
-                                    .frame(width: 88, height: 88)
+                                    .frame(width: 92, height: 92)
                                     .clipped()
                             case .failure:
                                 Image(systemName: item.kind.iconName)
-                                    .font(.system(size: 30))
-                                    .foregroundColor(item.kind.themeColor.opacity(0.45))
+                                    .font(.system(size: 32))
+                                    .foregroundColor(item.kind.themeColor.opacity(0.40))
                             @unknown default:
                                 Image(systemName: item.kind.iconName)
-                                    .font(.system(size: 30))
-                                    .foregroundColor(item.kind.themeColor.opacity(0.45))
+                                    .font(.system(size: 32))
+                                    .foregroundColor(item.kind.themeColor.opacity(0.40))
                             }
                         }
                     } else {
                         Image(systemName: item.kind.iconName)
-                            .font(.system(size: 30))
-                            .foregroundColor(item.kind.themeColor.opacity(0.45))
+                            .font(.system(size: 32))
+                            .foregroundColor(item.kind.themeColor.opacity(0.40))
                     }
                 }
-                .frame(width: 88, height: 88)
-                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .frame(width: 92, height: 92)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
                         .stroke(Color.black.opacity(0.04), lineWidth: 1)
                 )
 
                 // Stock Health Pill Overlay
-                Text(item.health.label(isRTL: isRTL))
-                    .font(PPFont.bold(10, relativeTo: .caption2))
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(item.health.badgeColor)
-                    .clipShape(Capsule())
-                    .padding(.bottom, 6)
-                    .shadow(color: item.health.badgeColor.opacity(0.35), radius: 3, x: 0, y: 1)
+                HStack(spacing: 3) {
+                    Image(systemName: item.health.requiresUrgentAttention ? "exclamationmark.triangle.fill" : "checkmark.circle.fill")
+                        .font(.system(size: 8, weight: .bold))
+                    Text(item.health.label(isRTL: isRTL))
+                        .font(PPFont.bold(10, relativeTo: .caption2))
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3.5)
+                .background(item.health.badgeColor)
+                .clipShape(Capsule())
+                .padding(.bottom, 6)
+                .shadow(color: item.health.badgeColor.opacity(0.40), radius: 4, x: 0, y: 2)
             }
-            .frame(width: 88, height: 88)
+            .frame(width: 92, height: 92)
 
             // Content & Live Controls
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 5) {
                 // Top Row: Kind Badge & Market Visibility Switch Beacon
                 HStack(spacing: 6) {
                     // Kind Badge
@@ -1286,7 +1401,7 @@ public struct PPProviderMarketInventoryView: View {
 
                     Spacer()
 
-                    // Interactive Market Visibility Beacon (One-tap toggle)
+                    // Interactive Market Visibility Beacon (One-tap direct toggle)
                     Button(action: {
                         withAnimation(.spring(response: 0.3, dampingFraction: 0.75)) {
                             viewModel.toggleVisibility(for: item.id)
@@ -1295,7 +1410,7 @@ public struct PPProviderMarketInventoryView: View {
                         HStack(spacing: 4) {
                             Circle()
                                 .fill(item.isListedInApp ? Color(red: 0.20, green: 0.72, blue: 0.52) : Color(red: 0.85, green: 0.55, blue: 0.20))
-                                .frame(width: 7, height: 7)
+                                .frame(width: 6.5, height: 6.5)
                             Text(item.isListedInApp ? (isRTL ? "معروض في التطبيق" : "Live in Store") : (isRTL ? "مخفي" : "Hidden"))
                                 .font(PPFont.bold(11, relativeTo: .caption2))
                                 .foregroundColor(item.isListedInApp ? Color(red: 0.15, green: 0.55, blue: 0.38) : Color(red: 0.65, green: 0.40, blue: 0.10))
@@ -1304,21 +1419,25 @@ public struct PPProviderMarketInventoryView: View {
                         .padding(.vertical, 3.5)
                         .background(item.isListedInApp ? Color(red: 0.20, green: 0.72, blue: 0.52).opacity(0.12) : Color(red: 0.85, green: 0.55, blue: 0.20).opacity(0.12))
                         .clipShape(Capsule())
+                        .overlay(
+                            Capsule()
+                                .stroke(item.isListedInApp ? Color(red: 0.20, green: 0.72, blue: 0.52).opacity(0.25) : Color(red: 0.85, green: 0.55, blue: 0.20).opacity(0.25), lineWidth: 0.75)
+                        )
                     }
                     .buttonStyle(PlainButtonStyle())
                 }
 
-                // Title & Secondary English Label
+                // Title & Secondary Subtitle
                 VStack(alignment: .leading, spacing: 2) {
                     Text(isRTL ? item.nameAr : item.nameEn)
-                        .font(PPFont.bold(15, relativeTo: .headline))
-                        .foregroundColor(Color(red: 0.12, green: 0.15, blue: 0.18))
+                        .font(PPFont.bold(15.5, relativeTo: .headline))
+                        .foregroundColor(Color(red: 0.10, green: 0.12, blue: 0.16))
                         .lineLimit(1)
                         .multilineTextAlignment(.leading)
 
                     Text(isRTL ? item.nameEn : item.nameAr)
                         .font(PPFont.regular(12, relativeTo: .caption))
-                        .foregroundColor(Color(red: 0.52, green: 0.55, blue: 0.60))
+                        .foregroundColor(Color(red: 0.50, green: 0.54, blue: 0.60))
                         .lineLimit(1)
                         .multilineTextAlignment(.leading)
                 }
@@ -1328,8 +1447,8 @@ public struct PPProviderMarketInventoryView: View {
                     // Price Block
                     HStack(alignment: .firstTextBaseline, spacing: 3) {
                         Text(String(format: "%.0f", item.price))
-                            .font(PPFont.bold(18, relativeTo: .headline))
-                            .foregroundColor(Color(red: 0.10, green: 0.12, blue: 0.15))
+                            .font(PPFont.bold(19, relativeTo: .headline))
+                            .foregroundColor(Color(red: 0.08, green: 0.10, blue: 0.14))
 
                         Text(isRTL ? "ر.ق" : "QAR")
                             .font(PPFont.bold(11, relativeTo: .caption))
@@ -1345,7 +1464,7 @@ public struct PPProviderMarketInventoryView: View {
 
                     Spacer()
 
-                    // DIRECT TACTILE STOCK STEPPER (Replaces the clunky 4-pill row!)
+                    // Direct Tactile Stock Stepper
                     HStack(spacing: 2) {
                         // Decrement Button
                         Button(action: {
@@ -1354,8 +1473,8 @@ public struct PPProviderMarketInventoryView: View {
                             Image(systemName: "minus")
                                 .font(.system(size: 10, weight: .bold))
                                 .foregroundColor(Color(red: 0.35, green: 0.38, blue: 0.44))
-                                .frame(width: 26, height: 26)
-                                .background(Color(red: 0.94, green: 0.945, blue: 0.96))
+                                .frame(width: 28, height: 28)
+                                .background(Color(red: 0.93, green: 0.94, blue: 0.955))
                                 .clipShape(Circle())
                         }
                         .disabled(item.stock <= 0)
@@ -1366,8 +1485,8 @@ public struct PPProviderMarketInventoryView: View {
                         }) {
                             Text("\(item.stock)")
                                 .font(PPFont.bold(13, relativeTo: .subheadline))
-                                .foregroundColor(Color(red: 0.15, green: 0.18, blue: 0.22))
-                                .frame(minWidth: 28)
+                                .foregroundColor(Color(red: 0.12, green: 0.15, blue: 0.18))
+                                .frame(minWidth: 30)
                         }
 
                         // Increment Button
@@ -1376,15 +1495,19 @@ public struct PPProviderMarketInventoryView: View {
                         }) {
                             Image(systemName: "plus")
                                 .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(Color(red: 0.35, green: 0.38, blue: 0.44))
-                                .frame(width: 26, height: 26)
-                                .background(Color(red: 0.94, green: 0.945, blue: 0.96))
+                                .foregroundColor(Color(red: 0.88, green: 0.22, blue: 0.42))
+                                .frame(width: 28, height: 28)
+                                .background(Color(red: 0.88, green: 0.22, blue: 0.42).opacity(0.12))
                                 .clipShape(Circle())
                         }
                     }
                     .padding(3)
-                    .background(Color(red: 0.97, green: 0.975, blue: 0.985))
+                    .background(Color(red: 0.965, green: 0.968, blue: 0.978))
                     .clipShape(Capsule())
+                    .overlay(
+                        Capsule()
+                            .stroke(Color.black.opacity(0.04), lineWidth: 0.75)
+                    )
 
                     // Context Menu for Deep Actions
                     Menu {
@@ -1425,9 +1548,9 @@ public struct PPProviderMarketInventoryView: View {
                     } label: {
                         Image(systemName: "ellipsis")
                             .font(.system(size: 13, weight: .bold))
-                            .foregroundColor(Color(red: 0.55, green: 0.58, blue: 0.65))
+                            .foregroundColor(Color(red: 0.50, green: 0.54, blue: 0.60))
                             .frame(width: 28, height: 28)
-                            .background(Color(red: 0.96, green: 0.965, blue: 0.975))
+                            .background(Color(red: 0.95, green: 0.955, blue: 0.965))
                             .clipShape(Circle())
                     }
                 }
@@ -1435,13 +1558,13 @@ public struct PPProviderMarketInventoryView: View {
         }
         .padding(14)
         .background(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .fill(Color.white)
-                .shadow(color: Color.black.opacity(0.035), radius: 8, x: 0, y: 3)
+                .shadow(color: Color.black.opacity(0.035), radius: 10, x: 0, y: 4)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(isSelected ? Color(red: 0.88, green: 0.22, blue: 0.42) : Color.clear, lineWidth: 2)
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(isSelected ? Color(red: 0.88, green: 0.22, blue: 0.42) : Color.black.opacity(0.045), lineWidth: isSelected ? 2 : 1)
         )
         .contentShape(Rectangle())
         .onTapGesture {

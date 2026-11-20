@@ -320,8 +320,16 @@ public final class PPGoogleMapsRouteService: Sendable {
                 if let value = url.queryItems?.first(where: { $0.name == name })?.value,
                    let coordinate = Self.coordinateQuery(value) { return coordinate }
             }
+            if let atRange = clean.range(of: "@") {
+                let sub = String(clean[atRange.upperBound...])
+                if let coordinate = Self.coordinateQuery(sub) { return coordinate }
+            }
             // A URL is not a postal address and must not geocode to an unrelated place.
             return nil
+        }
+        if let atRange = clean.range(of: "@") {
+            let sub = String(clean[atRange.upperBound...])
+            if let coordinate = Self.coordinateQuery(sub) { return coordinate }
         }
 
         // Fast resolution via Google Routes API first
@@ -379,7 +387,7 @@ public final class PPGoogleMapsRouteService: Sendable {
             return String(character)
         }.joined()
         let parts = ascii.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        guard parts.count == 2, let lat = Double(parts[0]), let lng = Double(parts[1]) else { return nil }
+        guard parts.count >= 2, let lat = Double(parts[0]), let lng = Double(parts[1]) else { return nil }
         let coordinate = CLLocationCoordinate2D(latitude: lat, longitude: lng)
         return isUsable(coordinate) ? coordinate : nil
     }
@@ -441,6 +449,6 @@ public final class PPGoogleMapsRouteService: Sendable {
 }
 
 /// UI maps these typed failures through the existing localized text helper.
-public enum PPRouteServiceError: Error, Sendable {
+public enum PPRouteServiceError: Error, Sendable, Equatable {
     case invalidCoordinates, serviceUnavailable, invalidResponse, noDrivingRoute
 }

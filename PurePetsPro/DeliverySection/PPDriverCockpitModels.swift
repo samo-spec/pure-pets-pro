@@ -306,6 +306,7 @@ struct PPDriverTask: Sendable, Identifiable, Equatable {
     var itemCount: Int = 0
     var totalAmount: Double = 0.0
     var currency: String = "QAR"
+    var deliveryFee: Double? = nil
 
     var id: String { PPDriverTask.key(authority: authority.rawValue, taskID: taskID) }
     var stage: PPDriverStage { PPDriverStage(status: status) }
@@ -488,6 +489,7 @@ func ppParseOfficialTask(_ value: Any?) -> PPDriverTask? {
     let parsedTotal = cpDouble(source["totalAmount"]) ?? 0
     let totalAmount = parsedTotal > 0 ? parsedTotal : (cash?.amount ?? 0)
     let currency = cpString(source["currency"]).isEmpty ? (cash?.currency ?? "QAR") : cpString(source["currency"]).uppercased()
+    let deliveryFee = cpDouble(source["deliveryFee"]) ?? cpDouble(source["feeAmount"])
     return PPDriverTask(taskID: taskID,
                         authority: authority,
                         companyID: cpString(source["companyId"]),
@@ -506,7 +508,8 @@ func ppParseOfficialTask(_ value: Any?) -> PPDriverTask? {
                         items: items,
                         itemCount: itemCount,
                         totalAmount: totalAmount,
-                        currency: currency)
+                        currency: currency,
+                        deliveryFee: deliveryFee)
 }
 
 /// A partner request plus its server-computed driverTask projection.
@@ -545,6 +548,7 @@ func ppParsePartnerTask(record value: Any?, projection projectionValue: Any?) ->
     let parsedTotal = cpDouble(record["totalAmount"]) ?? 0
     let totalAmount = parsedTotal > 0 ? parsedTotal : (cash?.amount ?? 0)
     let currency = cpString(record["currency"]).isEmpty ? (cash?.currency ?? "QAR") : cpString(record["currency"]).uppercased()
+    let deliveryFee = cpDouble(record["deliveryFee"]) ?? cpDouble(record["feeAmount"]) ?? cpDouble(projection["deliveryFee"]) ?? cpDouble(projection["feeAmount"])
     return PPDriverTask(taskID: taskID,
                         authority: .partnerCompanyRequest,
                         companyID: cpString(projection["companyId"]),
@@ -563,7 +567,8 @@ func ppParsePartnerTask(record value: Any?, projection projectionValue: Any?) ->
                         items: items,
                         itemCount: itemCount,
                         totalAmount: totalAmount,
-                        currency: currency)
+                        currency: currency,
+                        deliveryFee: deliveryFee)
 }
 
 func ppParseDriverContexts(_ result: [String: Any]) -> PPDriverContextResolution {

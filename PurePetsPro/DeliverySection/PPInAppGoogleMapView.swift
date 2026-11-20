@@ -156,8 +156,9 @@ public struct PPInAppGoogleMapView: UIViewRepresentable {
 
     private func generateHTML() -> String {
         let initial = pickupCoordinate ?? dropoffCoordinate ?? driverCoordinate
-        let initialLat = initial?.latitude ?? 0
-        let initialLng = initial?.longitude ?? 0
+        let initialLat = initial?.latitude ?? 30.0444
+        let initialLng = initial?.longitude ?? 31.2357
+        let initialZoom = initial == nil ? 12 : 14
         let bgHex = isDarkMode ? "#0F172A" : "#F8FAFC"
 
         let darkStyles = """
@@ -234,7 +235,7 @@ public struct PPInAppGoogleMapView: UIViewRepresentable {
               if (!window.google?.maps) { reportMapFailure(); return; }
               map = new google.maps.Map(document.getElementById('map'), {
                 center: { lat: \(initialLat), lng: \(initialLng) },
-                zoom: \(initial == nil ? 2 : 14),
+                zoom: \(initialZoom),
                 disableDefaultUI: true,
                 gestureHandling: 'greedy',
                 mapTypeId: '\(mapStyle.rawValue)',

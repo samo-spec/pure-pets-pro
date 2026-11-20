@@ -4972,3 +4972,6 @@
 "DeliveryDetail_Manifest_OptionsPartial" = "بعض خيارات الصنف غير معروضة.";
 "DeliveryDetail_Manifest_Expanded" = "موسّع";
 "DeliveryDetail_Manifest_Collapsed" = "مطويّ";
+
+"ProFulfillment_OrderDeliveryFee" = "رسوم توصيل الطلب بالكامل";
+"ProFulfillment_RecordedFeeUnavailable" = "لم تُسجّل لهذا الطلب";

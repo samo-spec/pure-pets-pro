@@ -514,6 +514,12 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
         [content addArrangedSubview:[self detailRowWithTitle:kLang(@"Fulfillment_Subtotal") value:[self moneyString:self.model.subtotal]]];
         [content addArrangedSubview:[self detailRowWithTitle:kLang(@"Fulfillment_PlatformCommission") value:[self moneyString:self.model.platformCommission]]];
     }
+    // The order-level charge is independent of the provider payout projection.
+    // Show it even when provider money is unavailable; never add it to net.
+    NSString *deliveryFeeText = self.model.recordedOrderDeliveryFee
+        ? [self moneyString:self.model.recordedOrderDeliveryFee.doubleValue]
+        : kLang(@"ProFulfillment_RecordedFeeUnavailable");
+    [content addArrangedSubview:[self detailRowWithTitle:kLang(@"ProFulfillment_OrderDeliveryFee") value:deliveryFeeText]];
     UILabel *caption = [self labelWithFont:[Styling fontRegular:13] color:[UIColor ppTextSecondary] lines:0];
     caption.text = kLang(self.model.hasMoneyProjection ? @"ProFulfillment_OrderMoneyCaption" : @"ProFulfillment_MoneyUnavailable");
     [content addArrangedSubview:caption];

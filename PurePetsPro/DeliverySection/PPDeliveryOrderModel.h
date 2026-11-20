@@ -108,6 +108,8 @@ typedef NS_ENUM(NSInteger, PPDeliveryFilter) {
 
 // ── Financials ──
 @property (nonatomic, assign) double totalAmount;
+/// One order-level delivery fee agreed at checkout; nil when not recorded.
+@property (nonatomic, strong, nullable) NSNumber *recordedDeliveryFee;
 @property (nonatomic, copy)   NSString *currencyCode;
 @property (nonatomic, copy)   NSString *paymentMethodId;
 @property (nonatomic, copy)   NSString *paymentStatus;

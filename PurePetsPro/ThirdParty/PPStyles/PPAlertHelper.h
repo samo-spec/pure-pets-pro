@@ -23,6 +23,10 @@ typedef void (^AlertCompletionBlock)(NSString * _Nullable text, BOOL didConfirm)
 typedef void (^PPAlertSimpleActionBlock)(void);
 @interface PPAlert : UIView
 
+/// When YES, the text field will automatically become first responder on presentation.
+/// Defaults to NO so optional note / prompt fields do not force the keyboard on screen unless tapped.
+@property (nonatomic, assign) BOOL autoFocusTextField;
+
 - (instancetype)initWithType:(PPAlertType)type
                       title:(NSString *)title
                    subtitle:(NSString *)subtitle

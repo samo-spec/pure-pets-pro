@@ -1,4 +1,6 @@
+#import <CoreFoundation/CoreFoundation.h>
 #import "PPDeliveryCompanyModels.h"
+#import <math.h>
 
 PPDeliveryCompanyRole const PPDeliveryCompanyRoleOwner = @"owner";
 PPDeliveryCompanyRole const PPDeliveryCompanyRoleDispatcher = @"dispatcher";
@@ -298,7 +300,21 @@ static NSString *PPDCAddressSummary(NSDictionary *address) {
     model.dropoffAddress = PPDCDictionary(dictionary[@"dropoffAddress"]);
     model.assignedDriverUID = PPDCString(dictionary[@"assignedDriverUid"]);
     model.assignedDriverName = PPDCString(dictionary[@"assignedDriverName"]);
-    model.deliveryFee = [dictionary[@"deliveryFee"] doubleValue];
+    // Missing fee must never be reported as "free delivery".
+    // The server records the historical order charge, including a valid 0.
+    for (id candidate in @[dictionary[@"deliveryFee"] ?: NSNull.null,
+                           dictionary[@"customerDeliveryFee"] ?: NSNull.null,
+                           dictionary[@"parentDeliveryFee"] ?: NSNull.null,
+                           dictionary[@"shippingFee"] ?: NSNull.null]) {
+        if (![candidate isKindOfClass:NSNumber.class] ||
+            CFGetTypeID((__bridge CFTypeRef)candidate) == CFBooleanGetTypeID()) continue;
+        double value = [candidate doubleValue];
+        if (!isfinite(value) || value < 0.0) continue;
+        model.deliveryFee = candidate;
+        break;
+    }
+    NSString *recordedCurrency = PPDCString(dictionary[@"currency"]).uppercaseString;
+    model.currency = recordedCurrency.length == 3 ? recordedCurrency : @"QAR";
     model.paymentStatus = PPDCString(dictionary[@"paymentStatus"]);
     model.deliveryNote = PPDCString(dictionary[@"deliveryNote"]);
     model.receiverName = PPDCString(dictionary[@"receiverName"]);
@@ -331,12 +347,16 @@ static NSString *PPDCAddressSummary(NSDictionary *address) {
 }
 - (NSString *)dropoffSummary { return PPDCAddressSummary(self.dropoffAddress); }
 - (NSString *)formattedFee {
-    if (self.deliveryFee == 0.0) {
-        return kLang(@"DeliveryCompany_Fee_Free");
-    }
-    return self.deliveryFee > 0.0
-        ? [NSString stringWithFormat:kLang(@"DeliveryCompany_Fee_Format"), self.deliveryFee]
-        : kLang(@"DeliveryCompany_Fee_Unavailable");
+    if (!self.deliveryFee) return kLang(@"DeliveryCompany_Fee_Unavailable");
+    if (self.deliveryFee.doubleValue == 0.0) return kLang(@"DeliveryCompany_Fee_Free");
+    NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
+    formatter.locale = [NSLocale localeWithLocaleIdentifier:Language.isRTL ? @"ar_QA" : @"en_QA"];
+    formatter.numberStyle = NSNumberFormatterCurrencyStyle;
+    formatter.currencyCode = self.currency;
+    formatter.minimumFractionDigits = 2;
+    formatter.maximumFractionDigits = 2;
+    return [formatter stringFromNumber:self.deliveryFee]
+        ?: [NSString stringWithFormat:@"%@ %.2f", self.currency, self.deliveryFee.doubleValue];
 }
 - (NSString *)statusDisplayName { return PPDeliveryCompanyStatusDisplayName(self.status); }
 - (UIColor *)statusColor { return PPDeliveryCompanyStatusColor(self.status); }

@@ -110,7 +110,8 @@ FOUNDATION_EXPORT NSString *PPDeliveryCompanyFilterTitle(PPDeliveryCompanyDashbo
 @property (nonatomic, copy) NSDictionary *dropoffAddress;
 @property (nonatomic, copy) NSString *assignedDriverUID;
 @property (nonatomic, copy) NSString *assignedDriverName;
-@property (nonatomic, assign) double deliveryFee;
+@property (nonatomic, strong, nullable) NSNumber *deliveryFee;
+@property (nonatomic, copy) NSString *currency;
 @property (nonatomic, copy) NSString *paymentStatus;
 @property (nonatomic, copy) NSString *deliveryNote;
 @property (nonatomic, copy) NSString *receiverName;

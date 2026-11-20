@@ -1,3 +1,4 @@
+#import <CoreFoundation/CoreFoundation.h>
 //
 //  PPDeliveryOrderModel.m
 //  PurePetsPro
@@ -349,6 +350,20 @@ static NSArray<NSString *> *PPOrderModelExactDocumentIDs(id value) {
     m.totalAmount    = PPOrderModelSafeDouble(dict, @[@"totalAmount", @"amount", @"total", @"grandTotal"]);
     if (m.totalAmount <= 0.0) {
         m.totalAmount = PPOrderModelSafeDouble(moneySnapshot, @[@"totalAmount", @"total"]);
+    }
+    // Checkout-time value is authoritative even when Basic Payment Settings
+    // have changed. Zero means free; missing means unknown.
+    NSDictionary *pricingSnapshot = PPOrderModelSafeDictionary(dict[@"pricingSnapshot"]);
+    for (id rawFee in @[pricingSnapshot[@"deliveryFee"] ?: NSNull.null,
+                        dict[@"shippingFee"] ?: NSNull.null,
+                        dict[@"parentDeliveryFee"] ?: NSNull.null,
+                        dict[@"deliveryFee"] ?: NSNull.null]) {
+        if (![rawFee isKindOfClass:NSNumber.class] ||
+            CFGetTypeID((__bridge CFTypeRef)rawFee) == CFBooleanGetTypeID()) continue;
+        double value = [rawFee doubleValue];
+        if (!isfinite(value) || value < 0.0) continue;
+        m.recordedDeliveryFee = rawFee;
+        break;
     }
     m.currencyCode   = PPOrderModelSafeString(dict, @[@"currencyCode", @"currency"]);
     if (m.currencyCode.length == 0) {

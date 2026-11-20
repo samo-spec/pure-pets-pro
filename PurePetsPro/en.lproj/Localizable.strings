@@ -4943,3 +4943,6 @@
 "DeliveryDetail_Manifest_OptionsPartial" = "Some item options are not shown.";
 "DeliveryDetail_Manifest_Expanded" = "Expanded";
 "DeliveryDetail_Manifest_Collapsed" = "Collapsed";
+
+"ProFulfillment_OrderDeliveryFee" = "Delivery fee (whole order)";
+"ProFulfillment_RecordedFeeUnavailable" = "Not recorded on this order";

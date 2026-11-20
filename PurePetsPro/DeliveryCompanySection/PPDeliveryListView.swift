@@ -1727,7 +1727,7 @@ private struct DeliveryDispatchCard: View {
                         .foregroundStyle(AdminSurface.secondaryText)
                     Text(record.deliveryFee == nil
                          ? deliveryText("DeliveryWorkspace_Unspecified")
-                         : "\u{2068}\(deliveryCurrencyText(record.deliveryFee, currency: record.cod["currency"] as? String ?? "QAR"))\u{2069}")
+                         : "\u{2068}\(deliveryCurrencyText(record.deliveryFee, currency: record.currency))\u{2069}")
                         .font(AdminType.subheadlineBold)
                         .foregroundStyle(AdminSurface.primaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -2259,7 +2259,7 @@ private struct DeliveryDossierSheet: View {
             sectionRule
             dossierFact("DeliveryWorkspace_Fee", record.deliveryFee == nil
                         ? deliveryText("DeliveryWorkspace_Unspecified")
-                        : deliveryCurrencyText(record.deliveryFee, currency: record.cod["currency"] as? String ?? "QAR"))
+                        : deliveryCurrencyText(record.deliveryFee, currency: record.currency))
             PPDeliveryDossierManifest(available: record.manifestAvailable, items: record.manifestItems,
                                       lineCount: record.manifestLineCount, truncated: record.manifestTruncated,
                                       expanded: expansion(for: .manifest), refreshing: viewModel.isLoadingDossier,

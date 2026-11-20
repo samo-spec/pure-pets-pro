@@ -15,6 +15,8 @@
 @property (nonatomic, assign) double subtotal;
 @property (nonatomic, assign) double platformCommission;
 @property (nonatomic, assign) double providerNet;
+/// The single checkout-time delivery charge on the parent order, not provider earnings.
+@property (nonatomic, strong, nullable) NSNumber *recordedOrderDeliveryFee;
 @property (nonatomic, copy) NSString *currency;
 @property (nonatomic, copy) NSDate *createdAt;
 @property (nonatomic, copy) NSDate *updatedAt;

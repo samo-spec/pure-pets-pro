@@ -1,4 +1,6 @@
+#import <CoreFoundation/CoreFoundation.h>
 #import "PPFulfillmentModel.h"
+#import <math.h>
 
 @implementation PPFulfillmentModel
 
@@ -26,6 +28,18 @@
     m.subtotal = PPSafeNumber(money[@"subtotal"]).doubleValue;
     m.platformCommission = PPSafeNumber(money[@"platformCommission"]).doubleValue;
     m.providerNet = PPSafeNumber(money[@"providerNet"]).doubleValue;
+    // The fulfillment owns merchandise/commission; the delivery charge is
+    // parent-managed and must not be added to this provider's net.
+    id recordedFee = dict[@"parentDeliveryFee"];
+    if (![recordedFee isKindOfClass:NSNumber.class] &&
+        ![PPSafeString(dict[@"deliveryFeeAllocation"]) isEqualToString:@"parent_managed"]) {
+        recordedFee = money[@"deliveryFee"]; // Only for pre-migration records.
+    }
+    if ([recordedFee isKindOfClass:NSNumber.class] &&
+        CFGetTypeID((__bridge CFTypeRef)recordedFee) != CFBooleanGetTypeID()) {
+        double value = [recordedFee doubleValue];
+        if (isfinite(value) && value >= 0.0) m.recordedOrderDeliveryFee = recordedFee;
+    }
 
     id ca = dict[@"createdAt"];
     if ([ca isKindOfClass:[NSDate class]]) m.createdAt = ca;

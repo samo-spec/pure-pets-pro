@@ -225,6 +225,7 @@ static NSString *PPAlertTrimmedText(NSString *value) {
     _secureEntry = secureEntry;
     _keyboardType = keyboardType;
     _shouldDismissOnBackgroundTap = shouldDismissOnBackgroundTap;
+    _autoFocusTextField = NO;
 
     self.backgroundColor = UIColor.clearColor;
     self.translatesAutoresizingMaskIntoConstraints = NO;
@@ -699,7 +700,7 @@ static NSString *PPAlertTrimmedText(NSString *value) {
             self.dimmingView.alpha = 1.0;
             self.cardContainerView.alpha = 1.0;
         } completion:^(BOOL finished) {
-            if (self.type == PPAlertTypeTextInput) {
+            if (self.type == PPAlertTypeTextInput && self.autoFocusTextField) {
                 [self.textField becomeFirstResponder];
             }
         }];
@@ -715,10 +716,17 @@ static NSString *PPAlertTrimmedText(NSString *value) {
             self.cardContainerView.alpha = 1.0;
             self.cardContainerView.transform = CGAffineTransformIdentity;
         } completion:^(BOOL finished) {
-            if (self.type == PPAlertTypeTextInput) {
+            if (self.type == PPAlertTypeTextInput && self.autoFocusTextField) {
                 [self.textField becomeFirstResponder];
             }
         }];
+    }
+}
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [super touchesBegan:touches withEvent:event];
+    if (self.textField.isFirstResponder) {
+        [self.textField resignFirstResponder];
     }
 }
 

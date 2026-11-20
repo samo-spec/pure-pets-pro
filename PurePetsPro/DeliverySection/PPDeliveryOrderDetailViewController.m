@@ -1364,6 +1364,20 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
                                             value:[order formattedTotal]
                                              bold:YES]];
 
+        // The order-level fee is informational; it must not be added again
+        // to the total or charged again during cash collection.
+        NSString *recordedFee = kLang(@"ProFulfillment_RecordedFeeUnavailable");
+        if (order.recordedDeliveryFee) {
+            NSNumberFormatter *feeFormatter = [[NSNumberFormatter alloc] init];
+            feeFormatter.numberStyle = NSNumberFormatterCurrencyStyle;
+            feeFormatter.currencyCode = order.currencyCode ?: @"QAR";
+            feeFormatter.maximumFractionDigits = 2;
+            recordedFee = [feeFormatter stringFromNumber:order.recordedDeliveryFee] ?: recordedFee;
+        }
+        [stack addArrangedSubview:[self detailRow:kLang(@"ProFulfillment_OrderDeliveryFee")
+                                           value:recordedFee
+                                            bold:NO]];
+
         // Method with semantic color
         BOOL isCash = [order isCashOrder];
         NSString *methodDisplay = isCash ? kLang(@"CashPayment") : kLang(@"OnlinePayment");

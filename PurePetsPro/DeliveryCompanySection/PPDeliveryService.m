@@ -1,3 +1,4 @@
+#import <CoreFoundation/CoreFoundation.h>
 #import "PPDeliveryService.h"
 #import "PPDeliveryCompanyService.h"
 #import "PPDeliveryCompanyModels.h"
@@ -219,7 +220,21 @@ static NSError *PPDeliveryCompanyContextError(void) {
         _assignedDriverUID = PPDeliveryString(source[@"assignedDriverUid"]);
         if (_assignedDriverUID.length == 0) _assignedDriverUID = PPDeliveryString(source[@"assignedDriverUID"]);
         _assignedDriverName = PPDeliveryString(source[@"assignedDriverName"]);
-        _deliveryFee = [source[@"deliveryFee"] isKindOfClass:NSNumber.class] ? source[@"deliveryFee"] : nil;
+        // Support both canonical projection and authorized legacy fee aliases.
+        // Never synthesize zero when the amount is missing or malformed.
+        for (id candidate in @[source[@"deliveryFee"] ?: NSNull.null,
+                               source[@"customerDeliveryFee"] ?: NSNull.null,
+                               source[@"parentDeliveryFee"] ?: NSNull.null,
+                               source[@"shippingFee"] ?: NSNull.null]) {
+            if (![candidate isKindOfClass:NSNumber.class] ||
+                CFGetTypeID((__bridge CFTypeRef)candidate) == CFBooleanGetTypeID()) continue;
+            double value = [candidate doubleValue];
+            if (!isfinite(value) || value < 0.0) continue;
+            _deliveryFee = candidate;
+            break;
+        }
+        NSString *feeCurrency = [PPDeliveryString(source[@"currency"]) uppercaseString];
+        _currency = feeCurrency.length == 3 ? feeCurrency : @"QAR";
         _pickupAddress = [PPDeliveryDictionary(source[@"pickupAddress"]) copy];
         _dropoffAddress = [PPDeliveryDictionary(source[@"dropoffAddress"]) copy];
         _proofOfDelivery = [PPDeliveryDictionary(source[@"pod"] ?: source[@"proofOfDelivery"]) copy];
@@ -826,7 +841,8 @@ static NSError *PPDeliveryCompanyContextError(void) {
                 dict[@"carrierName"] = req.companyName ?: (profile.name ?: @"");
                 dict[@"assignedDriverUid"] = req.assignedDriverUID ?: @"";
                 dict[@"assignedDriverName"] = req.assignedDriverName ?: @"";
-                dict[@"deliveryFee"] = @(req.deliveryFee);
+                if (req.deliveryFee) dict[@"deliveryFee"] = req.deliveryFee;
+                dict[@"currency"] = req.currency ?: @"QAR";
                 dict[@"pickupAddress"] = req.pickupAddress ?: @{};
                 dict[@"dropoffAddress"] = req.dropoffAddress ?: @{};
                 dict[@"createdAt"] = req.createdAt ?: [NSDate date];
@@ -995,7 +1011,8 @@ static NSError *PPDeliveryCompanyContextError(void) {
             jobDict[@"assignedDriverName"] = req.assignedDriverName ?: @"";
             // Pass through only the authorized response. Offers intentionally omit identity.
             jobDict[@"customerName"] = req.customerName ?: @"";
-            jobDict[@"deliveryFee"] = @(req.deliveryFee);
+            if (req.deliveryFee) jobDict[@"deliveryFee"] = req.deliveryFee;
+            jobDict[@"currency"] = req.currency ?: @"QAR";
             jobDict[@"pickupAddress"] = req.pickupAddress ?: @{};
             jobDict[@"dropoffAddress"] = req.dropoffAddress ?: @{};
             jobDict[@"createdAt"] = req.createdAt ?: [NSDate date];

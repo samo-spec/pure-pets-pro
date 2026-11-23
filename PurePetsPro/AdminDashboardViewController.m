@@ -2031,6 +2031,20 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     [self pp_clearCommandDataSources:(PPProCommandDataSourceSupportThreads | PPProCommandDataSourceSupportMessages)];
 }
 
+- (PPProRootTabBarController *)pp_findRootTabBarController {
+    if ([self.tabBarController isKindOfClass:NSClassFromString(@"PPProRootTabBarController")]) {
+        return (PPProRootTabBarController *)self.tabBarController;
+    }
+    if ([self.navigationController.tabBarController isKindOfClass:NSClassFromString(@"PPProRootTabBarController")]) {
+        return (PPProRootTabBarController *)self.navigationController.tabBarController;
+    }
+    UIWindow *window = self.view.window ?: [UIApplication sharedApplication].delegate.window;
+    if ([window.rootViewController isKindOfClass:NSClassFromString(@"PPProRootTabBarController")]) {
+        return (PPProRootTabBarController *)window.rootViewController;
+    }
+    return nil;
+}
+
 - (void)pp_updateSupportChatsRowBadge {
     XLFormRowDescriptor *supportChatsRow = [self.form formRowWithTag:@"providerSupportChats"];
     if (supportChatsRow) {
@@ -2044,10 +2058,11 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         [self reloadFormRow:supportChatsRow];
     }
     [self pp_refreshQuickActions];
+
     // Sync official tab bar badge (support + inbox)
     NSInteger combinedBadge = self.inboxUnreadCount + self.supportChatsUnreadThreadsCount;
-    if ([self.tabBarController isKindOfClass:NSClassFromString(@"PPProRootTabBarController")]) {
-        PPProRootTabBarController *tabBar = (PPProRootTabBarController *)self.tabBarController;
+    PPProRootTabBarController *tabBar = [self pp_findRootTabBarController];
+    if (tabBar) {
         [tabBar updateNotificationBadge:combinedBadge];
     }
     // Ensure snapshot reflects support count for menu/more tabs
@@ -5394,11 +5409,14 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     BOOL animated = self.didCompleteInitialDashboardLoad && self.view.window != nil;
     [surface applySnapshot:snapshot animated:animated];
 
-    // Official root UITabBar badge sync (replaces custom dock badge)
+    // Official root UITabBar badge sync
     NSInteger combinedBadge = self.inboxUnreadCount + (hasProviderWorkspace ? self.supportChatsUnreadThreadsCount : 0);
-    if ([self.tabBarController isKindOfClass:NSClassFromString(@"PPProRootTabBarController")]) {
-        PPProRootTabBarController *tabBar = (PPProRootTabBarController *)self.tabBarController;
-        [tabBar updateNotificationBadge:combinedBadge];
+    NSInteger updatesBadge = operationalActionCount > 0 ? operationalActionCount : signals.count;
+    NSInteger workspacesBadge = lensCount;
+
+    PPProRootTabBarController *tabBar = [self pp_findRootTabBarController];
+    if (tabBar) {
+        [tabBar updateAllTabBadgesWithUpdates:updatesBadge workspaces:workspacesBadge unread:combinedBadge];
     }
 }
 

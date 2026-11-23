@@ -28,6 +28,8 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
     private var notifNav: UINavigationController!
     private var moreHostNav: UINavigationController!
 
+    private var pulseBadgeCount: Int = 0
+    private var menuBadgeCount: Int = 0
     private var notificationBadgeCount: Int = 0
     private var tabTransition: PPProTabTransitionAnimator?
 
@@ -215,10 +217,8 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
 
         viewControllers = [dashNav, menuNav, notifNavInstance, moreNavInstance]
 
-        // Restore badge if already known
-        if notificationBadgeCount > 0 {
-            updateNotificationBadge(notificationBadgeCount)
-        }
+        // Restore badges if already known
+        applyBadges()
 
         // Ensure selected is Pulse on first build
         selectedIndex = 0
@@ -250,6 +250,7 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
         // Titles on hosted VCs also need refresh for nav bar visible title
         (menuHostNav?.viewControllers.first as? UIViewController)?.title = menuTitle
         (moreHostNav?.viewControllers.first as? UIViewController)?.title = moreTitle
+        applyBadges()
     }
 
     @objc public func refreshForLanguageChange() {
@@ -258,7 +259,71 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
 
     // MARK: Badges
 
-    @objc public func updateNotificationBadge(_ count: Int) {
+    private func applyBadges() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let vcs = self.viewControllers, vcs.count >= 3 else { return }
+
+            // Tab 0: Pulse / Updates
+            let pulseItem = vcs[0].tabBarItem
+            if self.pulseBadgeCount > 0 {
+                pulseItem!.badgeValue = self.pulseBadgeCount > 99 ? "99+" : "\(self.pulseBadgeCount)"
+                pulseItem!.badgeColor = UIColor.ppPrimary
+            } else {
+                pulseItem!.badgeValue = nil
+            }
+
+            // Tab 1: Menu / Workspaces
+            let menuItem = vcs[1].tabBarItem
+            if self.menuBadgeCount > 0 {
+                menuItem!.badgeValue = self.menuBadgeCount > 99 ? "99+" : "\(self.menuBadgeCount)"
+                menuItem!.badgeColor = UIColor.ppPrimary
+            } else {
+                menuItem!.badgeValue = nil
+            }
+
+            // Tab 2: Notifications / Unread
+            let notifItem = vcs[2].tabBarItem
+            if self.notificationBadgeCount > 0 {
+                notifItem!.badgeValue = self.notificationBadgeCount > 99 ? "99+" : "\(self.notificationBadgeCount)"
+                notifItem!.badgeColor = UIColor.ppPrimary
+            } else {
+                notifItem!.badgeValue = nil
+            }
+        }
+    }
+
+    @objc(updatePulseBadge:)
+    public func updatePulseBadge(_ count: Int) {
+        pulseBadgeCount = max(0, count)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.viewControllers?.count ?? 0 > 0 else { return }
+            let item = self.viewControllers?[0].tabBarItem
+            if self.pulseBadgeCount > 0 {
+                item?.badgeValue = self.pulseBadgeCount > 99 ? "99+" : "\(self.pulseBadgeCount)"
+                item?.badgeColor = UIColor.ppPrimary
+            } else {
+                item?.badgeValue = nil
+            }
+        }
+    }
+
+    @objc(updateMenuBadge:)
+    public func updateMenuBadge(_ count: Int) {
+        menuBadgeCount = max(0, count)
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.viewControllers?.count ?? 0 > 1 else { return }
+            let item = self.viewControllers?[1].tabBarItem
+            if self.menuBadgeCount > 0 {
+                item?.badgeValue = self.menuBadgeCount > 99 ? "99+" : "\(self.menuBadgeCount)"
+                item?.badgeColor = UIColor.ppPrimary
+            } else {
+                item?.badgeValue = nil
+            }
+        }
+    }
+
+    @objc(updateNotificationBadge:)
+    public func updateNotificationBadge(_ count: Int) {
         notificationBadgeCount = max(0, count)
         DispatchQueue.main.async { [weak self] in
             guard let self, self.viewControllers?.count ?? 0 > 2 else { return }
@@ -270,6 +335,14 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
                 item?.badgeValue = nil
             }
         }
+    }
+
+    @objc(updateAllTabBadgesWithUpdates:workspaces:unread:)
+    public func updateAllTabBadges(updates: Int, workspaces: Int, unread: Int) {
+        pulseBadgeCount = max(0, updates)
+        menuBadgeCount = max(0, workspaces)
+        notificationBadgeCount = max(0, unread)
+        applyBadges()
     }
 
     @objc public func updateCombinedBadge(inbox: Int, support: Int) {

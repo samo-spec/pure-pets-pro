@@ -1670,6 +1670,15 @@ public final class PPProCommandCenterSurfaceController: UIViewController {
         } else {
             store.apply(value)
         }
+        let unread = value.inboxUnreadCount + value.supportUnreadCount
+        let updates = value.actionCount > 0 ? value.actionCount : value.signals.count
+        let workspaces = value.workspaceCount
+        DispatchQueue.main.async { [weak self] in
+            let tabBar = (self?.tabBarController as? PPProRootTabBarController)
+                ?? (self?.navigationController?.tabBarController as? PPProRootTabBarController)
+                ?? (self?.view.window?.rootViewController as? PPProRootTabBarController)
+            tabBar?.updateAllTabBadges(updates: updates, workspaces: workspaces, unread: unread)
+        }
     }
 
     public func resetToUnifiedPulseAnimated(_ animated: Bool) {
@@ -5693,6 +5702,7 @@ struct PPProPulseView: View {
             isOnScreen = true
             reconcileDriverHomeStore()
             appeared = true
+            syncRootTabBarBadges()
             guard !bootStalled else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.bootPatience) {
                 bootStalled = true
@@ -5702,6 +5712,9 @@ struct PPProPulseView: View {
             isOnScreen = false
             driverHomeStore?.setVisible(false)
         }
+        .onChange(of: scope.signals.count) { _, _ in syncRootTabBarBadges() }
+        .onChange(of: scope.workspaceCount) { _, _ in syncRootTabBarBadges() }
+        .onChange(of: scope.unreadCount) { _, _ in syncRootTabBarBadges() }
         .onChange(of: hasDeliveryCapability) { _, _ in reconcileDriverHomeStore() }
         .onChange(of: driverWorkspaceRoute) { _, _ in reconcileDriverHomeStore() }
         .onChange(of: PPDeliveryCompanyService.currentAccountUID()) { _, _ in reconcileDriverHomeStore() }
@@ -6024,21 +6037,29 @@ struct PPProPulseView: View {
                     headerActionCluster
                 }
             }
-            PPProVitalsStrip(
-                workspaceCount: scope.workspaceCount,
-                signalCount: scope.signals.count,
-                unreadCount: scope.unreadCount,
-                isScoped: scope.isScoped,
-                palette: palette
-            )
-            .padding(.top, 12)
-            .overlay(alignment: .top) {
-                Rectangle().fill(palette.hairline).frame(height: 1)
-                    .accessibilityHidden(true)
-            }
         }
         .padding(.vertical, 6)
         .environment(\.locale, Locale(identifier: Language.currentLanguageCode()))
+    }
+
+    private func syncRootTabBarBadges() {
+        let updates = scope.signals.count
+        let workspaces = scope.workspaceCount
+        let unread = scope.unreadCount
+        DispatchQueue.main.async {
+            guard let window = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .flatMap(\.windows)
+                .first(where: \.isKeyWindow),
+                let rootTabBar = window.rootViewController as? PPProRootTabBarController else {
+                return
+            }
+            rootTabBar.updateAllTabBadges(
+                updates: updates,
+                workspaces: workspaces,
+                unread: unread
+            )
+        }
     }
 
     private var avatarInitials: String {

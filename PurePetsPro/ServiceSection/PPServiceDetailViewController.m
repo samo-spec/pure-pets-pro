@@ -12,8 +12,11 @@
 #import "PPAddEditServiceViewController.h"
 #import "PPServiceSubscriptionViewController.h"
 #import "PPServicesListViewController.h"
+#import "PPServiceRequestsViewController.h"
 #import "PPFirebaseCompat.h"
 #import "PPAlertHelper.h"
+#import "PPHUD.h"
+#import "PPFunc.h"
 
 @interface PPServiceDetailViewController ()
 @property (nonatomic, strong) PPServiceModel *service;
@@ -362,6 +365,20 @@
     [overviewViews addObject:[self pp_detailCardWithLabel:kLang(@"Serv_Field_Description")
                                                    value:[self pp_displayText:self.service.descriptionText]
                                                 iconName:@"doc.text.fill"]];
+
+    NSInteger mins = self.service.durationMinutes > 0 ? self.service.durationMinutes : 45;
+    NSString *durStr = (mins >= 480) ? (Language.isRTL ? @"يوم كامل" : @"Full Day") : [NSString stringWithFormat:@"%ld %@", (long)mins, Language.isRTL ? @"دقيقة" : @"min"];
+    [overviewViews addObject:[self pp_detailCardWithLabel:(Language.isRTL ? @"المدة التقديرية" : @"Duration")
+                                                   value:durStr
+                                                iconName:@"clock.arrow.circlepath"]];
+    [overviewViews addObject:[self pp_detailCardWithLabel:(Language.isRTL ? @"موقع الخدمة" : @"Service Location")
+                                                   value:(self.service.isHomeVisit ? (Language.isRTL ? @"زيارة منزلية متاحة" : @"Home Visit Available") : (Language.isRTL ? @"في المركز" : @"At Center"))
+                                                iconName:@"mappin.and.ellipse"]];
+    if (self.service.inclusions.count > 0) {
+        [overviewViews addObject:[self pp_detailCardWithLabel:(Language.isRTL ? @"تشمل الخدمة" : @"Inclusions")
+                                                       value:[self.service.inclusions componentsJoinedByString:@" · "]
+                                                    iconName:@"checkmark.seal.fill"]];
+    }
     [self.contentStack addArrangedSubview:[self pp_sectionBlockWithTitle:kLang(@"Serv_Section_Overview")
                                                                 subtitle:kLang(@"Serv_Section_Overview_Hint")
                                                                     icon:@"square.text.square"
@@ -424,6 +441,51 @@
                                                                         icon:@"calendar.circle.fill"
                                                                        views:timelineViews]];
     }
+
+    [self pp_setupReviewsSection];
+}
+
+- (void)pp_setupReviewsSection {
+    if (self.service.serviceID.length == 0) return;
+
+    __weak typeof(self) weakSelf = self;
+    FIRFirestore *db = [FIRFirestore firestore];
+    FIRCollectionReference *revCol = [[[db collectionWithPath:@"serviceOffers"] documentWithPath:self.service.serviceID] collectionWithPath:@"reviews"];
+    [revCol getDocumentsWithCompletion:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
+        if (!weakSelf) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSMutableArray<UIView *> *reviewViews = [NSMutableArray array];
+            if (snapshot.documents.count > 0) {
+                double totalRating = 0.0;
+                for (FIRDocumentSnapshot *doc in snapshot.documents) {
+                    NSDictionary *data = doc.data ?: @{};
+                    double r = [data[@"rating"] doubleValue];
+                    totalRating += r;
+                    NSString *name = data[@"reviewerName"] ?: (Language.isRTL ? @"مربّي أليف" : @"Pet Parent");
+                    NSString *comment = data[@"comment"] ?: @"";
+                    NSString *stars = [@"" stringByPaddingToLength:(NSUInteger)MAX(1, MIN(5, (NSInteger)r)) withString:@"★" startingAtIndex:0];
+                    NSString *val = [NSString stringWithFormat:@"%@ · %@", stars, comment.length > 0 ? comment : (Language.isRTL ? @"تقييم ممتاز" : @"Great service")];
+                    [reviewViews addObject:[weakSelf pp_detailCardWithLabel:name value:val iconName:@"star.fill"]];
+                }
+                double avg = totalRating / (double)snapshot.documents.count;
+                NSString *summary = [NSString stringWithFormat:Language.isRTL ? @"متوسط التقييم: %.1f من 5 (%ld تقييم)" : @"Average Rating: %.1f / 5 (%ld reviews)", avg, (long)snapshot.documents.count];
+                UIView *block = [weakSelf pp_sectionBlockWithTitle:Language.isRTL ? @"تقييمات وآراء العملاء" : @"Client Reviews"
+                                                          subtitle:summary
+                                                              icon:@"star.bubble.fill"
+                                                             views:reviewViews];
+                [weakSelf.contentStack addArrangedSubview:block];
+            } else {
+                UIView *emptyCard = [weakSelf pp_detailCardWithLabel:Language.isRTL ? @"لا توجد تقييمات مسجلة بعد" : @"No reviews yet"
+                                                               value:Language.isRTL ? @"ستظهر هنا آراء وتقييمات العملاء فور اكتمال الجلسات." : @"Verified client reviews will appear here once bookings complete."
+                                                            iconName:@"sparkles"];
+                UIView *block = [weakSelf pp_sectionBlockWithTitle:Language.isRTL ? @"تقييمات وآراء العملاء" : @"Client Reviews"
+                                                          subtitle:Language.isRTL ? @"تقييمات العملاء المعتمدة" : @"Verified customer ratings"
+                                                              icon:@"star.bubble.fill"
+                                                             views:@[emptyCard]];
+                [weakSelf.contentStack addArrangedSubview:block];
+            }
+        });
+    }];
 }
 
 - (UIView *)pp_sectionBlockWithTitle:(NSString *)title subtitle:(NSString *)subtitle icon:(NSString *)iconName views:(NSArray<UIView *> *)views {
@@ -575,7 +637,7 @@
     stack.translatesAutoresizingMaskIntoConstraints = NO;
     stack.axis = UILayoutConstraintAxisHorizontal;
     stack.distribution = UIStackViewDistributionFillEqually;
-    stack.spacing = 12.0;
+    stack.spacing = 10.0;
     [self.actionBar addSubview:stack];
 
     UIButton *editButton = [self pp_actionButtonWithTitle:kLang(@"Serv_Action_Edit")
@@ -583,6 +645,12 @@
                                                    filled:YES
                                                    action:@selector(editTapped)];
     [stack addArrangedSubview:editButton];
+
+    UIButton *pipelineButton = [self pp_actionButtonWithTitle:Language.isRTL ? @"الحجوزات" : @"Bookings"
+                                                   systemName:@"calendar.badge.clock"
+                                                       filled:NO
+                                                       action:@selector(pipelineTapped)];
+    [stack addArrangedSubview:pipelineButton];
 
     UIButton *subscriptionButton = [self pp_actionButtonWithTitle:kLang(@"Serv_Sub_MyPlan")
                                                        systemName:@"crown.fill"
@@ -645,6 +713,13 @@
 - (void)subscriptionTapped {
     [PPFunc pp_playTapEffect];
     PPServiceSubscriptionViewController *vc = [[PPServiceSubscriptionViewController alloc] initWithService:self.service];
+    [self.navigationController pushViewController:vc animated:YES];
+}
+
+- (void)pipelineTapped {
+    [PPFunc pp_playTapEffect];
+    PPServiceRequestsViewController *vc = [[PPServiceRequestsViewController alloc] init];
+    vc.initialServiceID = self.service.serviceID;
     [self.navigationController pushViewController:vc animated:YES];
 }
 

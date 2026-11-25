@@ -490,16 +490,20 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
 
 - (UIButton *)pp_ButtonWithSystemName:(NSString *)imageName action:(SEL)action {
     UIButton *btn;
-    CGFloat btnSize = 40;
+    CGFloat btnSize = 40.0;
+    if (@available(iOS 26.0, *)) {
+        btnSize = 44.0;
+    }
+    CGFloat cornerRadius = (btnSize >= 44.0) ? 13.0 : 12.0;
 
     if (@available(iOS 26.0, *)) {
-        btnSize = 44;
         UIButtonConfiguration *cfg = [UIButtonConfiguration glassButtonConfiguration];
         cfg.contentInsets = NSDirectionalEdgeInsetsMake(6, 6, 6, 6);
-        //cfg.background.backgroundColor = AppBackgroundClrShiner ?: [UIColor colorWithWhite:0.95 alpha:1.0];
+        cfg.baseForegroundColor = AppPrimaryClr;
+        cfg.cornerStyle = UIButtonConfigurationCornerStyleFixed;
+        cfg.background.cornerRadius = cornerRadius;
 
-        btn = [UIButton new];
-        btn.configuration = cfg;
+        btn = [UIButton buttonWithConfiguration:cfg primaryAction:nil];
         [btn setImage:[UIImage systemImageNamed:imageName] forState:UIControlStateNormal];
     }
     else if (@available(iOS 15.0, *)) {
@@ -508,14 +512,19 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
         
         // ✅ Set background color through configuration
         cfg.background.backgroundColor = AppBackgroundClrShiner ?: [UIColor colorWithWhite:0.95 alpha:1.0];
-        cfg.background.cornerRadius = 22;
+        cfg.cornerStyle = UIButtonConfigurationCornerStyleFixed;
+        cfg.background.cornerRadius = cornerRadius;
         
         btn = [UIButton buttonWithConfiguration:cfg primaryAction:nil];
     } else {
         btn = [UIButton buttonWithType:UIButtonTypeSystem];
         btn.contentEdgeInsets = UIEdgeInsetsMake(6, 6, 6, 6);
         btn.backgroundColor = AppBackgroundClrShiner ?: [UIColor colorWithWhite:0.95 alpha:1.0];
-        btn.layer.cornerRadius = 22;
+    }
+
+    btn.layer.cornerRadius = cornerRadius;
+    if (@available(iOS 13.0, *)) {
+        btn.layer.cornerCurve = kCACornerCurveContinuous;
     }
 
     // Try SF Symbol first → fallback to asset
@@ -538,15 +547,6 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
 
     btn.translatesAutoresizingMaskIntoConstraints = NO;
     btn.tintColor = AppPrimaryClr;
-    
-    // ✅ Remove the old backgroundColor assignment for iOS 15+
-    if (@available(iOS 15.0, *)) {
-        // Background is already set in configuration
-    } else {
-        btn.backgroundColor = AppForgroundColr;
-        btn.layer.cornerRadius = 22;
-        btn.layer.masksToBounds = YES;
-    }
 
     [btn addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
     [btn.widthAnchor constraintEqualToConstant:btnSize].active = YES;
@@ -555,7 +555,7 @@ static void PPSuppressLegacyNavigationItems(UIViewController *vc) {
     btn.layer.shadowColor = AppShadowColor.CGColor;
     btn.layer.shadowOpacity = 0.10;
     btn.layer.shadowOffset = CGSizeMake(0, 2);
-    btn.layer.shadowRadius = 6;
+    btn.layer.shadowRadius = 6.0;
     btn.layer.masksToBounds = NO; // shadow needs this
 
     

@@ -277,7 +277,8 @@ public final class PPProRootTabBarController: UITabBarController, UITabBarContro
             if self.menuBadgeCount > 0 {
                 menuItem!.badgeValue = self.menuBadgeCount > 99 ? "99+" : "\(self.menuBadgeCount)"
                 menuItem!.badgeColor = UIColor.ppPrimary
-            } else {
+            }
+            else {
                 menuItem!.badgeValue = nil
             }
 

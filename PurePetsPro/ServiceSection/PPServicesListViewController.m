@@ -413,6 +413,7 @@
 @property (nonatomic, strong) NSMutableArray<PPServiceModel *> *filteredServices;
 @property (nonatomic, copy) NSString *searchQuery;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> serviceListener;
+@property (nonatomic, strong, nullable) id<FIRListenerRegistration> bookingsListener;
 @property (nonatomic, assign) BOOL hasPermission;
 @property (nonatomic, strong) PPProviderServicesHostingController *nextgenServicesCockpitVC;
 
@@ -478,6 +479,10 @@
         __strong typeof(ws) self = ws;
         [self openTemplatePicker];
     };
+    self.nextgenServicesCockpitVC.onOpenPipelineRequested = ^{
+        __strong typeof(ws) self = ws;
+        [self openRequestsPipeline];
+    };
 
     [self startObservingServices];
 }
@@ -495,6 +500,8 @@
 - (void)dealloc {
     [self.serviceListener remove];
     self.serviceListener = nil;
+    [self.bookingsListener remove];
+    self.bookingsListener = nil;
 }
 
 - (BOOL)checkServicePermission {
@@ -1057,6 +1064,17 @@
             [strongSelf.nextgenServicesCockpitVC updateWithServices:strongSelf.allServices];
             [strongSelf updateCockpitStats];
             [strongSelf applyFilterAndReload];
+        });
+    }];
+
+    [self.bookingsListener remove];
+    self.bookingsListener = [[PPServiceManager sharedManager] observeBookingsForOwnerID:ownerID onChange:^(NSArray<PPServiceBookingItem *> * _Nullable bookings, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            if (bookings) {
+                [strongSelf.nextgenServicesCockpitVC updateWithBookings:bookings];
+            }
         });
     }];
 }

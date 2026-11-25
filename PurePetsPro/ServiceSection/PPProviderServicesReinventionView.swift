@@ -254,16 +254,26 @@ public final class PPServiceCockpitStore: ObservableObject {
     public func updateFromServices(_ rawServices: [PPServiceModel]) {
         self.services = rawServices.map { s in
             let isRTL = Language.isRTL()
-            var dur = "45 دقيقة"
-            var loc = "في المركز"
-            var aud = "جميع الأليفة"
-
-            if s.type == .training {
+            var dur = isRTL ? "45 دقيقة" : "45 mins"
+            if s.durationMinutes > 0 {
+                if s.durationMinutes >= 480 {
+                    dur = isRTL ? "يوم كامل" : "Full Day"
+                } else {
+                    dur = "\(s.durationMinutes) \(isRTL ? "دقيقة" : "mins")"
+                }
+            } else if s.type == .training {
                 dur = isRTL ? "60 دقيقة" : "60 mins"
-                aud = isRTL ? "كلاب وتأهيل" : "Dogs"
-            } else {
-                dur = isRTL ? "45 دقيقة" : "45 mins"
-                aud = isRTL ? "قطط وكلاب" : "Cats & Dogs"
+            }
+
+            let loc = s.isHomeVisit ? (isRTL ? "زيارة منزلية متاحة" : "Home Visit") : (isRTL ? "في المركز" : "At Center")
+
+            var aud = isRTL ? "جميع الأليفة" : "All Pets"
+            if s.petMainKindID == 1 {
+                aud = isRTL ? "🐕 كلاب" : "Dogs"
+            } else if s.petMainKindID == 2 {
+                aud = isRTL ? "🐈 قطط" : "Cats"
+            } else if s.petMainKindID == 3 {
+                aud = isRTL ? "🦜 طيور" : "Birds"
             }
 
             return PPServiceItemDisplayModel(
@@ -415,8 +425,28 @@ public final class PPServiceCockpitStore: ObservableObject {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         guard let idx = bookings.firstIndex(where: { $0.id == id }) else { return }
         bookings[idx].status = newStatus
+        PPServiceManager.sharedManager().updateBookingStatus(id, status: newStatus) { _ in }
         let msg = Language.isRTL() ? "تم تحديث حالة الحجز بنجاح" : "Booking status updated"
         showToast(msg)
+    }
+
+    public func updateFromBookings(_ rawBookings: [PPServiceBookingItem]) {
+        guard !rawBookings.isEmpty else { return }
+        self.bookings = rawBookings.map { b in
+            PPServiceBookingDisplayModel(
+                id: b.requestID,
+                serviceTitle: b.serviceTitle,
+                petName: b.petName,
+                petBreed: b.petBreed,
+                customerName: b.customerName,
+                customerPhone: b.customerPhone,
+                bookingDateText: b.bookingDateText,
+                locationText: b.locationText,
+                price: b.price,
+                status: b.status,
+                petPhotoURL: b.petPhotoURL ?? ""
+            )
+        }
     }
 
     public func toggleMasterDuty() {
@@ -450,6 +480,7 @@ public struct PPProviderServicesReinventionView: View {
     public var onServiceDetail: ((PPServiceItemDisplayModel) -> Void)? = nil
     public var onOpenSchedule: (() -> Void)? = nil
     public var onOpenTemplatePicker: (() -> Void)? = nil
+    public var onOpenPipeline: (() -> Void)? = nil
 
     private var isRTL: Bool { Language.isRTL() }
 
@@ -460,7 +491,8 @@ public struct PPProviderServicesReinventionView: View {
         onEditService: ((PPServiceItemDisplayModel) -> Void)? = nil,
         onServiceDetail: ((PPServiceItemDisplayModel) -> Void)? = nil,
         onOpenSchedule: (() -> Void)? = nil,
-        onOpenTemplatePicker: (() -> Void)? = nil
+        onOpenTemplatePicker: (() -> Void)? = nil,
+        onOpenPipeline: (() -> Void)? = nil
     ) {
         self.store = store
         self.onDismiss = onDismiss
@@ -469,6 +501,7 @@ public struct PPProviderServicesReinventionView: View {
         self.onServiceDetail = onServiceDetail
         self.onOpenSchedule = onOpenSchedule
         self.onOpenTemplatePicker = onOpenTemplatePicker
+        self.onOpenPipeline = onOpenPipeline
     }
 
     public var body: some View {
@@ -1047,6 +1080,27 @@ public struct PPProviderServicesReinventionView: View {
                 }
                 .padding(.horizontal, 16)
             }
+
+            // Full Pipeline Navigation Button
+            Button {
+                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                onOpenPipeline?()
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "rectangle.stack.badge.play.fill")
+                    Text(isRTL ? "متابعة المسار الكامل لطلبات الحجز (NextGen V10)" : "Open Complete Bookings Pipeline")
+                        .font(PPFont.bold(13.5))
+                    Spacer()
+                    Image(systemName: isRTL ? "chevron.left" : "chevron.right")
+                        .font(.system(size: 12, weight: .bold))
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 11)
+                .background(Color(red: 0.94, green: 0.25, blue: 0.45).opacity(0.10), in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color(red: 0.94, green: 0.25, blue: 0.45).opacity(0.25), lineWidth: 1))
+                .foregroundColor(Color(red: 0.94, green: 0.25, blue: 0.45))
+            }
+            .padding(.horizontal, 16)
 
             // Booking Cards
             if store.filteredBookings.isEmpty {
@@ -2194,9 +2248,14 @@ public final class PPProviderServicesHostingController: UIViewController {
     @objc public var onServiceDetailRequested: ((PPServiceModel) -> Void)? = nil
     @objc public var onOpenScheduleRequested: (() -> Void)? = nil
     @objc public var onOpenTemplatePickerRequested: (() -> Void)? = nil
+    @objc public var onOpenPipelineRequested: (() -> Void)? = nil
 
     @objc public func updateWithServices(_ services: [PPServiceModel]) {
         self.store.updateFromServices(services)
+    }
+
+    @objc public func updateWithBookings(_ bookings: [PPServiceBookingItem]) {
+        self.store.updateFromBookings(bookings)
     }
 
     public override func viewDidLoad() {
@@ -2225,6 +2284,8 @@ public final class PPProviderServicesHostingController: UIViewController {
                 model.currency = item.currency
                 model.category = item.category
                 model.categoryID = item.categoryID
+                model.petMainKindID = item.petMainKindID
+                model.imageURL = item.imageURL
                 model.isAvailable = item.isAvailable
                 model.type = item.type == 0 ? .training : .grooming
                 self?.onEditServiceRequested?(model)
@@ -2238,6 +2299,8 @@ public final class PPProviderServicesHostingController: UIViewController {
                 model.currency = item.currency
                 model.category = item.category
                 model.categoryID = item.categoryID
+                model.petMainKindID = item.petMainKindID
+                model.imageURL = item.imageURL
                 model.isAvailable = item.isAvailable
                 model.type = item.type == 0 ? .training : .grooming
                 self?.onServiceDetailRequested?(model)
@@ -2247,6 +2310,9 @@ public final class PPProviderServicesHostingController: UIViewController {
             },
             onOpenTemplatePicker: { [weak self] in
                 self?.onOpenTemplatePickerRequested?()
+            },
+            onOpenPipeline: { [weak self] in
+                self?.onOpenPipelineRequested?()
             }
         )
 

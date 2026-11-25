@@ -64,6 +64,7 @@
 
 // Inclusions Checklist
 @property (nonatomic, strong) NSMutableSet<NSString *> *selectedInclusions;
+@property (nonatomic, strong) NSMutableArray<UIButton *> *inclusionButtons;
 
 @property (nonatomic, assign) BOOL isEditingMode;
 @property (nonatomic, strong, nullable) PPServiceModel *templateModel;
@@ -99,6 +100,7 @@
     self.speciesButtons = [NSMutableArray array];
     self.durationButtons = [NSMutableArray array];
     self.deliveryButtons = [NSMutableArray array];
+    self.inclusionButtons = [NSMutableArray array];
     self.selectedInclusions = [NSMutableSet set];
 
     // Default values
@@ -393,7 +395,8 @@
         : @[@"🐕 Dogs", @"🐈 Cats", @"🦜 Birds", @"🐾 All Pets"];
 
     for (NSInteger i = 0; i < species.count; i++) {
-        UIButton *btn = [self makePillButtonWithTitle:species[i] tag:i + 1];
+        NSInteger tag = (i == 3) ? 0 : (i + 1);
+        UIButton *btn = [self makePillButtonWithTitle:species[i] tag:tag];
         [btn addTarget:self action:@selector(speciesPillTapped:) forControlEvents:UIControlEventTouchUpInside];
         [speciesStack addArrangedSubview:btn];
         [self.speciesButtons addObject:btn];
@@ -667,10 +670,12 @@
 
         UIButton *b1 = [self makeChecklistButtonWithTitle:tags[i]];
         [row addArrangedSubview:b1];
+        [self.inclusionButtons addObject:b1];
 
         if (i + 1 < tags.count) {
             UIButton *b2 = [self makeChecklistButtonWithTitle:tags[i+1]];
             [row addArrangedSubview:b2];
+            [self.inclusionButtons addObject:b2];
         }
         [rowsStack addArrangedSubview:row];
     }
@@ -780,6 +785,24 @@
         self.selectedType = src.type;
         self.selectedPetKindID = src.petMainKindID > 0 ? src.petMainKindID : 1;
         self.availabilitySwitch.on = src.isAvailable;
+
+        if (src.durationMinutes > 0) {
+            if (src.durationMinutes == 30) {
+                self.selectedDuration = Language.isRTL ? @"30 دقيقة" : @"30 min";
+            } else if (src.durationMinutes == 45) {
+                self.selectedDuration = Language.isRTL ? @"45 دقيقة" : @"45 min";
+            } else if (src.durationMinutes == 60) {
+                self.selectedDuration = Language.isRTL ? @"60 دقيقة" : @"60 min";
+            } else if (src.durationMinutes >= 480) {
+                self.selectedDuration = Language.isRTL ? @"يوم كامل" : @"Full Day";
+            }
+        }
+        if (src.isHomeVisit) {
+            self.selectedDelivery = Language.isRTL ? @"زيارة منزلية" : @"Home Visit";
+        }
+        if (src.inclusions.count > 0) {
+            [self.selectedInclusions addObjectsFromArray:src.inclusions];
+        }
 
         if (src.imageURL.length > 0) {
             [self.photoImageView sd_setImageWithURL:[NSURL URLWithString:src.imageURL]];
@@ -892,6 +915,20 @@
         BOOL isSel = [[btn titleForState:UIControlStateNormal] isEqualToString:self.selectedDelivery];
         [self applySelectionStyle:isSel toButton:btn];
     }
+
+    for (UIButton *btn in self.inclusionButtons) {
+        NSString *text = [btn titleForState:UIControlStateNormal];
+        BOOL isSel = [self.selectedInclusions containsObject:text];
+        if (isSel) {
+            btn.backgroundColor = [AppPrimaryClr colorWithAlphaComponent:0.12];
+            [btn setTitleColor:AppPrimaryClr forState:UIControlStateNormal];
+            btn.layer.borderColor = AppPrimaryClr.CGColor;
+        } else {
+            btn.backgroundColor = [UIColor ppSurface];
+            [btn setTitleColor:PrimaryTextClr forState:UIControlStateNormal];
+            btn.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+        }
+    }
 }
 
 - (void)applySelectionStyle:(BOOL)selected toButton:(UIButton *)btn {
@@ -983,6 +1020,16 @@
     model.type = self.selectedType;
     model.petMainKindID = self.selectedPetKindID;
     model.isAvailable = self.availabilitySwitch.isOn;
+
+    NSInteger durationMins = 45;
+    if ([self.selectedDuration containsString:@"30"]) durationMins = 30;
+    else if ([self.selectedDuration containsString:@"45"]) durationMins = 45;
+    else if ([self.selectedDuration containsString:@"60"]) durationMins = 60;
+    else if ([self.selectedDuration containsString:@"يوم"] || [self.selectedDuration containsString:@"Day"]) durationMins = 480;
+
+    model.durationMinutes = durationMins;
+    model.isHomeVisit = [self.selectedDelivery containsString:@"منزل"] || [self.selectedDelivery containsString:@"Home"] || [self.selectedDelivery containsString:@"كلا"] || [self.selectedDelivery containsString:@"Both"];
+    model.inclusions = [self.selectedInclusions allObjects];
 
     if (self.selectedType == PPServiceTypeGrooming) {
         model.category = Language.isRTL ? @"حلاقة وعناية" : @"Grooming";

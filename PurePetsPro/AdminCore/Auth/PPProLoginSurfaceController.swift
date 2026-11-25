@@ -5578,6 +5578,7 @@ struct PPProPulseView: View {
     /// Set once the first-paint spinner has been up long enough that leaving it
     /// there would be dishonest. See `phase`.
     @State private var bootStalled = false
+    @State private var navBarSeparatorShimmer = false
 
     @Namespace private var pulseNamespace
     @Namespace private var sectionNamespace
@@ -5703,6 +5704,11 @@ struct PPProPulseView: View {
             reconcileDriverHomeStore()
             appeared = true
             syncRootTabBarBadges()
+            if allowsWorkspaceMotion {
+                withAnimation(.easeInOut(duration: 3.2).repeatForever(autoreverses: true)) {
+                    navBarSeparatorShimmer = true
+                }
+            }
             guard !bootStalled else { return }
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.bootPatience) {
                 bootStalled = true
@@ -5710,6 +5716,7 @@ struct PPProPulseView: View {
         }
         .onDisappear {
             isOnScreen = false
+            navBarSeparatorShimmer = false
             driverHomeStore?.setVisible(false)
         }
         .onChange(of: scope.signals.count) { _, _ in syncRootTabBarBadges() }
@@ -6020,7 +6027,7 @@ struct PPProPulseView: View {
     }
 
     private var commandBar: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             if isAccessibilitySize {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack {
@@ -6037,9 +6044,71 @@ struct PPProPulseView: View {
                     headerActionCluster
                 }
             }
+
+            navBarSeparator
         }
         .padding(.vertical, 6)
         .environment(\.locale, Locale(identifier: Language.currentLanguageCode()))
+    }
+
+    // MARK: - NextGen V10 Living Navigation Bar Separator
+
+    private var navBarSeparator: some View {
+        ZStack(alignment: .center) {
+            // Ambient Horizon Glow — subtle radiant dissipation beneath the navigation bar
+            LinearGradient(
+                colors: [
+                    palette.accent.opacity(palette.isDark ? 0.20 : 0.10),
+                    palette.accentSoft.opacity(palette.isDark ? 0.10 : 0.04),
+                    Color.clear
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 6)
+            .blur(radius: 2.5)
+            .offset(y: 2)
+
+            // Precision Multi-Tone Architectural Hairline
+            GeometryReader { geo in
+                let width = geo.size.width
+                ZStack(alignment: isRTL ? .trailing : .leading) {
+                    // Base hairline: feathered edge-to-edge rule
+                    Rectangle()
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    palette.hairline.opacity(0.12),
+                                    palette.hairline.opacity(palette.isDark ? 0.78 : 0.62),
+                                    palette.hairline.opacity(palette.isDark ? 0.78 : 0.62),
+                                    palette.hairline.opacity(0.12)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(height: 1)
+
+                    // NextGen V10 Living Accent Core — breathing luminous beam anchored at the leading edge
+                    LinearGradient(
+                        colors: [
+                            Color.clear,
+                            palette.accent.opacity(palette.isDark ? (navBarSeparatorShimmer ? 0.75 : 0.50) : (navBarSeparatorShimmer ? 0.60 : 0.38)),
+                            palette.accent.opacity(palette.isDark ? (navBarSeparatorShimmer ? 0.40 : 0.22) : (navBarSeparatorShimmer ? 0.28 : 0.14)),
+                            Color.clear
+                        ],
+                        startPoint: isRTL ? .trailing : .leading,
+                        endPoint: isRTL ? .leading : .trailing
+                    )
+                    .frame(width: min(max(width * 0.42, 120), 220), height: 1.5)
+                    .offset(x: isRTL ? 0 : (navBarSeparatorShimmer && allowsWorkspaceMotion ? 12 : 0))
+                }
+            }
+            .frame(height: 1.5)
+        }
+        .frame(height: 6)
+        .padding(.top, 4)
+        .accessibilityHidden(true)
     }
 
     private func syncRootTabBarBadges() {

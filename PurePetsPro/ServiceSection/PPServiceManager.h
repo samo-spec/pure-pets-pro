@@ -12,10 +12,12 @@
 NS_ASSUME_NONNULL_BEGIN
 
 @class PPServiceModel;
+@class PPServiceBookingItem;
 @protocol FIRListenerRegistration;
 
 typedef void(^PPServiceArrayBlock)(NSArray<PPServiceModel *> * _Nullable services, NSError * _Nullable error);
 typedef void(^PPServiceVoidBlock)(NSError * _Nullable error);
+typedef void(^PPBookingArrayBlock)(NSArray<PPServiceBookingItem *> * _Nullable bookings, NSError * _Nullable error);
 
 @interface PPServiceManager : NSObject
 
@@ -26,6 +28,15 @@ typedef void(^PPServiceVoidBlock)(NSError * _Nullable error);
                                                  onChange:(PPServiceArrayBlock)onChange;
 - (void)fetchServiceByID:(NSString *)serviceID
               completion:(void(^)(PPServiceModel * _Nullable service, NSError * _Nullable error))completion;
+
+// ── Bookings & Requests Pipeline (Provider Follow-Up) ──
+- (id<FIRListenerRegistration>)observeBookingsForOwnerID:(NSString *)ownerID
+                                                onChange:(PPBookingArrayBlock)onChange;
+- (void)updateBookingStatus:(NSString *)requestID
+                     status:(NSString *)status
+                 completion:(PPServiceVoidBlock)completion;
+- (void)saveBooking:(PPServiceBookingItem *)booking
+         completion:(PPServiceVoidBlock)completion;
 
 // ── WRITE (provider-owned only) ──
 - (void)addService:(PPServiceModel *)service

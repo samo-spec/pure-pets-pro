@@ -75,6 +75,13 @@
     d[@"blurHash"]       = self.blurHash ?: @"";
     d[@"serviceOwnerID"] = self.serviceOwnerID ?: @"";
     d[@"isAvailable"]    = @(self.isAvailable);
+    if (self.durationMinutes > 0) {
+        d[@"durationMinutes"] = @(self.durationMinutes);
+    }
+    d[@"isHomeVisit"]    = @(self.isHomeVisit);
+    if (self.inclusions.count > 0) {
+        d[@"inclusions"] = self.inclusions;
+    }
     d[@"updatedAt"]      = [NSDate date];
     return [d copy];
 }
@@ -127,6 +134,11 @@
     m.type           = [dict[@"type"] integerValue];
     m.imageURL       = dict[@"imageURL"] ?: @"";
     m.blurHash       = dict[@"blurHash"] ?: @"";
+    m.durationMinutes = dict[@"durationMinutes"] ? [dict[@"durationMinutes"] integerValue] : 45;
+    m.isHomeVisit    = [dict[@"isHomeVisit"] boolValue];
+    if ([dict[@"inclusions"] isKindOfClass:[NSArray class]]) {
+        m.inclusions = dict[@"inclusions"];
+    }
 
     // Availability: prefer explicit isAvailable, fall back to legacy availableDate
     if (dict[@"isAvailable"] != nil) {
@@ -161,6 +173,7 @@
         @"title", @"searchTitle", @"description", @"price", @"currency",
         @"category", @"categoryID", @"petMainKindID", @"type",
         @"imageURL", @"blurHash", @"serviceOwnerID", @"isAvailable",
+        @"durationMinutes", @"isHomeVisit", @"inclusions",
         @"availableDate", @"timestamp", @"createdAt", @"updatedAt",
         @"isDisabled", @"isBlocked", @"isDeleted", @"verificationStatus",
         @"subscriptionType", @"subscriptionPlan", @"subscriptionStatus",
@@ -193,6 +206,9 @@
     c.type           = self.type;
     c.imageURL       = self.imageURL;
     c.blurHash       = self.blurHash;
+    c.durationMinutes = self.durationMinutes;
+    c.isHomeVisit    = self.isHomeVisit;
+    c.inclusions     = [self.inclusions copy];
     c.isAvailable    = self.isAvailable;
     c.isDisabled     = self.isDisabled;
     c.isBlocked      = self.isBlocked;
@@ -209,6 +225,144 @@
     c.timestamp      = self.timestamp;
     c.extraFields    = self.extraFields;
     return c;
+}
+
+@end
+
+#pragma mark - PPServiceBookingItem Implementation
+
+@implementation PPServiceBookingItem
+
+- (instancetype)init {
+    if (self = [super init]) {
+        _currency = @"QAR";
+        _status = @"new";
+        _petKindID = 1;
+        _price = 0.0;
+        _isHomeVisit = NO;
+    }
+    return self;
+}
+
+- (id)copyWithZone:(NSZone *)zone {
+    PPServiceBookingItem *item = [[PPServiceBookingItem allocWithZone:zone] init];
+    item.requestID = self.requestID;
+    item.serviceID = self.serviceID;
+    item.serviceTitle = self.serviceTitle;
+    item.serviceOwnerID = self.serviceOwnerID;
+    item.petName = self.petName;
+    item.petBreed = self.petBreed;
+    item.petPhotoURL = self.petPhotoURL;
+    item.petKindID = self.petKindID;
+    item.petAge = self.petAge;
+    item.petNotes = self.petNotes;
+    item.customerID = self.customerID;
+    item.customerName = self.customerName;
+    item.customerPhone = self.customerPhone;
+    item.bookingDateText = self.bookingDateText;
+    item.bookingDate = self.bookingDate;
+    item.locationText = self.locationText;
+    item.isHomeVisit = self.isHomeVisit;
+    item.price = self.price;
+    item.currency = self.currency;
+    item.status = self.status;
+    item.inclusionsText = self.inclusionsText;
+    item.createdAt = self.createdAt;
+    item.updatedAt = self.updatedAt;
+    return item;
+}
+
+- (NSDictionary *)toDictionary {
+    NSMutableDictionary *d = [NSMutableDictionary dictionary];
+    d[@"requestID"] = self.requestID ?: @"";
+    d[@"serviceID"] = self.serviceID ?: @"";
+    d[@"serviceTitle"] = self.serviceTitle ?: @"";
+    d[@"serviceOwnerID"] = self.serviceOwnerID ?: @"";
+    d[@"petName"] = self.petName ?: @"";
+    d[@"petBreed"] = self.petBreed ?: @"";
+    d[@"petPhotoURL"] = self.petPhotoURL ?: @"";
+    d[@"petKindID"] = @(self.petKindID);
+    d[@"petAge"] = self.petAge ?: @"";
+    d[@"petNotes"] = self.petNotes ?: @"";
+    d[@"customerID"] = self.customerID ?: @"";
+    d[@"customerName"] = self.customerName ?: @"";
+    d[@"customerPhone"] = self.customerPhone ?: @"";
+    d[@"bookingDateText"] = self.bookingDateText ?: @"";
+    d[@"locationText"] = self.locationText ?: @"";
+    d[@"isHomeVisit"] = @(self.isHomeVisit);
+    d[@"price"] = @(self.price);
+    d[@"currency"] = self.currency ?: @"QAR";
+    d[@"status"] = self.status ?: @"new";
+    d[@"inclusionsText"] = self.inclusionsText ?: @"";
+    if (self.createdAt) d[@"createdAt"] = @([self.createdAt timeIntervalSince1970]);
+    if (self.updatedAt) d[@"updatedAt"] = @([self.updatedAt timeIntervalSince1970]);
+    return [d copy];
+}
+
++ (instancetype)fromDictionary:(NSDictionary *)dict withID:(NSString *)requestID {
+    PPServiceBookingItem *item = [[PPServiceBookingItem alloc] init];
+    item.requestID = requestID.length > 0 ? requestID : (dict[@"requestID"] ?: @"");
+    item.serviceID = dict[@"serviceID"] ?: @"";
+    item.serviceTitle = dict[@"serviceTitle"] ?: @"";
+    item.serviceOwnerID = dict[@"serviceOwnerID"] ?: @"";
+    item.petName = dict[@"petName"] ?: @"";
+    item.petBreed = dict[@"petBreed"] ?: @"";
+    item.petPhotoURL = dict[@"petPhotoURL"] ?: @"";
+    item.petKindID = [dict[@"petKindID"] integerValue];
+    item.petAge = dict[@"petAge"] ?: @"";
+    item.petNotes = dict[@"petNotes"] ?: @"";
+    item.customerID = dict[@"customerID"] ?: @"";
+    item.customerName = dict[@"customerName"] ?: @"";
+    item.customerPhone = dict[@"customerPhone"] ?: @"";
+    item.bookingDateText = dict[@"bookingDateText"] ?: @"";
+    item.locationText = dict[@"locationText"] ?: @"";
+    item.isHomeVisit = [dict[@"isHomeVisit"] boolValue];
+    item.price = [dict[@"price"] doubleValue];
+    item.currency = dict[@"currency"] ?: @"QAR";
+    item.status = dict[@"status"] ?: @"new";
+    item.inclusionsText = dict[@"inclusionsText"] ?: @"";
+    if (dict[@"createdAt"]) {
+        NSTimeInterval t = [dict[@"createdAt"] doubleValue];
+        item.createdAt = [NSDate dateWithTimeIntervalSince1970:t];
+    }
+    if (dict[@"updatedAt"]) {
+        NSTimeInterval t = [dict[@"updatedAt"] doubleValue];
+        item.updatedAt = [NSDate dateWithTimeIntervalSince1970:t];
+    }
+    return item;
+}
+
+- (NSString *)localizedStatusText {
+    NSString *st = self.status.lowercaseString;
+    BOOL isRTL = [NSLocale.preferredLanguages.firstObject hasPrefix:@"ar"];
+    if ([st isEqualToString:@"new"]) {
+        return isRTL ? @"طلب جديد" : @"New Request";
+    } else if ([st isEqualToString:@"scheduled"]) {
+        return isRTL ? @"حجز مؤكد" : @"Scheduled";
+    } else if ([st isEqualToString:@"in_progress"]) {
+        return isRTL ? @"جلسة جارية الآن" : @"In Progress";
+    } else if ([st isEqualToString:@"completed"]) {
+        return isRTL ? @"مكتمل بنجاح" : @"Completed";
+    } else if ([st isEqualToString:@"declined"]) {
+        return isRTL ? @"ملغي / مرفوض" : @"Declined";
+    }
+    return self.status;
+}
+
+- (UIColor *)statusAccentColor {
+    NSString *st = self.status.lowercaseString;
+    if ([st isEqualToString:@"new"]) {
+        return [UIColor systemOrangeColor];
+    } else if ([st isEqualToString:@"scheduled"]) {
+        return [UIColor systemBlueColor];
+    } else if ([st isEqualToString:@"in_progress"]) {
+        return [UIColor systemPurpleColor];
+    } else if ([st isEqualToString:@"completed"]) {
+        return [UIColor systemGreenColor];
+    } else if ([st isEqualToString:@"declined"]) {
+        return [UIColor systemRedColor];
+    }
+    return [UIColor systemGrayColor];
 }
 
 @end

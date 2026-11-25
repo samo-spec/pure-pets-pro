@@ -238,6 +238,28 @@
     t4.type = PPServiceTypeGrooming;
     t4.duration = Language.isRTL ? @"يوم كامل (24 ساعة)" : @"Full Day (24 hrs)";
     [self.templates addObject:t4];
+
+    PPServiceTemplateItem *t5 = [PPServiceTemplateItem new];
+    t5.iconName = @"sparkles";
+    t5.title = Language.isRTL ? @"إزالة عقد الفرو وتصفيف للقطط" : @"Cat Fur Dematting & Spa";
+    t5.categoryName = Language.isRTL ? @"عناية بالقطط" : @"Cat Grooming";
+    t5.desc = Language.isRTL ? @"فك تشابك الفرو الطويل بلطف، إزالة الشعر الميت، وتدليك مهدئ مع قص الأظافر." : @"Gentle long hair dematting, deshedding, relaxing massage, and nail care.";
+    t5.price = 140.0;
+    t5.petKindID = 2; // Cats
+    t5.type = PPServiceTypeGrooming;
+    t5.duration = Language.isRTL ? @"50 دقيقة" : @"50 min";
+    [self.templates addObject:t5];
+
+    PPServiceTemplateItem *t6 = [PPServiceTemplateItem new];
+    t6.iconName = @"mouth.fill";
+    t6.title = Language.isRTL ? @"تنظيف الأسنان وإزالة الجير" : @"Dental Hygiene & Tartar Cleanse";
+    t6.categoryName = Language.isRTL ? @"عناية وصحة" : @"Pet Dental Care";
+    t6.desc = Language.isRTL ? @"تنظيف الأسنان واللثة بالفرشاة المخصصة ومعجون طبي للقضاء على الروائح الكريهة وحماية الأسنان." : @"Specialized pet enzymatic brushing, tartar control, and breath freshener.";
+    t6.price = 95.0;
+    t6.petKindID = 0; // All Pets
+    t6.type = PPServiceTypeGrooming;
+    t6.duration = Language.isRTL ? @"25 دقيقة" : @"25 min";
+    [self.templates addObject:t6];
 }
 
 - (void)setupUI {

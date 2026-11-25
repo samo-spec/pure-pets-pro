@@ -313,7 +313,12 @@ static CGFloat const kImageRadius = 15.0;
                                         withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIImageSymbolWeightBold]];
 
     // Duration
-    self.durationPill.text = [NSString stringWithFormat:@"⏱ %@", [Language isRTL] ? @"45 دقيقة" : @"45 min"];
+    NSInteger mins = service.durationMinutes > 0 ? service.durationMinutes : 45;
+    if (mins >= 480) {
+        self.durationPill.text = [NSString stringWithFormat:@"⏱ %@", [Language isRTL] ? @"يوم كامل" : @"Full Day"];
+    } else {
+        self.durationPill.text = [NSString stringWithFormat:@"⏱ %ld %@", (long)mins, [Language isRTL] ? @"دقيقة" : @"min"];
+    }
 
     // Availability State
     BOOL isLive = service.isLive;

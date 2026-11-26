@@ -1,3 +1,4 @@
+#import "PPProSessionFence.h"
 //
 //  FUUserDoc.m
 //  PurePetsAdmin
@@ -101,6 +102,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 #pragma mark - Combined Registration (auth + user doc)
 
 @interface FUCompositeRegistration : NSObject <FIRListenerRegistration>
+@property (nonatomic, strong, nullable) FIRAuth *authOwner;
 @property (nonatomic) FIRAuthStateDidChangeListenerHandle authHandle;
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> docReg;
 
@@ -109,8 +111,9 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 @implementation FUCompositeRegistration
 - (void)remove {
     if (self.authHandle) {
-        [[FIRAuth auth] removeAuthStateDidChangeListener:self.authHandle];
+        [(self.authOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authHandle];
         self.authHandle = 0;
+        self.authOwner = nil;
     }
     [self.docReg remove];
     self.docReg = nil;
@@ -120,8 +123,11 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 #pragma mark - Private
 
 @interface FUManager ()
+@property (nonatomic, strong, nullable) FIRAuth *bootstrapAuthOwner;
 @property (nonatomic) FIRAuthStateDidChangeListenerHandle bootstrapAuthHandle;
+@property (nonatomic, strong, nullable) FIRAuth *authHandleOwner;
 @property (nonatomic) FIRAuthStateDidChangeListenerHandle authHandle;
+@property (nonatomic, copy, nullable) void (^authChangeBlock)(FIRUser * _Nullable authUser, UserModel * _Nullable userModel);
 @property (nonatomic, strong, nullable)  FIRDocumentReference *ref;
 @end
 
@@ -134,39 +140,101 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     return s;
 }
 
+- (FIRAuth *)activeAuth {
+    return [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+}
+
+- (FIRFirestore *)db {
+    return [PPProSessionCoordinator.shared activeFirestore];
+}
+
+- (FIRStorage *)storage {
+    return [PPProSessionCoordinator.shared activeStorage];
+}
+
+- (FIRFunctions *)functions {
+    return [PPProSessionCoordinator.shared activeFunctions];
+}
+
 - (instancetype)init {
     if ((self = [super init])) {
-        _db        = [FIRFirestore firestore];
-        _storage   = [FIRStorage storage];
-        _functions = [FIRFunctions functionsForRegion:@"us-central1"]; // adjust if needed
-
         __weak typeof(self) weakSelf = self;
-        self.bootstrapAuthHandle =
-        [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth * _Nonnull auth, FIRUser * _Nullable user) {
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) return;
+        [PPProSessionCoordinator.shared registerSessionTeardownHandler:^(__unused NSString *reason) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            strongSelf.currentUserDoc = nil;
+            strongSelf.ref = nil;
+            if (strongSelf.bootstrapAuthHandle) {
+                [(strongSelf.bootstrapAuthOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:strongSelf.bootstrapAuthHandle];
+                strongSelf.bootstrapAuthHandle = 0;
+                strongSelf.bootstrapAuthOwner = nil;
+            }
+            if (strongSelf.authHandle) {
+                [(strongSelf.authHandleOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:strongSelf.authHandle];
+                strongSelf.authHandle = 0;
+                strongSelf.authHandleOwner = nil;
+            }
+        } forKey:@"FUManager"];
 
-            if (!user) { self.currentUserDoc = nil; return; }
-
-            [[self userDocumentRefForUID:user.uid] getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
-                if (!snapshot.exists || !snapshot.data) { self.currentUserDoc = nil; return; }
-
-                FUUserDoc *d = [FUUserDoc new];
-                d.uid         = user.uid;
-                d.email       = FUString(snapshot[@"email"]) ?: user.email;
-                d.displayName = FUString(snapshot[@"displayName"]) ?: user.displayName;
-                d.photoURL    = FUURL(snapshot[@"photoURL"]) ?: user.photoURL;
-                d.raw         = snapshot.data;
-                self.currentUserDoc = d;
-            }];
-        }];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(pp_handleActiveRuntimeChange)
+                                                     name:PPProSessionDidChangeActiveRuntimeNotification
+                                                   object:nil];
+        [self pp_attachBootstrapAuthListener];
     }
     return self;
 }
 
+- (void)pp_handleActiveRuntimeChange {
+    [self pp_attachBootstrapAuthListener];
+    if (self.authChangeBlock) {
+        [self startAuthListenerWithChangeBlock:self.authChangeBlock];
+    }
+}
+
+- (void)pp_attachBootstrapAuthListener {
+    if (self.bootstrapAuthHandle) {
+        [(self.bootstrapAuthOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.bootstrapAuthHandle];
+        self.bootstrapAuthHandle = 0;
+        self.bootstrapAuthOwner = nil;
+    }
+    FIRAuth *targetAuth = [self activeAuth];
+    if (!targetAuth) return;
+    __weak typeof(self) weakSelf = self;
+    self.bootstrapAuthOwner = targetAuth;
+    self.bootstrapAuthHandle =
+    [targetAuth addAuthStateDidChangeListener:^(FIRAuth * _Nonnull auth, FIRUser * _Nullable user) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        if (auth != [self activeAuth]) return;
+
+        FIRUser *active = auth.currentUser;
+        if (active != user) return;
+        PPProSessionFence *fence = [PPProSessionFence shared];
+        [fence observeActiveUID:active.uid identity:active];
+        self.currentUserDoc = nil;
+        if (!user) return;
+        NSString *uid = user.uid;
+        NSUUID *bootstrapGeneration = [fence captureForUID:uid activeUID:active.uid identity:active];
+        [[self userDocumentRefForUID:uid] getDocumentWithSource:FIRFirestoreSourceServer completion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
+            FIRUser *current = [PPProSessionCoordinator.shared currentUser];
+            if (![fence accepts:bootstrapGeneration requestedUID:uid activeUID:current.uid identity:current]) return;
+            if (!snapshot.exists || !snapshot.data) { self.currentUserDoc = nil; return; }
+
+            FUUserDoc *d = [FUUserDoc new];
+            d.uid         = user.uid;
+            d.email       = FUString(snapshot[@"email"]) ?: user.email;
+            d.displayName = FUString(snapshot[@"displayName"]) ?: user.displayName;
+            d.photoURL    = FUURL(snapshot[@"photoURL"]) ?: user.photoURL;
+            d.raw         = snapshot.data;
+            self.currentUserDoc = d;
+        }];
+    }];
+}
+
 #pragma mark - Accessors
 
-- (FIRUser *)currentUser { return [FIRAuth auth].currentUser; }
+- (FIRUser *)currentUser { return [PPProSessionCoordinator.shared currentUser]; }
 
 #pragma mark - Errors & finish
 
@@ -248,12 +316,17 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     UIImage *scaled = [self p_scaleImage:image maxDimension:maxDim];
     NSData  *data   = [self p_pngDataForImage:scaled targetMaxBytes:maxBytes];
 
-    NSString *path = [NSString stringWithFormat:@"users/%@/profile.png", uid];
+    NSString *path = [NSString stringWithFormat:@"uploads/users/%@/profile/profile_%lld.png",
+                      uid,
+                      (long long)([[NSDate date] timeIntervalSince1970] * 1000)];
     FIRStorageReference *ref = [[self.storage reference] child:path];
 
     FIRStorageMetadata *meta = [FIRStorageMetadata new];
     meta.contentType  = @"image/png";
     meta.cacheControl = @"public, max-age=3600";
+    if (uid.length > 0) {
+        meta.customMetadata = @{@"uploaded_by": uid};
+    }
 
     [ref putData:data metadata:meta completion:^(FIRStorageMetadata * _Nullable metadata, NSError * _Nullable error) {
         if (error) { if (completion) completion(nil, error); return; }
@@ -284,7 +357,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
                    metadata:(NSDictionary *)metadata
                  completion:(FUUserBlock)completion
 {
-    [[FIRAuth auth] createUserWithEmail:email password:password completion:^(FIRAuthDataResult * _Nullable res, NSError * _Nullable err) {
+    [[self activeAuth] createUserWithEmail:email password:password completion:^(FIRAuthDataResult * _Nullable res, NSError * _Nullable err) {
         if (err || !res.user) { [self p_finishUser:nil error:err completion:completion]; return; }
         FIRUser *user = res.user;
 
@@ -315,8 +388,9 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     NSString *trimmedEmail = [email stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     NSString *safePassword = password ?: @"";
 
-    [[FIRAuth auth] signInWithEmail:trimmedEmail password:safePassword completion:^(FIRAuthDataResult * _Nullable res, NSError * _Nullable err) {
-        FIRUser *effectiveUser = res.user ?: [FIRAuth auth].currentUser;
+    FIRAuth *activeAuth = [self activeAuth];
+    [activeAuth signInWithEmail:trimmedEmail password:safePassword completion:^(FIRAuthDataResult * _Nullable res, NSError * _Nullable err) {
+        FIRUser *effectiveUser = res.user ?: activeAuth.currentUser;
         NSError *effectiveError = err;
 
         if (effectiveError) {
@@ -347,7 +421,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 }
 
 - (BOOL)signOut:(NSError * _Nullable * _Nullable)error {
-    return [[FIRAuth auth] signOut:error];
+    return [[self activeAuth] signOut:error];
 }
 
 - (void)deleteCurrentUserWithCompletion:(FUErrorBlock)completion {
@@ -432,6 +506,14 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     // Bind every asynchronous operation to this identity. A singleton's mutable
     // `ref` can change while a previous account's sign-in is still completing.
     NSString *uid = user.uid;
+    PPProSessionFence *fence = [PPProSessionFence shared];
+    FIRUser *active = [PPProSessionCoordinator.shared currentUser];
+    NSUUID *bootstrapTransactionGeneration = [fence captureForUID:uid activeUID:active.uid identity:active];
+    BOOL (^isCurrent)(void) = ^BOOL {
+        FIRUser *current = [PPProSessionCoordinator.shared currentUser];
+        return [fence accepts:bootstrapTransactionGeneration requestedUID:uid activeUID:current.uid identity:current];
+    };
+    if (!isCurrent()) { if (completion) completion([self p_err:@"Session changed" code:1301]); return; }
     FIRDocumentReference *ref = [self userDocumentRefForUID:uid];
     NSMutableDictionary *profile = [@{
         @"uid": uid,
@@ -453,7 +535,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 
     __weak typeof(self) weakSelf = self;
     [self.db runTransactionWithBlock:^id(FIRTransaction *transaction, NSError **errorPointer) {
-        if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+        if (!isCurrent()) {
             *errorPointer = [NSError errorWithDomain:FUErrorDomain code:1301 userInfo:nil];
             return nil;
         }
@@ -466,13 +548,13 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     } completion:^(id result, NSError *error) {
         (void)result;
         if (error) { if (completion) completion(error); return; }
-        if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+        if (!isCurrent()) {
             if (completion) completion([NSError errorWithDomain:FUErrorDomain code:1301 userInfo:nil]);
             return;
         }
-        [ref getDocumentWithCompletion:^(FIRDocumentSnapshot *snap, NSError *readError) {
+        [ref getDocumentWithSource:FIRFirestoreSourceServer completion:^(FIRDocumentSnapshot *snap, NSError *readError) {
             __strong typeof(weakSelf) self = weakSelf;
-            if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+            if (!isCurrent()) {
                 if (completion) completion([NSError errorWithDomain:FUErrorDomain code:1301 userInfo:nil]);
                 return;
             }
@@ -716,7 +798,9 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     __weak typeof(self) weakSelf = self;
     void (^cb)(UserModel * _Nullable, NSError * _Nullable) = [callback copy];
 
-    combo.authHandle = [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth * _Nonnull auth, FIRUser * _Nullable user) {
+    FIRAuth *authInstance = [self activeAuth];
+    combo.authOwner = authInstance;
+    combo.authHandle = [authInstance addAuthStateDidChangeListener:^(FIRAuth * _Nonnull auth, FIRUser * _Nullable user) {
         __strong typeof(weakSelf) mgr = weakSelf;
         if (!mgr) return;
 
@@ -751,7 +835,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 + (FIRQuery *)usersBaseQueryOrderedBy:(NSString * _Nullable)orderField
                             ascending:(BOOL)ascending
 {
-    FIRCollectionReference *col = [[FIRFirestore firestore] collectionWithPath:kFUUsersCollection];
+    FIRCollectionReference *col = [[PPProSessionCoordinator.shared activeFirestore] collectionWithPath:kFUUsersCollection];
 
     // Primary sort: UserName (or the provided field)
     NSString *field = orderField.length ? orderField : @"UserName";
@@ -858,19 +942,33 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 - (void)startAuthListenerWithChangeBlock:(void(^)(FIRUser * _Nullable authUser,
                                                   UserModel * _Nullable userModel))block
 {
+    self.authChangeBlock = block;
     if (self.authHandle) {
-        [[FIRAuth auth] removeAuthStateDidChangeListener:self.authHandle];
+        [(self.authHandleOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authHandle];
         self.authHandle = 0;
+        self.authHandleOwner = nil;
     }
 
+    FIRAuth *targetAuth = [self activeAuth];
+    if (!targetAuth) return;
     __weak typeof(self) weakSelf = self;
-    self.authHandle = [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser * _Nullable authUser) {
+    self.authHandleOwner = targetAuth;
+    self.authHandle = [targetAuth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser * _Nullable authUser) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
+        if (auth != [self activeAuth]) return;
 
+        FIRUser *active = auth.currentUser;
+        if (active != authUser) return;
+        PPProSessionFence *fence = [PPProSessionFence shared];
+        [fence observeActiveUID:active.uid identity:active];
         if (!authUser) { if (block) block(nil, nil); return; }
+        NSString *uid = authUser.uid;
+        NSUUID *generation = [fence captureForUID:uid activeUID:active.uid identity:active];
 
-        [[self userDocumentRefForUID:authUser.uid] getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snap, NSError * _Nullable err) {
+        [[self userDocumentRefForUID:uid] getDocumentWithSource:FIRFirestoreSourceServer completion:^(FIRDocumentSnapshot * _Nullable snap, NSError * _Nullable err) {
+            FIRUser *current = [PPProSessionCoordinator.shared currentUser];
+            if (![fence accepts:generation requestedUID:uid activeUID:current.uid identity:current]) return;
             FUUserDoc *d = nil;
             if (snap.exists && snap.data) {
                 d = [FUUserDoc new];
@@ -889,10 +987,18 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 - (void)reloadCurrentUserWithCompletion:(void(^)(UserModel * _Nullable user,
                                                  NSError * _Nullable error))completion
 {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
     if (!authUser) { if (completion) completion(nil, nil); return; }
 
-    [[self userDocumentRefForUID:authUser.uid] getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snap, NSError * _Nullable err) {
+    PPProSessionFence *fence = [PPProSessionFence shared];
+    NSString *uid = authUser.uid;
+    NSUUID *generation = [fence captureForUID:uid activeUID:authUser.uid identity:authUser];
+    [[self userDocumentRefForUID:uid] getDocumentWithSource:FIRFirestoreSourceServer completion:^(FIRDocumentSnapshot * _Nullable snap, NSError * _Nullable err) {
+        FIRUser *current = [PPProSessionCoordinator.shared currentUser];
+        if (![fence accepts:generation requestedUID:uid activeUID:current.uid identity:current]) {
+            if (completion) completion(nil, [self p_err:@"Session changed" code:1301]);
+            return;
+        }
         if (err) { if (completion) completion(nil, err); return; }
         FUUserDoc *d = nil;
         if (snap.exists && snap.data) {
@@ -952,7 +1058,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
                     isAdmin:(BOOL)isAdmin
                  completion:(void(^)(NSError * _Nullable error))completion
 {
-    [[FIRAuth auth] createUserWithEmail:email password:password completion:^(FIRAuthDataResult * _Nullable res, NSError * _Nullable err) {
+    [[self activeAuth] createUserWithEmail:email password:password completion:^(FIRAuthDataResult * _Nullable res, NSError * _Nullable err) {
         if (err) { if (completion) completion(err); return; }
 
         NSString *uid = res.user.uid ?: @"";
@@ -983,7 +1089,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
                toUserID:(NSString *)uid
              completion:(FUErrorBlock)completion
 {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
     if (!authUser || uid.length == 0) {
         if (completion) completion([self p_err:@"No signed-in user" code:-10]);
         return;
@@ -995,7 +1101,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     [req commitChangesWithCompletion:^(__unused NSError * _Nullable e1) {
         // 2) Firestore user doc
         FIRDocumentReference *doc =
-            [[[FIRFirestore firestore] collectionWithPath:kPPUsersCol] documentWithPath:uid];
+            [[self.db collectionWithPath:kPPUsersCol] documentWithPath:uid];
         NSString *abs = url.absoluteString ?: @"";
         NSDictionary *fields = @{
             @"UserImageUrl": abs,
@@ -1015,7 +1121,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 - (void)uploadAvatarPNGData:(NSData *)pngData
                 completion:(FUURLBlock)completion
 {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
     if (!authUser || pngData.length == 0) {
         if (completion) completion(nil, [self p_err:@"Missing user or data" code:-11]);
         return;
@@ -1025,14 +1131,14 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 
     // Read old avatar path before uploading new one
     FIRDocumentReference *userDoc =
-        [[[FIRFirestore firestore] collectionWithPath:kPPUsersCol] documentWithPath:uid];
+        [[self.db collectionWithPath:kPPUsersCol] documentWithPath:uid];
     [userDoc getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snap, NSError * _Nullable readErr) {
         NSString *oldAvatarPath = (snap.exists ? snap[@"UserImagePath"] : nil);
 
         NSString *file = [NSString stringWithFormat:@"avatars/%@/%lld.png",
                           uid, (long long)[NSDate date].timeIntervalSince1970];
 
-        FIRStorageReference *ref = [[[FIRStorage storage] reference] child:file];
+        FIRStorageReference *ref = [[self.storage reference] child:file];
         FIRStorageMetadata *meta = [FIRStorageMetadata new];
         meta.contentType = @"image/png";
 
@@ -1047,7 +1153,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 
                 // Delete old avatar from Storage (best-effort, fire-and-forget)
                 if (oldAvatarPath.length > 0 && ![oldAvatarPath isEqualToString:file]) {
-                    FIRStorageReference *oldRef = [[[FIRStorage storage] reference] child:oldAvatarPath];
+                    FIRStorageReference *oldRef = [[self.storage reference] child:oldAvatarPath];
                     [oldRef deleteWithCompletion:^(NSError * _Nullable delErr) {
                         if (delErr) {
                             DLog(@"[Avatar] failed to delete old avatar: %@", delErr.localizedDescription);
@@ -1069,7 +1175,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 - (void)updatePhotoURL:(NSURL *)url
             completion:(FUErrorBlock)completion
 {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
     if (!authUser || !url) {
         if (completion) completion([self p_err:@"Missing user or URL" code:-12]);
         return;
@@ -1086,7 +1192,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 
 - (void)fetchCurrentUserPhotoURL:(FUURLBlock)completion
 {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
     if (!authUser) { if (completion) completion(nil, [self p_err:@"No signed-in user" code:-13]); return; }
 
     if (authUser.photoURL) {
@@ -1112,7 +1218,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
         return;
     }
     FIRDocumentReference *doc =
-        [[[FIRFirestore firestore] collectionWithPath:kPPUsersCol] documentWithPath:uid];
+        [[self.db collectionWithPath:kPPUsersCol] documentWithPath:uid];
     [doc getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snap, NSError * _Nullable err) {
         if (err || !snap.exists) { if (completion) completion(nil, err); return; }
 
@@ -1126,12 +1232,12 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 - (void)removeCurrentUserPhotoWithDeleteFromStorage:(BOOL)deleteFromStorage
                                          completion:(FUErrorBlock)completion
 {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
     if (!authUser) { if (completion) completion([self p_err:@"No signed-in user" code:-15]); return; }
 
     // Try to read last stored path first (best effort)
     FIRDocumentReference *doc =
-        [[[FIRFirestore firestore] collectionWithPath:kPPUsersCol] documentWithPath:authUser.uid];
+        [[self.db collectionWithPath:kPPUsersCol] documentWithPath:authUser.uid];
 
     [doc getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snap, NSError * _Nullable err) {
         NSString *path = (snap.exists ? (snap[@"UserImagePath"] ?: @"") : @"");
@@ -1150,7 +1256,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 
                 // 3) Optionally delete last stored object
                 if (deleteFromStorage && path.length) {
-                    FIRStorageReference *ref = [[[FIRStorage storage] reference] child:path];
+                    FIRStorageReference *ref = [[self.storage reference] child:path];
                     [ref deleteWithCompletion:^(__unused NSError * _Nullable e3) {
                         if (completion) completion(e1 ?: e2 ?: e3);
                     }];
@@ -1168,7 +1274,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
                 progress:(FUProgressBlock)progress
               completion:(FUURLBlock)completion
 {
-    FIRUser *user = [FIRAuth auth].currentUser;
+    FIRUser *user = [PPProSessionCoordinator.shared currentUser];
     if (!user) { if (completion) completion(nil, [self p_err:@"No auth user" code:-1]); return; }
 
     // 1) scale + compress (sync, quick)
@@ -1176,12 +1282,17 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     NSData  *png    = [self p_pngDataForImage:scaled targetMaxBytes:maxBytes];
     if (!png) { if (completion) completion(nil, [self p_err:@"Encoding failed" code:-2]); return; }
 
-    // 2) storage path
-    NSString *path = [NSString stringWithFormat:@"users/%@/avatar.png", user.uid];
+    // 2) storage path matching Storage rules (uploads/users/{uid}/profile/{fileName})
+    NSString *path = [NSString stringWithFormat:@"uploads/users/%@/profile/avatar_%lld.png",
+                      user.uid,
+                      (long long)([[NSDate date] timeIntervalSince1970] * 1000)];
     FIRStorageReference *ref = [[self.storage reference] child:path];
+    FIRStorageMetadata *meta = [FIRStorageMetadata new];
+    meta.contentType = @"image/png";
+    meta.customMetadata = @{@"uploaded_by": user.uid ?: @""};
 
     // 3) upload with progress
-    FIRStorageUploadTask *task = [ref putData:png metadata:nil];
+    FIRStorageUploadTask *task = [ref putData:png metadata:meta];
 
     // progress
     [task observeStatus:FIRStorageTaskStatusProgress handler:^(FIRStorageTaskSnapshot * _Nonnull snapshot) {

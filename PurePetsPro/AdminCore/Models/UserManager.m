@@ -8,6 +8,7 @@
 #import "Lottie.h"
 #import "UIImageView+WebCache.h"
 #import "AppDelegate.h"
+#import "PPProSessionFence.h"
 
 @interface AppDelegate (PPNotificationV2LogoutBarrier)
 - (void)pp_beginNotificationV2LogoutBarrierWithCompletion:(dispatch_block_t)completion;
@@ -52,13 +53,13 @@ NSString * const UserManagerAuthStateDidChangeNotification = @"UserManagerAuthSt
 NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification";
 
 @interface UserManager ()
-@property (nonatomic, strong) NSArray<UserModel *> *cachedUsers;
-@property (nonatomic, strong) NSDate *lastUsersFetchAt;
 
 @property (nonatomic, strong) NSCache<NSString *, UserModel *> *userCache;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSDate *> *userCacheAges;
 @property (nonatomic, strong) dispatch_queue_t cacheQueue; // thread-safety for disk ops
 @property (nonatomic, assign) BOOL signOutInProgress;
+@property (nonatomic, strong) PPProSessionFence *sessionFence;
+@property (nonatomic, strong, nullable) NSUUID *userListenerGeneration;
 - (void)p_queryUsersColField:(NSString *)field
                      equalTo:(NSString *)value
           tryServerThenCache:(BOOL)serverFirst
@@ -80,6 +81,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     if ((self = [super init])) {
         
         
+        _sessionFence = [PPProSessionFence shared];
         _userCache = [NSCache new];
         _userCache.countLimit = 500;
 
@@ -87,18 +89,46 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         _cacheQueue = dispatch_queue_create("com.purepets.usercache.q", DISPATCH_QUEUE_SERIAL);
 
         _userCacheTTL = 5 * 60; // 5 minutes default
+        __weak typeof(self) weakSelf = self;
+        [PPProSessionCoordinator.shared registerSessionTeardownHandler:^(__unused NSString *reason) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf clearUserCache];
+            [strongSelf stopListening];
+            strongSelf.currentUser = nil;
+        } forKey:@"UserManager"];
     }
     return self;
+}
+
+// Bind each profile operation to the current Firebase identity and session epoch.
+- (NSUUID * _Nullable)pp_captureSessionForUID:(NSString *)uid {
+    FIRUser *active = [PPProSessionCoordinator.shared currentUser];
+    if (self.signOutInProgress) return nil;
+    return [self.sessionFence captureForUID:uid activeUID:active.uid identity:active];
+}
+
+- (BOOL)pp_sessionAllows:(NSUUID * _Nullable)generation uid:(NSString *)uid {
+    FIRUser *active = [PPProSessionCoordinator.shared currentUser];
+    return !self.signOutInProgress &&
+           [self.sessionFence accepts:generation requestedUID:uid activeUID:active.uid identity:active];
+}
+
+- (BOOL)pp_model:(UserModel *)model belongsToUID:(NSString *)uid {
+    NSString *modelUID = PPSafeString(model.uid.length ? model.uid : model.ID);
+    return model && modelUID.length && [modelUID isEqualToString:uid];
+}
+
+- (NSError *)pp_invalidProfileSessionError {
+    return [NSError errorWithDomain:@"UserManager" code:401
+                           userInfo:@{NSLocalizedDescriptionKey: @"Profile session is no longer active"}];
 }
 
 - (void)fetchAdminWithUID:(NSString *)uid cachePolicy:(PPUserCachePolicy)policy completion:(void (^)(UserModel * _Nullable, NSError * _Nullable))completion
 {
     NSString *resolvedUID = PPSafeString(uid);
     if (resolvedUID.length == 0) {
-        resolvedUID = PPSafeString(self.currentUser.uid.length ? self.currentUser.uid : self.currentUser.ID);
-    }
-    if (resolvedUID.length == 0) {
-        resolvedUID = PPSafeString([FIRAuth auth].currentUser.uid);
+        resolvedUID = PPSafeString([PPProSessionCoordinator.shared activeUID]);
     }
 
     if (!resolvedUID.length) {
@@ -110,12 +140,20 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         return;
     }
 
+    NSUUID *generation = [self pp_captureSessionForUID:resolvedUID];
+    if (![self pp_sessionAllows:generation uid:resolvedUID]) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+        return;
+    }
+
     switch (policy) {
         case PPUserCachePolicyCacheOnly: {
             UserModel *cached = [self.userCache objectForKey:resolvedUID];
             if (!cached) {
                 cached = [self p_readUserFromDisk:resolvedUID];
             }
+            if (![self pp_sessionAllows:generation uid:resolvedUID]) { if (completion) completion(nil, [self pp_invalidProfileSessionError]); return; }
+            if (cached && ![self pp_model:cached belongsToUID:resolvedUID]) cached = nil;
             if (cached) {
                 [self p_cacheUser:cached];
                 self.currentUser = cached;
@@ -125,6 +163,11 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         }
         case PPUserCachePolicyServerOnly: {
             [self p_queryUsersColField:@"uid" equalTo:resolvedUID tryServerThenCache:NO completion:^(UserModel * _Nullable user, NSError * _Nullable error) {
+                if (![self pp_sessionAllows:generation uid:resolvedUID]) { if (completion) completion(nil, [self pp_invalidProfileSessionError]); return; }
+                if (user && ![self pp_model:user belongsToUID:resolvedUID]) {
+                    if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+                    return;
+                }
                 if (error) {
                     if (completion) completion(nil, error);
                     return;
@@ -137,6 +180,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
                 }
 
                 [[self _userDoc:resolvedUID] getDocumentWithSource:FIRFirestoreSourceServer completion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable docError) {
+                    if (![self pp_sessionAllows:generation uid:resolvedUID]) { if (completion) completion(nil, [self pp_invalidProfileSessionError]); return; }
                     if (docError) {
                         if (completion) completion(nil, docError);
                         return;
@@ -147,6 +191,10 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
                     }
 
                     UserModel *docUser = [[UserModel alloc] initWithSnapshot:snapshot];
+                    if (docUser && ![self pp_model:docUser belongsToUID:resolvedUID]) {
+                        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+                        return;
+                    }
                     if (docUser) {
                         [self p_cacheUser:docUser];
                         self.currentUser = docUser;
@@ -168,11 +216,23 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 {
     
     
+    NSUUID *generation = [self pp_captureSessionForUID:uid];
+    if (![self pp_sessionAllows:generation uid:uid]) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+        return;
+    }
+
     [self p_queryUsersColField:@"uid" equalTo:uid tryServerThenCache:YES completion:^(UserModel * _Nullable user, NSError * _Nullable error) {
        
+        if (![self pp_sessionAllows:generation uid:uid]) { if (completion) completion(nil, [self pp_invalidProfileSessionError]); return; }
+        if (user && ![self pp_model:user belongsToUID:uid]) {
+            if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+            return;
+        }
         if (error) { if (completion) completion(nil, error); return; }
         if (!user) {
             [[self _userDoc:uid] getDocumentWithSource:FIRFirestoreSourceServer completion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable docError) {
+                if (![self pp_sessionAllows:generation uid:uid]) { if (completion) completion(nil, [self pp_invalidProfileSessionError]); return; }
                 if (docError) {
                     if (completion) completion(nil, docError);
                     return;
@@ -183,6 +243,10 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
                 }
 
                 UserModel *docUser = [[UserModel alloc] initWithSnapshot:snapshot];
+                if (docUser && ![self pp_model:docUser belongsToUID:uid]) {
+                    if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+                    return;
+                }
                 if (docUser) {
                     [self p_cacheUser:docUser];
                     self.currentUser = docUser;
@@ -204,7 +268,17 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 - (void)lookupUserByUIDOrID:(NSString *)uid
                  completion:(void(^)(UserModel * _Nullable user, NSError * _Nullable error))completion
 {
+    NSString *owner = [PPProSessionCoordinator.shared activeUID];
+    NSUUID *generation = [self pp_captureSessionForUID:owner];
+    if (![self pp_sessionAllows:generation uid:owner]) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+        return;
+    }
     [self p_queryUsersColField:@"uid" equalTo:uid tryServerThenCache:YES completion:^(UserModel * _Nullable user, NSError * _Nullable error) {
+        if (![self pp_sessionAllows:generation uid:owner]) {
+            if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+            return;
+        }
         if (error) {
             if (completion) completion(nil, error);
             return;
@@ -215,6 +289,10 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         }
 
         [[self _userDoc:uid] getDocumentWithSource:FIRFirestoreSourceServer completion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable docError) {
+            if (![self pp_sessionAllows:generation uid:owner]) {
+                if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+                return;
+            }
             if (docError) {
                 if (completion) completion(nil, docError);
                 return;
@@ -251,10 +329,10 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     
     // Session restore must read the owner's document before any legacy lookup.
     // Infra allows this GET but denies ordinary providers a UsersCol query.
-    if ([field isEqualToString:@"uid"] && [[FIRAuth auth].currentUser.uid isEqualToString:cleanValue]) {
-        FIRFirestoreSource source = serverFirst ? FIRFirestoreSourceDefault : FIRFirestoreSourceServer;
+    if ([field isEqualToString:@"uid"] && [[PPProSessionCoordinator.shared activeUID] isEqualToString:cleanValue]) {
+        FIRFirestoreSource source = FIRFirestoreSourceServer;
         [[self _userDoc:cleanValue] getDocumentWithSource:source completion:^(FIRDocumentSnapshot *snapshot, NSError *error) {
-            if (![[FIRAuth auth].currentUser.uid isEqualToString:cleanValue]) {
+            if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:cleanValue]) {
                 if (completion) completion(nil, [NSError errorWithDomain:@"UserManager" code:1301 userInfo:nil]);
                 return;
             }
@@ -268,71 +346,34 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         return;
     }
 
-    UserModel *restoredUser = [self p_readUserFromDisk:cleanValue];
-    if(restoredUser)
-    {
-        if (completion) completion(restoredUser, nil);
+    NSString *owner = [PPProSessionCoordinator.shared activeUID];
+    NSUUID *generation = [self pp_captureSessionForUID:owner];
+    if (![self pp_sessionAllows:generation uid:owner]) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
         return;
     }
-    
-    FIRFirestore *db =   [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+        return;
+    }
     FIRQuery *q = [[[db collectionWithPath:@"UsersCol"] queryWhereField:field isEqualTo:cleanValue] queryLimitedTo:1];
-
-    void (^handleSnap)(FIRQuerySnapshot *, NSError *) = ^(FIRQuerySnapshot *snap, NSError *err){
-        if (err) {
-            DLog(@"query %@ == %@ error: %@", field, cleanValue, err.localizedDescription);
-            if (serverFirst) {
-                // Try cache once
-                [q getDocumentsWithSource:FIRFirestoreSourceCache completion:^(FIRQuerySnapshot * _Nullable csnap, NSError * _Nullable cerr) {
-                    if (!cerr && csnap.documents.count > 0) {
-                        FIRDocumentSnapshot *doc = csnap.documents.firstObject;
-                        UserModel *u = [[UserModel alloc] initWithSnapshot:doc];
-                        [self p_cacheUser:u];
-                        DLog(@"✅ query cache hit %@ == %@", field, value);
-                        if (completion) completion(u, nil);
-                    } else {
-                        // If we were checking 'uid' and failed, fall back to 'ID'
-                        if ([field isEqualToString:@"uid"]) {
-                            DLog(@"fallback: trying field ID == %@", cleanValue);
-                            [self p_queryUsersColField:@"ID" equalTo:cleanValue tryServerThenCache:YES completion:completion];
-                        } else {
-                            if (completion) completion(nil, err ?: cerr);
-                        }
-                    }
-                }];
-            } else {
-                if (completion) completion(nil, err);
-            }
+    [q getDocumentsWithSource:FIRFirestoreSourceServer completion:^(FIRQuerySnapshot *snap, NSError *err) {
+        if (![self pp_sessionAllows:generation uid:owner]) {
+            if (completion) completion(nil, [self pp_invalidProfileSessionError]);
             return;
         }
-
-        if (snap.documents.count > 0) {
-            FIRDocumentSnapshot *doc = snap.documents.firstObject;
-            UserModel *u = [[UserModel alloc] initWithSnapshot:doc];
-            [self p_cacheUser:u];
-            DLog(@"✅ query match %@ == %@ (docID=%@)", field, cleanValue, doc.documentID);
-            if (completion) completion(u, nil);
-        } else {
-            if ([field isEqualToString:@"uid"]) {
-                // 2) Not found by 'uid' → try 'ID'
-                DLog(@"no match for uid == %@ → try ID", cleanValue);
-                [self p_queryUsersColField:@"ID" equalTo:cleanValue tryServerThenCache:serverFirst completion:completion];
-            } else {
-                DLog(@"no match for %@ == %@", field, cleanValue);
-                if (completion) completion(nil, nil);
-            }
+        if (err) { if (completion) completion(nil, err); return; }
+        if (snap.documents.count) {
+            UserModel *user = [[UserModel alloc] initWithSnapshot:snap.documents.firstObject];
+            if (completion) completion(user, nil);
+        } else if ([field isEqualToString:@"uid"]) {
+            [self p_queryUsersColField:@"ID" equalTo:cleanValue tryServerThenCache:NO completion:completion];
+        } else if (completion) {
+            completion(nil, nil);
         }
-    };
-
-    if (serverFirst) {
-        DLog(@"try: query %@ == %@ (server)", field, cleanValue);
-        [q getDocumentsWithSource:FIRFirestoreSourceServer completion:handleSnap];
-    } else {
-        [q getDocumentsWithCompletion:handleSnap];
-    }
+    }];
 }
-
-
 
 - (void)fetchUserWithUID:(NSString *)uid
               completion:(void(^)(UserModel * _Nullable user, NSError * _Nullable error))completion
@@ -344,20 +385,26 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         return;
     }
     
-    __block BOOL didReturn = NO;
-        void (^returnOnce)(UserModel *, NSError *) = ^(UserModel *u, NSError *e){
-            if (didReturn) return;
-            didReturn = YES;
-            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(u,e); });
-        };
-    
-    
-    [[self _userDoc:uid] getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable err) {
+    NSString *owner = [PPProSessionCoordinator.shared activeUID];
+    NSUUID *generation = [self pp_captureSessionForUID:owner];
+    if (![self pp_sessionAllows:generation uid:owner]) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+        return;
+    }
+    FIRDocumentReference *doc = [self _userDoc:uid];
+    if (!doc) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+        return;
+    }
+    [doc getDocumentWithSource:FIRFirestoreSourceServer completion:^(FIRDocumentSnapshot *snapshot, NSError *err) {
+        if (![self pp_sessionAllows:generation uid:owner]) {
+            if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+            return;
+        }
         if (err) { if (completion) completion(nil, err); return; }
-        if (!snapshot.exists) { if (completion) completion(nil, nil); return; }
-        UserModel *m = [[UserModel alloc] initWithSnapshot:snapshot];
-        [self p_cacheUser:m];
-        if (completion) completion(m, nil);
+        UserModel *model = snapshot.exists ? [[UserModel alloc] initWithSnapshot:snapshot] : nil;
+        if (model) [self p_cacheUser:model];
+        if (completion) completion(model, nil);
     }];
 }
 
@@ -365,9 +412,11 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 
 - (void)p_cacheUser:(UserModel *)user {
     if (!user) { DLog(@"p_cacheUser: user=nil (skip)"); return; }
-    NSString *uid = (user.ID.length ? user.ID : user.uid);
+    NSString *uid = (user.uid.length ? user.uid : user.ID);
     if (uid.length == 0) { DLog(@"p_cacheUser: uid is empty (skip)"); return; }
 
+    NSUUID *generation = [self pp_captureSessionForUID:uid];
+    if (![self pp_sessionAllows:generation uid:uid]) return;
     // Memory
     [self.userCache setObject:user forKey:uid];
     self.userCacheAges[uid] = [NSDate date];
@@ -375,6 +424,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 
     // Disk (async)
     dispatch_async(self.cacheQueue, ^{
+        if (![self pp_sessionAllows:generation uid:uid]) return;
         DLog(@"p_cacheUser: ⌛️ disk write begin uid=%@", uid);
         [self p_writeUserToDisk:user forUID:uid];
         [self p_writeUserAgeToDisk:[NSDate date] forUID:uid];
@@ -427,6 +477,8 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 // Write to disk
 - (void)p_writeUserToDisk:(UserModel *)user forUID:(NSString *)uid {
     if (!user || uid.length == 0) { DLog(@"p_cacheUser: p_writeUserToDisk: invalid args (user=%@ uid=%@)", user ? @"non-nil" : @"nil", uid); return; }
+    NSUUID *generation = [self pp_captureSessionForUID:uid];
+    if (![self pp_sessionAllows:generation uid:uid] || ![self pp_model:user belongsToUID:uid]) return;
     NSString *path = [self p_userPathForUID:uid];
     NSError *err = nil;
     //NSDictionary *safe = [UserManager sanitizeUserDict:user.toDictionary];
@@ -439,7 +491,8 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         return;
     }
 
-    BOOL ok = [data writeToFile:path atomically:YES];
+    if (![self pp_sessionAllows:generation uid:uid]) return;
+    BOOL ok = [data writeToFile:path options:NSDataWritingAtomic | NSDataWritingFileProtectionCompleteUntilFirstUserAuthentication error:&err];
     if (ok) {
         DLog(@"p_cacheUser: p_writeUserToDisk: ✅ wrote %lu bytes → %@", (unsigned long)data.length, path);
     } else {
@@ -447,8 +500,23 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     }
 }
 
-- (UserModel *)p_readUserFromDisk:(NSString *)uid {
+- (void)p_writeUserToDiskAsync:(UserModel *)user forUID:(NSString *)uid {
+    if (!user || uid.length == 0) return;
+    NSString *uidCopy = [uid copy];
+    NSUUID *generation = [self pp_captureSessionForUID:uidCopy];
+    if (![self pp_sessionAllows:generation uid:uidCopy]) return;
+    dispatch_async(self.cacheQueue, ^{
+        if ([self pp_sessionAllows:generation uid:uidCopy]) [self p_writeUserToDisk:user forUID:uidCopy];
+    });
+}
+
+- (nullable UserModel *)p_readUserFromDisk:(NSString *)uid {
     if (!uid.length) return nil;
+    NSUUID *generation = [self pp_captureSessionForUID:uid];
+    if (![self pp_sessionAllows:generation uid:uid]) return nil;
+
+    UserModel *memCached = [self.userCache objectForKey:uid];
+    if (memCached) return [self pp_model:memCached belongsToUID:uid] ? memCached : nil;
     
     NSString *path = [self p_userPathForUID:uid];
     NSError *err = nil;
@@ -472,16 +540,29 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
             DLog(@"[UserManager] ⚠️ Found legacy dict cache, migrating…");
             u = [[UserModel alloc] initWithDict:dict];
             if (u) {
-                [self p_writeUserToDisk:u forUID:uid]; // overwrite properly
+                [self p_writeUserToDiskAsync:u forUID:uid]; // overwrite asynchronously
             }
         }
     }
 
-
-    
+    if (![self pp_sessionAllows:generation uid:uid] || ![self pp_model:u belongsToUID:uid]) return nil;
+    if (u) {
+        [self.userCache setObject:u forKey:uid];
+    }
     return u;
 }
 
+- (void)p_readUserFromDiskAsync:(NSString *)uid completion:(void(^)(UserModel * _Nullable user))completion {
+    NSString *uidCopy = [uid copy];
+    NSUUID *generation = [self pp_captureSessionForUID:uidCopy];
+    if (![self pp_sessionAllows:generation uid:uidCopy]) { if (completion) completion(nil); return; }
+    dispatch_async(self.cacheQueue, ^{
+        UserModel *diskUser = [self pp_sessionAllows:generation uid:uidCopy] ? [self p_readUserFromDisk:uidCopy] : nil;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (completion) completion([self pp_sessionAllows:generation uid:uidCopy] ? diskUser : nil);
+        });
+    });
+}
 
 - (void)p_writeUserAgeToDisk:(NSDate *)date forUID:(NSString *)uid {
     if (!date) { DLog(@"p_cacheUser: p_writeUserAgeToDisk: date=nil (skip)"); return; }
@@ -573,10 +654,17 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
                          onChange:(void(^)(UserModel * _Nullable user))onChange {
     [self stopListening]; // avoid duplicate listeners
     
-    if (!uid.length) return;
+    NSUUID *generation = [self pp_captureSessionForUID:uid];
+    if (![self pp_sessionAllows:generation uid:uid]) return;
+    NSUUID *listenerGeneration = [NSUUID UUID];
+    self.userListenerGeneration = listenerGeneration;
     
-    FIRDocumentReference *doc = [[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:uid];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return;
+    FIRDocumentReference *doc = [[db collectionWithPath:@"UsersCol"] documentWithPath:uid];
     self.userListener = [doc addSnapshotListener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
+        if (![self.userListenerGeneration isEqual:listenerGeneration] ||
+            ![self pp_sessionAllows:generation uid:uid]) return;
         if (error) {
             DLog(@"❌ Failed to listen user: %@", error.localizedDescription);
             return;
@@ -586,13 +674,16 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
             return;
         }
         
-        self.currentUser = [[UserModel alloc] initWithSnapshot:snapshot];
+        UserModel *model = [[UserModel alloc] initWithSnapshot:snapshot];
+        if (![self pp_model:model belongsToUID:uid]) return;
+        self.currentUser = model;
         DLog(@"🔄 User updated: %@", self.currentUser.UserName);
         if (onChange) onChange(self.currentUser);
     }];
 }
 
 - (void)stopListening {
+    self.userListenerGeneration = nil;
     if (self.userListener) {
         [self.userListener remove];
         self.userListener = nil;
@@ -612,7 +703,9 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         return;
     }
     
-    FIRDocumentReference *doc = [[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:uid];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return;
+    FIRDocumentReference *doc = [[db collectionWithPath:@"UsersCol"] documentWithPath:uid];
     [doc getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         if (error) {
             if (completion) completion(error);
@@ -658,12 +751,17 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 #pragma mark - Sign Out
 
 - (void)signOut {
+    [self signOutWithCompletion:nil];
+}
+
+- (void)signOutWithCompletion:(void (^ _Nullable)(NSError * _Nullable))completion {
     if (self.signOutInProgress) {
+        if (completion) completion([NSError errorWithDomain:@"UserManager" code:409 userInfo:nil]);
         return;
     }
     self.signOutInProgress = YES;
 
-    NSString *userID = PPSafeString([FIRAuth auth].currentUser.uid);
+    NSString *userID = PPSafeString([PPProSessionCoordinator.shared activeUID]);
     if (userID.length == 0) {
         userID = PPSafeString(self.currentUser.uid.length ? self.currentUser.uid : self.currentUser.ID);
     }
@@ -696,10 +794,13 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
                 if (presenter) {
                     [PPAlertHelper showErrorIn:presenter title:kLang(@"Error") subtitle:signOutError.localizedDescription];
                 }
+                if (completion) completion(signOutError);
                 return;
             }
 
+            [strongSelf.sessionFence invalidate];
             strongSelf.currentUser = nil;
+            [PPProSessionCoordinator.shared completeExternalSignOutWithUID:userID];
 
             __block BOOL didFinishLocalTokenInvalidation = NO;
             void (^finishSignOut)(NSError * _Nullable) = ^(NSError * _Nullable localTokenError) {
@@ -710,8 +811,12 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
                 }
                 [notificationAppDelegate pp_endNotificationV2LogoutBarrier];
                 strongSelf.signOutInProgress = NO;
-                [[NSNotificationCenter defaultCenter] postNotificationName:UserManagerAuthStateDidChangeNotification
-                                                                    object:nil];
+                dispatch_block_t publish = ^{
+                    if (completion) completion(nil);
+                    [[NSNotificationCenter defaultCenter] postNotificationName:UserManagerAuthStateDidChangeNotification
+                                                                        object:nil];
+                };
+                if (NSThread.isMainThread) publish(); else dispatch_async(dispatch_get_main_queue(), publish);
             };
 
             // Keep the registration barrier active through token deletion so a
@@ -755,10 +860,20 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     }
     
     NSString *uid = authUser.uid;
-    FIRDocumentReference *docRef = [[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:uid];
+    NSUUID *generation = [self pp_captureSessionForUID:uid];
+    if (![self pp_sessionAllows:generation uid:uid]) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+        return;
+    }
+    FIRDocumentReference *docRef = [self _userDoc:uid];
+    if (!docRef) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+        return;
+    }
     
     [docRef getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot,
                                         NSError * _Nullable error) {
+        if (![self pp_sessionAllows:generation uid:uid]) { if (completion) completion(nil, [self pp_invalidProfileSessionError]); return; }
         if (error) {
             DLog(@"❌ Firestore fetch error: %@", error.localizedDescription);
             if (completion) completion(nil, error);
@@ -768,6 +883,10 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         if (snapshot.exists) {
             // ✅ User exists
             UserModel *user = [[UserModel alloc] initWithSnapshot:snapshot];
+            if (![self pp_model:user belongsToUID:uid]) {
+                if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+                return;
+            }
             self.currentUser = user;
             [self p_cacheUser:user];
             DLog(@"✅ User already exists: %@", user.uid);
@@ -803,6 +922,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
             data[@"permissions"]  = @{};
             
             [docRef setData:data completion:^(NSError * _Nullable error) {
+                if (![self pp_sessionAllows:generation uid:uid]) { if (completion) completion(nil, [self pp_invalidProfileSessionError]); return; }
                 if (error) {
                     DLog(@"❌ Failed to create user doc: %@", error.localizedDescription);
                     if (completion) completion(nil, error);
@@ -979,32 +1099,30 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 - (void)fetchAllUsersForceRefresh:(BOOL)force
                        completion:(void(^)(NSArray<UserModel *> * _Nullable users,
                                            NSError * _Nullable error))completion {
-    // ✅ Return cached users if available and not forced
-    if (!force && self.cachedUsers.count > 0) {
-        DLog(@"[UserManager] Returning %lu cached users", (unsigned long)self.cachedUsers.count);
-        if (completion) completion(self.cachedUsers, nil);
+    (void)force;
+    NSString *owner = [PPProSessionCoordinator.shared activeUID];
+    NSUUID *generation = [self pp_captureSessionForUID:owner];
+    if (![self pp_sessionAllows:generation uid:owner]) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
         return;
     }
-    
-    FIRCollectionReference *usersCol = [[FIRFirestore firestore] collectionWithPath:@"UsersCol"];
-    [[usersCol queryOrderedByField:@"UserName" descending:NO] getDocumentsWithCompletion:^(FIRQuerySnapshot * _Nullable snapshot,
-                                           NSError * _Nullable error) {
-        if (error) {
-            DLog(@"❌ Failed to fetch all users: %@", error.localizedDescription);
-            if (completion) completion(nil, error);
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+        return;
+    }
+    FIRCollectionReference *usersCol = [db collectionWithPath:@"UsersCol"];
+    [[usersCol queryOrderedByField:@"UserName" descending:NO] getDocumentsWithSource:FIRFirestoreSourceServer completion:^(FIRQuerySnapshot *snapshot, NSError *error) {
+        if (![self pp_sessionAllows:generation uid:owner]) {
+            if (completion) completion(nil, [self pp_invalidProfileSessionError]);
             return;
         }
-        
+        if (error) { if (completion) completion(nil, error); return; }
         NSMutableArray *arr = [NSMutableArray array];
         for (FIRDocumentSnapshot *doc in snapshot.documents) {
-            UserModel *u = [[UserModel alloc] initWithSnapshot:doc];
-            if (u) [arr addObject:u];
+            UserModel *model = [[UserModel alloc] initWithSnapshot:doc];
+            if (model) [arr addObject:model];
         }
-        
-        self.cachedUsers = arr;
-        self.lastUsersFetchAt = [NSDate date];
-        DLog(@"✅ Loaded %lu users from Firestore", (unsigned long)arr.count);
-        
         if (completion) completion(arr, nil);
     }];
 }
@@ -1076,7 +1194,7 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
         user.isAdmin = makeAdmin;
         user.isSuperAdmin = isSuperAdmin;
 
-        FIRUser *current = [FIRAuth auth].currentUser;
+        FIRUser *current = [PPProSessionCoordinator.shared currentUser];
         BOOL isCurrentUser = (current != nil) && [current.uid isEqualToString:targetUID];
         if (!isCurrentUser) {
             if (completion) completion(nil);
@@ -1108,7 +1226,9 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 #pragma mark - Private
 
 - (FIRDocumentReference *)_userDoc:(NSString *)uid {
-    return [[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:uid];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return nil;
+    return [[db collectionWithPath:@"UsersCol"] documentWithPath:uid];
 }
 
 - (void)pp_updateAdminAccessForUID:(NSString *)uid
@@ -1130,7 +1250,11 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     if (role != nil) payload[@"role"] = role;
     if (isSuperAdmin != nil) payload[@"isSuperAdmin"] = isSuperAdmin;
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) {
+        if (completion) completion([self pp_invalidProfileSessionError]);
+        return;
+    }
     [[functions HTTPSCallableWithName:@"updateUserAdminAccess"] callWithObject:payload completion:^(__unused FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
         if (error) {
             DLog(@"[UserManager] updateUserAdminAccess failed for %@: %@", uid, error.localizedDescription);
@@ -1261,7 +1385,11 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 
 // in UserManager.m
 - (void)listenAllUsersWithCompletion:(void(^)(NSArray<UserModel *> *users, NSError *error))completion {
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion(nil, [self pp_invalidProfileSessionError]);
+        return;
+    }
 
     [[db collectionWithPath:@"UsersCol"]
      addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {

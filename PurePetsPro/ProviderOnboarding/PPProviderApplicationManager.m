@@ -1035,16 +1035,17 @@ static BOOL PPProviderBool(id value) {
 
 - (void)pp_callSubscriptionFunction:(NSString *)name payload:(NSDictionary *)payload
                          completion:(void(^)(NSDictionary *, NSError *))completion {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
-    if (!uid.length) {
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!uid.length || !functions) {
         dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, PPProviderError(kLang(@"Please login first"))); });
         return;
     }
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:name];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:name];
     callable.timeoutInterval = 20;
     [callable callWithObject:payload completion:^(FIRHTTPSCallableResult *result, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+            if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid]) {
                 completion(nil, PPProviderError(kLang(@"ProSubscriptions_AccountChanged")));
             } else {
                 NSDictionary *payload = PPSafeDict(result.data);
@@ -1095,7 +1096,7 @@ static BOOL PPProviderBool(id value) {
 }
 
 - (void)fetchOwnedSubscriptionsWithCompletion:(void(^)(NSArray<PPProviderOwnedSubscription *> *, NSError *))completion {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     [self pp_fetchOwnedSubscriptionsAfter:@"" uid:uid records:[NSMutableDictionary dictionary]
                                   cursors:[NSMutableSet set] completion:completion];
 }
@@ -1106,7 +1107,7 @@ static BOOL PPProviderBool(id value) {
                              completion:(void(^)(NSArray<PPProviderOwnedSubscription *> *, NSError *))completion {
     [self pp_callSubscriptionFunction:@"getMyProviderSubscriptions" payload:cursor.length ? @{@"after": cursor} : @{}
                            completion:^(NSDictionary *result, NSError *error) {
-        if (error || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+        if (error || ![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid]) {
             completion(nil, error ?: PPProviderError(kLang(@"ProSubscriptions_AccountChanged"))); return;
         }
         NSArray *items = [result[@"partners"] isKindOfClass:NSArray.class] ? result[@"partners"] : @[];
@@ -1132,7 +1133,7 @@ static BOOL PPProviderBool(id value) {
 
 - (void)fetchSubscriptionOptionsForProfileID:(NSString *)profileID
                                 completion:(void(^)(PPProviderOwnedSubscription *, NSArray<PPProviderPlan *> *, NSError *))completion {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     [self pp_callSubscriptionFunction:@"getMyProviderSubscriptions" payload:@{@"profileId": profileID ?: @""}
                            completion:^(NSDictionary *result, NSError *error) {
         if ([error.domain isEqualToString:FIRFunctionsErrorDomain] && error.code == FIRFunctionsErrorCodeInvalidArgument) {
@@ -1140,7 +1141,7 @@ static BOOL PPProviderBool(id value) {
             // only an inventory read. Preserve exact-ID viewing through that
             // same authorized endpoint; never invent request availability.
             [self fetchOwnedSubscriptionsWithCompletion:^(NSArray<PPProviderOwnedSubscription *> *records, NSError *readError) {
-                if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+                if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid]) {
                     completion(nil, nil, PPProviderError(kLang(@"ProSubscriptions_AccountChanged"))); return;
                 }
                 for (PPProviderOwnedSubscription *record in records) {
@@ -1186,9 +1187,12 @@ static BOOL PPProviderBool(id value) {
 - (instancetype)initPrivate {
     self = [super init];
     if (self) {
-        _db = [FIRFirestore firestore];
     }
     return self;
+}
+
+- (FIRFirestore *)db {
+    return [PPProSessionCoordinator.shared activeFirestore];
 }
 
 - (instancetype)init {
@@ -1201,16 +1205,15 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 
 - (void)saveDraft:(PPProviderApplicationDraft *)draft forProviderType:(PPProviderType)providerType {
     if (!draft) return;
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    NSString *key = PPProviderDraftStorageKey(authUser.uid, providerType);
+    NSString *uid = [PPProSessionCoordinator.shared activeUID];
+    NSString *key = PPProviderDraftStorageKey(uid, providerType);
     NSDictionary *dict = [draft dictionaryRepresentation];
     [[NSUserDefaults standardUserDefaults] setObject:dict forKey:key];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 - (nullable PPProviderApplicationDraft *)savedDraftForProviderType:(PPProviderType)providerType {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    NSString *key = PPProviderDraftStorageKey(authUser.uid, providerType);
+    NSString *uid = [PPProSessionCoordinator.shared activeUID];
+    NSString *key = PPProviderDraftStorageKey(uid, providerType);
     NSDictionary *dict = [[NSUserDefaults standardUserDefaults] objectForKey:key];
     if ([dict isKindOfClass:[NSDictionary class]]) {
         return [[PPProviderApplicationDraft alloc] initWithDictionary:dict];
@@ -1219,10 +1222,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 }
 
 - (void)clearDraftForProviderType:(PPProviderType)providerType {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
+    NSString *uid = [PPProSessionCoordinator.shared activeUID];
     NSString *key = PPProviderDraftStorageKey(authUser.uid, providerType);
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:key];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 + (NSString *)localizedTitleForProviderType:(PPProviderType)type {
@@ -1315,7 +1317,7 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 }
 
 - (id<FIRListenerRegistration>)observeProviderStateForCurrentUser:(void(^)(PPProviderOnboardingState * _Nullable state, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
     PPProviderCompositeRegistration *token = [[PPProviderCompositeRegistration alloc] init];
     if (!authUser.uid.length) {
         if (completion) {
@@ -1343,7 +1345,7 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
     __weak typeof(self) weakSelf = self;
     void (^emitState)(NSError * _Nullable) = ^(NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!completion || !self || ![[FIRAuth auth].currentUser.uid isEqualToString:authUser.uid]) {
+        if (!completion || !self || ![[PPProSessionCoordinator.shared activeUID] isEqualToString:authUser.uid]) {
             return;
         }
         if (error) {
@@ -1469,7 +1471,7 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 - (void)pp_fetchPlansForProviderType:(PPProviderType)providerType
                        didRefreshAuth:(BOOL)didRefreshAuth
                            completion:(void(^)(NSArray<PPProviderPlan *> * _Nullable plans, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
     if (authUser.uid.length == 0) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -1559,7 +1561,7 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 }
 
 - (void)pp_refreshAuthSessionWithCompletion:(void(^)(BOOL refreshed))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
     if (authUser.uid.length == 0) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -1681,8 +1683,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
           selectedPlan:(PPProviderPlan *)selectedPlan
         didRefreshAuth:(BOOL)didRefreshAuth
             completion:(void(^)(NSDictionary * _Nullable response, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (authUser.uid.length == 0) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (authUser.uid.length == 0 || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(nil, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
@@ -1691,7 +1694,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:PPProviderSubmitCallableName(draft.providerType)];
     callable.timeoutInterval = 30.0;
 
@@ -1922,8 +1924,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 - (void)updateChecklistProgressForKey:(NSString *)key
                             completed:(BOOL)completed
                            completion:(void(^)(BOOL success, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (authUser.uid.length == 0) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (authUser.uid.length == 0 || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
@@ -1932,7 +1935,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"updatePartnerSetupChecklist"];
     callable.timeoutInterval = 30.0;
 
@@ -1958,8 +1960,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 }
 
 - (void)activatePartnerAccountWithCompletion:(void(^)(BOOL success, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (authUser.uid.length == 0) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (authUser.uid.length == 0 || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
@@ -1968,7 +1971,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"activatePartnerAccount"];
     callable.timeoutInterval = 30.0;
 
@@ -1997,8 +1999,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
                       patch:(NSDictionary *)patch
             expectedVersion:(nullable NSNumber *)expectedVersion
                  completion:(void(^)(BOOL success, NSDictionary * _Nullable result, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (authUser.uid.length == 0) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (authUser.uid.length == 0 || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, nil, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
@@ -2007,7 +2010,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"updatePartnerProfileDomain"];
     callable.timeoutInterval = 30.0;
 
@@ -2037,8 +2039,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 
 - (void)fetchProfileDomain:(NSString *)domain
                 completion:(void(^)(NSDictionary * _Nullable domainData, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (authUser.uid.length == 0) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (authUser.uid.length == 0 || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(nil, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
@@ -2047,7 +2050,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerProfileDomain"];
     callable.timeoutInterval = 30.0;
 
@@ -2075,8 +2077,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 
 - (void)fetchSyncSnapshotWithClientVersion:(nullable NSNumber *)clientVersion
                                 completion:(void(^)(BOOL inSync, BOOL catchUpRequired, NSDictionary * _Nullable snapshot, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (authUser.uid.length == 0) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (authUser.uid.length == 0 || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, NO, nil, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
@@ -2085,7 +2088,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"fetchPartnerSyncSnapshot"];
     callable.timeoutInterval = 30.0;
 
@@ -2114,8 +2116,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 }
 
 - (void)reconcileReadModelsWithServer:(void(^)(BOOL reconciled, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (authUser.uid.length == 0) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (authUser.uid.length == 0 || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
@@ -2124,7 +2127,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"syncPartnerReadModels"];
     callable.timeoutInterval = 30.0;
 
@@ -2151,8 +2153,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 }
 
 - (void)fetchRestrictionsSummary:(void(^)(NSDictionary * _Nullable summary, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (authUser.uid.length == 0) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (authUser.uid.length == 0 || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(nil, PPProviderError(kLang(@"ProviderSubmitSessionFailed")));
@@ -2161,7 +2164,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerRestrictionsSummary"];
     callable.timeoutInterval = 30.0;
 
@@ -2194,8 +2196,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
                                 expectedVersion:(nullable NSNumber *)expectedVersion
                                  idempotencyKey:(nullable NSString *)idempotencyKey
                                      completion:(void(^)(BOOL success, NSDictionary * _Nullable response, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (!authUser) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!authUser || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
@@ -2206,7 +2209,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"submitPartnerReactivationRequest"];
     callable.timeoutInterval = 30.0;
 
@@ -2238,8 +2240,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 }
 
 - (void)fetchReactivationDossierWithCompletion:(void(^)(NSDictionary * _Nullable dossier, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (!authUser) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!authUser || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
@@ -2250,7 +2253,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerReactivationDossierData"];
     callable.timeoutInterval = 30.0;
 
@@ -2281,8 +2283,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
                                   expectedVersion:(nullable NSNumber *)expectedVersion
                                    idempotencyKey:(nullable NSString *)idempotencyKey
                                        completion:(void(^)(BOOL success, NSDictionary * _Nullable response, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (!authUser) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!authUser || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
@@ -2293,7 +2296,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"initiatePartnerOffboardingWorkflow"];
     callable.timeoutInterval = 30.0;
 
@@ -2324,8 +2326,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 }
 
 - (void)fetchOffboardingDossierWithCompletion:(void(^)(NSDictionary * _Nullable dossier, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (!authUser) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!authUser || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
@@ -2336,7 +2339,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerOffboardingDossierData"];
     callable.timeoutInterval = 30.0;
 
@@ -2364,8 +2366,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 - (void)fetchPartnerAuditTrailWithLimit:(nullable NSNumber *)limit
                          filterCategory:(nullable NSString *)filterCategory
                              completion:(void(^)(BOOL success, NSArray<NSDictionary *> * _Nullable entries, NSDictionary * _Nullable verification, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (!authUser) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!authUser || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, nil, nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
@@ -2376,7 +2379,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerAuditTrail"];
     callable.timeoutInterval = 30.0;
 
@@ -2409,8 +2411,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 }
 
 - (void)exportPrivacyDataWithCompletion:(void(^)(BOOL success, NSDictionary * _Nullable exportData, NSError * _Nullable error))completion {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (!authUser) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!authUser || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, nil, [NSError errorWithDomain:@"PPProviderApplicationManager"
@@ -2421,7 +2424,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"exportPartnerPrivacyData"];
     callable.timeoutInterval = 30.0;
 
@@ -2451,8 +2453,9 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
                              forceRefresh:(BOOL)forceRefresh
                                completion:(void(^)(BOOL notModified, NSDictionary * _Nullable cockpit, NSString * _Nullable etag, NSNumber * _Nullable generation, NSError * _Nullable error))completion
 {
-    FIRUser *authUser = [FIRAuth auth].currentUser;
-    if (!authUser) {
+    FIRUser *authUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!authUser || !functions) {
         if (completion) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, nil, nil, nil, [NSError errorWithDomain:@"PPProviderApplicationManager" code:401 userInfo:@{NSLocalizedDescriptionKey: kLang(@"error_not_authenticated")}]);
@@ -2461,7 +2464,6 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
         return;
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"getPartnerCockpitSummary"];
     callable.timeoutInterval = 20.0;
 

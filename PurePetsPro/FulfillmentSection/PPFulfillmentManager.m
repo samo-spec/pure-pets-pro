@@ -86,6 +86,8 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 @property (nonatomic, strong) id<FIRListenerRegistration> accountListener;
 @property (nonatomic, strong) id<FIRListenerRegistration> profilesListener;
 @property (nonatomic, strong) id authHandle;
+@property (nonatomic, strong) FIRAuth *authOwner;
+@property (nonatomic, strong) id suspendObserver;
 @property (nonatomic, strong) NSDictionary *account;
 @property (nonatomic, strong) NSArray<FIRDocumentSnapshot *> *profiles;
 @property (nonatomic, strong) NSMutableArray<id<FIRListenerRegistration>> *children;
@@ -104,8 +106,8 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 
 @implementation PPProviderFulfillmentQueue
 - (BOOL)sessionCurrent {
-    return !self.removed && [[FIRAuth auth].currentUser.uid isEqualToString:self.uid] &&
-        ![FIRAuth auth].currentUser.isAnonymous;
+    FIRUser *activeUser = [PPProSessionCoordinator.shared currentUser];
+    return !self.removed && [activeUser.uid isEqualToString:self.uid] && !activeUser.isAnonymous;
 }
 - (void)clearQueries {
     self.generation += 1;
@@ -120,8 +122,13 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
     [self clearQueries];
     [self.accountListener remove]; self.accountListener = nil;
     [self.profilesListener remove]; self.profilesListener = nil;
-    if (self.authHandle) [[FIRAuth auth] removeAuthStateDidChangeListener:self.authHandle];
+    if (self.authHandle) [(self.authOwner ?: [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authHandle];
     self.authHandle = nil;
+    self.authOwner = nil;
+    if (self.suspendObserver) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self.suspendObserver];
+        self.suspendObserver = nil;
+    }
     self.handler = nil;
 }
 - (void)fail:(NSError *)error {
@@ -252,11 +259,28 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 - (void)start {
     self.limit = 50;
     [self clearQueries];
+    if (self.authHandle) {
+        [(self.authOwner ?: [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authHandle];
+        self.authHandle = nil;
+    }
+    if (self.suspendObserver) {
+        [[NSNotificationCenter defaultCenter] removeObserver:self.suspendObserver];
+        self.suspendObserver = nil;
+    }
     __weak typeof(self) weakSelf = self;
-    self.authHandle = [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
+    FIRAuth *auth = [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+    self.authOwner = auth;
+    self.authHandle = [auth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || self.removed || [self sessionCurrent]) return;
         if (self.handler) self.handler(@[], PPFulfillmentManagerError(401, kLang(@"Fulfillment_LoadError")), NO);
+        [self remove];
+    }];
+    self.suspendObserver = [[NSNotificationCenter defaultCenter] addObserverForName:PPProSessionDidSuspendNotification
+                                                                             object:nil
+                                                                              queue:NSOperationQueue.mainQueue
+                                                                         usingBlock:^(__unused NSNotification * _Nonnull note) {
+        __strong typeof(weakSelf) self = weakSelf;
         [self remove];
     }];
     self.accountListener = [[[self.db collectionWithPath:@"UsersCol"] documentWithPath:self.uid]
@@ -298,13 +322,18 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 
 - (instancetype)initPrivate {
     if (self = [super init]) {
-        _db = [FIRFirestore firestore];
     }
     return self;
 }
 
+- (FIRFirestore *)db {
+    return [PPProSessionCoordinator.shared activeFirestore];
+}
+
 - (FIRCollectionReference *)collection {
-    return [self.db collectionWithPath:kColFulfillmentOrders];
+    FIRFirestore *db = self.db;
+    if (!db) return nil;
+    return [db collectionWithPath:kColFulfillmentOrders];
 }
 
 - (FIRDocumentReference *)documentForID:(NSString *)fulfillmentID {
@@ -325,7 +354,7 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
                                                                          NSError *error,
                                                                          BOOL fromCache))stateHandler {
     NSString *uid = PPFulfillmentTrimmedString(ownerID);
-    NSString *authenticatedUID = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *authenticatedUID = PPFulfillmentTrimmedString([PPProSessionCoordinator.shared activeUID]);
     if (uid.length == 0 || ![authenticatedUID isEqualToString:uid]) {
         if (stateHandler) stateHandler(nil, PPFulfillmentManagerError(401, kLang(@"DeliveryOrderUnavailable")), NO);
         return nil;
@@ -357,12 +386,12 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 - (id<FIRListenerRegistration>)observeEventsForFulfillmentID:(NSString *)fulfillmentID
                                               stateHandler:(void (^)(NSArray<NSDictionary *> *events, NSError *error, BOOL fromCache))stateHandler {
     if (!stateHandler) return nil;
-    NSString *uid = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *uid = PPFulfillmentTrimmedString([PPProSessionCoordinator.shared activeUID]);
     if (!uid.length || !fulfillmentID.length) { stateHandler(@[], PPFulfillmentManagerError(401, nil), NO); return nil; }
     FIRQuery *query = [[[[self documentForID:fulfillmentID] collectionWithPath:@"events"] queryOrderedByField:@"createdAt" descending:YES] queryLimitedTo:50];
     return [query addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot *snapshot, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
             if (error || !snapshot) { stateHandler(@[], error ?: PPFulfillmentManagerError(503, nil), NO); return; }
             NSMutableArray<NSDictionary *> *events = [NSMutableArray array];
             for (FIRDocumentSnapshot *doc in snapshot.documents) {
@@ -391,7 +420,7 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
                                                                      NSError * _Nullable error,
                                                                      BOOL fromCache))stateHandler {
     NSString *resolvedFulfillmentID = [fulfillmentID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    NSString *listenerUID = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *listenerUID = PPFulfillmentTrimmedString([PPProSessionCoordinator.shared activeUID]);
     if (resolvedFulfillmentID.length == 0) {
         if (stateHandler) stateHandler(nil, PPFulfillmentManagerError(400, nil), NO);
         return nil;
@@ -403,7 +432,7 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 
     return [[self documentForID:resolvedFulfillmentID] addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:listenerUID]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:listenerUID]) return;
             if (error || !snapshot.exists || ![snapshot.data isKindOfClass:NSDictionary.class]) {
                 if (stateHandler) stateHandler(nil, error ?: PPFulfillmentManagerError(404, kLang(@"DeliveryOrderUnavailable")), NO);
                 return;
@@ -417,7 +446,7 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 - (void)fetchFulfillmentWithID:(NSString *)fulfillmentID
                      completion:(void (^)(PPFulfillmentModel * _Nullable fulfillment, NSError * _Nullable error))completion {
     NSString *resolvedFulfillmentID = [fulfillmentID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    NSString *requestUID = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *requestUID = PPFulfillmentTrimmedString([PPProSessionCoordinator.shared activeUID]);
     if (resolvedFulfillmentID.length == 0) {
         if (completion) {
             completion(nil, [NSError errorWithDomain:@"PPFulfillmentManager" code:400 userInfo:nil]);
@@ -431,7 +460,7 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 
     [[self documentForID:resolvedFulfillmentID] getDocumentWithSource:FIRFirestoreSourceServer completion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:requestUID]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:requestUID]) return;
             if (error || !snapshot.exists || ![snapshot.data isKindOfClass:NSDictionary.class] || snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites) {
                 if (completion) completion(nil, error ?: PPFulfillmentManagerError(503, kLang(@"ProFulfillment_ReadbackPending")));
                 return;
@@ -495,7 +524,7 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
                                            note:(NSString *)note
                                  pickupBranchID:(NSString *)pickupBranchID
                                      completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
-    NSString *requestUID = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *requestUID = PPFulfillmentTrimmedString([PPProSessionCoordinator.shared activeUID]);
     NSString *resolvedNote = PPFulfillmentTrimmedString(note);
     UserModel *user = UsrMgr.currentUser ?: AppMgr.currentUser;
     BOOL isOfficialPlatformOwner = [requestUID isEqualToString:PPFulfillmentOfficialOwnerUID] ||
@@ -539,7 +568,7 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 - (void)fetchPickupOptionsForFulfillment:(PPFulfillmentModel *)fulfillment
                          afterBranchID:(NSString *)afterBranchID
                             completion:(void (^)(NSDictionary *, NSError *))completion {
-    NSString *uid = PPFulfillmentTrimmedString(FIRAuth.auth.currentUser.uid);
+    NSString *uid = PPFulfillmentTrimmedString([PPProSessionCoordinator.shared activeUID]);
     NSString *fulfillmentID = PPFulfillmentTrimmedString(fulfillment.fulfillmentID);
     NSString *status = PPFulfillmentTrimmedString(fulfillment.status).lowercaseString;
     if (!uid.length || !fulfillmentID.length ||
@@ -551,12 +580,16 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
     }
     NSMutableDictionary *payload = [@{@"fulfillmentID":fulfillmentID, @"expectedStatus":status} mutableCopy];
     if (afterBranchID.length) payload[@"afterBranchId"] = PPFulfillmentTrimmedString(afterBranchID);
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"]
-        HTTPSCallableWithName:@"staffGetOfficialFulfillmentPickupOptions"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) {
+        if (completion) completion(nil, PPFulfillmentManagerError(401, kLang(@"ProPickup_SessionChanged")));
+        return;
+    }
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"staffGetOfficialFulfillmentPickupOptions"];
     callable.timeoutInterval = 30;
     [callable callWithObject:payload completion:^(FIRHTTPSCallableResult *result, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (![PPFulfillmentTrimmedString(FIRAuth.auth.currentUser.uid) isEqualToString:uid]) {
+            if (![PPFulfillmentTrimmedString([PPProSessionCoordinator.shared activeUID]) isEqualToString:uid]) {
                 if (completion) completion(nil, PPFulfillmentManagerError(401, kLang(@"ProPickup_SessionChanged")));
                 return;
             }
@@ -604,7 +637,7 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
                                    note:(NSString *)note
                          pickupBranchID:(NSString *)pickupBranchID
                              completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
-    NSString *requestUID = PPFulfillmentTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *requestUID = PPFulfillmentTrimmedString([PPProSessionCoordinator.shared activeUID]);
     NSString *resolvedFulfillmentID = PPFulfillmentTrimmedString(fulfillmentID);
     NSString *resolvedAction = PPFulfillmentTrimmedString(action).lowercaseString;
     NSString *resolvedExpectedStatus = PPFulfillmentTrimmedString(expectedStatus).lowercaseString;
@@ -623,7 +656,12 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
                                                           resolvedNote);
     }
 
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) {
+        NSError *error = PPFulfillmentManagerError(401, kLang(@"DeliveryOrderUnavailable"));
+        if (completion) completion(NO, error.localizedDescription, error);
+        return;
+    }
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:callableName];
     callable.timeoutInterval = 30.0;
 
@@ -648,7 +686,7 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 
     [callable callWithObject:[payload copy] completion:^(FIRHTTPSCallableResult *result, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:requestUID]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:requestUID]) return;
             if (error) {
                 NSString *msg = error.localizedDescription;
                 NSDictionary *details = error.userInfo[FIRFunctionsErrorDetailsKey];

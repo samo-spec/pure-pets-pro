@@ -1,0 +1,14 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const root = path.resolve(__dirname,'..','PurePetsPro');
+const ui = fs.readFileSync(path.join(root,'AdminCore/Auth/PPProLoginSurfaceController.swift'),'utf8');
+const auth = fs.readFileSync(path.join(root,'AdminCore/Auth/AdminLoginViewController.m'),'utf8');
+assert(ui.includes('didChangeCountryCode') && auth.includes('didChangeCountryCode:'), 'Country selection must reach Objective-C owner immediately');
+assert(ui.includes('accessibilityFocused($authenticationFocused)'), 'Partner application must move accessible focus');
+assert(ui.includes('ProLoginProviderHeadline') && ui.includes('ProLoginProviderSubtitle'), 'Partner application must communicate its actual action');
+assert(!ui.slice(ui.indexOf('private struct PPProIdentityGateView:'),ui.indexOf('// MARK: - PULSE COMMAND CENTER')).includes('g.circle.fill'), 'Google action must not use generic fake mark');
+assert(!auth.includes('3.0 * NSEC_PER_SEC'), 'OTP resend must follow actual completion, not a fixed timer');
+assert(auth.includes('verifyAction.enabled = NO'), 'Incomplete code must not dismiss OTP entry');
+assert(!auth.includes('stringForKey:kPPDefaultsVerificationIDKey'), 'Do not restore an old unscoped OTP challenge');
+console.log('PASS login reviewer regression contracts');

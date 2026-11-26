@@ -27,8 +27,10 @@ NS_ASSUME_NONNULL_BEGIN
 
 
 - (void)p_writeUserToDisk:(UserModel *)user forUID:(NSString *)uid;
+- (void)p_writeUserToDiskAsync:(UserModel *)user forUID:(NSString *)uid;
 - (void)p_cacheUser:(UserModel *)user;
-- (UserModel *)p_readUserFromDisk:(NSString *)uid;
+- (nullable UserModel *)p_readUserFromDisk:(NSString *)uid;
+- (void)p_readUserFromDiskAsync:(NSString *)uid completion:(void(^)(UserModel * _Nullable user))completion;
 - (void)invalidateUserCacheForUID:(NSString *)uid;
 
 
@@ -85,6 +87,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Sign out and clear cached user
 - (void)signOut;
+- (void)signOutWithCompletion:(void (^ _Nullable)(NSError * _Nullable error))completion;
 
 // Ensure user document exists when logging in with Firebase Auth
 - (void)ensureUserDocumentExistsForAuthUser:(FIRUser *)authUser

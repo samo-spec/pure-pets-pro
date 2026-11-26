@@ -123,7 +123,7 @@ static NSString *PPNotificationsRouteTrimmedString(id value)
 
 static NSString *PPProAuthenticatedNotificationUID(void)
 {
-    return PPNotificationsRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    return PPNotificationsRouteTrimmedString([PPProSessionCoordinator.shared activeUID]);
 }
 
 static BOOL PPNotificationsRouteStringsEqual(id lhs, id rhs)

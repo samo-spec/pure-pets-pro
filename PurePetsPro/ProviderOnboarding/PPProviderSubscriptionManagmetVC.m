@@ -32,7 +32,7 @@
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor ppBackground];
     self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
-    self.actorUID = [FIRAuth auth].currentUser.uid ?: @"";
+    self.actorUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
 
     __weak typeof(self) weakSelf = self;
     self.hostingController = [[PPProviderSubscriptionStudioHostingController alloc]
@@ -55,7 +55,7 @@
     self.hostingController.workforceOnly = [user.uid isEqualToString:self.actorUID] && [user.accountType isEqualToString:@"staff"];
     self.hostingController.onSelectSubscription = ^(NSString *profileID) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || ![self.actorUID isEqualToString:[FIRAuth auth].currentUser.uid] || !profileID.length) return;
+        if (!self || ![self.actorUID isEqualToString:[PPProSessionCoordinator.shared activeUID]] || !profileID.length) return;
         PPProviderSubscriptionManagmetVC *detail = [[PPProviderSubscriptionManagmetVC alloc] init];
         detail.selectedSubscriptionProfileID = profileID;
         detail.suppressAutoDashboardTransition = YES;
@@ -64,7 +64,7 @@
     };
     self.hostingController.onApplications = ^(BOOL addFeature) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || ![self.actorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
+        if (!self || ![self.actorUID isEqualToString:[PPProSessionCoordinator.shared activeUID]]) return;
         SceneDelegate *scene = (SceneDelegate *)self.view.window.windowScene.delegate;
         if ([scene isKindOfClass:SceneDelegate.class]) [scene cancelPendingProAccessRouting];
         PPProviderApplicationStatusViewController *controller = [[PPProviderApplicationStatusViewController alloc] init];
@@ -74,7 +74,7 @@
     };
     self.hostingController.onMessage = ^(NSString *title, NSString *body) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || ![self.actorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
+        if (!self || ![self.actorUID isEqualToString:[PPProSessionCoordinator.shared activeUID]]) return;
         [PPAlertHelper showInfoIn:self title:title subtitle:body];
     };
     self.hostingController.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];

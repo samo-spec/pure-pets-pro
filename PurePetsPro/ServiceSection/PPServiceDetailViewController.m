@@ -449,7 +449,8 @@
     if (self.service.serviceID.length == 0) return;
 
     __weak typeof(self) weakSelf = self;
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return;
     FIRCollectionReference *revCol = [[[db collectionWithPath:@"serviceOffers"] documentWithPath:self.service.serviceID] collectionWithPath:@"reviews"];
     [revCol getDocumentsWithCompletion:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         if (!weakSelf) return;

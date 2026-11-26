@@ -663,7 +663,7 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
 
 - (NSString *)pp_currentUID
 {
-    return PPProHubTrimmedString([FIRAuth auth].currentUser.uid);
+    return PPProHubTrimmedString([PPProSessionCoordinator.shared activeUID]);
 }
 
 - (void)pp_startInboxListenerIfNeeded
@@ -692,7 +692,7 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:strongSelf.uid]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:strongSelf.uid]) return;
 
             strongSelf.inboxError = error;
             if (error) {
@@ -890,7 +890,7 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
     if (indexPath.row >= (NSInteger)self.items.count) return;
 
     PPProHubNotificationItem *item = self.items[indexPath.row];
-    if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:(self.uid ?: @"")]) {
+    if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:(self.uid ?: @"")]) {
         [self reloadNotifications];
         return;
     }
@@ -964,7 +964,9 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
         return;
     }
 
-    FIRDocumentReference *threadRef = [[[FIRFirestore firestore] collectionWithPath:@"Chats"] documentWithPath:threadID];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return;
+    FIRDocumentReference *threadRef = [[db collectionWithPath:@"Chats"] documentWithPath:threadID];
     __weak typeof(self) weakSelf = self;
     [threadRef getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -998,7 +1000,9 @@ static NSString *PPProHubInboxSymbolName(NSDictionary *payload)
         return;
     }
 
-    FIRDocumentReference *orderRef = [[[FIRFirestore firestore] collectionWithPath:@"Orders"] documentWithPath:orderID];
+    FIRFirestore *orderDB = [PPProSessionCoordinator.shared activeFirestore];
+    if (!orderDB) return;
+    FIRDocumentReference *orderRef = [[orderDB collectionWithPath:@"Orders"] documentWithPath:orderID];
     __weak typeof(self) weakSelf = self;
     [orderRef getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{

@@ -134,12 +134,19 @@ static BOOL PPMarketplaceErrorLooksUnavailable(NSError *error, NSString *message
 }
 
 - (FIRCollectionReference *)col {
-    return [[FIRFirestore firestore] collectionWithPath:@"petAccessories"];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return nil;
+    return [db collectionWithPath:@"petAccessories"];
 }
 
 - (void)callFunction:(NSString *)name payload:(NSDictionary *)payload completion:(void (^)(BOOL, NSString *, NSError *))completion {
     NSLog(@"[MarketPM] callFunction: %@ payload: %@", name, payload);
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) {
+        NSError *err = [NSError errorWithDomain:@"PurePetsPro.Marketplace" code:401 userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}];
+        if (completion) completion(NO, err.localizedDescription, err);
+        return;
+    }
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:name];
     callable.timeoutInterval = 30.0;
     [callable callWithObject:payload completion:^(FIRHTTPSCallableResult *result, NSError *error) {
@@ -154,7 +161,13 @@ static BOOL PPMarketplaceErrorLooksUnavailable(NSError *error, NSString *message
 - (void)callFunctionResult:(NSString *)name
                    payload:(NSDictionary *)payload
                 completion:(void (^)(NSDictionary *result, NSError *error))completion {
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:name];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) {
+        NSError *err = [NSError errorWithDomain:@"PurePetsPro.Marketplace" code:401 userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}];
+        if (completion) completion(nil, err);
+        return;
+    }
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:name];
     callable.timeoutInterval = 30.0;
     [callable callWithObject:payload ?: @{} completion:^(FIRHTTPSCallableResult *result, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -193,17 +206,29 @@ static BOOL PPMarketplaceErrorLooksUnavailable(NSError *error, NSString *message
     FIRQuery *q = [[self.col queryWhereField:@"ownerID" isEqualTo:ownerID ?: @""] queryLimitedTo:50];
     return [q addSnapshotListener:^(FIRQuerySnapshot *snap, NSError *error) {
         if (!onChange) return;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (error) { NSLog(@"[MarketPM] observeMarketItems error: %@", error); onChange(nil, error); return; }
-            NSMutableArray *items = [NSMutableArray array];
-            for (FIRDocumentSnapshot *doc in snap.documents) {
+        if (error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSLog(@"[MarketPM] observeMarketItems error: %@", error);
+                onChange(nil, error);
+            });
+            return;
+        }
+        NSArray<FIRDocumentSnapshot *> *docs = snap.documents ?: @[];
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            NSMutableArray *items = [NSMutableArray arrayWithCapacity:docs.count];
+            for (FIRDocumentSnapshot *doc in docs) {
                 PPProviderMarketItem *item = [PPProviderMarketItem fromDictionary:PPSafeDict(doc.data) itemID:doc.documentID];
                 if (item.accessKindType != 1 && item.accessKindType != 2) continue;
                 [items addObject:item];
             }
-            [items sortUsingComparator:^NSComparisonResult(PPProviderMarketItem *a, PPProviderMarketItem *b) { return [b.updatedAt compare:a.updatedAt]; }];
-            NSLog(@"[MarketPM] observeMarketItems loaded %ld items (filtered to kind 1/2)", (long)items.count);
-            onChange([items copy], nil);
+            [items sortUsingComparator:^NSComparisonResult(PPProviderMarketItem *a, PPProviderMarketItem *b) {
+                return [b.updatedAt compare:a.updatedAt];
+            }];
+            NSArray<PPProviderMarketItem *> *sortedItems = [items copy];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSLog(@"[MarketPM] observeMarketItems loaded %ld items (filtered to kind 1/2)", (long)sortedItems.count);
+                onChange(sortedItems, nil);
+            });
         });
     }];
 }

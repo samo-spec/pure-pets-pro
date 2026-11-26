@@ -425,7 +425,7 @@ public final class PPServiceCockpitStore: ObservableObject {
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         guard let idx = bookings.firstIndex(where: { $0.id == id }) else { return }
         bookings[idx].status = newStatus
-        PPServiceManager.sharedManager().updateBookingStatus(id, status: newStatus) { _ in }
+        PPServiceManager.shared().updateBookingStatus(id, status: newStatus) { _ in }
         let msg = Language.isRTL() ? "تم تحديث حالة الحجز بنجاح" : "Booking status updated"
         showToast(msg)
     }

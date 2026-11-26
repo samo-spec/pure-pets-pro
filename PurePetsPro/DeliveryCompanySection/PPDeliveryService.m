@@ -713,7 +713,11 @@ static NSError *PPDeliveryCompanyContextError(void) {
 - (void)callFunction:(NSString *)name
               params:(NSDictionary *)params
           completion:(void(^)(id _Nullable result, NSError * _Nullable error))completion {
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany" code:FIRFunctionsErrorCodeUnauthenticated userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}]);
+        return;
+    }
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:name];
     callable.timeoutInterval = 30.0;
     [callable callWithObject:params ?: @{} completion:^(FIRHTTPSCallableResult *result, NSError *error) {
@@ -785,13 +789,13 @@ static NSError *PPDeliveryCompanyContextError(void) {
     }
     NSDictionary *params = @{@"pageSize": @100, @"companyId": profile.companyID,
                              @"supportsFulfillmentReassignment": @YES};
-    NSString *uid = [FIRAuth auth].currentUser.uid;
+    NSString *uid = [PPProSessionCoordinator.shared activeUID];
 
     __weak typeof(self) weakSelf = self;
     [self callFunction:@"getDeliveryCommandCenter"
                 params:params
             completion:^(id result, NSError *error) {
-        if (![[FIRAuth auth].currentUser.uid isEqualToString:uid] ||
+        if (![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid] ||
             ![[PPDeliveryCompanyService shared].verifiedProfile.companyID isEqualToString:profile.companyID]) {
             if (completion) completion(nil, PPDeliveryCompanyContextError());
             return;
@@ -919,7 +923,7 @@ static NSError *PPDeliveryCompanyContextError(void) {
 - (void)fetchDrivingRouteFromPickup:(NSDictionary *)pickup
                            dropoff:(NSDictionary *)dropoff
                         completion:(void(^)(NSDictionary *, NSError *))completion {
-    NSString *uid = [FIRAuth auth].currentUser.uid;
+    NSString *uid = [PPProSessionCoordinator.shared activeUID];
     NSString *companyID = [self effectiveCompanyID];
     PPDeliveryCompanyProfile *profile = [PPDeliveryCompanyService shared].verifiedProfile;
     if (uid.length == 0 || companyID.length == 0 || ![profile.companyID isEqualToString:companyID]) {
@@ -930,7 +934,7 @@ static NSError *PPDeliveryCompanyContextError(void) {
     // or new order read is introduced into the client.
     NSDictionary *params = @{@"pickup": pickup ?: @{}, @"dropoff": dropoff ?: @{}, @"selectedStop": @"DROPOFF"};
     [self callFunction:@"getDeliveryDrivingRoutes" params:params completion:^(id result, NSError *error) {
-        if (![[FIRAuth auth].currentUser.uid isEqualToString:uid] ||
+        if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid] ||
             ![[PPDeliveryCompanyService shared].verifiedProfile.companyID isEqualToString:companyID]) {
             if (completion) completion(nil, PPDeliveryCompanyContextError());
             return;
@@ -960,11 +964,11 @@ static NSError *PPDeliveryCompanyContextError(void) {
     }
     NSDictionary *params = @{@"requestId": safeRequestID, @"companyId": companyID,
                              @"supportsFulfillmentReassignment": @YES};
-    NSString *uid = [FIRAuth auth].currentUser.uid;
+    NSString *uid = [PPProSessionCoordinator.shared activeUID];
 
     __weak typeof(self) weakSelf = self;
     [self callFunction:@"getDeliveryDossier" params:params completion:^(id result, NSError *error) {
-        if (![[FIRAuth auth].currentUser.uid isEqualToString:uid] ||
+        if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid] ||
             ![[PPDeliveryCompanyService shared].verifiedProfile.companyID isEqualToString:companyID]) {
             if (completion) completion(nil, PPDeliveryCompanyContextError());
             return;
@@ -1310,7 +1314,7 @@ static NSError *PPDeliveryCompanyContextError(void) {
               expectedRevision:(NSInteger)expectedRevision
                      commandID:(NSString *)commandID
                     completion:(void(^)(PPDeliveryCompanyMemberRecord *, NSError *))completion {
-    NSString *actorUID = [FIRAuth auth].currentUser.uid.copy ?: @"";
+    NSString *actorUID = [PPProSessionCoordinator.shared activeUID].copy ?: @"";
     if (actorUID.length == 0 || driverUID.length == 0 || companyID.length == 0 || commandID.length == 0 || expectedRevision < 0) {
         if (completion) completion(nil, PPDeliveryInvalidResponseError());
         return;
@@ -1321,7 +1325,7 @@ static NSError *PPDeliveryCompanyContextError(void) {
                          @"commandId": commandID,
                          @"reason": allowed ? @"driver_self_acceptance.enabled" : @"driver_self_acceptance.disabled"}
             completion:^(id result, NSError *error) {
-        if (![[FIRAuth auth].currentUser.uid isEqualToString:actorUID]) {
+        if (![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:actorUID]) {
             if (completion) completion(nil, [NSError errorWithDomain:FIRFunctionsErrorDomain code:FIRFunctionsErrorCodeUnauthenticated
                 userInfo:@{NSLocalizedDescriptionKey: kLang(@"Delivery_Driver_Acceptance_Sync_Error")}]);
             return;
@@ -1339,7 +1343,7 @@ static NSError *PPDeliveryCompanyContextError(void) {
         }
         // A command receipt is not proof that the displayed projection is current.
         [self fetchCompanyMembersForCompanyID:companyID completion:^(NSArray<PPDeliveryCompanyMemberRecord *> *members, NSError *readError) {
-            if (![[FIRAuth auth].currentUser.uid isEqualToString:actorUID]) {
+            if (![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:actorUID]) {
                 if (completion) completion(nil, [NSError errorWithDomain:FIRFunctionsErrorDomain code:FIRFunctionsErrorCodeUnauthenticated
                     userInfo:@{NSLocalizedDescriptionKey: kLang(@"Delivery_Driver_Acceptance_Sync_Error")}]);
                 return;

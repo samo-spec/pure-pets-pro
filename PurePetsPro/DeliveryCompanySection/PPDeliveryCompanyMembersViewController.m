@@ -1211,7 +1211,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 - (instancetype)initWithMember:(PPDeliveryCompanyMember *)member {
     if (self = [super init]) {
         _member = member;
-        _acceptanceActorUID = [FIRAuth auth].currentUser.uid.copy ?: @"";
+        _acceptanceActorUID = [PPProSessionCoordinator.shared activeUID].copy ?: @"";
         self.modalPresentationStyle = UIModalPresentationPageSheet;
     }
     return self;
@@ -1336,7 +1336,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
                                                   icon:@"message.fill"
                                                  color:[UIColor ppInfo]
                                                 action:@selector(chatTapped)];
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     BOOL canChat = self.member.uid.length > 0 && ![self.member.uid isEqualToString:currentUID];
     chatButton.enabled = canChat;
     chatButton.alpha = canChat ? 1.0 : 0.48;
@@ -1579,14 +1579,14 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
     [self.acceptanceButton setTitle:kLang(key) forState:UIControlStateNormal];
     self.acceptanceButton.hidden = !self.member.canManageSelfAcceptance;
     self.acceptanceButton.enabled = !self.updatingAcceptance &&
-        [self.acceptanceActorUID isEqualToString:[FIRAuth auth].currentUser.uid] &&
+        [self.acceptanceActorUID isEqualToString:[PPProSessionCoordinator.shared activeUID]] &&
         (allowed || [self.member.status isEqualToString:@"active"]);
     self.acceptanceButton.alpha = self.acceptanceButton.enabled ? 1 : 0.45;
 }
 
 - (void)confirmAcceptancePolicy {
     if (!self.member.canManageSelfAcceptance || self.updatingAcceptance ||
-        ![self.acceptanceActorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
+        ![self.acceptanceActorUID isEqualToString:[PPProSessionCoordinator.shared activeUID]]) return;
     BOOL allowed = !self.member.canSelfAcceptOrders;
     __weak typeof(self) weakSelf = self;
     [PPAlertHelper showConfirmationIn:self title:kLang(@"Delivery_Driver_Acceptance_Confirm_Title")
@@ -1600,7 +1600,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 
 - (void)applyAcceptancePolicy:(BOOL)allowed {
     if (!self.member.canManageSelfAcceptance || self.updatingAcceptance || self.companyID.length == 0 ||
-        ![self.acceptanceActorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
+        ![self.acceptanceActorUID isEqualToString:[PPProSessionCoordinator.shared activeUID]]) return;
     if (!self.acceptanceCommandID || self.acceptancePendingValue != allowed) {
         self.acceptanceCommandID = NSUUID.UUID.UUIDString;
         self.acceptanceExpectedRevision = self.member.revision;
@@ -1614,7 +1614,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
                                     expectedRevision:self.acceptanceExpectedRevision commandID:self.acceptanceCommandID
                                           completion:^(PPDeliveryCompanyMemberRecord *confirmed, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || ![self.acceptanceActorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
+        if (!self || ![self.acceptanceActorUID isEqualToString:[PPProSessionCoordinator.shared activeUID]]) return;
         self.updatingAcceptance = NO;
         self.acceptanceFeedbackLabel.hidden = NO;
         if (confirmed && !error) {
@@ -1630,7 +1630,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
             [PPDeliveryCompanyService.shared listMembersForCompanyID:self.companyID completion:^(NSArray<PPDeliveryCompanyMember *> *members, NSError *readError) {
                 __strong typeof(weakSelf) self = weakSelf;
                 if (!self || readError ||
-                    ![self.acceptanceActorUID isEqualToString:[FIRAuth auth].currentUser.uid]) return;
+                    ![self.acceptanceActorUID isEqualToString:[PPProSessionCoordinator.shared activeUID]]) return;
                 for (PPDeliveryCompanyMember *fresh in members) {
                     if (![fresh.uid isEqualToString:self.member.uid]) continue;
                     if (fresh.revision != self.member.revision) self.acceptanceCommandID = nil;
@@ -1970,7 +1970,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     PPDeliveryCompanyMember *member = self.members[indexPath.row];
     PPDeliveryCompanyMemberCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PPDeliveryCompanyMemberCell" forIndexPath:indexPath];
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     BOOL canDisable = self.profile.canManageMembers &&
                       [member.status isEqualToString:@"active"] &&
                       ![member.uid isEqualToString:currentUID] &&
@@ -2109,13 +2109,17 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
 }
 
 - (void)openChatWithMember:(PPDeliveryCompanyMember *)member fromController:(UIViewController *)presentedController {
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (member.uid.length == 0 || [member.uid isEqualToString:currentUID]) {
         [PPToast toast:kLang(@"DeliveryCompany_Members_Sheet_ChatUnavailable")];
         return;
     }
 
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        [PPToast toast:kLang(@"DeliveryCompany_Members_Sheet_ChatUnavailable")];
+        return;
+    }
     NSString *threadID = ([currentUID compare:member.uid] == NSOrderedAscending)
         ? [NSString stringWithFormat:@"%@_%@", currentUID, member.uid]
         : [NSString stringWithFormat:@"%@_%@", member.uid, currentUID];
@@ -2131,7 +2135,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
                 return;
             }
 
-            FIRUser *authenticatedUser = [FIRAuth auth].currentUser;
+            FIRUser *authenticatedUser = [PPProSessionCoordinator.shared currentUser];
             UserModel *currentUser = [UserManager shared].currentUser;
             BOOL sessionMatchesCurrentUser =
                 ([currentUser.uid isEqualToString:currentUID] || [currentUser.ID isEqualToString:currentUID]);
@@ -2216,7 +2220,7 @@ static BOOL PPDCInviteLooksLikeUID(NSString *value) {
     thread.ID = threadID;
     thread.conversationType = @"provider_chat";
     thread.supportUserID = member.uid ?: @"";
-    thread.customerId = [FIRAuth auth].currentUser.uid ?: @"";
+    thread.customerId = [PPProSessionCoordinator.shared activeUID] ?: @"";
     thread.supportDisplayName = member.displayName.length ? member.displayName : member.uid;
     thread.memberIDs = @[thread.customerId ?: @"", member.uid ?: @""];
 

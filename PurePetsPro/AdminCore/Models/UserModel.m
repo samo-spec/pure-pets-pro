@@ -715,7 +715,13 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
         return;
     }
 
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) {
+            completion([UserModel pp_errorWithCode:401 key:@"Please login first"]);
+        }
+        return;
+    }
     FIRDocumentReference *docRef = [[db collectionWithPath:kPPUsersCol] documentWithPath:documentID];
 
     NSMutableDictionary *payload = [[self toDictionary] mutableCopy];
@@ -897,7 +903,9 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
         @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp]
     } mutableCopy];
 
-    FIRWriteBatch *batch = [[FIRFirestore firestore] batch];
+    FIRFirestore *batchDB = [PPProSessionCoordinator.shared activeFirestore];
+    if (!batchDB) { if (completion) completion([UserModel pp_errorWithCode:401 key:@"Please login first"]); return; }
+    FIRWriteBatch *batch = [batchDB batch];
     [batch setData:payload
        forDocument:[permissionsCollection documentWithPath:canonicalPermission]
              merge:YES];
@@ -1314,15 +1322,15 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
 
 + (void)loadCurrentUserModelWithCompletion:(void(^)(UserModel *_Nullable u,
                                                     NSError *_Nullable err))completion {
-    FIRUser *current = [FIRAuth auth].currentUser;
-    if (!current) {
+    FIRUser *current = [PPProSessionCoordinator.shared currentUser];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!current || !db) {
         [self pp_dispatchLoadCompletion:completion
                                    user:nil
                                   error:[self pp_errorWithCode:401 key:@"error_not_signed_in"]];
         return;
     }
 
-    FIRFirestore *db = [FIRFirestore firestore];
     FIRDocumentReference *docRef = [[db collectionWithPath:kPPUsersCol] documentWithPath:current.uid];
 
     [docRef getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
@@ -1438,31 +1446,31 @@ static NSString *PPUserNormalizedPartnerType(id _Nullable value) {
 
 - (nullable FIRCollectionReference *)pp_permissionsCollection {
     NSString *documentID = [self pp_documentID];
-    if (documentID.length == 0) {
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (documentID.length == 0 || !db) {
         return nil;
     }
 
-    FIRFirestore *db = [FIRFirestore firestore];
     return [[[db collectionWithPath:kPPUsersCol] documentWithPath:documentID] collectionWithPath:kPPPermsSubCol];
 }
 
 - (nullable FIRCollectionReference *)pp_legacyPermissionsCollection {
     NSString *documentID = [self pp_documentID];
-    if (documentID.length == 0) {
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (documentID.length == 0 || !db) {
         return nil;
     }
 
-    FIRFirestore *db = [FIRFirestore firestore];
     return [[[db collectionWithPath:kPPUsersCol] documentWithPath:documentID] collectionWithPath:kPPLegacyPermsSubCol];
 }
 
 - (nullable FIRCollectionReference *)pp_legacyPermissionsCollectionAlt {
     NSString *documentID = [self pp_documentID];
-    if (documentID.length == 0) {
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (documentID.length == 0 || !db) {
         return nil;
     }
 
-    FIRFirestore *db = [FIRFirestore firestore];
     return [[[db collectionWithPath:kPPUsersCol] documentWithPath:documentID] collectionWithPath:kPPLegacyPermsSubColAlt];
 }
 

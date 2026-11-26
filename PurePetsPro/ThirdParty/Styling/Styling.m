@@ -312,7 +312,7 @@
     }
 
     // 🔹 Download from Firebase
-    FIRStorage *storage = [FIRStorage storage];
+    FIRStorage *storage = [PPProSessionCoordinator.shared activeStorage] ?: [FIRStorage storage];
     FIRStorageReference *ref = [storage referenceWithPath:storagePath];
 
     int64_t maxDownloadSize = 20 * 1024 * 1024; // 20 MB

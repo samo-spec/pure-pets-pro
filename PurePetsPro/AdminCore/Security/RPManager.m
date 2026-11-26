@@ -24,6 +24,18 @@
     return manager;
 }
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        __weak typeof(self) weakSelf = self;
+        [PPProSessionCoordinator.shared registerSessionTeardownHandler:^(__unused NSString *reason) {
+            [weakSelf.reg remove];
+            weakSelf.reg = nil;
+        } forKey:@"RPManager"];
+    }
+    return self;
+}
+
 - (id<FIRListenerRegistration>)listenPermissionsForUID:(NSString *)uid
                                               onChange:(void(^)(NSDictionary<NSString *, NSNumber *> *perms,
                                                                 NSError * _Nullable error))block
@@ -81,7 +93,7 @@
 - (void)fetchIDTokenClaims:(void(^)(NSDictionary * _Nullable claims,
                                     NSError * _Nullable error))completion
 {
-    FIRUser *user = [FIRAuth auth].currentUser;
+    FIRUser *user = [PPProSessionCoordinator.shared currentUser];
     if (!user) {
         if (completion) {
             completion(nil, [NSError errorWithDomain:@"RPManager"
@@ -112,7 +124,16 @@
     [self.reg remove];
     self.reg = nil;
 
-    FIRDocumentReference *doc = [[[FIRFirestore firestore] collectionWithPath:kPPUsersCol] documentWithPath:uid];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) {
+            completion(nil, [NSError errorWithDomain:@"RPManager"
+                                                code:4
+                                            userInfo:@{NSLocalizedDescriptionKey: @"Active session unavailable"}]);
+        }
+        return;
+    }
+    FIRDocumentReference *doc = [[db collectionWithPath:kPPUsersCol] documentWithPath:uid];
     __weak typeof(self) weakSelf = self;
     self.reg = [doc addSnapshotListener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;

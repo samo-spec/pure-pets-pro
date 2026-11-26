@@ -141,6 +141,12 @@ private struct ProCountry: Identifiable, Equatable {
         }
     }
 
+    // Non-personal test fixtures, never used by the production controller.
+    static let presentationFixtures = [
+        ProCountry(id: "QA", name: "Qatar", localizedName: "قطر", phoneCode: "+974", flag: "🇶🇦"),
+        ProCountry(id: "EG", name: "Egypt", localizedName: "مصر", phoneCode: "+20", flag: "🇪🇬")
+    ]
+
     static func sorted(for isRTL: Bool) -> [ProCountry] {
         all.sorted {
             (isRTL ? $0.localizedName : $0.name)
@@ -152,9 +158,11 @@ private struct ProCountry: Identifiable, Equatable {
 private struct PPCountryPickerView: View {
     @Environment(\.presentationMode) private var presentationMode
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.sizeCategory) private var sizeCategory
 
     let isRTL: Bool
     let selectedCode: String
+    let presentationTestMode: Bool
     let onSelect: (ProCountry) -> Void
 
     @State private var searchText = ""
@@ -164,7 +172,7 @@ private struct PPCountryPickerView: View {
 
     private var filtered: [ProCountry] {
         _ = countryRevision
-        let countries = ProCountry.sorted(for: isRTL)
+        let countries = presentationTestMode ? ProCountry.presentationFixtures : ProCountry.sorted(for: isRTL)
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return countries }
         return countries.filter {
@@ -182,12 +190,13 @@ private struct PPCountryPickerView: View {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(palette.secondary)
                     TextField(localized("PPBottomSearch_Accessibility"), text: $searchText)
+                        .accessibilityIdentifier("pro.login.country.search")
                         .font(PPProType.medium(16))
                         .textInputAutocapitalization(.never)
                         .disableAutocorrection(true)
                 }
                 .padding(.horizontal, 15)
-                .frame(height: 48)
+                .frame(minHeight: 48)
                 .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -220,7 +229,7 @@ private struct PPCountryPickerView: View {
                                             Text(isRTL ? country.localizedName : country.name)
                                                 .font(PPProType.medium(16))
                                                 .foregroundStyle(palette.text)
-                                                .lineLimit(1)
+                                                .lineLimit(sizeCategory.isAccessibilityCategory ? nil : 2)
                                             Text(country.phoneCode)
                                                 .font(PPProType.regular(13))
                                                 .foregroundStyle(palette.secondary)
@@ -243,6 +252,7 @@ private struct PPCountryPickerView: View {
                                     )
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityIdentifier("pro.login.country.option."+country.id)
                             }
                         }
                     }
@@ -257,12 +267,13 @@ private struct PPCountryPickerView: View {
                     presentationMode.wrappedValue.dismiss()
                 }
                 .font(PPProType.medium(15))
+                .accessibilityIdentifier("pro.login.country.cancel")
             )
         }
         .navigationViewStyle(StackNavigationViewStyle())
         .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
         .onAppear {
-            CitiesManager.shared().loadData()
+            if !presentationTestMode { CitiesManager.shared().loadData() }
             countryRevision &+= 1
         }
         .onReceive(
@@ -295,6 +306,7 @@ private struct PPPhoneNumberTextField: UIViewRepresentable {
         textField.delegate = context.coordinator
         textField.keyboardType = .phonePad
         textField.textContentType = .telephoneNumber
+        textField.accessibilityIdentifier = "pro.login.phone"
         let baseFont = UIFont(name: "Beiruti-Medium", size: 17) ?? .systemFont(ofSize: 17, weight: .medium)
         textField.font = Styling.scaledFont(for: baseFont, textStyle: .body) ?? baseFont
         textField.textAlignment = .left
@@ -313,6 +325,7 @@ private struct PPPhoneNumberTextField: UIViewRepresentable {
         context.coordinator.onChange = onChange
         if uiView.text != text { uiView.text = text }
         uiView.isEnabled = isEnabled
+        uiView.accessibilityLabel = placeholder
         uiView.textColor = UIColor.ppTextPrimary
         uiView.tintColor = UIColor.ppPrimary
         let baseFont = UIFont(name: "Beiruti-Medium", size: 17) ?? .systemFont(ofSize: 17, weight: .medium)
@@ -367,6 +380,7 @@ private struct PPPhoneNumberTextField: UIViewRepresentable {
 
 @objc public protocol PPProLoginSurfaceControllerDelegate: AnyObject {
     func proLoginSurface(_ controller: PPProLoginSurfaceController, didChangePhoneText text: String)
+    func proLoginSurface(_ controller: PPProLoginSurfaceController, didChangeCountryCode code: String)
     func proLoginSurfaceDidRequestCountryCode(_ controller: PPProLoginSurfaceController)
     func proLoginSurfaceDidTapPhoneContinue(_ controller: PPProLoginSurfaceController)
     func proLoginSurfaceDidTapApple(_ controller: PPProLoginSurfaceController)
@@ -374,10 +388,16 @@ private struct PPPhoneNumberTextField: UIViewRepresentable {
     func proLoginSurfaceDidTapSupport(_ controller: PPProLoginSurfaceController)
     func proLoginSurfaceDidTapLanguage(_ controller: PPProLoginSurfaceController)
     func proLoginSurfaceDidTapProviderApplication(_ controller: PPProLoginSurfaceController)
+    func proLoginSurfaceDidTapRecoveryRetry(_ controller: PPProLoginSurfaceController)
+    func proLoginSurface(_ controller: PPProLoginSurfaceController, didRequestRemoveRememberedAccount uid: String)
 }
 
 @MainActor
 private final class PPProLoginSurfaceModel: ObservableObject {
+    var presentationTestMode = false
+    @Published var rememberedAccounts: [[String: String]] = []
+    @Published var selectedRememberedAccountUID: String?
+    @Published var requiresTransitionRecovery = false
     @Published var phoneText = ""
     @Published var countryCode = "+974"
     @Published var isBusy = false
@@ -392,6 +412,30 @@ private final class PPProLoginSurfaceModel: ObservableObject {
 @objcMembers
 public final class PPProLoginSurfaceController: UIViewController {
     public weak var delegate: PPProLoginSurfaceControllerDelegate?
+
+    public var presentationTestMode = false
+
+    public var rememberedAccounts: [[String: String]] = [] {
+        didSet {
+            model.rememberedAccounts = rememberedAccounts.filter {
+                !($0["uid"] ?? "").isEmpty && !($0["label"] ?? "").isEmpty
+            }
+            if let selected = model.selectedRememberedAccountUID,
+               !model.rememberedAccounts.contains(where: { $0["uid"] == selected }) {
+                model.selectedRememberedAccountUID = nil
+            }
+        }
+    }
+
+    public var selectedRememberedAccountUID: String? { model.selectedRememberedAccountUID }
+
+    public var requiresTransitionRecovery: Bool = false {
+        didSet {
+            if model.requiresTransitionRecovery != requiresTransitionRecovery {
+                model.requiresTransitionRecovery = requiresTransitionRecovery
+            }
+        }
+    }
 
     public var phoneText: String = "" {
         didSet {
@@ -432,11 +476,13 @@ public final class PPProLoginSurfaceController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = .clear
         view.semanticContentAttribute = Language.isRTL() ? .forceRightToLeft : .forceLeftToRight
-        CitiesManager.shared().loadData()
+        model.presentationTestMode = presentationTestMode
+        if !presentationTestMode { CitiesManager.shared().loadData() }
 
         model.phoneText = phoneText
         model.countryCode = countryCode
         model.isBusy = isBusy
+        model.requiresTransitionRecovery = requiresTransitionRecovery
         model.isPhoneContinueEnabled = isPhoneContinueEnabled
         model.showsAppleButton = showsAppleButton
         model.isRTL = Language.isRTL()
@@ -453,6 +499,7 @@ public final class PPProLoginSurfaceController: UIViewController {
                 // Keep the child-controller public property in sync. The Objective-C
                 // host reads controller.countryCode immediately before phone auth.
                 self.countryCode = code
+                self.delegate?.proLoginSurface(self, didChangeCountryCode: code)
             },
             onPhoneContinue: { [weak self] in
                 guard let self else { return }
@@ -477,6 +524,14 @@ public final class PPProLoginSurfaceController: UIViewController {
             onProviderApplication: { [weak self] in
                 guard let self else { return }
                 self.delegate?.proLoginSurfaceDidTapProviderApplication(self)
+            },
+            onRecoveryRetry: { [weak self] in
+                guard let self else { return }
+                self.delegate?.proLoginSurfaceDidTapRecoveryRetry(self)
+            },
+            onRemoveRememberedAccount: { [weak self] uid in
+                guard let self else { return }
+                self.delegate?.proLoginSurface(self, didRequestRemoveRememberedAccount: uid)
             }
         )
 
@@ -506,54 +561,8 @@ public final class PPProLoginSurfaceController: UIViewController {
     }
 }
 
-private struct PPProOrbitArcNode: View {
-    let diameter: CGFloat
-    let sweep: CGFloat
-    let accentColor: Color
-    let isDark: Bool
-
-    var body: some View {
-        let radius = diameter / 2
-        let sweepAngleRadians = sweep * 2 * .pi
-        let tipX = radius * cos(sweepAngleRadians)
-        let tipY = radius * sin(sweepAngleRadians)
-
-        ZStack {
-            // Arc with smooth luminous gradient leading into the node
-            Circle()
-                .trim(from: 0.0, to: sweep)
-                .stroke(
-                    AngularGradient(
-                        gradient: Gradient(colors: [
-                            accentColor.opacity(0.0),
-                            accentColor.opacity(isDark ? 0.35 : 0.25),
-                            accentColor.opacity(0.95)
-                        ]),
-                        center: .center,
-                        startAngle: .degrees(0),
-                        endAngle: .degrees(Double(sweep) * 360)
-                    ),
-                    style: StrokeStyle(lineWidth: 2.2, lineCap: .round)
-                )
-
-            // Leading Node (Mathematically locked to exact arc tip)
-            Circle()
-                .fill(accentColor)
-                .frame(width: 7.5, height: 7.5)
-                .overlay {
-                    Circle()
-                        .stroke(Color.white.opacity(isDark ? 0.65 : 0.90), lineWidth: 1.2)
-                }
-                .shadow(color: accentColor.opacity(0.65), radius: 4, x: 0, y: 0)
-                .offset(x: tipX, y: tipY)
-        }
-        .frame(width: diameter, height: diameter)
-    }
-}
-
 private struct PPProIdentityGateView: View {
     @ObservedObject var model: PPProLoginSurfaceModel
-
     let onPhoneChange: (String) -> Void
     let onCountryChanged: (String) -> Void
     let onPhoneContinue: () -> Void
@@ -562,424 +571,301 @@ private struct PPProIdentityGateView: View {
     let onSupport: () -> Void
     let onLanguage: () -> Void
     let onProviderApplication: () -> Void
+    let onRecoveryRetry: () -> Void
+    let onRemoveRememberedAccount: (String) -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.sizeCategory) private var sizeCategory
-
     @State private var phoneFocused = false
     @State private var showCountryPicker = false
-    @State private var appeared = false
-    @State private var orbiting = false
-    @State private var focusFlash = false
     @State private var handledFocusToken = 0
+    @AccessibilityFocusState private var authenticationFocused: Bool
 
     private var palette: PPProPalette { .resolve(colorScheme) }
     private var isRTL: Bool { model.isRTL }
-
-    // Temporary product switch: keep the decorative hero orbit out of the view
-    // hierarchy without disturbing the login copy, layout, or authentication flow.
-    private static let showsLoginHeroOrbit = false
+    private var interactionsDisabled: Bool { model.isBusy || model.requiresTransitionRecovery }
 
     var body: some View {
         let _ = model.refreshToken
-        GeometryReader { geometry in
-            ScrollViewReader { proxy in
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 22) {
-                        identityHeader
-                            .padding(.top, max(geometry.safeAreaInsets.top + 6, 18))
-
-                        identityCore(compact: geometry.size.width < 700)
-
-                        authenticationPanel
-                            .id("authentication-panel")
-
-                        providerAccessStrip
-
-                        footer
-                            .padding(.bottom, max(geometry.safeAreaInsets.bottom + 18, 24))
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    utilityBar
+                    brandStage
+                    if model.requiresTransitionRecovery {
+                        transitionRecoveryBanner
                     }
-                    .padding(.horizontal, geometry.size.width < 700 ? 18 : 36)
-                    .frame(maxWidth: 840)
-                    .frame(maxWidth: .infinity)
+                    if !model.rememberedAccounts.isEmpty {
+                        rememberedAccountSection
+                    }
+                    Divider()
+                    authenticationPanel.id("authentication-panel")
+                    Divider()
+                    providerAccess
+                    securityNote
                 }
-                .background(ambientBackground)
-                .onReceive(model.$loginFormFocusToken) { token in
-                    guard token != 0, token != handledFocusToken else { return }
-                    handledFocusToken = token
-                    withAnimation(reduceMotion ? nil : .spring(response: 0.48, dampingFraction: 0.86)) {
-                        proxy.scrollTo("authentication-panel", anchor: .center)
-                    }
-                    guard !reduceMotion else { return }
-                    focusFlash = true
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.55) {
-                        focusFlash = false
-                    }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 20)
+                .frame(maxWidth: 520)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .background(palette.canvas.ignoresSafeArea())
+            .onReceive(model.$loginFormFocusToken) { token in
+                guard token != 0, token != handledFocusToken else { return }
+                handledFocusToken = token
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.24)) {
+                    proxy.scrollTo("authentication-panel", anchor: .center)
                 }
+                authenticationFocused = true
             }
         }
         .environment(\.layoutDirection, isRTL ? .rightToLeft : .leftToRight)
-        .onAppear {
-            appeared = true
-            if Self.showsLoginHeroOrbit && !reduceMotion { orbiting = true }
+    }
+
+    private var utilityBar: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Image("AD_LOGO")
+                .resizable().scaledToFit().frame(width: 42, height: 42)
+                .accessibilityHidden(true)
+            Spacer(minLength: 4)
+            utility(localized("ProLoginSupportChip"), symbol: "questionmark.circle", id: "pro.login.support", action: onSupport)
+            utility(Language.languageVal() == 0 ? "AR" : "EN", symbol: "globe", id: "pro.login.language", action: onLanguage)
         }
     }
 
-    private var ambientBackground: some View {
-        ZStack {
-            palette.canvas.ignoresSafeArea()
-
-            Circle()
-                .fill(palette.accent.opacity(palette.isDark ? 0.09 : 0.075))
-                .frame(width: 330, height: 330)
-                .blur(radius: 2)
-                .offset(x: isRTL ? -130 : 130, y: -150)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isRTL ? .topLeading : .topTrailing)
-
-            Circle()
-                .fill(palette.accentStrong.opacity(palette.isDark ? 0.06 : 0.045))
-                .frame(width: 280, height: 280)
-                .offset(x: isRTL ? 130 : -130, y: 130)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isRTL ? .bottomTrailing : .bottomLeading)
-        }
-    }
-
-    private var identityHeader: some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 10) {
-                Image("AD_LOGO")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 38, height: 38)
-                    .padding(5)
-                    .background(palette.surface, in: Circle())
-
-                VStack(alignment: .leading, spacing: 0) {
-                    Text(localized("PulseCommand_BrandName"))
-                        .font(PPProType.bold(18, relativeTo: .headline))
-                        .foregroundStyle(palette.text)
-                    Text(localized("ProLoginPhoneSectionTitle"))
-                        .font(PPProType.regular(11, relativeTo: .caption))
-                        .foregroundStyle(palette.secondary)
-                }
-            }
-
-            Spacer(minLength: 8)
-
-            HStack(spacing: 8) {
-                compactUtility(
-                    title: localized("ProLoginSupportChip"),
-                    symbol: "questionmark.circle",
-                    action: onSupport
-                )
-                compactUtility(
-                    title: Language.languageVal() == 0 ? "AR" : "EN",
-                    symbol: "globe",
-                    action: onLanguage
-                )
-            }
-        }
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : -8)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.34), value: appeared)
-    }
-
-    private func identityCore(compact: Bool) -> some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 36, style: .continuous)
-                .fill(palette.surface.opacity(palette.isDark ? 0.82 : 0.90))
-
-            identityCoreContent(compact: compact)
-                .padding(compact ? 18 : 26)
-        }
-        .overlay {
-            RoundedRectangle(cornerRadius: 36, style: .continuous)
-                .stroke(palette.hairline, lineWidth: 0.8)
-        }
-        .shadow(color: palette.shadow, radius: 26, x: 0, y: 14)
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 16)
-        .animation(reduceMotion ? nil : .spring(response: 0.62, dampingFraction: 0.90), value: appeared)
-    }
-
-    /// The orbit is a fixed-size instrument: each caller states the exact side so
-    /// every ring radius, and the satellite that rides them, is derived from one
-    /// constant. It previously read a `GeometryReader`, which made the geometry a
-    /// function of an offered size that can still settle after the perpetual spin
-    /// has started — on device the assembly was measured snapping from one radius
-    /// set to another about three seconds after appearing (satellite orbit radius
-    /// 175px → 134px in a single frame, then drifting for a further 0.2s) while
-    /// the static core kept its exact size, because the settle landed inside the
-    /// running `repeatForever` transaction.
-    @ViewBuilder
-    private func identityCoreContent(compact: Bool) -> some View {
-        if sizeCategory.isAccessibilityCategory {
-            VStack(alignment: .leading, spacing: 18) {
-                if Self.showsLoginHeroOrbit {
-                    loginOrbit(side: 104)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                }
-
-                identityCoreCopy(compact: true)
-            }
-        } else {
-            HStack(spacing: compact ? 18 : 32) {
-                if Self.showsLoginHeroOrbit {
-                    loginOrbit(side: compact ? 122 : 164)
-                        .layoutPriority(1)
-                }
-
-                identityCoreCopy(compact: compact)
-            }
-        }
-    }
-
-    private func identityCoreCopy(compact: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(localized("ProLoginSubtitle"))
-                .font(PPProType.bold(compact ? 29 : 38, relativeTo: .largeTitle))
+    private var brandStage: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(localized("ProLoginTitle"))
+                .font(PPProType.medium(16, relativeTo: .subheadline))
+                .foregroundStyle(palette.secondary)
+            Text(localized("ProIdentityPortalTitle"))
+                .font(PPProType.bold(36, relativeTo: .largeTitle))
                 .foregroundStyle(palette.text)
                 .fixedSize(horizontal: false, vertical: true)
-
-            Text(localized("ProLoginAuthHint"))
-                .font(PPProType.regular(compact ? 14 : 16))
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityIdentifier("pro.login.screen")
+            Text(localized("ProIdentityPortalSubtitle"))
+                .font(PPProType.regular(17))
                 .foregroundStyle(palette.secondary)
-                .lineSpacing(4)
                 .fixedSize(horizontal: false, vertical: true)
-
-            Group {
-                if sizeCategory.isAccessibilityCategory {
-                    VStack(alignment: .leading, spacing: 8) {
-                        trustPill(symbol: "checkmark.shield.fill", title: localized("ProLoginAccessTitle"))
-                        trustPill(symbol: "person.2.badge.key.fill", title: localized("ProLoginSupportTitle"))
-                    }
-                } else {
-                    HStack(spacing: 8) {
-                        trustPill(symbol: "checkmark.shield.fill", title: localized("ProLoginAccessTitle"))
-                        trustPill(symbol: "person.2.badge.key.fill", title: localized("ProLoginSupportTitle"))
-                    }
-                }
-            }
-            .padding(.top, 2)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func loginOrbit(side: CGFloat) -> some View {
-        let primaryDiameter = side * 0.88
-        let secondaryDiameter = side * 0.74
-        let coreDiameter = side * 0.54
-
-        return ZStack {
-            // Background ambient glow behind the orbit
-            Circle()
-                .fill(palette.accent.opacity(palette.isDark ? 0.16 : 0.08))
-                .frame(width: side * 0.68, height: side * 0.68)
-                .blur(radius: 12)
-
-            // Outer orbital hairline track (crisp reference ring)
-            Circle()
-                .strokeBorder(palette.accent.opacity(palette.isDark ? 0.18 : 0.10), lineWidth: 1)
-                .frame(width: side * 0.94, height: side * 0.94)
-
-            // Secondary counter-harmonic orbital arc (slow, elegant ambient motion)
-            Circle()
-                .trim(from: 0.0, to: Self.secondaryArcSweep)
-                .stroke(
-                    AngularGradient(
-                        colors: [
-                            palette.accent.opacity(0.0),
-                            palette.accent.opacity(palette.isDark ? 0.32 : 0.22),
-                            palette.accent.opacity(0.0)
-                        ],
-                        center: .center
-                    ),
-                    style: StrokeStyle(lineWidth: 1.4, lineCap: .round)
-                )
-                .frame(width: secondaryDiameter, height: secondaryDiameter)
-                .rotationEffect(.degrees(orbiting && !reduceMotion ? -360 : 0))
-                .animation(
-                    reduceMotion ? nil : .linear(duration: 18.0).repeatForever(autoreverses: false),
-                    value: orbiting
-                )
-
-            // Primary NextGen V6 Living Orbit (Arc + Mathematically Locked Satellite Node)
-            PPProOrbitArcNode(
-                diameter: primaryDiameter,
-                sweep: Self.primaryArcSweep,
-                accentColor: palette.accent,
-                isDark: palette.isDark
-            )
-            .rotationEffect(.degrees(orbiting && !reduceMotion ? 360 : 0))
-            .animation(
-                reduceMotion ? nil : .linear(duration: 12.0).repeatForever(autoreverses: false),
-                value: orbiting
-            )
-
-            // Core Specular Glass Capsule
-            Circle()
-                .fill(palette.accentSoft)
-                .frame(width: coreDiameter, height: coreDiameter)
-                .overlay {
-                    Circle()
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: [
-                                    Color.white.opacity(palette.isDark ? 0.40 : 0.75),
-                                    palette.accent.opacity(0.25)
-                                ],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 1.2
-                        )
-                }
-                .shadow(
-                    color: Color.black.opacity(palette.isDark ? 0.22 : 0.05),
-                    radius: 8,
-                    x: 0,
-                    y: 3
-                )
-
-            // Center Identity Emblem
-            Image(systemName: "person.badge.shield.checkmark.fill")
-                .font(.system(size: side * 0.22, weight: .bold))
-                .foregroundStyle(palette.accent)
-                .shadow(color: palette.accent.opacity(0.25), radius: 4, x: 0, y: 2)
-        }
-        .frame(width: side, height: side)
-        .accessibilityHidden(true)
-    }
-
-    /// Swept fractions of the two orbital arcs.
-    private static let primaryArcSweep: CGFloat = 0.68
-    private static let secondaryArcSweep: CGFloat = 0.36
-
-    private func trustPill(symbol: String, title: String) -> some View {
-        HStack(spacing: 5) {
-            Image(systemName: symbol)
-                .font(.system(size: 10, weight: .semibold))
-            Text(title)
-                .font(PPProType.medium(11, relativeTo: .caption))
-                .lineLimit(sizeCategory.isAccessibilityCategory ? nil : 1)
-        }
-        .foregroundStyle(palette.accent)
-        .padding(.horizontal, 9)
-        .frame(minHeight: sizeCategory.isAccessibilityCategory ? 44 : 30)
-        .background(palette.accentSoft, in: Capsule())
-    }
-
-    private var authenticationPanel: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(alignment: .top, spacing: 14) {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(localized("ProLoginAuthHeading"))
-                        .font(PPProType.bold(27, relativeTo: .title2))
+    private var transitionRecoveryBanner: some View {
+        let warningColor = Color(uiColor: UIColor.ppWarning)
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(warningColor)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(localized("ProIdentityRecoveryTitle"))
+                        .font(PPProType.bold(17, relativeTo: .headline))
                         .foregroundStyle(palette.text)
-                    Text(localized("ProLoginFormSubtitle"))
-                        .font(PPProType.regular(14))
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(localized("ProIdentityRecoveryMessage"))
+                        .font(PPProType.regular(15))
                         .foregroundStyle(palette.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                Spacer(minLength: 8)
-                Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(palette.accent)
-                    .frame(width: 46, height: 46)
-                    .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             }
-
-            phoneEntry
-            continueButton
-
-            HStack(spacing: 12) {
-                Rectangle().fill(palette.hairline).frame(height: 1)
-                Text(localized("ProLoginOr"))
-                    .font(PPProType.regular(12, relativeTo: .caption))
-                    .foregroundStyle(palette.secondary)
-                Rectangle().fill(palette.hairline).frame(height: 1)
-            }
-
-            VStack(spacing: 10) {
-                if model.showsAppleButton {
-                    identityProviderButton(
-                        title: localized("ProLoginSignInWithApple"),
-                        symbol: "applelogo",
-                        action: onApple
-                    )
+            Button(action: onRecoveryRetry) {
+                HStack(spacing: 8) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 14, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text(localized("ProIdentityRecoveryRetry"))
+                        .font(PPProType.bold(16))
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                identityProviderButton(
-                    title: localized("ProLoginSignInWithGoogle"),
-                    symbol: "g.circle.fill",
-                    action: onGoogle
-                )
-            }
-        }
-        .padding(20)
-        .background(palette.surface.opacity(palette.isDark ? 0.88 : 0.96), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .stroke(focusFlash ? palette.accent.opacity(0.70) : palette.hairline, lineWidth: focusFlash ? 1.5 : 0.8)
-        }
-        .shadow(color: focusFlash ? palette.accent.opacity(0.13) : palette.shadow, radius: focusFlash ? 32 : 22, x: 0, y: 12)
-        .scaleEffect(focusFlash && !reduceMotion ? 1.01 : 1)
-        .animation(reduceMotion ? nil : .spring(response: 0.44, dampingFraction: 0.80), value: focusFlash)
-        .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 20)
-        .animation(reduceMotion ? nil : .spring(response: 0.70, dampingFraction: 0.90).delay(0.06), value: appeared)
-    }
-
-    private var phoneEntry: some View {
-        let currentCountry = ProCountry.sorted(for: isRTL).first(where: { $0.phoneCode == model.countryCode })
-        let emphasized = phoneFocused || focusFlash
-
-        return HStack(spacing: 0) {
-            Button {
-                showCountryPicker = true
-            } label: {
-                HStack(spacing: 6) {
-                    if let currentCountry {
-                        Text(currentCountry.flag).font(.system(size: 22))
-                    }
-                    Text(model.countryCode)
-                        .font(PPProType.medium(15))
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(palette.secondary)
-                }
-                .foregroundStyle(palette.text)
+                .foregroundStyle(Color.white)
+                .frame(maxWidth: .infinity, minHeight: 44)
                 .padding(.horizontal, 14)
-                .frame(minHeight: 57)
+                .background(warningColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             }
             .buttonStyle(.plain)
             .disabled(model.isBusy)
+            .accessibilityIdentifier("pro.login.recoveryRetry")
+        }
+        .padding(14)
+        .background(warningColor.opacity(palette.isDark ? 0.16 : 0.10),
+                    in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(warningColor.opacity(0.45), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("pro.login.recoveryBanner")
+    }
 
-            Rectangle()
-                .fill(emphasized ? palette.accent.opacity(0.34) : palette.hairline)
-                .frame(width: 1, height: 30)
+    private var rememberedAccountSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(localized("ProIdentityRememberedAccounts"))
+                .font(PPProType.bold(21, relativeTo: .title3))
+                .foregroundStyle(palette.text)
+                .accessibilityAddTraits(.isHeader)
+            Text(localized("ProIdentityReauthenticationHint"))
+                .font(PPProType.regular(15))
+                .foregroundStyle(palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            ForEach(model.rememberedAccounts.compactMap { item -> String? in item["uid"] }, id: \.self) { uid in
+                if let account = model.rememberedAccounts.first(where: { $0["uid"] == uid }) {
+                    let selected = model.selectedRememberedAccountUID == uid
+                    HStack(spacing: 8) {
+                        Button {
+                            model.selectedRememberedAccountUID = uid
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "person.crop.circle")
+                                    .font(.system(size: 28, weight: .regular))
+                                    .foregroundStyle(palette.accent)
+                                    .accessibilityHidden(true)
+                                Text(account["label"] ?? "")
+                                    .font(PPProType.medium(17))
+                                    .foregroundStyle(palette.text)
+                                    .environment(\.layoutDirection, .leftToRight)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 4)
+                                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(selected ? palette.accent : palette.secondary)
+                                    .accessibilityHidden(true)
+                            }
+                            .padding(12)
+                            .frame(minHeight: 54)
+                            .background(palette.surface, in: RoundedRectangle(cornerRadius: 14))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14)
+                                    .strokeBorder(selected ? palette.accent : palette.hairline, lineWidth: selected ? 2 : 1)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(interactionsDisabled)
+                        .accessibilityAddTraits(selected ? .isSelected : [])
+                        .accessibilityIdentifier("pro.login.rememberedAccount")
 
-            PPPhoneNumberTextField(
-                text: Binding(get: { model.phoneText }, set: { model.phoneText = $0 }),
-                isFocused: $phoneFocused,
-                placeholder: localized("ProLoginPhonePlaceholder"),
-                isEnabled: !model.isBusy,
-                onChange: onPhoneChange
-            )
-            .padding(.horizontal, 15)
-            .frame(minHeight: 57)
+                        Button {
+                            onRemoveRememberedAccount(uid)
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(palette.secondary)
+                                .frame(minWidth: 44, minHeight: 54)
+                                .background(palette.surface, in: RoundedRectangle(cornerRadius: 14))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 14)
+                                        .strokeBorder(palette.hairline, lineWidth: 1)
+                                }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(interactionsDisabled)
+                        .accessibilityLabel(localized("ProIdentityRemoveAccount"))
+                        .accessibilityIdentifier("pro.login.removeRememberedAccount")
+                    }
+                }
+            }
+            Button {
+                model.selectedRememberedAccountUID = nil
+            } label: {
+                Label(localized("ProIdentityUseAnotherAccount"), systemImage: "person.badge.plus")
+                    .font(PPProType.medium(16))
+                    .foregroundStyle(palette.accent)
+                    .frame(minHeight: 44, alignment: .leading)
+            }
+            .buttonStyle(.plain)
+            .disabled(interactionsDisabled)
+            .accessibilityIdentifier("pro.login.anotherAccount")
+        }
+    }
+
+    private var authenticationPanel: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(localized("ProIdentitySignInMethods"))
+                .font(PPProType.bold(21, relativeTo: .title3))
+                .foregroundStyle(palette.text)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilityFocused($authenticationFocused)
+            phoneEntry
+            continueButton
+            if model.isBusy {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text(localized("ProIdentityVerifying")).font(PPProType.regular(15))
+                }
+                .foregroundStyle(palette.secondary)
+                .accessibilityIdentifier("pro.login.busy")
+            }
+            HStack(spacing: 12) {
+                Rectangle().fill(palette.hairline).frame(height: 1)
+                Text(localized("ProLoginOr"))
+                    .font(PPProType.regular(14, relativeTo: .caption))
+                    .foregroundStyle(palette.secondary)
+                Rectangle().fill(palette.hairline).frame(height: 1)
+            }
+            if model.showsAppleButton {
+                providerButton(localized("ProLoginSignInWithApple"), symbol: "applelogo", id: "pro.login.apple", action: onApple)
+            }
+            providerButton(localized("ProLoginSignInWithGoogle"), symbol: "google", id: "pro.login.google", action: onGoogle)
+        }
+    }
+
+    private var countryControl: some View {
+        let country = (model.presentationTestMode ? ProCountry.presentationFixtures : ProCountry.sorted(for: isRTL)).first { $0.phoneCode == model.countryCode }
+        return Button { showCountryPicker = true } label: {
+            HStack(spacing: 6) {
+                if let country { Text(country.flag).accessibilityHidden(true) }
+                Text(model.countryCode).font(PPProType.medium(16))
+                Image(systemName: "chevron.down").font(.system(size: 11, weight: .semibold))
+            }
+            .foregroundStyle(palette.text)
+            .padding(.horizontal, 12)
+            .frame(minHeight: 54)
+        }
+        .buttonStyle(.plain)
+        .disabled(interactionsDisabled)
+        .accessibilityLabel(localized("ProLoginCountryCode"))
+        .accessibilityValue(model.countryCode)
+        .accessibilityIdentifier("pro.login.country")
+    }
+
+    private var phoneField: some View {
+        PPPhoneNumberTextField(
+            text: Binding(get: { model.phoneText }, set: { model.phoneText = $0 }),
+            isFocused: $phoneFocused,
+            placeholder: localized("ProLoginPhonePlaceholder"),
+            isEnabled: !interactionsDisabled,
+            onChange: onPhoneChange
+        )
+        .padding(.horizontal, 12)
+        .frame(minHeight: 54)
+        .accessibilityIdentifier("pro.login.phone")
+    }
+
+    private var phoneEntry: some View {
+        Group {
+            if sizeCategory.isAccessibilityCategory {
+                VStack(alignment: .leading, spacing: 0) {
+                    countryControl
+                    Divider()
+                    phoneField
+                }
+            } else {
+                HStack(spacing: 0) {
+                    countryControl
+                    Rectangle().fill(palette.hairline).frame(width: 1, height: 28)
+                    phoneField
+                }
+            }
         }
         .environment(\.layoutDirection, .leftToRight)
-        .background(
-            palette.accentSoft.opacity(emphasized ? 1.0 : 0.65),
-            in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-        )
+        .background(palette.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(emphasized ? palette.accent.opacity(0.35) : palette.hairline, lineWidth: emphasized ? 1.2 : 0.8)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(phoneFocused ? palette.accent : palette.hairline, lineWidth: phoneFocused ? 2 : 1)
         }
         .sheet(isPresented: $showCountryPicker) {
-            PPCountryPickerView(isRTL: isRTL, selectedCode: model.countryCode) { country in
+            PPCountryPickerView(isRTL: isRTL, selectedCode: model.countryCode, presentationTestMode: model.presentationTestMode) { country in
                 model.countryCode = country.phoneCode
                 onCountryChanged(country.phoneCode)
             }
@@ -987,121 +873,114 @@ private struct PPProIdentityGateView: View {
     }
 
     private var continueButton: some View {
-        let disabled = !model.isPhoneContinueEnabled || model.isBusy
+        let disabled = interactionsDisabled || !model.isPhoneContinueEnabled
         return Button(action: onPhoneContinue) {
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 Text(localized("ProLoginContinuePhone"))
-                    .font(PPProType.bold(16, relativeTo: .headline))
+                    .font(PPProType.bold(18, relativeTo: .headline))
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 8)
-                if model.isBusy {
-                    ProgressView().tint(.white)
-                } else {
+                if !model.isBusy {
                     Image(systemName: isRTL ? "arrow.left" : "arrow.right")
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: 15, weight: .semibold))
+                        .accessibilityHidden(true)
                 }
             }
             .foregroundStyle(disabled ? palette.secondary : Color.white)
-            .padding(.horizontal, 18)
-            .frame(minHeight: 55)
-            .background(
-                disabled ? palette.accent.opacity(0.16) : palette.accent,
-                in: RoundedRectangle(cornerRadius: 18, style: .continuous)
-            )
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .frame(minHeight: 56)
+            .background(disabled ? palette.accentSoft : palette.accent, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
-        .buttonStyle(PPProPressStyle())
+        .buttonStyle(.plain)
         .disabled(disabled)
-        .shadow(color: disabled ? .clear : palette.accent.opacity(0.20), radius: 18, x: 0, y: 10)
+        .accessibilityIdentifier("pro.login.continue")
     }
 
-    private func identityProviderButton(title: String, symbol: String, action: @escaping () -> Void) -> some View {
+    private func providerButton(_ title: String, symbol: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 10) {
-                Image(systemName: symbol)
-                    .font(.system(size: 17, weight: .semibold))
-                    .frame(width: 22)
-                Text(title)
-                    .font(PPProType.medium(15))
-                Spacer(minLength: 8)
-                Image(systemName: isRTL ? "chevron.left" : "chevron.right")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(palette.secondary)
+            HStack(spacing: 12) {
+                if id == "pro.login.google" {
+                    if let url = Bundle.main.url(forResource: "GoogleSignIn", withExtension: "bundle"),
+                       let bundle = Bundle(url: url),
+                       let logo = UIImage(named: "google", in: bundle, compatibleWith: nil) {
+                        Image(uiImage: logo).resizable().scaledToFit()
+                            .frame(width: 24, height: 24).accessibilityHidden(true)
+                    }
+                } else {
+                    Image(systemName: symbol).font(.system(size: 21, weight: .medium))
+                        .frame(width: 28).accessibilityHidden(true)
+                }
+                Text(title).font(PPProType.medium(17))
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
             }
             .foregroundStyle(palette.text)
-            .padding(.horizontal, 16)
-            .frame(minHeight: 52)
-            .background(palette.accentSoft.opacity(0.55), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 17, style: .continuous)
-                    .stroke(palette.hairline, lineWidth: 0.8)
-            }
+            .padding(.horizontal, 16).padding(.vertical, 12)
+            .frame(minHeight: 54)
+            .background(palette.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay { RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(palette.hairline, lineWidth: 1) }
         }
-        .buttonStyle(PPProPressStyle())
-        .disabled(model.isBusy)
-        .opacity(model.isBusy ? 0.45 : 1)
+        .buttonStyle(.plain)
+        .disabled(interactionsDisabled)
+        .opacity(interactionsDisabled ? 0.55 : 1)
+        .accessibilityIdentifier(id)
     }
 
-    private var providerAccessStrip: some View {
+    private var providerAccess: some View {
         Button(action: onProviderApplication) {
-            HStack(spacing: 12) {
-                Image(systemName: "building.2.crop.circle.fill")
-                    .font(.system(size: 18, weight: .semibold))
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: "building.2.crop.circle")
+                    .font(.system(size: 27, weight: .medium))
                     .foregroundStyle(palette.accent)
-                    .frame(width: 42, height: 42)
-                    .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(localized("ProLoginAccessTitle"))
-                        .font(PPProType.medium(14))
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(localized("ProLoginProviderHeadline"))
+                        .font(PPProType.bold(18, relativeTo: .headline))
                         .foregroundStyle(palette.text)
-                    Text(localized("ProLoginAccessSummary"))
-                        .font(PPProType.regular(12))
+                    Text(localized("ProLoginProviderSubtitle"))
+                        .font(PPProType.regular(15))
                         .foregroundStyle(palette.secondary)
-                        .lineLimit(sizeCategory.isAccessibilityCategory ? 3 : 2)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-
-                Spacer(minLength: 8)
-                Image(systemName: "arrow.down.circle")
-                    .foregroundStyle(palette.secondary)
+                Spacer(minLength: 4)
+                Image(systemName: isRTL ? "chevron.left" : "chevron.right")
+                    .foregroundStyle(palette.secondary).accessibilityHidden(true)
             }
-            .padding(14)
-            .background(palette.surface.opacity(0.75), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(palette.hairline, lineWidth: 0.8)
-            }
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(PPProPressStyle())
-        .disabled(model.isBusy)
+        .buttonStyle(.plain)
+        .disabled(interactionsDisabled)
+        .accessibilityIdentifier("pro.login.providerApplication")
     }
 
-    private var footer: some View {
-        Text(localized("PulseCommand_BrandName"))
-            .font(PPProType.medium(12, relativeTo: .caption))
-            .foregroundStyle(palette.secondary)
-            .frame(maxWidth: .infinity, alignment: .center)
+    private var securityNote: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: "lock.shield").accessibilityHidden(true)
+            Text(localized("ProLoginStatusNote"))
+                .font(PPProType.regular(14, relativeTo: .footnote))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(palette.secondary)
     }
 
-    private func compactUtility(title: String, symbol: String, action: @escaping () -> Void) -> some View {
+    private func utility(_ title: String, symbol: String, id: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 5) {
-                Image(systemName: symbol)
-                    .font(.system(size: 11, weight: .semibold))
-                Text(title)
-                    .font(PPProType.medium(12, relativeTo: .caption))
-                    .lineLimit(1)
+                Image(systemName: symbol).accessibilityHidden(true)
+                Text(title).font(PPProType.medium(14, relativeTo: .caption))
             }
             .foregroundStyle(palette.text)
-            .padding(.horizontal, 10)
-            .frame(minHeight: 44)
-            .ppProMaterialSurface(radius: 13, palette: palette, interactive: true)
+            .padding(.horizontal, 6)
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
         }
-        .buttonStyle(PPProPressStyle())
+        .buttonStyle(.plain)
         .disabled(model.isBusy)
+        .accessibilityIdentifier(id)
     }
 
-    private func localized(_ key: String) -> String {
-        Language.get(key, alter: nil)
-    }
+    private func localized(_ key: String) -> String { Language.get(key, alter: nil) }
 }
 
 // ============================================================================
@@ -3542,10 +3421,17 @@ struct PPProAvatarView: View {
                     switch phase {
                     case .success(let image):
                         image.resizable().scaledToFill()
+                    case .empty:
+                        ZStack {
+                            fallbackView
+                            ProgressView()
+                                .scaleEffect(0.65)
+                        }
                     default:
                         fallbackView
                     }
                 }
+                .id(urlString)
             } else {
                 fallbackView
             }

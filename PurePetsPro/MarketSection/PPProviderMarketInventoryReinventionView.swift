@@ -1453,7 +1453,7 @@ public struct PPProviderMarketInventoryView: View {
     // MARK: - 5. The Living Product Stream
 
     private var productStreamSection: some View {
-        VStack(spacing: 12) {
+        LazyVStack(spacing: 12) {
             if viewModel.filteredItems.isEmpty {
                 emptyInventoryStateView
             } else {

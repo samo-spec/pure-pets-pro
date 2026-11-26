@@ -95,9 +95,10 @@ static NSString *PPCurrentCountryFromCarrier(void) {
 
 - (void)refreshFromFirestore {
     if (self.loading) return;
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return;
     self.loading = YES;
 
-    FIRFirestore *db = [FIRFirestore firestore];
     [[db collectionWithPath:@"countries"] getDocumentsWithCompletion:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         if (error) {
             NSLog(@"[CitiesManager] Failed to fetch countries: %@", error);

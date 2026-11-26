@@ -19,14 +19,17 @@
         DLog(@"❌ inboxRefForUID: UID is nil/empty");
         return nil;
     }
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        return nil;
+    }
     return [[[db collectionWithPath:@"UsersCol"]
               documentWithPath:safeUID]
              collectionWithPath:@"inbox"]; // (retain only if ARC is off)
 }
 
 + (nullable FIRCollectionReference *)inboxRefForCurrentUser {
-    NSString *uid = [FIRAuth auth].currentUser.uid;
+    NSString *uid = [PPProSessionCoordinator.shared activeUID];
     if (uid.length == 0) {
         DLog(@"❌ inboxRefForCurrentUser: not signed in");
         return nil;

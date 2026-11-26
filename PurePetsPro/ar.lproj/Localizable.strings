@@ -4975,3 +4975,21 @@
 
 "ProFulfillment_OrderDeliveryFee" = "رسوم توصيل الطلب بالكامل";
 "ProFulfillment_RecordedFeeUnavailable" = "لم تُسجّل لهذا الطلب";
+
+"ProIdentityPortalTitle" = "مساحتك المهنية";
+"ProIdentityPortalSubtitle" = "سجّل الدخول بحسابك الخاص في بيور بيتس للوصول إلى مساحة العمل المصرّح بها.";
+
+"ProIdentityRememberedAccounts" = "الحسابات المحفوظة";
+"ProIdentityReauthenticationHint" = "اختر الحساب ثم تحقّق منه باستخدام طريقة تسجيل الدخول المعتادة.";
+"ProIdentityUseAnotherAccount" = "استخدام حساب آخر";
+"ProIdentityWrongAccount" = "الحساب الذي تم التحقق منه لا يطابق الحساب المحدد. يرجى المحاولة مجدداً.";
+
+"ProIdentitySignInMethods" = "اختر طريقة تسجيل الدخول";
+"ProIdentityVerifying" = "جارٍ التحقق من هويتك…";
+"ProIdentityRecoveryTitle" = "يلزم إكمال إنهاء الجلسة السابقة";
+"ProIdentityRecoveryMessage" = "تعذّر التحقق من تسجيل الخروج من حسابك السابق بعد. أعد المحاولة قبل تسجيل الدخول.";
+"ProIdentityRecoveryRetry" = "التحقق ومسح الجلسة";
+"ProIdentityRemoveAccount" = "إزالة";
+"ProIdentityRemoveAccountTitle" = "إزالة الحساب المحفوظ؟";
+"ProIdentityRemoveAccountMessage" = "سيتم إزالة %@ ومسح تفضيلاته المخزنة من هذا الجهاز.";
+"DriverCockpit_ActiveWork_SwitchBlocked" = "أكمل أو أخلِ مهام التوصيل النشطة قبل تبديل الحساب.";

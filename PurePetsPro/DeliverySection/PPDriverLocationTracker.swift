@@ -51,12 +51,26 @@ public final class PPDriverLocationTracker: NSObject, ObservableObject, @preconc
         self.authorizationStatus = locationManager.authorizationStatus
         super.init()
         self.locationManager.delegate = self
-        self.locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
-        self.locationManager.distanceFilter = 1.0 // continuous telemetry
-        self.locationManager.headingFilter = 3.0 // 3 degrees
+        self.locationManager.activityType = .automotiveNavigation
+        self.locationManager.pausesLocationUpdatesAutomatically = true
+        self.locationManager.desiredAccuracy = kCLLocationAccuracyBest
+        self.locationManager.distanceFilter = 5.0
+        self.locationManager.headingFilter = 5.0
         if let initial = locationManager.location, isLocationUsable(initial) {
             self.currentLocation = initial
         }
+        PPProSessionCoordinator.shared().registerSessionTeardownHandler({ [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.resetForSessionTeardown()
+            }
+        }, forKey: "PPDriverLocationTracker")
+    }
+
+    public func resetForSessionTeardown() {
+        stopTracking()
+        currentLocation = nil
+        currentHeading = nil
+        locationFailed = false
     }
 
     public func startTracking() {
@@ -126,6 +140,10 @@ public final class PPDriverLocationTracker: NSObject, ObservableObject, @preconc
         guard let latest = locations.last(where: { isLocationUsable($0) }) else { return }
         self.locationFailed = false
         self.currentLocation = latest
+        let targetFilter: CLLocationDistance = latest.speed >= 1.5 ? 5.0 : 20.0
+        if locationManager.distanceFilter != targetFilter {
+            locationManager.distanceFilter = targetFilter
+        }
     }
 
     public func locationManager(_ manager: CLLocationManager, didUpdateHeading newHeading: CLHeading) {

@@ -39,8 +39,19 @@ import FirebaseFunctions
 @objc public final class PPAccessoryVariantService: NSObject, @unchecked Sendable {
     @objc public static let shared = PPAccessoryVariantService()
 
-    private let functions = Functions.functions()
-    private let db = Firestore.firestore()
+    private func activeFunctions() throws -> Functions {
+        guard let functions = PPProSessionCoordinator.shared().activeFunctions() else {
+            throw PPAccessoryVariantServiceError.notAuthenticated
+        }
+        return functions
+    }
+
+    private func activeDB() throws -> Firestore {
+        guard let db = PPProSessionCoordinator.shared().activeFirestore() else {
+            throw PPAccessoryVariantServiceError.notAuthenticated
+        }
+        return db
+    }
 
     private override init() { super.init() }
 
@@ -62,6 +73,7 @@ import FirebaseFunctions
         let trimmed = familyId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw PPAccessoryVariantServiceError.invalidFamilyIdentifier }
 
+        let db = try activeDB()
         let snapshot = try await db.collection("ProductFamilies").document(trimmed).getDocument(source: .server)
         guard snapshot.exists, let data = snapshot.data() else {
             throw PPAccessoryVariantServiceError.familyNotFound
@@ -112,6 +124,7 @@ import FirebaseFunctions
 
     private func loadProducts(ids: [String]) async throws -> [String: PetAccessory] {
         guard !ids.isEmpty else { return [:] }
+        let db = try activeDB()
         var result: [String: PetAccessory] = [:]
         for chunk in stride(from: 0, to: ids.count, by: 30).map({ Array(ids[$0..<min($0 + 30, ids.count)]) }) {
             let snapshot = try await db.collection("petAccessories")
@@ -130,6 +143,7 @@ import FirebaseFunctions
     public func loadProduct(productId: String) async throws -> PetAccessory {
         let trimmed = productId.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { throw PPAccessoryVariantServiceError.invalidFamilyIdentifier }
+        let db = try activeDB()
         let snapshot = try await db.collection("petAccessories").document(trimmed).getDocument(source: .server)
         guard snapshot.exists, let data = snapshot.data() else {
             throw Self.unavailableProducts([trimmed])
@@ -272,11 +286,12 @@ import FirebaseFunctions
     }
 
     private func invokeFamilyCommand(_ envelope: [String: Any]) async throws -> PPAccessoryVariantSaveResult {
-        guard let currentUser = Auth.auth().currentUser else {
+        guard let currentUser = PPProSessionCoordinator.shared().currentUser() else {
             throw PPAccessoryVariantServiceError.notAuthenticated
         }
         _ = try? await currentUser.getIDToken(forcingRefresh: false)
 
+        let functions = try activeFunctions()
         let boxed = PPVariantSendableDictionary(dict: envelope)
         let callable = functions.httpsCallable(PPAccessoryVariantContract.callableName)
         callable.timeoutInterval = PPAccessoryVariantService.callableTimeout
@@ -288,7 +303,7 @@ import FirebaseFunctions
         } catch {
             let nsError = error as NSError
             let isUnauthenticated = nsError.code == FunctionsErrorCode.unauthenticated.rawValue
-            if isUnauthenticated, let currentUser = Auth.auth().currentUser {
+            if isUnauthenticated, let currentUser = PPProSessionCoordinator.shared().currentUser() {
                 _ = try? await currentUser.getIDToken(forcingRefresh: true)
                 do {
                     return try parseResult(from: try await callable.call(boxed.dict))

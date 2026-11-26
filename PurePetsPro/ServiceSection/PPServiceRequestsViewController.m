@@ -798,7 +798,7 @@
 #pragma mark - Real-Time Observation
 
 - (void)startObservingBookings {
-    NSString *ownerID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *ownerID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     __weak typeof(self) weakSelf = self;
     self.bookingsListener = [[PPServiceManager sharedManager] observeBookingsForOwnerID:ownerID onChange:^(NSArray<PPServiceBookingItem *> * _Nullable bookings, NSError * _Nullable error) {
         if (!weakSelf) return;

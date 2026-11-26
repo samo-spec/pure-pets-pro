@@ -34,13 +34,18 @@ static NSError *PPServiceError(NSInteger code, NSString *message) {
 
 - (instancetype)init {
     if (self = [super init]) {
-        _db = [FIRFirestore firestore];
     }
     return self;
 }
 
+- (FIRFirestore *)db {
+    return [PPProSessionCoordinator.shared activeFirestore];
+}
+
 - (FIRCollectionReference *)col {
-    return [self.db collectionWithPath:kColServices];
+    FIRFirestore *db = self.db;
+    if (!db) return nil;
+    return [db collectionWithPath:kColServices];
 }
 
 #pragma mark - Mapping
@@ -60,11 +65,21 @@ static NSError *PPServiceError(NSInteger code, NSString *message) {
 #pragma mark - READ (Provider-Scoped)
 
 - (id<FIRListenerRegistration>)observeServicesForOwnerID:(NSString *)ownerID onChange:(PPServiceArrayBlock)onChange {
-    FIRQuery *q = [[self col] queryWhereField:@"serviceOwnerID" isEqualTo:ownerID ?: @""];
+    FIRQuery *q = [[[self col] queryWhereField:@"serviceOwnerID" isEqualTo:ownerID ?: @""] queryLimitedTo:100];
     return [q addSnapshotListener:^(FIRQuerySnapshot * _Nullable snap, NSError * _Nullable error) {
         if (!onChange) return;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            onChange(error ? nil : [self _mapDocs:snap.documents], error);
+        if (error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                onChange(nil, error);
+            });
+            return;
+        }
+        NSArray<FIRDocumentSnapshot *> *docs = snap.documents ?: @[];
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            NSArray<PPServiceModel *> *services = [self _mapDocs:docs];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                onChange(services, nil);
+            });
         });
     }];
 }
@@ -158,7 +173,7 @@ static NSError *PPServiceError(NSInteger code, NSString *message) {
     [[[self col] documentWithPath:service.serviceID] updateData:@{
         @"isDeleted": @YES,
         @"archivedAt": [NSDate date],
-        @"archivedBy": [FIRAuth auth].currentUser.uid ?: @"",
+        @"archivedBy": [PPProSessionCoordinator.shared activeUID] ?: @"",
         @"updatedAt": [FIRTimestamp timestamp]
     } completion:completion];
 }
@@ -171,14 +186,19 @@ static NSError *PPServiceError(NSInteger code, NSString *message) {
         if (completion) completion(@"");
         return;
     }
+    FIRStorage *storage = [PPProSessionCoordinator.shared activeStorage];
+    if (!storage) {
+        if (completion) completion(@"");
+        return;
+    }
     NSString *path = [NSString stringWithFormat:@"services/%@.jpg", serviceID];
-    FIRStorageReference *ref = [[[FIRStorage storage] reference] child:path];
+    FIRStorageReference *ref = [[storage reference] child:path];
 
     // Explicit JPEG contentType for Storage security rules
     FIRStorageMetadata *meta = [[FIRStorageMetadata alloc] init];
     meta.contentType = @"image/jpeg";
     meta.customMetadata = @{
-        @"uploaded_by": [FIRAuth auth].currentUser.uid ?: @"",
+        @"uploaded_by": [PPProSessionCoordinator.shared activeUID] ?: @"",
         @"entity_type": @"service",
         @"entity_id": serviceID ?: @""
     };
@@ -320,7 +340,6 @@ static NSString * const kBookingsStoragePrefix = @"pp_provider_service_bookings_
         [raw addObject:[item toDictionary]];
     }
     [[NSUserDefaults standardUserDefaults] setObject:[raw copy] forKey:key];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 - (id<FIRListenerRegistration>)observeBookingsForOwnerID:(NSString *)ownerID onChange:(PPBookingArrayBlock)onChange {
@@ -373,7 +392,7 @@ static NSString * const kBookingsStoragePrefix = @"pp_provider_service_bookings_
         return;
     }
 
-    NSString *ownerID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *ownerID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     NSArray<PPServiceBookingItem *> *items = [self _loadCachedBookingsForOwner:ownerID];
     BOOL found = NO;
     for (PPServiceBookingItem *item in items) {
@@ -399,7 +418,7 @@ static NSString * const kBookingsStoragePrefix = @"pp_provider_service_bookings_
         return;
     }
 
-    NSString *ownerID = booking.serviceOwnerID.length > 0 ? booking.serviceOwnerID : ([FIRAuth auth].currentUser.uid ?: @"");
+    NSString *ownerID = booking.serviceOwnerID.length > 0 ? booking.serviceOwnerID : ([PPProSessionCoordinator.shared activeUID] ?: @"");
     NSMutableArray<PPServiceBookingItem *> *items = [[self _loadCachedBookingsForOwner:ownerID] mutableCopy];
     NSInteger idx = NSNotFound;
     for (NSInteger i = 0; i < items.count; i++) {

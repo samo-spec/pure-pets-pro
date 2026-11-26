@@ -133,7 +133,6 @@ NSString * const kStaffPermVeterinariansManage = @"veterinarians.manage";
 #pragma mark - PPStaffAuth
 
 @interface PPStaffAuth ()
-@property (nonatomic, strong) FIRFirestore *db;
 @property (nonatomic, strong, nullable) PPStaffDoc *cachedCurrentStaff;
 @end
 
@@ -148,13 +147,22 @@ NSString * const kStaffPermVeterinariansManage = @"veterinarians.manage";
 
 - (instancetype)init {
     if ((self = [super init])) {
-        _db = [FIRFirestore firestore];
+        __weak typeof(self) weakSelf = self;
+        [PPProSessionCoordinator.shared registerSessionTeardownHandler:^(__unused NSString *reason) {
+            weakSelf.cachedCurrentStaff = nil;
+        } forKey:@"PPStaffAuth"];
     }
     return self;
 }
 
+- (FIRFirestore *)db {
+    return [PPProSessionCoordinator.shared activeFirestore];
+}
+
 - (FIRDocumentReference *)staffDoc:(NSString *)uid {
-    return [[self.db collectionWithPath:kStaffUsersCollection] documentWithPath:uid];
+    FIRFirestore *db = self.db;
+    if (!db) return nil;
+    return [[db collectionWithPath:kStaffUsersCollection] documentWithPath:uid];
 }
 
 - (void)fetchStaffDoc:(NSString *)uid completion:(PPStaffDocCompletion)completion {
@@ -228,7 +236,7 @@ NSString * const kStaffPermVeterinariansManage = @"veterinarians.manage";
 }
 
 - (void)checkCurrentUserIsStaff:(void(^)(BOOL, PPStaffDoc * _Nullable))completion {
-    NSString *uid = [FIRAuth auth].currentUser.uid;
+    NSString *uid = PPProSessionCoordinator.shared.activeUID;
     if (!uid.length) {
         if (completion) completion(NO, nil);
         return;
@@ -241,7 +249,7 @@ NSString * const kStaffPermVeterinariansManage = @"veterinarians.manage";
 }
 
 - (void)refreshCurrentStaff:(PPStaffDocCompletion)completion {
-    NSString *uid = [FIRAuth auth].currentUser.uid;
+    NSString *uid = PPProSessionCoordinator.shared.activeUID;
     if (!uid.length) {
         self.cachedCurrentStaff = nil;
         if (completion) completion(nil, nil);

@@ -71,11 +71,13 @@ final class PPProProfileSettingsViewModel: ObservableObject {
     @Published var editedEmail: String
     @Published var editedPhone: String
     @Published var isSaving: Bool = false
+    @Published var isUploadingAvatar: Bool = false
     @Published var showAppearanceSheet: Bool = false
     @Published var showLanguageAlert: Bool = false
     @Published var showLogoutAlert: Bool = false
 
     var onSave: ((String, String, String) -> Void)?
+    var onChangeAvatar: (() -> Void)?
     var onEditProviderProfile: (() -> Void)?
     var onOpenNotifications: (() -> Void)?
     var onSelectTheme: ((String) -> Void)?
@@ -427,64 +429,91 @@ public struct PPProProfileSettingsView: View {
     private var operatorIdentityHeroCard: some View {
         VStack(spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
-                // Operator Avatar with Halo Ring
-                ZStack {
-                    Circle()
-                        .strokeBorder(
-                            LinearGradient(
-                                colors: [Color(uiColor: .ppPrimary), Color.blue.opacity(0.6), Color.purple.opacity(0.5)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
-                            ),
-                            lineWidth: 2.2
-                        )
-                        .frame(width: 68, height: 68)
+                // Tappable Operator Avatar with Halo Ring & Camera Badge
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    viewModel.onChangeAvatar?()
+                } label: {
+                    ZStack(alignment: .bottomTrailing) {
+                        ZStack {
+                            Circle()
+                                .strokeBorder(
+                                    LinearGradient(
+                                        colors: [Color(uiColor: .ppPrimary), Color.blue.opacity(0.6), Color.purple.opacity(0.5)],
+                                        startPoint: .topLeading,
+                                        endPoint: .bottomTrailing
+                                    ),
+                                    lineWidth: 2.2
+                                )
+                                .frame(width: 68, height: 68)
 
-                    if let avatar = viewModel.snapshot.avatarURL, let url = URL(string: avatar), !avatar.isEmpty {
-                        AsyncImage(url: url) { phase in
-                            switch phase {
-                            case .success(let image):
-                                image.resizable().scaledToFill()
-                            default:
+                            if let avatar = viewModel.snapshot.avatarURL, let url = URL(string: avatar), !avatar.isEmpty {
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image.resizable().scaledToFill()
+                                    case .empty:
+                                        ZStack {
+                                            avatarInitialsFallback
+                                            ProgressView()
+                                                .scaleEffect(0.75)
+                                        }
+                                    default:
+                                        avatarInitialsFallback
+                                    }
+                                }
+                                .id(avatar)
+                                .frame(width: 60, height: 60)
+                                .clipShape(Circle())
+                            } else {
                                 avatarInitialsFallback
                             }
-                        }
-                        .frame(width: 60, height: 60)
-                        .clipShape(Circle())
-                    } else {
-                        avatarInitialsFallback
-                    }
 
-                    // Verified Checkmark Dot
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            ZStack {
+                            if viewModel.isUploadingAvatar {
                                 Circle()
-                                    .fill(Color(uiColor: .systemBackground))
-                                    .frame(width: 20, height: 20)
-                                Image(systemName: "checkmark.seal.fill")
-                                    .font(.system(size: 15))
-                                    .foregroundColor(Color(uiColor: .ppPrimary))
+                                    .fill(Color.black.opacity(0.45))
+                                    .frame(width: 60, height: 60)
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.85)
                             }
                         }
+
+                        // Camera Edit Badge
+                        ZStack {
+                            Circle()
+                                .fill(Color(uiColor: .ppPrimary))
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundColor(.white)
+                        }
+                        .frame(width: 24, height: 24)
+                        .overlay(Circle().stroke(Color(uiColor: .ppSurface), lineWidth: 2))
+                        .offset(x: 2, y: 2)
                     }
                     .frame(width: 68, height: 68)
                 }
-                .frame(width: 68, height: 68)
+                .buttonStyle(PlainButtonStyle())
+                .disabled(viewModel.isUploadingAvatar)
+                .accessibilityLabel(Language.get("PulseCommand_Action_ChangePhoto", alter: Language.isRTL() ? "تغيير الصورة الشخصية" : "Change Profile Photo"))
 
                 // Operator Text Info Stack
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        Text(viewModel.snapshot.displayName.isEmpty
-                             ? (Language.isRTL() ? "مشغل بيور بتس" : "PurePets Operator")
-                             : viewModel.snapshot.displayName
-                        )
-                        .font(PPFont.bold(16.5, relativeTo: .headline))
-                        .foregroundColor(Color(uiColor: .ppTextPrimary))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.85)
+                        HStack(spacing: 4) {
+                            Text(viewModel.snapshot.displayName.isEmpty
+                                 ? (Language.isRTL() ? "مشغل بيور بتس" : "PurePets Operator")
+                                 : viewModel.snapshot.displayName
+                            )
+                            .font(PPFont.bold(16.5, relativeTo: .headline))
+                            .foregroundColor(Color(uiColor: .ppTextPrimary))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.system(size: 13))
+                                .foregroundColor(Color(uiColor: .ppPrimary))
+                        }
 
                         Spacer(minLength: 4)
 
@@ -543,6 +572,26 @@ public struct PPProProfileSettingsView: View {
                         }
                     }
                     .padding(.top, 2)
+
+                    Button {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        viewModel.onChangeAvatar?()
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "camera.fill")
+                                .font(.system(size: 10, weight: .bold))
+                            Text(Language.get("PulseCommand_Action_ChangePhoto", alter: Language.isRTL() ? "تغيير الصورة الشخصية" : "Change Profile Photo"))
+                                .font(PPFont.bold(11, relativeTo: .caption2))
+                        }
+                        .foregroundColor(Color(uiColor: .ppPrimary))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(Color(uiColor: .ppPrimary).opacity(0.10), in: Capsule())
+                        .overlay(Capsule().stroke(Color(uiColor: .ppPrimary).opacity(0.2), lineWidth: 0.8))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .disabled(viewModel.isUploadingAvatar)
+                    .padding(.top, 4)
                 }
             }
         }
@@ -1087,6 +1136,10 @@ public final class PPProProfileSettingsHostController: UIViewController {
     @objc public func didFinishSaving() {
         viewModel.isSaving = false
     }
+
+    @objc public func setUploadingAvatar(_ uploading: Bool) {
+        viewModel.isUploadingAvatar = uploading
+    }
 }
 
 @objc(PPProProfileSettingsHostingBridge)
@@ -1095,6 +1148,7 @@ public final class PPProProfileSettingsHostingBridge: NSObject {
     @objc public static func makeViewController(
         snapshot: PPProProfileSnapshot,
         onSave: @escaping (String, String, String) -> Void,
+        onChangeAvatar: @escaping () -> Void,
         onEditProviderProfile: @escaping () -> Void,
         onOpenNotifications: @escaping () -> Void,
         onSelectTheme: @escaping (String) -> Void,
@@ -1104,6 +1158,7 @@ public final class PPProProfileSettingsHostingBridge: NSObject {
     ) -> PPProProfileSettingsHostController {
         let vm = PPProProfileSettingsViewModel(snapshot: snapshot)
         vm.onSave = onSave
+        vm.onChangeAvatar = onChangeAvatar
         vm.onEditProviderProfile = onEditProviderProfile
         vm.onOpenNotifications = onOpenNotifications
         vm.onSelectTheme = onSelectTheme

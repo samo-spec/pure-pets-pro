@@ -33,9 +33,14 @@ static NSString * const kLanguageDidChangeNotification = @"LanguageDidChangeNoti
         bundle = [NSBundle mainBundle];
     }
 
-    // Cache selection
-    [[NSUserDefaults standardUserDefaults] setObject:norm forKey:LanguageCodeIdIndentifier];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    // Cache selection. Fixture launch arguments must not overwrite the device preference.
+    BOOL persistLanguage = YES;
+#if DEBUG
+    persistLanguage = ![NSProcessInfo.processInfo.arguments containsObject:@"-PPProIdentityPortalUITest"];
+#endif
+    if (persistLanguage) {
+        [[NSUserDefaults standardUserDefaults] setObject:norm forKey:LanguageCodeIdIndentifier];
+    }
 
     // Notify app
     [[NSNotificationCenter defaultCenter] postNotificationName:kLanguageDidChangeNotification object:nil];

@@ -71,8 +71,6 @@ final class PPAccessoryVariantMediaService {
     /// Matches the server's `imageURLsArray` ceiling of 12 entries.
     static let maxImagesPerVariant = 12
 
-    private let storage = Storage.storage()
-
     private init() {}
 
     // MARK: - Image Preparation
@@ -176,7 +174,8 @@ final class PPAccessoryVariantMediaService {
         productId: String,
         colorId: String
     ) async throws {
-        guard let uid = Auth.auth().currentUser?.uid else {
+        guard let uid = PPProSessionCoordinator.shared().activeUID, !uid.isEmpty,
+              let storage = PPProSessionCoordinator.shared().activeStorage() else {
             throw PPAccessoryVariantMediaError.notAuthenticated
         }
         guard staged.count <= Self.maxImagesPerVariant else {
@@ -317,6 +316,7 @@ final class PPAccessoryVariantMediaService {
     }
 
     func deleteOrphans(_ urls: [String]) async {
+        guard let storage = PPProSessionCoordinator.shared().activeStorage() else { return }
         for url in urls where !url.isEmpty {
             let reference = storage.reference(forURL: url)
             await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in

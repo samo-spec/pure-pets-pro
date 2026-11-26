@@ -1932,8 +1932,16 @@ public struct PPProviderMarketItemStudioScreen: View {
 
     private func uploadImagesToFirebaseStorage(images: [UIImage]) async throws -> [String] {
         guard !images.isEmpty else { return [] }
-        let uid = Auth.auth().currentUser?.uid ?? "unknown_vendor"
-        let storageRef = Storage.storage().reference()
+        guard let uid = PPProSessionCoordinator.shared().activeUID,
+              !uid.isEmpty,
+              let storage = PPProSessionCoordinator.shared().activeStorage() else {
+            throw NSError(
+                domain: PPProSessionCoordinatorErrorDomain,
+                code: PPProSessionCoordinatorErrorCode.transitionRequired.rawValue,
+                userInfo: [NSLocalizedDescriptionKey: Language.isRTL() ? "انتهت الجلسة النشطة. يرجى إعادة المحاولة." : "Active session unavailable. Please sign in again."]
+            )
+        }
+        let storageRef = storage.reference()
         var uploadedURLs: [String] = []
 
         for (idx, image) in images.enumerated() {

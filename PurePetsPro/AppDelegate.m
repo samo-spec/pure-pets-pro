@@ -10,6 +10,8 @@
 #import "SceneDelegate.h"
 #import "PPFirebaseCompat.h"
 #import "PPProInAppNotificationPresenter.h"
+#import "SDImageCache.h"
+#import "SDImageCacheConfig.h"
 #import <sys/utsname.h>
 @import FirebaseMessaging;
 @import GoogleSignIn;
@@ -69,8 +71,9 @@ static NSString *PPProNotificationRecipientUID(NSDictionary *payload)
 
 static NSString *PPProCurrentSignedInUID(void)
 {
-    NSString *firUID = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *firUID = PPAdminRouteTrimmedString([PPProSessionCoordinator.shared activeUID]);
     if (firUID.length > 0) return firUID;
+    if ([PPProSessionCoordinator.shared requiresTransitionRecovery]) return @"";
     NSString *userMgrUID = PPAdminRouteTrimmedString([UserManager shared].currentUser.uid ?: [UserManager shared].currentUser.ID);
     return userMgrUID;
 }
@@ -261,6 +264,8 @@ static BOOL PPProIsDriverTaskPayload(NSDictionary *payload)
 
 @interface AppDelegate ()
 @property (nonatomic, assign) FIRAuthStateDidChangeListenerHandle authStateHandle;
+@property (nonatomic, strong, nullable) FIRAuth *authStateOwner;
+@property (nonatomic, strong, nullable) id<NSObject> activeRuntimeObserver;
 @property (nonatomic, copy) NSString *apnsTokenHexString;
 @property (nonatomic, assign) BOOL notificationV2RegistrationInFlight;
 @property (nonatomic, assign) BOOL notificationV2RegistrationNeedsForegroundRetry;
@@ -295,7 +300,7 @@ static BOOL PPProIsDriverTaskPayload(NSDictionary *payload)
     // Inbox rows carry no push stamp, so an unaddressed payload stays
     // routable here; one addressed to another account never is.
     return PPProPayloadHasSupportedSchema(payload) && !PPAdminPayloadTargetsOtherApp(payload) &&
-        [self pp_notificationPayload:payload isAddressedToUID:[FIRAuth auth].currentUser.uid requiresRecipient:NO];
+        [self pp_notificationPayload:payload isAddressedToUID:[PPProSessionCoordinator.shared activeUID] requiresRecipient:NO];
 }
 
 + (BOOL)pp_notificationPayload:(NSDictionary *)payload
@@ -370,6 +375,13 @@ extern BOOL PP_TouchDotsEnabled;
 
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
+#if DEBUG
+    if ([NSProcessInfo.processInfo.arguments containsObject:@"-PPProIdentityPortalUITest"]) {
+        // Presentation-only test launch. Do not initialize Firebase, Auth or push.
+        [self setupAppAppearance];
+        return YES;
+    }
+#endif
     
     // PPImageCollectionRow auto-registers via +load — no manual registration needed.
 
@@ -386,7 +398,6 @@ extern BOOL PP_TouchDotsEnabled;
 
     
     [[NSUserDefaults standardUserDefaults] setObject:@[lang] forKey:@"AppleLanguages"];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 
     DLog(@"AppleLanguages  lang %@" ,lang);
     // --- Push Notifications ---
@@ -445,7 +456,10 @@ extern BOOL PP_TouchDotsEnabled;
 {
     (void)application;
     (void)options;
-    return [GIDSignIn.sharedInstance handleURL:url];
+    if ([GIDSignIn.sharedInstance handleURL:url]) {
+        return YES;
+    }
+    return [PPProSessionCoordinator.shared canHandleAuthURL:url];
 }
 
 // ===============================  NOTIFICATIONS ===========================================================//
@@ -488,7 +502,9 @@ extern BOOL PP_TouchDotsEnabled;
 
     self.apnsTokenHexString = [tokenString copy];
     DLog(@"[NotificationsV2] APNs token updated. reason=apns_registration hasToken=%@", self.apnsTokenHexString.length > 0 ? @"yes" : @"no");
-    
+
+    // Forward APNs token across active/staged FirebaseAuth slots (Phone Auth + reCAPTCHA).
+    [[PPProSessionCoordinator shared] setAPNSTokenForActiveAuths:deviceToken];
     // Forward the token to Firebase Messaging
     [FIRMessaging messaging].APNSToken = deviceToken;
     [self pp_attemptNotificationV2RegistrationForReason:@"apns_registration"];
@@ -520,27 +536,25 @@ extern BOOL PP_TouchDotsEnabled;
 
 #pragma mark - Handle Token
 
-- (void)pp_registerForAdminTokenSync {
+- (void)pp_attachAuthStateListenerToActiveAuth {
+    if (self.authStateHandle) {
+        [(self.authStateOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authStateHandle];
+        self.authStateHandle = nil;
+        self.authStateOwner = nil;
+    }
+    FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+    self.authStateOwner = activeAuth;
     __weak typeof(self) weakSelf = self;
-    
-    // 1. Resolve the current token and register the V2 device binding.
-    [self pp_resolveCurrentFCMTokenWithCompletion:^(NSString * _Nullable token) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf || token.length == 0) return;
-        NSString *currentUID = [FIRAuth auth].currentUser.uid;
-        if (currentUID.length > 0) {
-            [strongSelf pp_attemptNotificationV2RegistrationForReason:@"launch_sync"];
-        }
-    }];
-
-    // 2. Listen for auth changes to sync token for the new user session
-    self.authStateHandle = [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth * _Nonnull auth, FIRUser * _Nullable user) {
+    self.authStateHandle = [activeAuth addAuthStateDidChangeListener:^(FIRAuth * _Nonnull auth, FIRUser * _Nullable user) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
         // Notification Center belongs to one login at a time.
         [strongSelf pp_removeDeliveredNotificationsNotForSignedInAccount];
-        NSString *uid = PPAdminRouteTrimmedString(user.uid);
+        NSString *uid = PPAdminRouteTrimmedString([PPProSessionCoordinator.shared activeUID]);
+        if (auth == [PPProSessionCoordinator.shared activeAuth] && uid.length == 0) {
+            uid = PPAdminRouteTrimmedString(user.uid);
+        }
         NSDictionary *binding = [NSUserDefaults.standardUserDefaults dictionaryForKey:kPPProNotificationV2BindingDefaultsKey];
         NSString *boundUID = [binding isKindOfClass:NSDictionary.class] ? PPAdminRouteTrimmedString(binding[@"uid"]) : @"";
         // UserManager's logout holds the barrier and releases its own binding.
@@ -568,6 +582,60 @@ extern BOOL PP_TouchDotsEnabled;
         }];
         [strongSelf pp_attemptNotificationV2RegistrationForReason:@"auth_change"];
     }];
+}
+
+- (void)pp_registerForAdminTokenSync {
+    __weak typeof(self) weakSelf = self;
+    [[PPProSessionCoordinator shared] registerNotificationBarrierHandler:^(NSString * _Nonnull reason, void (^ _Nonnull done)(NSError * _Nullable)) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            if (done) done(nil);
+            return;
+        }
+        [strongSelf pp_beginNotificationV2LogoutBarrierWithCompletion:^{
+            NSString *mappedReason = [reason isEqualToString:kPPNotificationDeactivationReasonLogout]
+                ? kPPNotificationDeactivationReasonLogout
+                : kPPNotificationDeactivationReasonAccountSwitch;
+            void (^finishBarrier)(NSError * _Nullable) = ^(NSError * _Nullable deactivateError) {
+                [PPNotifications invalidateLocalDeviceTokenWithCompletion:^(__unused NSError * _Nullable rotErr) {
+                    [strongSelf pp_endNotificationV2LogoutBarrier];
+                    if (done) done(deactivateError);
+                }];
+            };
+            if ([PPProSessionCoordinator.shared activeFunctions] && [PPProSessionCoordinator.shared activeUID].length > 0) {
+                [PPNotifications deactivateNotificationDeviceV2WithReason:mappedReason completion:finishBarrier];
+            } else {
+                finishBarrier(nil);
+            }
+        }];
+    }];
+
+    // 1. Resolve the current token and register the V2 device binding.
+    [self pp_resolveCurrentFCMTokenWithCompletion:^(NSString * _Nullable token) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || token.length == 0) return;
+        NSString *currentUID = [PPProSessionCoordinator.shared activeUID];
+        if (currentUID.length > 0) {
+            [strongSelf pp_attemptNotificationV2RegistrationForReason:@"launch_sync"];
+        }
+    }];
+
+    // 2. Listen for auth changes on the active account runtime and re-attach when the slot swaps.
+    [self pp_attachAuthStateListenerToActiveAuth];
+    if (!self.activeRuntimeObserver) {
+        self.activeRuntimeObserver = [[NSNotificationCenter defaultCenter] addObserverForName:PPProSessionDidChangeActiveRuntimeNotification
+                                                                                     object:nil
+                                                                                      queue:NSOperationQueue.mainQueue
+                                                                                 usingBlock:^(__unused NSNotification * _Nonnull note) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf pp_attachAuthStateListenerToActiveAuth];
+            [strongSelf pp_removeDeliveredNotificationsNotForSignedInAccount];
+            if ([PPProSessionCoordinator.shared activeUID].length > 0) {
+                [strongSelf pp_attemptNotificationV2RegistrationForReason:@"account_switch"];
+            }
+        }];
+    }
 }
 
 - (BOOL)pp_hasCurrentNotificationV2BindingForUID:(NSString *)uid
@@ -608,7 +676,7 @@ extern BOOL PP_TouchDotsEnabled;
     // against the account signed in now.
     [self pp_removeDeliveredNotificationsNotForSignedInAccount];
 
-    NSString *uid = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *uid = PPAdminRouteTrimmedString([PPProSessionCoordinator.shared activeUID]);
     if (uid.length == 0) {
         return;
     }
@@ -638,7 +706,7 @@ extern BOOL PP_TouchDotsEnabled;
     if (self.notificationV2LogoutBarrierActive || self.notificationV2RegistrationInFlight) {
         return;
     }
-    NSString *uid = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *uid = PPAdminRouteTrimmedString([PPProSessionCoordinator.shared activeUID]);
     if (uid.length == 0) {
         return;
     }
@@ -661,7 +729,7 @@ extern BOOL PP_TouchDotsEnabled;
 /// of them when nobody is signed in.
 - (void)pp_removeDeliveredNotificationsNotForSignedInAccount
 {
-    NSString *uid = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *uid = PPAdminRouteTrimmedString([PPProSessionCoordinator.shared activeUID]);
     UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
     if (uid.length == 0) {
         [center removeAllDeliveredNotifications];
@@ -821,7 +889,7 @@ extern BOOL PP_TouchDotsEnabled;
 
 - (BOOL)pp_notificationV2RegistrationIsCurrentForUID:(NSString *)uid epoch:(NSUInteger)epoch
 {
-    NSString *activeUID = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *activeUID = PPAdminRouteTrimmedString([PPProSessionCoordinator.shared activeUID]);
     return !self.notificationV2LogoutBarrierActive &&
         epoch == self.notificationV2LifecycleEpoch &&
         [activeUID isEqualToString:PPAdminRouteTrimmedString(uid)];
@@ -837,7 +905,7 @@ extern BOOL PP_TouchDotsEnabled;
     BOOL ok = [response[@"ok"] respondsToSelector:@selector(boolValue)] && [response[@"ok"] boolValue];
     NSString *bindingGeneration = PPAdminRouteTrimmedString(response[@"bindingGeneration"]);
     NSString *fcmTokenHash = PPAdminRouteTrimmedString(response[@"fcmTokenHash"]);
-    NSString *activeUID = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *activeUID = PPAdminRouteTrimmedString([PPProSessionCoordinator.shared activeUID]);
     if (!ok || ![activeUID isEqualToString:PPAdminRouteTrimmedString(uid)] ||
         PPAdminRouteTrimmedString(installationId).length == 0 ||
         bindingGeneration.length == 0 || fcmTokenHash.length == 0) {
@@ -869,7 +937,12 @@ extern BOOL PP_TouchDotsEnabled;
         @"bindingGeneration": bindingGeneration,
         @"expectedFcmTokenHash": fcmTokenHash
     };
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"deactivateNotificationDeviceV2"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) {
+        finish();
+        return;
+    }
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"deactivateNotificationDeviceV2"];
     callable.timeoutInterval = 10.0;
     [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -906,7 +979,7 @@ extern BOOL PP_TouchDotsEnabled;
         return;
     }
 
-    NSString *uid = PPAdminRouteTrimmedString([FIRAuth auth].currentUser.uid);
+    NSString *uid = PPAdminRouteTrimmedString([PPProSessionCoordinator.shared activeUID]);
     if (uid.length == 0) {
         DLog(@"[PPNotificationsV2] registration skipped | reason=%@ appId=%@ hasUID=no",
               safeReason.length > 0 ? safeReason : @"unknown",
@@ -1084,7 +1157,13 @@ extern BOOL PP_TouchDotsEnabled;
         payload[@"apnsTokenHash"] = apnsTokenHex;
     }
 
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"registerNotificationDeviceV2"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) {
+        self.notificationV2RegistrationNeedsForegroundRetry = YES;
+        [self pp_finishNotificationV2RegistrationCycle];
+        return;
+    }
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"registerNotificationDeviceV2"];
     callable.timeoutInterval = 30.0;
 
     NSLog(@"PPLAB NotificationsV2 registration start | reason=%@ hasUID=yes appId=pro_ios scopes=%lu providerIds=%lu hasAPNS=%@",
@@ -1392,6 +1471,12 @@ extern BOOL PP_TouchDotsEnabled;
 - (void)application:(UIApplication *)application
 didReceiveRemoteNotification:(NSDictionary *)userInfo
 fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
+    if ([[PPProSessionCoordinator shared] canHandleAuthNotification:userInfo]) {
+        if (completionHandler) {
+            completionHandler(UIBackgroundFetchResultNoData);
+        }
+        return;
+    }
     if (!PPProPushIsForSignedInAccount(userInfo) || ![AppDelegate pp_isNotificationPayloadRoutable:userInfo]) {
         if (completionHandler) {
             completionHandler(UIBackgroundFetchResultNoData);
@@ -1484,6 +1569,11 @@ fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler {
 
 - (void)setupAppAppearance {
     DLog(@"[AppDelegate] setupAppAppearance called");
+
+    SDImageCacheConfig *cacheConfig = SDImageCache.sharedImageCache.config;
+    cacheConfig.maxMemoryCost = 50 * 1024 * 1024;
+    cacheConfig.maxDiskSize = 250 * 1024 * 1024;
+    cacheConfig.shouldUseWeakMemoryCache = YES;
     
     // Theme preference defaults to PPProThemePreferenceSystem via PPProCurrentThemePreference fallback
 

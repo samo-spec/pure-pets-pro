@@ -42,6 +42,7 @@ static const CGFloat PPBottomSearchParkedInset = 16.0;
 @property (nonatomic, assign) BOOL queueFromCache;
 @property (nonatomic, strong) NSError *queueError;
 @property (nonatomic, strong) FIRAuthStateDidChangeListenerHandle authListener;
+@property (nonatomic, strong) FIRAuth *authListenerOwner;
 @property (nonatomic, assign) BOOL previousIQEnabled;
 @property (nonatomic, assign) BOOL previousToolbarEnabled;
 @end
@@ -64,7 +65,9 @@ static const CGFloat PPBottomSearchParkedInset = 16.0;
     [self buildBottomSearchBar];
     [self startListening];
     __weak typeof(self) weakSelf = self;
-    self.authListener = [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
+    FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+    self.authListenerOwner = activeAuth;
+    self.authListener = [activeAuth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || [self.listenerUID isEqualToString:user.uid ?: @""]) return;
         self.fulfillments = @[];
@@ -356,7 +359,7 @@ static const CGFloat PPBottomSearchParkedInset = 16.0;
     [self.listener remove];
     self.listener = nil;
     NSUInteger generation = ++self.listenerGeneration;
-    NSString *uid = [[FIRAuth auth].currentUser.uid ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSString *uid = [[PPProSessionCoordinator.shared activeUID] ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     self.listenerUID = uid;
     self.queueError = nil;
     self.queueStateLabel.text = kLang(@"Fulfillment_Loading");
@@ -376,7 +379,7 @@ static const CGFloat PPBottomSearchParkedInset = 16.0;
     self.listener = [[PPFulfillmentManager sharedManager] observeFulfillmentsForOwnerID:uid stateHandler:^(NSArray<PPFulfillmentModel *> *fulfillments, NSError *error, BOOL fromCache) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || generation != self.listenerGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] || ![self.listenerUID isEqualToString:uid]) {
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid] || ![self.listenerUID isEqualToString:uid]) {
             self.fulfillments = @[];
             [self.spinner stopAnimating];
             [self.refreshControl endRefreshing];
@@ -590,7 +593,9 @@ static const CGFloat PPBottomSearchParkedInset = 16.0;
 
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
-    if (self.authListener) [[FIRAuth auth] removeAuthStateDidChangeListener:self.authListener];
+    if (self.authListener) [(self.authListenerOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authListener];
+    self.authListener = nil;
+    self.authListenerOwner = nil;
     self.listenerGeneration += 1;
     [self.listener remove];
 }

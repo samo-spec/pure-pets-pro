@@ -121,23 +121,23 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
 - (void)startOrderListener {
     if (!self.order.orderId.length) return;
-    NSString *listenerUID = [FIRAuth auth].currentUser.uid ?: @"";
-    if (listenerUID.length == 0) return;
+    NSString *listenerUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (listenerUID.length == 0 || !db) return;
     [self.orderListener remove];
     self.orderListener = nil;
     self.orderListenerUID = listenerUID;
     NSUInteger listenerGeneration = ++self.orderListenerGeneration;
     NSString *orderID = self.order.orderId;
 
-    FIRFirestore *db = [FIRFirestore firestore];
     FIRDocumentReference *docRef = [[db collectionWithPath:@"Orders"] documentWithPath:orderID];
 
     __weak typeof(self) weakSelf = self;
-    self.orderListener = [docRef addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
+    self.orderListener = [docRef addSnapshotListener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         if (listenerGeneration != strongSelf.orderListenerGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:listenerUID]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:listenerUID]) return;
         if (![strongSelf.orderListenerUID isEqualToString:listenerUID]) return;
         if (![strongSelf.order.orderId isEqualToString:orderID]) return;
         if (error || !snapshot.exists) return;
@@ -147,7 +147,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
         dispatch_async(dispatch_get_main_queue(), ^{
             if (listenerGeneration != strongSelf.orderListenerGeneration) return;
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:listenerUID]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:listenerUID]) return;
             PPDeliveryOrderModel *freshOrder = [PPDeliveryOrderModel fromDictionary:data withID:snapshot.documentID];
             PPDeliveryOrderModel *assignedProjection = [[PPDeliveryManager shared] currentDeliveryOrderWithID:snapshot.documentID];
             if (freshOrder.fulfillmentVersion == 1) {
@@ -188,7 +188,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     if (notification.object != [PPDeliveryManager shared] || self.order.fulfillmentVersion != 1) return;
     NSString *listenerUID = self.orderListenerUID ?: @"";
     if (listenerUID.length == 0 ||
-        ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:listenerUID]) {
+        ![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:listenerUID]) {
         return;
     }
 
@@ -576,7 +576,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 - (void)addCustomerInfoSection {
     __weak typeof(self) weakSelf = self;
     PPDeliveryOrderModel *order = self.order;
-    NSString *currentDeliveryUserID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentDeliveryUserID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     BOOL canRevealCustomerPhone = [order pp_canRevealCustomerPhoneForDeliveryUserID:currentDeliveryUserID];
     BOOL isDeliveryAccepted = order.deliveryUserId.length > 0;
     BOOL isOfficialProfile = [self pp_isOfficialSupportProfile];
@@ -1077,13 +1077,13 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         [providerID isEqualToString:@"platform"] ||
         [providerID isEqualToString:PPDeliveryOfficialSupportUserID]) return;
 
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
-    if (currentUID.length == 0 || [providerID isEqualToString:currentUID]) {
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (currentUID.length == 0 || !db || [providerID isEqualToString:currentUID]) {
         [PPToast toast:kLang(@"Deliv_CannotChatProvider")];
         return;
     }
 
-    FIRFirestore *db = [FIRFirestore firestore];
     NSString *threadID = ([currentUID compare:providerID] == NSOrderedAscending)
         ? [NSString stringWithFormat:@"%@_%@", currentUID, providerID]
         : [NSString stringWithFormat:@"%@_%@", providerID, currentUID];
@@ -1107,7 +1107,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
                     ? strongSelf.order.marketplaceProviderName
                     : providerID);
 
-            FIRUser *authenticatedUser = [FIRAuth auth].currentUser;
+            FIRUser *authenticatedUser = [PPProSessionCoordinator.shared currentUser];
             UserModel *deliveryUser = [UserManager shared].currentUser;
             BOOL deliveryUserMatchesSession =
                 ([deliveryUser.uid isEqualToString:currentUID] ||
@@ -1194,7 +1194,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     thread.ID = threadID;
     thread.conversationType = @"provider_chat";
     thread.supportUserID = providerID;
-    thread.customerId = [FIRAuth auth].currentUser.uid ?: @"";
+    thread.customerId = [PPProSessionCoordinator.shared activeUID] ?: @"";
     thread.supportDisplayName = displayName;
     thread.memberIDs = @[thread.customerId, providerID];
     UserModel *providerUser = self.marketplaceProviderUser;
@@ -1581,7 +1581,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     } else if ([order canConfirmPackageHandover]) {
         // If a delivery agent is assigned, only the assigned agent can pick up
         BOOL isDeliveryAssigned = (order.deliveryUserId.length > 0);
-        NSString *currentUid = [FIRAuth auth].currentUser.uid;
+        NSString *currentUid = [PPProSessionCoordinator.shared activeUID];
         if (!isDeliveryAssigned || [order.deliveryUserId isEqualToString:currentUid]) {
             UIButton *btn = [self primaryActionButton:kLang(@"PickUpFromStore")
                                                 color:[UIColor ppQuickActionCommunity]
@@ -1591,7 +1591,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
             self.actionButton = btn;
         }
     } else if ([order canMarkInTransit]) {
-        NSString *currentUid = [FIRAuth auth].currentUser.uid;
+        NSString *currentUid = [PPProSessionCoordinator.shared activeUID];
         if (order.deliveryUserId.length == 0 || [order.deliveryUserId isEqualToString:currentUid]) {
             UIButton *btn = [self primaryActionButton:kLang(@"Deliv_StartTransit")
                                                 color:[UIColor ppInfo]
@@ -1603,7 +1603,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     } else if ([order canMarkDelivered]) {
         // Only the assigned delivery agent can mark as delivered
         BOOL isDeliveryAssigned = (order.deliveryUserId.length > 0);
-        NSString *currentUid = [FIRAuth auth].currentUser.uid;
+        NSString *currentUid = [PPProSessionCoordinator.shared activeUID];
         if (!isDeliveryAssigned || [order.deliveryUserId isEqualToString:currentUid]) {
             UIButton *btn = [self primaryActionButton:kLang(@"MarkAsDelivered")
                                                 color:[UIColor ppSuccess]
@@ -1693,7 +1693,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     else if ([order canMarkShipped]) {
         // If a delivery agent is assigned, only the assigned agent can pick up
         BOOL isDeliveryAssigned = (order.deliveryUserId.length > 0);
-        NSString *currentUid = [FIRAuth auth].currentUser.uid;
+        NSString *currentUid = [PPProSessionCoordinator.shared activeUID];
         if (!isDeliveryAssigned || [order.deliveryUserId isEqualToString:currentUid]) {
             UIButton *btn = [self primaryActionButton:kLang(@"PickUpFromStore")
                                                 color:[UIColor ppQuickActionCommunity]
@@ -1705,7 +1705,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     } else if ([order canMarkDelivered]) {
         // Only the assigned delivery agent can mark as delivered
         BOOL isDeliveryAssigned = (order.deliveryUserId.length > 0);
-        NSString *currentUid = [FIRAuth auth].currentUser.uid;
+        NSString *currentUid = [PPProSessionCoordinator.shared activeUID];
         if (!isDeliveryAssigned || [order.deliveryUserId isEqualToString:currentUid]) {
             UIButton *btn = [self primaryActionButton:kLang(@"MarkAsDelivered")
                                                 color:[UIColor ppSuccess]
@@ -1774,7 +1774,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 #pragma mark - Official Support Chat
 
 - (BOOL)pp_isOfficialSupportProfile {
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     return [currentUID isEqualToString:PPDeliveryOfficialSupportUserID];
 }
 
@@ -1881,7 +1881,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     ChatThreadModel *thread = [[ChatThreadModel alloc] init];
     thread.ID = threadID;
     thread.conversationType = @"support_chat";
-    thread.supportUserID = [FIRAuth auth].currentUser.uid ?: @"";
+    thread.supportUserID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     thread.customerId = customerID;
     thread.supportDisplayName = displayName;
     thread.memberIDs = @[thread.supportUserID, customerID];
@@ -2174,14 +2174,14 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        NSString *actorUID = [FIRAuth auth].currentUser.uid ?: @"";
+        NSString *actorUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
         NSString *orderID = strongSelf.order.orderId ?: @"";
-        if (actorUID.length == 0 || orderID.length == 0) return;
+        FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+        if (actorUID.length == 0 || orderID.length == 0 || !db) return;
 
         // Preserve the V0 issue workflow, but bind its parent write to a
         // transactionally current version read. This prevents a stale V0 row
         // or open prompt from mutating an activated fulfillment-v1 parent.
-        FIRFirestore *db = [FIRFirestore firestore];
         FIRDocumentReference *docRef = [[db collectionWithPath:@"Orders"] documentWithPath:orderID];
         NSDictionary *update = @{
             @"deliveryIssue": text,
@@ -2209,7 +2209,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         } completion:^(id _Nullable result, NSError * _Nullable error) {
             (void)result;
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:actorUID] ||
+                if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:actorUID] ||
                     ![strongSelf.order.orderId isEqualToString:orderID]) {
                     return;
                 }
@@ -2255,7 +2255,7 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
 - (void)callCustomer {
     [PPFunc pp_playTapEffect];
-    NSString *currentDeliveryUserID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentDeliveryUserID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (![self.order pp_canRevealCustomerPhoneForDeliveryUserID:currentDeliveryUserID]) {
         [PPToast toast:kLang(@"Deliv_CustomerPhoneAfterAccepting")];
         return;

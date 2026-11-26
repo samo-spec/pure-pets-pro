@@ -975,7 +975,9 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
         return;
     }
 
-    FIRDocumentReference *profileRef = [[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:safeUserID];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) { if (completion) completion(nil, PPChatParticipantTypeForProfile(nil, sourcePlatform)); return; }
+    FIRDocumentReference *profileRef = [[db collectionWithPath:@"UsersCol"] documentWithPath:safeUserID];
     [profileRef getDocumentWithCompletion:^(FIRDocumentSnapshot *snapshot, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             NSDictionary *profile = (!error && snapshot.exists) ? (snapshot.data ?: @{}) : @{};
@@ -1015,7 +1017,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
         [strongSelf.tableView reloadData];
     }];
 
-    NSString *currentUserID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUserID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     [self pp_fetchIdentityForUserID:currentUserID
                     sourcePlatform:@"pro_ios"
                         completion:^(__unused UserModel *user, NSString *participantType) {
@@ -1075,7 +1077,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 {
     NSString *senderID = PPMessageTrimmedString(message[@"senderID"] ?: message[@"senderId"]);
     NSString *employeeID = PPMessageTrimmedString(message[@"employeeID"] ?: message[@"employeeId"]);
-    NSString *currentUserID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUserID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (senderID.length > 0 && [senderID isEqualToString:currentUserID]) {
         return self.currentIdentityType.length > 0 ? self.currentIdentityType : PPChatParticipantTypeProvider;
     }
@@ -1100,8 +1102,10 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 {
     if (self.messagesListener || self.chatThread.ID.length == 0) return;
 
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return;
     FIRCollectionReference *messagesRef =
-    [[[[FIRFirestore firestore] collectionWithPath:@"Chats"]
+    [[[db collectionWithPath:@"Chats"]
       documentWithPath:self.chatThread.ID]
      collectionWithPath:@"Messages"];
 
@@ -1178,10 +1182,11 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 
 - (void)pp_markIncomingMessagesAsRead
 {
-    NSString *currentUID = [FIRAuth auth].currentUser.uid;
-    if (!currentUID.length || self.chatThread.ID.length == 0) return;
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!currentUID.length || !functions || self.chatThread.ID.length == 0) return;
 
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"chatMessageCommand"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"chatMessageCommand"];
     callable.timeoutInterval = 30.0;
     [callable callWithObject:@{
         @"action": @"mark_read",
@@ -1192,7 +1197,9 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 - (void)pp_startObservingThread
 {
     if (self.threadListener || self.chatThread.ID.length == 0) return;
-    FIRDocumentReference *threadRef = [[[FIRFirestore firestore] collectionWithPath:@"Chats"] documentWithPath:self.chatThread.ID];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return;
+    FIRDocumentReference *threadRef = [[db collectionWithPath:@"Chats"] documentWithPath:self.chatThread.ID];
     __weak typeof(self) weakSelf = self;
     self.threadListener = [threadRef addSnapshotListener:^(FIRDocumentSnapshot *snapshot, NSError *error) {
         if (error || !snapshot.exists) return;
@@ -1214,14 +1221,15 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 
 - (void)pp_setTypingActive:(BOOL)isTyping
 {
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
-    if (currentUID.length == 0 || self.chatThread.ID.length == 0) return;
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (currentUID.length == 0 || !db || self.chatThread.ID.length == 0) return;
     if (self.didWriteTypingActive == isTyping) return;
     self.didWriteTypingActive = isTyping;
 
     NSString *typingStatusPath = [NSString stringWithFormat:@"typingStatus.%@", currentUID];
     NSString *typingPath = [NSString stringWithFormat:@"typing.%@", currentUID];
-    FIRDocumentReference *threadRef = [[[FIRFirestore firestore] collectionWithPath:@"Chats"] documentWithPath:self.chatThread.ID];
+    FIRDocumentReference *threadRef = [[db collectionWithPath:@"Chats"] documentWithPath:self.chatThread.ID];
     [threadRef updateData:@{
         typingStatusPath: @(isTyping),
         typingPath: @(isTyping),
@@ -1258,9 +1266,10 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     NSString *text = PPMessageTrimmedString(self.chatInputBar.textView.text);
     if (text.length == 0) return;
 
-    NSString *senderID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *senderID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     NSString *receiverID = [self pp_receiverIDForCurrentSender:senderID];
-    if (senderID.length == 0 || receiverID.length == 0 || self.chatThread.ID.length == 0) return;
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (senderID.length == 0 || receiverID.length == 0 || !functions || self.chatThread.ID.length == 0) return;
 
     [self pp_setSendInFlight:YES];
 
@@ -1280,7 +1289,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     };
 
     __weak typeof(self) weakSelf = self;
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"chatMessageCommand"];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"chatMessageCommand"];
     callable.timeoutInterval = 30.0;
     [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
         (void)result;
@@ -1303,9 +1312,10 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     }
     if (fileURL.path.length == 0 || duration <= 0) return;
 
-    NSString *senderID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *senderID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     NSString *receiverID = [self pp_receiverIDForCurrentSender:senderID];
-    if (senderID.length == 0 || receiverID.length == 0 || self.chatThread.ID.length == 0) {
+    FIRStorage *storage = [PPProSessionCoordinator.shared activeStorage];
+    if (senderID.length == 0 || receiverID.length == 0 || !storage || self.chatThread.ID.length == 0) {
         [PPToast toast:kLang(@"ch_provider_voice_send_error")];
         return;
     }
@@ -1320,7 +1330,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 
     NSString *messageID = [[NSUUID UUID] UUIDString];
     NSString *storagePath = [NSString stringWithFormat:@"Chats/%@/audio/%@.m4a", self.chatThread.ID, messageID];
-    FIRStorageReference *ref = [[[FIRStorage storage] reference] child:storagePath];
+    FIRStorageReference *ref = [[storage reference] child:storagePath];
     FIRStorageMetadata *metadata = [FIRStorageMetadata new];
     metadata.contentType = @"audio/mp4";
     metadata.customMetadata = @{
@@ -1402,7 +1412,9 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     };
 
     __weak typeof(self) weakSelf = self;
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"chatMessageCommand"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) { [self pp_setSendInFlight:NO]; return; }
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"chatMessageCommand"];
     callable.timeoutInterval = 30.0;
     [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
         (void)result;
@@ -1690,7 +1702,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     PPUserMessageCell *cell = [tableView dequeueReusableCellWithIdentifier:@"PPUserMessageCell" forIndexPath:indexPath];
     NSDictionary *message = self.messages[indexPath.row];
     [cell configureWithMessage:message
-                 currentUserID:[FIRAuth auth].currentUser.uid ?: @""
+                 currentUserID:[PPProSessionCoordinator.shared activeUID] ?: @""
          senderParticipantType:[self pp_identityTypeForMessage:message]
                      formatter:self.dateFormatter
           playingAudioMessageID:self.playingAudioMessageID ?: @""

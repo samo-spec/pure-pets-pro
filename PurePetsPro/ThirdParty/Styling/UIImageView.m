@@ -22,13 +22,8 @@
     SDImageCache *cache = [SDImageCache sharedImageCache];
     NSString *key = [[SDWebImageManager sharedManager] cacheKeyForURL:[NSURL URLWithString:urlString]];
     
-    // Try memory cache first
-    UIImage *image = [cache imageFromMemoryCacheForKey:key];
-    if (image) return image;
-    
-    // Try disk cache (synchronous read)
-    image = [cache imageFromDiskCacheForKey:key];
-    return image;
+    // Memory cache only; callers needing disk/network should use the async completion API
+    return [cache imageFromMemoryCacheForKey:key];
 }
 
 + (void)imageFromUrl:(NSString *)urlString completion:(void(^)(UIImage * _Nullable image))completion {
@@ -94,21 +89,7 @@
         // you can replace with real shimmer lib (FBShimmeringView)
     }
     
-    // Synchronous (if already cached)
-    UIImage *cached = [PPImageCacheHelper.shared imageForKey:urlString];
-    if (cached) {
-        if (completion) completion(cached);
-    }
     __weak typeof(self) weakSelf = self;
-    // Asynchronous (recommended)
-    [UIImageView imageFromUrl:urlString completion:^(UIImage * _Nullable image) {
-        if (image) {
-            if (completion) completion(image);
-        }
-    }];
-    
-    
-   
     [self sd_setImageWithURL:[NSURL URLWithString:urlString]
             placeholderImage:[UIImage imageNamed:@"Placeholder"]
                      options:SDWebImageRetryFailed | SDWebImageHighPriority
@@ -126,12 +107,19 @@
 
 #pragma mark - Private
 - (UIImage *)blurredImage:(UIImage *)image {
+    if (!image) return nil;
     CIImage *ciImage = [[CIImage alloc] initWithImage:image];
+    if (!ciImage) return image;
     CIFilter *blurFilter = [CIFilter filterWithName:@"CIGaussianBlur"];
     [blurFilter setValue:ciImage forKey:kCIInputImageKey];
     [blurFilter setValue:@(10.0) forKey:kCIInputRadiusKey];
-    CIContext *context = [CIContext contextWithOptions:nil];
-    CGImageRef cgImage = [context createCGImage:blurFilter.outputImage fromRect:[ciImage extent]];
+    static CIContext *sharedCIContext = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        sharedCIContext = [CIContext contextWithOptions:nil];
+    });
+    CGImageRef cgImage = [sharedCIContext createCGImage:blurFilter.outputImage fromRect:[ciImage extent]];
+    if (!cgImage) return image;
     UIImage *blurred = [UIImage imageWithCGImage:cgImage];
     CGImageRelease(cgImage);
     return blurred;

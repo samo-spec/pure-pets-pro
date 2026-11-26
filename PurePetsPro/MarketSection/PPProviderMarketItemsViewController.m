@@ -3892,7 +3892,7 @@ typedef NS_ENUM(NSInteger, PPProviderMarketSort) {
     [self.listener remove];
     self.listener = nil;
     self.loadFailed = NO;
-    NSString *uid = [FIRAuth auth].currentUser.uid;
+    NSString *uid = [PPProSessionCoordinator.shared activeUID];
     if (!uid) {
         self.hasLoaded = YES;
         [self updateUI];

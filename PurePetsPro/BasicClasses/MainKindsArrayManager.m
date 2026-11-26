@@ -29,13 +29,32 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
     return s;
 }
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        __weak typeof(self) weakSelf = self;
+        [PPProSessionCoordinator.shared registerSessionTeardownHandler:^(__unused NSString *reason) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf.mainKindsListener remove];
+            strongSelf.mainKindsListener = nil;
+        } forKey:@"MainKindsArrayManager"];
+    }
+    return self;
+}
+
 - (void)listenForMainKindsChangesWithBlock:(void (^)(NSArray<MainKindsModel *> *mainKinds, NSError *error))block {
     if (self.mainKindsListener) {
         [self.mainKindsListener remove];
         self.mainKindsListener = nil;
     }
     
-    FIRQuery *query = [[[FIRFirestore firestore] collectionWithPath:@"MainKindsCollection"]
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (block) block(@[], nil);
+        return;
+    }
+    FIRQuery *query = [[db collectionWithPath:@"MainKindsCollection"]
                        queryOrderedByField:@"sortingKey" descending:NO];
     
     __weak typeof(self) weakSelf = self;
@@ -219,8 +238,12 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
 
 
 - (void)fetchMainKindByID:(NSString *)mainID completion:(void(^)(NSDictionary *, NSError *))completion {
-    if (!mainID.length) { if (completion) completion(nil, [NSError errorWithDomain:@"arg" code:400 userInfo:nil]); return; }
-    [[[[FIRFirestore firestore] collectionWithPath:@"MainKindsCollection"]
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!mainID.length || !db) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"arg" code:(!db ? 401 : 400) userInfo:nil]);
+        return;
+    }
+    [[[db collectionWithPath:@"MainKindsCollection"]
       documentWithPath:mainID]
      getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snap, NSError * _Nullable err) {
         completion(snap.exists ? snap.data : nil, err);
@@ -234,7 +257,11 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
         return;
     }
     
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion([NSError errorWithDomain:@"arg" code:401 userInfo:@{NSLocalizedDescriptionKey:@"Session unavailable"}]);
+        return;
+    }
     FIRDocumentReference *mainDoc = [[db collectionWithPath:@"MainKindsCollection"] documentWithPath:mainID];
     
     // SubKind document id strategy:
@@ -266,7 +293,11 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
         return;
     }
     
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion([NSError errorWithDomain:@"arg" code:401 userInfo:@{NSLocalizedDescriptionKey:@"Session unavailable"}]);
+        return;
+    }
     FIRDocumentReference *mainDoc = [[db collectionWithPath:@"MainKindsCollection"] documentWithPath:mainID];
     FIRDocumentReference *subDoc = [[mainDoc collectionWithPath:@"SubKinds"] documentWithPath:subID];
     
@@ -304,7 +335,6 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
         }
     }
     [[NSUserDefaults standardUserDefaults] setObject:arr forKey:kCachedMainKindsKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
     ////NSLog(@"[Cache] 💾 Saved %lu users.", (unsigned long)arr.count);
 }
 
@@ -342,8 +372,14 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
     // Set a flag indicating whether initial data has been seeded
     self.didSeedMainKinds = hasCache;
     
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completionHandler) completionHandler(0);
+        return;
+    }
+    
     // Build the Firestore query (sorted by ID ascending)
-    FIRQuery *query = [[[FIRFirestore firestore] collectionWithPath:@"MainKindsCollection"] queryOrderedByField:@"sortingKey" descending:NO];
+    FIRQuery *query = [[db collectionWithPath:@"MainKindsCollection"] queryOrderedByField:@"sortingKey" descending:NO];
     
     // Use weakSelf in the block to avoid retain cycles
     __weak typeof(self) weakSelf = self;
@@ -517,7 +553,11 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
         mainKind.subKindsListener = nil;
     }
     
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (block) block(@[], nil);
+        return;
+    }
     FIRDocumentReference *mainDoc = [[db collectionWithPath:@"MainKindsCollection"] documentWithPath:mainKind.documentID];
     FIRQuery *q = [[mainDoc collectionWithPath:@"SubKinds"] queryOrderedByField:@"ID" descending:NO];
     
@@ -575,7 +615,11 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
     
     NSString *subDocID =        [NSString stringWithFormat:@"%ld", (long)subKind.ID];
     
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (block) block(@[], nil);
+        return;
+    }
     FIRDocumentReference *subDoc = [[[[db collectionWithPath:@"MainKindsCollection"] documentWithPath:mainKindDocID]
                                      collectionWithPath:@"SubKinds"] documentWithPath:subDocID];
     
@@ -632,7 +676,11 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
     
     NSString *subSubDocID = [NSString stringWithFormat:@"%ld", (long)subSubKind.ID];
     
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (block) block(@[], nil);
+        return;
+    }
     FIRDocumentReference *subSubDoc = [[[[[[db collectionWithPath:@"MainKindsCollection"] documentWithPath:mainKindDocID]
                                           collectionWithPath:@"SubKinds"] documentWithPath:subKindDocID]
                                         collectionWithPath:@"SubSubKinds"] documentWithPath:subSubDocID];

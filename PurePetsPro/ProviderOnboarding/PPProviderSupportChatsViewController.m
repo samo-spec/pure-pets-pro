@@ -815,8 +815,9 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 - (void)pp_startObservingChats
 {
     if (self.threadsListener) return;
-    NSString *providerUID = [FIRAuth auth].currentUser.uid ?: @"";
-    if (providerUID.length == 0) {
+    NSString *providerUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (providerUID.length == 0 || !db) {
         self.supportThreads = @[];
         self.isLoading = NO;
         [self pp_updateEmptyState];
@@ -824,7 +825,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     }
 
     FIRQuery *query =
-    [[[[[[FIRFirestore firestore] collectionWithPath:@"Chats"]
+    [[[[[db collectionWithPath:@"Chats"]
         queryWhereField:@"members" arrayContains:providerUID]
        queryWhereField:@"conversationType" isEqualTo:kPPConversationTypeProviderChat]
       queryWhereField:@"supportUserId" isEqualTo:providerUID]
@@ -880,8 +881,10 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
         }
         if ([self.loadingParticipantIDs containsObject:participantID]) continue;
 
+        FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+        if (!db) continue;
         [self.loadingParticipantIDs addObject:participantID];
-        FIRDocumentReference *profileRef = [[[FIRFirestore firestore] collectionWithPath:@"UsersCol"] documentWithPath:participantID];
+        FIRDocumentReference *profileRef = [[db collectionWithPath:@"UsersCol"] documentWithPath:participantID];
         __weak typeof(self) weakSelf = self;
         [profileRef getDocumentWithCompletion:^(FIRDocumentSnapshot *snapshot, NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -928,14 +931,15 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
 - (void)pp_startObservingUnreadMessages
 {
     if (self.messagesListener) return;
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
-    if (currentUID.length == 0) return;
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (currentUID.length == 0 || !db) return;
 
     // Use the composite collection-group index (receiverID + status)
     // that matches the consumer iOS app's ChManager global unread listener.
     // status < 3 means Sending(0), Sent(1), or Delivered(2) — all unread.
     FIRQuery *query =
-    [[[[FIRFirestore firestore]
+    [[[[db
        collectionGroupWithID:@"Messages"]
       queryWhereField:@"receiverID" isEqualTo:currentUID]
      queryWhereField:@"status" isLessThan:@(3)];

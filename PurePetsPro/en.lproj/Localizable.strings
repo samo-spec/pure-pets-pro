@@ -4946,3 +4946,21 @@
 
 "ProFulfillment_OrderDeliveryFee" = "Delivery fee (whole order)";
 "ProFulfillment_RecordedFeeUnavailable" = "Not recorded on this order";
+
+"ProIdentityPortalTitle" = "Your professional workspace";
+"ProIdentityPortalSubtitle" = "Sign in with your own Pure Pets account to access your authorized workspace.";
+
+"ProIdentityRememberedAccounts" = "Remembered accounts";
+"ProIdentityReauthenticationHint" = "Choose an identity, then verify it with your usual sign-in method.";
+"ProIdentityUseAnotherAccount" = "Use another account";
+"ProIdentityWrongAccount" = "The authenticated account did not match the selected identity. Please try again.";
+
+"ProIdentitySignInMethods" = "Choose how to sign in";
+"ProIdentityVerifying" = "Verifying your identity…";
+"ProIdentityRecoveryTitle" = "Session recovery required";
+"ProIdentityRecoveryMessage" = "Sign-out from your previous account could not be verified yet. Retry verification before signing in.";
+"ProIdentityRecoveryRetry" = "Verify & clear session";
+"ProIdentityRemoveAccount" = "Remove";
+"ProIdentityRemoveAccountTitle" = "Remove remembered account?";
+"ProIdentityRemoveAccountMessage" = "This removes %@ and clears its cached app preferences from this device.";
+"DriverCockpit_ActiveWork_SwitchBlocked" = "Complete or release active deliveries before switching accounts.";

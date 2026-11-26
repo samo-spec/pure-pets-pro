@@ -9,6 +9,8 @@
 #import "NotificationsListViewController.h"
 #import "PPProInAppNotificationPresenter.h"
 #import "PPStaffAuth.h"
+#import "PPProRememberedAccountStore.h"
+#import "PPProSessionFence.h"
 #import "AppManager.h"
 #import "AdminDashboardViewController.h"
 #import "PurePetsPro-Swift.h"
@@ -40,6 +42,9 @@ void PPAdminSetLoginInProgress(BOOL inProgress) { _pp_adminLoginInProgress = inP
 @property (nonatomic, strong) NSDate *pp_splashAppearDate;
 @property (nonatomic, copy, nullable) NSDictionary *pp_pendingCompanyDeliveryPayload;
 @property (nonatomic, copy, nullable) NSDictionary *pp_pendingNotificationRoutePayload;
+@property (nonatomic, strong, nullable) NSUUID *pp_pendingNotificationEpoch;
+@property (nonatomic, strong, nullable) NSUUID *pp_pendingCompanyDeliveryEpoch;
+@property (nonatomic, strong, nullable) NSUUID *pp_companyResolutionID;
 @property (nonatomic, copy, nullable) NSString *pp_lastNotificationRouteSignature;
 @property (nonatomic) CFTimeInterval pp_lastNotificationRouteAt;
 @property (nonatomic) BOOL pp_isResolvingCompanyDeliveryNotification;
@@ -63,7 +68,7 @@ void PPAdminSetLoginInProgress(BOOL inProgress) { _pp_adminLoginInProgress = inP
 - (void)pp_applyNavigationAppearance;
 @end
 
-static NSTimeInterval const kPPSplashMinDisplayTime = 2.2;
+static NSTimeInterval const kPPSplashMinDisplayTime = 0.0;
 
 static BOOL PPSceneUserDocIsBlocked(NSDictionary *root) {
      return [AppManager isProAccountBlocked:root];
@@ -150,7 +155,43 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
 @implementation SceneDelegate
 
+- (NSUUID *)pp_captureNotificationEpoch {
+     FIRUser *user = [PPProSessionCoordinator.shared currentUser];
+     return [[PPProSessionFence shared] captureForUID:user.uid ?: @"" activeUID:user.uid identity:user];
+}
+
+- (BOOL)pp_notificationEpochIsCurrent:(NSUUID *)epoch {
+     FIRUser *user = [PPProSessionCoordinator.shared currentUser];
+     return [[PPProSessionFence shared] accepts:epoch requestedUID:user.uid ?: @"" activeUID:user.uid identity:user];
+}
+
+- (void)pp_discardStaleNotificationRoutes {
+     if (![self pp_notificationEpochIsCurrent:self.pp_pendingNotificationEpoch]) {
+          self.pp_pendingNotificationRoutePayload = nil;
+          self.pp_pendingNotificationEpoch = nil;
+          self.pp_lastNotificationRouteSignature = nil;
+          self.pp_lastNotificationRouteAt = 0;
+     }
+     if (![self pp_notificationEpochIsCurrent:self.pp_pendingCompanyDeliveryEpoch]) {
+          self.pp_pendingCompanyDeliveryPayload = nil;
+          self.pp_pendingCompanyDeliveryEpoch = nil;
+          self.pp_companyResolutionID = nil;
+          self.pp_isResolvingCompanyDeliveryNotification = NO;
+     }
+}
+
 - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
+#if DEBUG
+     if ([NSProcessInfo.processInfo.arguments containsObject:@"-PPProIdentityPortalUITest"]) {
+          if (![scene isKindOfClass:UIWindowScene.class]) return;
+          self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+          self.currentRoot = AppRootLogin;
+          self.window.rootViewController = [[PPNavigationController alloc] initWithRootViewController:[AdminLoginViewController new]];
+          PPProApplyThemeToWindow(self.window);
+          [self.window makeKeyAndVisible];
+          return;
+     }
+#endif
      
      
      [self setRoot:AppRootSplash animated:NO];
@@ -193,6 +234,17 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      PPProApplyThemeToWindow(self.window);
 
      __weak typeof(self) weakSelf = self;
+     [[PPProSessionCoordinator shared] performColdStartRecoveryCheckWithCompletion:^(BOOL recoveryRequired,
+                                                                                     BOOL cleared,
+                                                                                     __unused NSError * _Nullable recoveryError) {
+          dispatch_async(dispatch_get_main_queue(), ^{
+               __strong typeof(weakSelf) strongSelf = weakSelf;
+               if (!strongSelf) return;
+               if (recoveryRequired && !cleared) {
+                    [strongSelf pp_applyAdminRoutingForAuthUser:nil animated:NO];
+               }
+          });
+     }];
      [[FUManager shared] startAuthListenerWithChangeBlock:^(FIRUser * _Nullable authUser,
                                                             UserModel * _Nullable userModel) {
           (void)userModel;
@@ -206,6 +258,14 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      [[NSNotificationCenter defaultCenter] addObserver:self
                                               selector:@selector(handleAuthChange)
                                                   name:UserManagerAuthStateDidChangeNotification
+                                                object:nil];
+     [[NSNotificationCenter defaultCenter] addObserver:self
+                                              selector:@selector(handleAuthChange)
+                                                  name:PPProSessionDidChangeActiveRuntimeNotification
+                                                object:nil];
+     [[NSNotificationCenter defaultCenter] addObserver:self
+                                              selector:@selector(pp_handleTransitionRecoveryRequired)
+                                                  name:PPProSessionTransitionRecoveryRequiredNotification
                                                 object:nil];
      
      [[NSNotificationCenter defaultCenter] addObserver:self
@@ -224,6 +284,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      if ([notificationPayload isKindOfClass:NSDictionary.class] &&
          [AppDelegate pp_isNotificationPayloadRoutable:notificationPayload]) {
           self.pp_pendingNotificationRoutePayload = [notificationPayload copy];
+          self.pp_pendingNotificationEpoch = [self pp_captureNotificationEpoch];
      }
      self.pp_requiresForegroundUnlock = NO;
      self.pp_didAutoPromptForCurrentLockCycle = NO;
@@ -245,6 +306,19 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 }
 
 - (void)pp_applyAdminRoutingForAuthUser:(FIRUser * _Nullable)authUser animated:(BOOL)animated {
+     if ([PPProSessionCoordinator.shared requiresTransitionRecovery]) {
+          ++self.pp_proAccessRoutingGeneration;
+          self.awaitingModel = NO;
+          self.pp_requiresForegroundUnlock = NO;
+          self.pp_didAutoPromptForCurrentLockCycle = NO;
+          self.pp_requiresManualUnlockRetry = NO;
+          [self pp_hideLockOverlay];
+          [self pp_discardStaleNotificationRoutes];
+          [self setRoot:AppRootLogin animated:animated];
+          return;
+     }
+     if ([PPProSessionCoordinator.shared currentUser] != authUser) return;
+     [self pp_discardStaleNotificationRoutes];
      // ── Guard: don't interfere while the login controller's pipeline is active ──
      if (PPAdminLoginInProgress()) {
           NSLog(@"[SceneDelegate] ⏸ skipping routing — login in progress");
@@ -252,6 +326,8 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      }
 
      if (!authUser) {
+          ++self.pp_proAccessRoutingGeneration;
+          self.awaitingModel = NO;
           self.pp_requiresForegroundUnlock = NO;
           self.pp_didAutoPromptForCurrentLockCycle = NO;
           self.pp_requiresManualUnlockRetry = NO;
@@ -265,7 +341,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      [AppMgr checkIfUserWithUID:authUser.uid canAccessPro:^(BOOL isAllowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
           dispatch_async(dispatch_get_main_queue(), ^{
                 if (!weakSelf || routingGeneration != weakSelf.pp_proAccessRoutingGeneration ||
-                    ![[FIRAuth auth].currentUser.uid isEqualToString:authUser.uid]) {
+                    ![[PPProSessionCoordinator.shared currentUser].uid isEqualToString:authUser.uid]) {
                      return;
                 }
                 // Re-check: login controller may have started between the async gap
@@ -333,7 +409,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                return;
           }
 
-          NSString *activeUID = [FIRAuth auth].currentUser.uid ?: @"";
+          NSString *activeUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
           if (![activeUID isEqualToString:uid]) {
                return;
           }
@@ -369,7 +445,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                [self setRoot:AppRootLogin animated:animated completion:^{
                __strong typeof(weakSelf) self = weakSelf;
                if (!self || self.currentRoot != AppRootLogin || PPAdminLoginInProgress() ||
-                   ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                   ![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) return;
                [PPAlertHelper showThreeActionConfirmationIn:self.window.rootViewController
                                            title:kLang(@"ProAccess_CheckFailedTitle")
                                         subtitle:kLang(@"ProAccess_CheckFailedBody")
@@ -380,15 +456,15 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                                   tertiaryButton:kLang(@"ProAccess_UseAnotherAccount")
                                    tertiaryStyle:UIAlertActionStyleDefault
                                     primaryBlock:^{
-                    if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
-                    [weakSelf pp_applyAdminRoutingForAuthUser:[FIRAuth auth].currentUser animated:YES];
+                    if (![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) return;
+                    [weakSelf pp_applyAdminRoutingForAuthUser:PPProSessionCoordinator.shared.currentUser animated:YES];
                } secondaryBlock:^{
-                    if (!weakSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                    if (!weakSelf || ![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) return;
                     [weakSelf cancelPendingProAccessRouting];
                     weakSelf.pp_autoPresentProviderStatusOnNextRoot = YES;
                     [weakSelf setRoot:AppRootProviderStatus animated:YES];
                } tertiaryBlock:^{
-                    if ([[FIRAuth auth].currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+                    if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
                }];
                }];
                return;
@@ -398,18 +474,18 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                [self setRoot:AppRootLogin animated:animated completion:^{
                __strong typeof(weakSelf) self = weakSelf;
                if (!self || self.currentRoot != AppRootLogin || PPAdminLoginInProgress() ||
-                   ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                   ![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) return;
                [PPAlertHelper showInfoIn:self.window.rootViewController title:kLang(@"ProAccess_NotEnabledTitle")
                                 subtitle:kLang(@"ProAccess_NotEnabledBody")
                            primaryButton:kLang(@"ProAccess_BecomePartner")
                          secondaryButton:kLang(@"ProAccess_UseAnotherAccount")
                             primaryBlock:^{
-                    if (!weakSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                    if (!weakSelf || ![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) return;
                     [weakSelf cancelPendingProAccessRouting];
                     weakSelf.pp_autoPresentProviderStatusOnNextRoot = YES;
                     [weakSelf setRoot:AppRootProviderStatus animated:YES];
                } secondaryBlock:^{
-                    if ([[FIRAuth auth].currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+                    if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
                }];
                }];
                return;
@@ -419,6 +495,26 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      }];
 }
 
+- (void)pp_rememberAuthorizedIdentity {
+     if (![PPProRememberedAccountStore rolloutEnabled]) return;
+     FIRUser *user = [PPProSessionCoordinator.shared currentUser];
+     if (!user.uid.length) return;
+     NSString *method = nil;
+     for (id<FIRUserInfo> info in user.providerData) {
+          if ([@[@"phone", @"apple.com", @"google.com"] containsObject:info.providerID]) {
+               method = info.providerID;
+               if ([method isEqualToString:@"phone"] && user.phoneNumber.length) break;
+          }
+     }
+     if (!method) return;
+     NSString *label = [PPProRememberedAccountStore maskedLabelForPhone:user.phoneNumber email:user.email];
+     [PPProRememberedAccountStore rememberUID:user.uid
+                                  maskedLabel:label
+                                       method:method
+                                       slotID:PPProSessionCoordinator.shared.activeSlot.slotID
+                                        error:nil];
+}
+
 - (void)showDashboardWithDeliveryCompanyProfile:(PPDeliveryCompanyProfile *)profile animated:(BOOL)animated {
      if (!profile.companyID.length) {
           [self setRoot:AppRootProviderStatus animated:animated];
@@ -426,6 +522,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      }
 
      [self cancelPendingProAccessRouting];
+     [self pp_rememberAuthorizedIdentity];
      self.currentRoot = AppRootDashboard;
      // Official root UITabBarController (replaces single UINavigationController)
      PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
@@ -510,7 +607,9 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      NSString *safeTaskID = PPSceneTrimmed(taskID);
      NSString *safeAuthority = PPSceneTrimmed(authority);
      NSString *safeCompanyID = PPSceneTrimmed(companyID);
+     NSUUID *cockpitEpoch = [self pp_captureNotificationEpoch];
      void (^showCockpit)(void) = ^{
+          if (![self pp_notificationEpochIsCurrent:cockpitEpoch]) return;
           if (tabBar && tabBar.selectedViewController != navigationController) {
                tabBar.selectedViewController = navigationController;
           }
@@ -539,18 +638,21 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 }
 
 - (void)pp_handleCompanyDeliveryNotification:(NSNotification *)notification {
+     [self pp_discardStaleNotificationRoutes];
      NSMutableDictionary *payload = [NSMutableDictionary dictionaryWithDictionary:
                                      [notification.userInfo isKindOfClass:NSDictionary.class] ? notification.userInfo : @{}];
      NSString *requestID = PPSafeString(notification.object);
      if (requestID.length > 0 && PPSafeString(payload[@"requestId"]).length == 0) {
           payload[@"requestId"] = requestID;
      }
+     if (![AppDelegate pp_isNotificationPayloadRoutable:payload]) return;
      // A driver's own task opens the driver cockpit, never the dispatcher's
      // request detail. Inbox rows and banners reach this handler too.
      NSDictionary<NSString *, NSString *> *driverRoute = PPSceneDriverTaskRoute(payload);
      if (driverRoute) {
           if (self.currentRoot != AppRootDashboard) {
                self.pp_pendingNotificationRoutePayload = payload.copy;
+               self.pp_pendingNotificationEpoch = [self pp_captureNotificationEpoch];
                return;
           }
           [self openDriverCockpitWithTaskID:driverRoute[@"taskId"]
@@ -563,23 +665,34 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           return;
      }
      self.pp_pendingCompanyDeliveryPayload = payload.copy;
+     self.pp_pendingCompanyDeliveryEpoch = [self pp_captureNotificationEpoch];
      [self pp_routePendingCompanyDeliveryNotificationIfPossible];
 }
 
 - (void)pp_routePendingCompanyDeliveryNotificationIfPossible {
+     [self pp_discardStaleNotificationRoutes];
      NSDictionary *payload = self.pp_pendingCompanyDeliveryPayload;
      NSString *requestID = PPSafeString(payload[@"requestId"]);
-     NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+     NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
      if (requestID.length == 0 || uid.length == 0 || self.pp_isResolvingCompanyDeliveryNotification) {
           return;
      }
 
      self.pp_isResolvingCompanyDeliveryNotification = YES;
+     NSUUID *epoch = self.pp_pendingCompanyDeliveryEpoch;
+     NSUUID *resolutionID = [NSUUID UUID];
+     self.pp_companyResolutionID = resolutionID;
      __weak typeof(self) weakSelf = self;
      [PPDeliveryCompanyService.shared discoverCompanyMembershipsWithCompletion:^(NSArray<PPDeliveryCompanyProfile *> * _Nullable profiles, NSError * _Nullable error) {
           __strong typeof(weakSelf) self = weakSelf;
-          if (!self) return;
+          if (!self || ![self.pp_companyResolutionID isEqual:resolutionID]) return;
           self.pp_isResolvingCompanyDeliveryNotification = NO;
+          self.pp_companyResolutionID = nil;
+          if (![self pp_notificationEpochIsCurrent:epoch]) { [self pp_discardStaleNotificationRoutes]; return; }
+          if (![self.pp_pendingCompanyDeliveryPayload isEqual:payload]) {
+               [self pp_routePendingCompanyDeliveryNotificationIfPossible];
+               return;
+          }
 
           if (error || profiles.count == 0) {
                NSLog(@"[CompanyDeliveryPush] Unable to resolve active company membership: %@",
@@ -631,6 +744,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 }
 
 - (void)pp_presentPendingCompanyDeliveryWithProfile:(PPDeliveryCompanyProfile *)profile {
+     [self pp_discardStaleNotificationRoutes];
      NSDictionary *payload = self.pp_pendingCompanyDeliveryPayload;
      NSString *requestID = PPSafeString(payload[@"requestId"]);
      NSString *companyID = PPSafeString(payload[@"companyId"]);
@@ -696,11 +810,13 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      }
 
      self.pp_pendingNotificationRoutePayload = safePayload;
+     self.pp_pendingNotificationEpoch = [self pp_captureNotificationEpoch];
      [self pp_consumePendingNotificationRouteIfPossible];
 }
 
 - (void)pp_consumePendingNotificationRouteIfPossible
 {
+     [self pp_discardStaleNotificationRoutes];
      if (self.pp_pendingNotificationRoutePayload.count == 0) {
           return;
      }
@@ -729,7 +845,9 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      }
 
      NSDictionary *payload = self.pp_pendingNotificationRoutePayload;
+     NSUUID *epoch = self.pp_pendingNotificationEpoch;
      self.pp_pendingNotificationRoutePayload = nil;
+     self.pp_pendingNotificationEpoch = nil;
      __weak typeof(self) weakSelf = self;
      [NotificationManager routePayload:payload
               fromNavigationController:navigationController
@@ -739,7 +857,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                return;
           }
           __strong typeof(weakSelf) self = weakSelf;
-          if (!self) return;
+          if (!self || ![self pp_notificationEpochIsCurrent:epoch]) return;
           NotificationsListViewController *notificationsController = [self pp_openNotificationsScreenAndReturnController];
           [notificationsController handleNotificationRoutePayload:payload];
      }];
@@ -905,12 +1023,12 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      __weak typeof(self) weakSelf = self;
      [UserManager.shared loadUserByUIDOrID:authUID completion:^(UserModel * _Nullable user, NSError * _Nullable error) {
           if (!weakSelf || routingGeneration != weakSelf.pp_proAccessRoutingGeneration ||
-              ![[FIRAuth auth].currentUser.uid isEqualToString:authUID]) return;
+              ![[PPProSessionCoordinator.shared currentUser].uid isEqualToString:authUID]) return;
           weakSelf.awaitingModel = NO;
           
           UserModel *effectiveUser = user;
           if (!effectiveUser) {
-               FIRUser *au = [FIRAuth auth].currentUser;
+               FIRUser *au = [PPProSessionCoordinator.shared currentUser];
                if (au) {
                     effectiveUser = [[FUManager shared] userModelFromAuth:au doc:nil];
                }
@@ -921,7 +1039,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                [AppMgr checkIfUserWithUID:authUID canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                          if (!weakSelf || routingGeneration != weakSelf.pp_proAccessRoutingGeneration ||
-                             ![[FIRAuth auth].currentUser.uid isEqualToString:authUID]) return;
+                             ![[PPProSessionCoordinator.shared currentUser].uid isEqualToString:authUID]) return;
                          if (error) {
                               [weakSelf setRoot:AppRootLogin animated:YES];
                               return;
@@ -995,6 +1113,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      self.currentRoot = target;
      
      if (target == AppRootDashboard) {
+          [self pp_rememberAuthorizedIdentity];
           PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
           UIViewController *old = self.window.rootViewController;
           self.window.rootViewController = tabBar;
@@ -1111,12 +1230,12 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           return;
      }
      
-     [self updateRootForUser:[FIRAuth auth].currentUser animated:YES];
+     [self updateRootForUser:[PPProSessionCoordinator.shared currentUser] animated:YES];
 }
 
 
 - (void)handleAuthStateChange {
-     [self pp_applyAdminRoutingForAuthUser:[FIRAuth auth].currentUser animated:YES];
+     [self pp_applyAdminRoutingForAuthUser:[PPProSessionCoordinator.shared currentUser] animated:YES];
 }
 
 - (void)pp_clearAllYYCacheNamed:(NSString *)name {
@@ -1131,8 +1250,14 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
 
 - (void)handleAuthChange {
-     [self pp_applyAdminRoutingForAuthUser:[FIRAuth auth].currentUser animated:YES];
+     [self pp_applyAdminRoutingForAuthUser:[PPProSessionCoordinator.shared currentUser] animated:YES];
      
+}
+
+- (void)pp_handleTransitionRecoveryRequired {
+     dispatch_async(dispatch_get_main_queue(), ^{
+          [self pp_applyAdminRoutingForAuthUser:nil animated:YES];
+     });
 }
 
 #pragma mark - Public: called by [Language userSelectedLanguage:]
@@ -1156,6 +1281,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      (void)scene;
      for (UIOpenURLContext *ctx in URLContexts) {
           if ([GIDSignIn.sharedInstance handleURL:ctx.URL]) { return; }
+          if ([PPProSessionCoordinator.shared canHandleAuthURL:ctx.URL]) { return; }
      }
 }
 

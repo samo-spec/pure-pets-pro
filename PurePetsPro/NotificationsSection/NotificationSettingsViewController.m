@@ -752,8 +752,8 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
     NSString *key = sender.accessibilityIdentifier;
     if (key.length == 0) return;
 
-    [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:key];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    NSString *scopedKey = [PPProSessionCoordinator scopedDefaultsKey:key forUID:[PPProSessionCoordinator.shared activeUID]];
+    [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:scopedKey];
     [self pp_applySwitchStatesAnimated:YES];
 
     if (@available(iOS 10.0, *)) {
@@ -834,7 +834,7 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
     content.sound = [UNNotificationSound defaultSound];
     // Addressed to the signed-in account like every Notifications V2 push, so
     // the account filter keeps it for this login only.
-    NSString *diagnosticUID = [[FIRAuth auth].currentUser.uid ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    NSString *diagnosticUID = [[PPProSessionCoordinator.shared activeUID] ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
     if (diagnosticUID.length > 0) content.userInfo = @{@"targetUid": diagnosticUID};
 
     UNTimeIntervalNotificationTrigger *trigger = [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:1.5 repeats:NO];
@@ -932,9 +932,10 @@ static NSString * const kPPProNotifCategoryGeneralKey    = @"pp_notif_cat_genera
 #pragma mark - Preferences & States
 
 - (BOOL)pp_boolForPreferenceKey:(NSString *)key defaultValue:(BOOL)defaultValue {
-    id value = [[NSUserDefaults standardUserDefaults] objectForKey:key];
+    NSString *scopedKey = [PPProSessionCoordinator scopedDefaultsKey:key forUID:[PPProSessionCoordinator.shared activeUID]];
+    id value = [[NSUserDefaults standardUserDefaults] objectForKey:scopedKey];
     if (value == nil) return defaultValue;
-    return [[NSUserDefaults standardUserDefaults] boolForKey:key];
+    return [[NSUserDefaults standardUserDefaults] boolForKey:scopedKey];
 }
 
 - (void)pp_applySwitchStatesAnimated:(BOOL)animated {

@@ -86,12 +86,18 @@
         _cachedUserInboxItems = [NSMutableDictionary dictionary];
         _cachedStaffInboxItems = [NSMutableDictionary dictionary];
         _confirmedStaffInboxApplicability = [NSMutableDictionary dictionary];
+        __weak typeof(self) weakSelf = self;
+        [PPProSessionCoordinator.shared registerSessionTeardownHandler:^(__unused NSString *reason) {
+            [weakSelf stopListening];
+        } forKey:@"NotificationManager"];
     }
     return self;
 }
 
 - (FIRCollectionReference *)adminCollection {
-    return [[[[FIRFirestore firestore] collectionWithPath:@"admin"]
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return nil;
+    return [[[db collectionWithPath:@"admin"]
              documentWithPath:@"notifications"]
             collectionWithPath:@"items"];
 }
@@ -101,7 +107,9 @@
       ? [uid stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
       : @"";
     if (safeUID.length == 0) return nil;
-    return [[[[FIRFirestore firestore] collectionWithPath:@"staff_users"]
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return nil;
+    return [[[db collectionWithPath:@"staff_users"]
              documentWithPath:safeUID]
             collectionWithPath:@"inbox"];
 }
@@ -155,9 +163,9 @@
         ? [uid stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
         : @"";
     if (safeUID.length == 0) {
-        safeUID = [FIRAuth auth].currentUser.uid ?: @"";
+        safeUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     }
-    NSString *authUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *authUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (authUID.length == 0 || ![safeUID isEqualToString:authUID]) {
         if (handler) {
             handler(@[], [self.class pp_notificationErrorWithMessage:@"The requested inbox does not belong to the current session."]);
@@ -189,7 +197,7 @@
     __weak typeof(self) weakSelf = self;
     __weak PPCombinedNotificationListener *weakCombined = combined;
     BOOL (^authIsCurrent)(void) = ^BOOL(void) {
-        return [([FIRAuth auth].currentUser.uid ?: @"") isEqualToString:safeUID];
+        return [([PPProSessionCoordinator.shared activeUID] ?: @"") isEqualToString:safeUID];
     };
     void (^emitMerged)(void) = ^{
         __strong typeof(weakSelf) self = weakSelf;
@@ -309,7 +317,8 @@
         }
     };
 
-    FIRDocumentReference *staffDocument = [[[FIRFirestore firestore] collectionWithPath:kStaffUsersCollection]
+    FIRFirestore *staffDB = [PPProSessionCoordinator.shared activeFirestore];
+    FIRDocumentReference *staffDocument = [[staffDB collectionWithPath:kStaffUsersCollection]
                                              documentWithPath:safeUID];
     id<FIRListenerRegistration> staffApplicabilityRegistration =
     [staffDocument addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRDocumentSnapshot * _Nullable snap, NSError * _Nullable error) {
@@ -388,7 +397,7 @@
     NSString *safeUID = [uid isKindOfClass:NSString.class]
         ? [uid stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
         : @"";
-    NSString *authUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *authUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (safeUID.length == 0) safeUID = authUID;
     if (authUID.length == 0 || ![safeUID isEqualToString:authUID]) {
         if (completion) {
@@ -455,7 +464,8 @@
         });
     };
 
-    FIRDocumentReference *staffDocument = [[[FIRFirestore firestore] collectionWithPath:kStaffUsersCollection]
+    FIRFirestore *staffDB = [PPProSessionCoordinator.shared activeFirestore];
+    FIRDocumentReference *staffDocument = [[staffDB collectionWithPath:kStaffUsersCollection]
                                              documentWithPath:safeUID];
     [staffDocument getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         if (error || !snapshot) {
@@ -496,7 +506,7 @@
         if (completion) completion([self.class pp_notificationErrorWithMessage:@"Notification id is required."]);
         return;
     }
-    NSString *authUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *authUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     NSString *requestedUID = [uid isKindOfClass:NSString.class]
         ? [uid stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet]
         : @"";
@@ -528,10 +538,15 @@
         return;
     }
 
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:callableName];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) {
+        if (completion) completion([self.class pp_notificationErrorWithMessage:@"Active session unavailable."]);
+        return;
+    }
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:callableName];
     [callable callWithObject:@{@"notificationId": notificationID} completion:^(__unused FIRHTTPSCallableResult *result, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:authUID]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:authUID]) return;
             if (completion) completion(error);
         });
     }];

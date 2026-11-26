@@ -40,7 +40,7 @@ static NSString * const PPProThemePreferenceDark = @"dark";
 // Keep notification headers file-local to avoid heavy module chains in PCH.
 
 // ===== Third-party =====
-#import "XLForm.h"
+ 
 #import "Language.h"
 #import "YYKit.h"
 #import "SSZipArchive.h"
@@ -69,6 +69,7 @@ static NSString * const PPProThemePreferenceDark = @"dark";
 #import "AdminDashboardViewController.h"
 
 // ===== Users =====
+#import "PPProSessionCoordinator.h"
 #import "AdminLoginViewController.h"
 #import "UserManager+Refs.h"
 #import "PPNavigationController.h"

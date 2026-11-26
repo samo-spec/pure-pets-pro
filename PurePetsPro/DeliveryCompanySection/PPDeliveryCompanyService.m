@@ -58,8 +58,31 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
     return service;
 }
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        __weak typeof(self) weakSelf = self;
+        [PPProSessionCoordinator.shared registerSessionTeardownHandler:^(__unused NSString *reason) {
+            [weakSelf resetSessionState];
+        } forKey:@"PPDeliveryCompanyService"];
+    }
+    return self;
+}
+
+- (void)resetSessionState {
+    self.verifiedProfile = nil;
+    self.discoveredProfiles = @[];
+    self.verifiedUID = @"";
+    self.driverWorkspaceUID = @"";
+    self.deliveryWorkspaceUID = @"";
+    self.isRefreshingProfile = NO;
+    [self.profileRefreshCompletions removeAllObjects];
+    [self.memberInvitationCommandIDs removeAllObjects];
+    [[NSNotificationCenter defaultCenter] postNotificationName:PPDeliveryCompanyMembershipDidChangeNotification object:self];
+}
+
 - (NSString *)defaultsKey {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"guest";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"guest";
     return [NSString stringWithFormat:@"%@.%@", PPDCConfiguredCompanyDefaultsPrefix, uid];
 }
 
@@ -119,8 +142,9 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
              payload:(NSDictionary *)payload
           allowRetry:(BOOL)allowRetry
           completion:(PPDeliveryCompanyActionCompletion)completion {
-    FIRUser *currentUser = [FIRAuth auth].currentUser;
-    if (!currentUser) {
+    FIRUser *currentUser = [PPProSessionCoordinator.shared currentUser];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!currentUser || !functions) {
         dispatch_async(dispatch_get_main_queue(), ^{
             NSError *authError = [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany"
                                                      code:FIRFunctionsErrorCodeUnauthenticated
@@ -132,7 +156,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         return;
     }
 
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:name];
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:name];
     callable.timeoutInterval = 30.0;
     __weak typeof(self) weakSelf = self;
     [callable callWithObject:payload ?: @{} completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
@@ -166,7 +190,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         dispatch_async(dispatch_get_main_queue(), ^{ [self refreshConfiguredProfileWithCompletion:completion]; });
         return;
     }
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (self.verifiedUID.length && ![self.verifiedUID isEqualToString:currentUID]) {
         self.verifiedProfile = nil;
         self.discoveredProfiles = @[];
@@ -191,7 +215,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         void (^finish)(PPDeliveryCompanyProfile *, NSError *) = ^(PPDeliveryCompanyProfile *profile, NSError *profileError) {
             for (PPDeliveryCompanyProfileCompletion pending in completions) pending(profile, profileError);
         };
-        NSString *activeUID = [FIRAuth auth].currentUser.uid ?: @"";
+        NSString *activeUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
         if (![activeUID isEqualToString:currentUID]) {
             self.verifiedProfile = nil;
             self.discoveredProfiles = @[];
@@ -232,14 +256,14 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 }
 
 - (void)discoverCompanyMembershipsWithCompletion:(void(^)(NSArray<PPDeliveryCompanyProfile *> * _Nullable profiles, NSError * _Nullable error))completion {
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (self.verifiedUID.length && ![self.verifiedUID isEqualToString:currentUID]) {
         self.verifiedProfile = nil;
         self.discoveredProfiles = @[];
         self.verifiedUID = @"";
     }
     [self callFunction:PPDCFunctionGetMyCompanies payload:@{} completion:^(NSDictionary * _Nullable result, NSError * _Nullable error) {
-        NSString *activeUID = [FIRAuth auth].currentUser.uid ?: @"";
+        NSString *activeUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
         if (![activeUID isEqualToString:currentUID]) {
             if (completion) completion(@[], nil);
             return;
@@ -313,7 +337,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
     [[NSUserDefaults standardUserDefaults] setObject:profile.companyID forKey:self.defaultsKey];
     self.verifiedProfile = profile;
     self.discoveredProfiles = @[profile];
-    self.verifiedUID = [FIRAuth auth].currentUser.uid ?: @"";
+    self.verifiedUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     [[NSNotificationCenter defaultCenter] postNotificationName:PPDeliveryCompanyMembershipDidChangeNotification object:self];
 }
 
@@ -471,7 +495,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         });
         return;
     }
-    NSString *issuerUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *issuerUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     NSData *identity = [NSJSONSerialization dataWithJSONObject:@[issuerUID, companyID ?: @"", identifier, role ?: @""] options:0 error:nil];
     NSString *identityKey = [[NSString alloc] initWithData:identity encoding:NSUTF8StringEncoding];
     if (!self.memberInvitationCommandIDs) self.memberInvitationCommandIDs = [NSMutableDictionary dictionary];
@@ -489,7 +513,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
         @"commandId": commandID
     }
             completion:^(NSDictionary * _Nullable result, NSError * _Nullable error) {
-        if (![[FIRAuth auth].currentUser.uid isEqualToString:issuerUID]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:issuerUID]) return;
         if (!error) [self.memberInvitationCommandIDs removeObjectForKey:identityKey];
         if (completion) completion(result, error);
     }];
@@ -501,11 +525,11 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 #pragma mark - Driver cockpit
 
 + (NSString *)currentAccountUID {
-    return [FIRAuth auth].currentUser.uid ?: @"";
+    return [PPProSessionCoordinator.shared activeUID] ?: @"";
 }
 
 - (void)resolveDriverCockpitRequirementWithCompletion:(void(^)(BOOL requiresDriverCockpit, NSError * _Nullable error))completion {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (!uid.length) {
         dispatch_async(dispatch_get_main_queue(), ^{
             completion(NO, [NSError errorWithDomain:@"com.firebase.functions" code:FIRFunctionsErrorCodeUnauthenticated
@@ -515,7 +539,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
     }
     [[AppManager shared] checkIfUserWithUID:uid canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            NSString *activeUID = [FIRAuth auth].currentUser.uid ?: @"";
+            NSString *activeUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
             if (![activeUID isEqualToString:uid]) {
                 completion(NO, [NSError errorWithDomain:@"com.firebase.functions" code:FIRFunctionsErrorCodeUnauthenticated
                                                userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}]);
@@ -538,7 +562,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
                 return;
             }
             [self discoverCompanyMembershipsWithCompletion:^(NSArray<PPDeliveryCompanyProfile *> * _Nullable profiles, NSError * _Nullable membershipError) {
-                if (![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+                if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid]) {
                     completion(NO, [NSError errorWithDomain:@"com.firebase.functions" code:FIRFunctionsErrorCodeUnauthenticated
                                                    userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}]);
                     return;
@@ -565,9 +589,10 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 - (NSObject *)observeOwnDriverAcceptanceForCompanyID:(NSString *)companyID
                                          completion:(void(^)(BOOL, NSError *))completion {
     PPDriverAcceptanceObservation *token = [PPDriverAcceptanceObservation new];
-    NSString *uid = FIRAuth.auth.currentUser.uid ?: @"";
-    if (!uid.length || !companyID.length || [companyID containsString:@"/"]) return token;
-    FIRCollectionReference *companies = [[FIRFirestore firestore] collectionWithPath:@"deliveryCompanies"];
+    NSString *uid = PPProSessionCoordinator.shared.activeUID ?: @"";
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!uid.length || !db || !companyID.length || [companyID containsString:@"/"]) return token;
+    FIRCollectionReference *companies = [db collectionWithPath:@"deliveryCompanies"];
     FIRDocumentReference *member = [[[companies documentWithPath:companyID]
         collectionWithPath:@"members"] documentWithPath:uid];
     __weak PPDriverAcceptanceObservation *weakToken = token;
@@ -598,7 +623,7 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
             !restricted && (!accountStatus.length || [accountStatus isEqual:@"active"]) &&
             [data[@"role"] isEqual:@"driver"] && explicitGrant;
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (!weakToken || ![FIRAuth.auth.currentUser.uid ?: @"" isEqualToString:uid]) return;
+            if (!weakToken || ![PPProSessionCoordinator.shared.activeUID ?: @"" isEqualToString:uid]) return;
             if (completion) completion(allowed, policyError);
         });
     }];
@@ -677,12 +702,12 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 }
 
 - (BOOL)hasDiscoveredDriverWorkspace {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     return uid.length > 0 && [self.driverWorkspaceUID isEqualToString:uid];
 }
 
 - (BOOL)hasDiscoveredDeliveryWorkspace {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     return uid.length > 0 && [self.deliveryWorkspaceUID isEqualToString:uid];
 }
 

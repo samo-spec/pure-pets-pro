@@ -299,6 +299,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
 @property (nonatomic, assign) NSUInteger operationGeneration;
 @property (nonatomic, assign) BOOL reviewRequiresNote;
 @property (nonatomic, strong) FIRAuthStateDidChangeListenerHandle authListener;
+@property (nonatomic, strong) FIRAuth *authListenerOwner;
 - (void)observeFulfillment;
 - (void)refreshActionBarFromLiveFulfillment;
 - (void)removeActionBar;
@@ -323,7 +324,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
     self.view.backgroundColor = [UIColor ppBackground];
     self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
     self.currentEvents = @[];
-    self.mayDisplayDossier = [self isOwnedModel:self.model uid:[FIRAuth auth].currentUser.uid ?: @""];
+    self.mayDisplayDossier = [self isOwnedModel:self.model uid:[PPProSessionCoordinator.shared activeUID] ?: @""];
     self.liveMessage = kLang(@"ProFulfillment_CheckingOrder");
     [self buildScrollView];
     [self renderDossier];
@@ -333,9 +334,11 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(stopJourneyMotion:) name:UIApplicationWillResignActiveNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(stopJourneyMotion:) name:UIApplicationDidEnterBackgroundNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(resumeJourneyMotion:) name:UIApplicationDidBecomeActiveNotification object:nil];
-    NSString *entryUID = [FIRAuth auth].currentUser.uid ?: @"";
+    FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+    NSString *entryUID = activeAuth.currentUser.uid ?: @"";
     __weak typeof(self) weakSelf = self;
-    self.authListener = [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
+    self.authListenerOwner = activeAuth;
+    self.authListener = [activeAuth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || [entryUID isEqualToString:user.uid ?: @""]) return;
         self.operationGeneration++;
@@ -962,7 +965,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
     [self.fulfillmentListener remove];
     self.fulfillmentListener = nil;
     NSUInteger generation = ++self.fulfillmentListenerGeneration;
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     NSString *fulfillmentID = self.model.fulfillmentID ?: @"";
     self.listenerUID = uid;
     self.hasLiveFulfillmentState = NO;
@@ -972,7 +975,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
     __weak typeof(self) weakSelf = self;
     self.fulfillmentListener = [[PPFulfillmentManager sharedManager] observeFulfillmentWithID:fulfillmentID stateHandler:^(PPFulfillmentModel *model, NSError *error, BOOL fromCache) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || generation != self.fulfillmentListenerGeneration || ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] || ![self.listenerUID isEqualToString:uid]) return;
+        if (!self || generation != self.fulfillmentListenerGeneration || ![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid] || ![self.listenerUID isEqualToString:uid]) return;
         BOOL owns = [self isOwnedModel:model uid:uid];
         self.hasLiveFulfillmentState = !error && model && !fromCache && owns;
         self.liveMessage = kLang(error || !model || !owns ? @"ProFulfillment_OrderUnavailable" : (fromCache ? @"ProFulfillment_CachedOrder" : @"ProFulfillment_ServerConfirmed"));
@@ -1005,7 +1008,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
     self.eventsListener = [[PPFulfillmentManager sharedManager] observeEventsForFulfillmentID:self.model.fulfillmentID stateHandler:^(NSArray<NSDictionary *> *events, NSError *error, BOOL fromCache) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) self = weakSelf;
-            if (!self || generation != self.eventsListenerGeneration || ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] || ![self.listenerUID isEqualToString:uid]) return;
+            if (!self || generation != self.eventsListenerGeneration || ![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid] || ![self.listenerUID isEqualToString:uid]) return;
             self.eventsLoaded = YES;
             self.eventsError = error;
             self.eventsFromCache = fromCache;
@@ -1097,7 +1100,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
 
 - (void)confirmAction:(NSString *)action pickupBranchID:(NSString *)pickupBranchID pickupSelectionResolved:(BOOL)pickupSelectionResolved {
     if (self.submitting || self.pendingAction.length || self.presentedViewController || !self.hasLiveFulfillmentState || ![self.model.availableActions containsObject:action]) return;
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     NSString *source = [self.model.status copy];
     NSString *target = [PPFulfillmentModel targetStatusForAction:action];
     NSString *fulfillmentID = [self.model.fulfillmentID copy];
@@ -1109,7 +1112,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
             initWithFulfillment:self.model completion:^(NSString *branchID) {
             __strong typeof(weakSelf) self = weakSelf;
             if (!self) return;
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] ||
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid] ||
                 !self.hasLiveFulfillmentState || ![self.model.fulfillmentID isEqualToString:fulfillmentID] ||
                 ![self.model.status isEqualToString:source] || ![self.model.availableActions containsObject:action] ||
                 ![self isOwnedModel:self.model uid:uid] || ![PPFulfillmentManager isOfficialPlatformFulfillment:self.model forUID:uid]) {
@@ -1150,7 +1153,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self) return;
         NSString *note = [text ?: @"" stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid] || !self.hasLiveFulfillmentState || ![self.model.fulfillmentID isEqualToString:fulfillmentID] || ![self.model.status isEqualToString:source] || ![self.model.availableActions containsObject:action] || official != [PPFulfillmentManager isOfficialPlatformFulfillment:self.model forUID:uid]) {
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid] || !self.hasLiveFulfillmentState || ![self.model.fulfillmentID isEqualToString:fulfillmentID] || ![self.model.status isEqualToString:source] || ![self.model.availableActions containsObject:action] || official != [PPFulfillmentManager isOfficialPlatformFulfillment:self.model forUID:uid]) {
             self.operationMessage = kLang(@"ProFulfillment_StateChanged");
             [self observeFulfillment];
             return;
@@ -1174,7 +1177,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
 
 - (void)executeAction:(NSString *)action note:(NSString *)note {
     if (self.submitting || !self.pendingAction.length || ![action isEqualToString:self.pendingAction] || ![note ?: @"" isEqualToString:self.pendingNote ?: @""]) return;
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (![uid isEqualToString:self.pendingUID] || ![self isOwnedModel:self.model uid:uid]) return;
     if (!self.hasLiveFulfillmentState) {
         self.operationMessage = kLang(@"ProFulfillment_RetryNeedsLive");
@@ -1188,7 +1191,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
     __weak typeof(self) weakSelf = self;
     [self performCanonicalFulfillmentAction:action note:note completion:^(BOOL success, NSString *message, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || generation != self.operationGeneration || ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:self.pendingUID]) return;
+        if (!self || generation != self.operationGeneration || ![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:self.pendingUID]) return;
         self.submitting = NO;
         if (!success) {
             BOOL callableError = [error.domain isEqualToString:FIRFunctionsErrorDomain];
@@ -1250,7 +1253,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
 }
 
 - (void)verifyPendingIntent {
-    if (self.submitting || !self.pendingAction.length || ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:self.pendingUID]) return;
+    if (self.submitting || !self.pendingAction.length || ![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:self.pendingUID]) return;
     self.submitting = YES;
     NSUInteger generation = ++self.operationGeneration;
     NSString *uid = self.pendingUID;
@@ -1259,7 +1262,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
     __weak typeof(self) weakSelf = self;
     [[PPFulfillmentManager sharedManager] fetchFulfillmentWithID:fulfillmentID completion:^(PPFulfillmentModel *model, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || generation != self.operationGeneration || ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (!self || generation != self.operationGeneration || ![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
         self.submitting = NO;
         if (error || ![self isOwnedModel:model uid:uid] || ![model.fulfillmentID isEqualToString:fulfillmentID]) {
             self.hasLiveFulfillmentState = NO;
@@ -1388,7 +1391,15 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
         return;
     }
 
-    FIRDocumentReference *reference = [[[FIRFirestore firestore] collectionWithPath:@"Orders"] documentWithPath:orderID];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        NSError *unauth = [NSError errorWithDomain:PPProSessionCoordinatorErrorDomain
+                                              code:PPProSessionCoordinatorErrorTransitionRequired
+                                          userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Generic")}];
+        if (completion) completion(nil, unauth);
+        return;
+    }
+    FIRDocumentReference *reference = [[db collectionWithPath:@"Orders"] documentWithPath:orderID];
     [reference getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (error) {
@@ -1470,7 +1481,7 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
 - (void)performCanonicalFulfillmentAction:(NSString *)action
                                      note:(NSString *)note
                                completion:(void (^)(BOOL success, NSString *message, NSError *error))completion {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (!self.hasLiveFulfillmentState || ![self.listenerUID isEqualToString:uid] || ![self isOwnedModel:self.model uid:uid] || ![self.pendingUID isEqualToString:uid] || ![self.pendingAction isEqualToString:action]) {
         NSError *error = [NSError errorWithDomain:@"PurePetsPro.Fulfillment" code:409 userInfo:@{NSLocalizedDescriptionKey:kLang(@"DeliveryStateChangedReload")}];
         if (completion) completion(NO, error.localizedDescription, error);
@@ -1495,7 +1506,9 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [self.journeyView stopAnimations];
-    if (self.authListener) [[FIRAuth auth] removeAuthStateDidChangeListener:self.authListener];
+    if (self.authListener) [(self.authListenerOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authListener];
+    self.authListener = nil;
+    self.authListenerOwner = nil;
     self.operationGeneration++;
     self.fulfillmentListenerGeneration += 1;
     self.eventsListenerGeneration += 1;

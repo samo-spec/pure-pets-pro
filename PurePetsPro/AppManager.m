@@ -557,7 +557,7 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
 }
 
 - (void)checkIfAdmin:(void(^)(BOOL isAdmin))completion {
-    FIRUser *user = [FIRAuth auth].currentUser;
+    FIRUser *user = [PPProSessionCoordinator.shared currentUser];
     self.currentUser = user;
     
     if (!user) {
@@ -605,7 +605,7 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
 
 - (void)checkIfCurrentUserCanAccessPro:(void(^)(BOOL allowed))completion
 {
-    NSString *uid = PPSafeString([FIRAuth auth].currentUser.uid);
+    NSString *uid = PPSafeString([PPProSessionCoordinator.shared activeUID]);
     [self checkIfUserWithUID:uid canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
         (void)userDoc;
         (void)error;
@@ -617,13 +617,18 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
               canAccessPro:(void(^)(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error))completion
 {
     NSString *safeUID = PPSafeString(uid);
-    if (safeUID.length == 0 || ![[FIRAuth auth].currentUser.uid isEqualToString:safeUID]) {
+    if (safeUID.length == 0 || ![PPProSessionCoordinator.shared.activeUID isEqualToString:safeUID]) {
         if (completion) completion(NO, nil, nil);
         return;
     }
 
-    PPFetchUsersColRootForAuthIdentity([FIRFirestore firestore], safeUID, ^(NSDictionary * _Nullable root, NSError * _Nullable error) {
-        if (![[FIRAuth auth].currentUser.uid isEqualToString:safeUID]) {
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion(NO, nil, nil);
+        return;
+    }
+    PPFetchUsersColRootForAuthIdentity(db, safeUID, ^(NSDictionary * _Nullable root, NSError * _Nullable error) {
+        if (![PPProSessionCoordinator.shared.activeUID isEqualToString:safeUID]) {
             if (completion) completion(NO, nil, nil);
             return;
         }
@@ -642,7 +647,11 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
 #pragma mark - MainKinds
 
 - (void)fetchMainKindsWithCompletion:(void(^)(NSArray<MainKindsModel *> * _Nullable kinds, NSError * _Nullable error))completion {
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion(nil, nil);
+        return;
+    }
     
     DLog(@"Fetching visible MainKindsCollection from Firestore…");
     FIRQuery *query = [[[db collectionWithPath:@"MainKindsCollection"]

@@ -90,7 +90,6 @@ static NSString *PPNotificationV2ProEnvironment(void)
     } else {
         [defaults removeObjectForKey:kPPNotificationTokenDefaultsKey];
     }
-    [defaults synchronize];
 }
 
 - (NSString *)deviceToken {
@@ -147,7 +146,7 @@ static NSString *PPNotificationV2ProEnvironment(void)
 
 - (void)deactivateNotificationDeviceV2WithReason:(NSString *)reason
                                       completion:(void (^)(NSError * _Nullable))completion {
-    NSString *safeUID = [PPNotificationsManager pp_trimmedString:[FIRAuth auth].currentUser.uid];
+    NSString *safeUID = [PPNotificationsManager pp_trimmedString:[PPProSessionCoordinator.shared activeUID]];
     if (safeUID.length == 0) {
         NSLog(@"PPLAB NotificationsV2 deactivation skipped | appId=%@ hasUID=no", kPPNotificationV2ProAppID);
         if (completion) completion(nil);
@@ -186,7 +185,7 @@ static NSString *PPNotificationV2ProEnvironment(void)
         return;
     }
 
-    NSString *activeUID = [PPNotificationsManager pp_trimmedString:[FIRAuth auth].currentUser.uid];
+    NSString *activeUID = [PPNotificationsManager pp_trimmedString:[PPProSessionCoordinator.shared activeUID]];
     if (![activeUID isEqualToString:safeUID]) {
         NSLog(@"PPLAB NotificationsV2 deactivation cancelled | appId=%@ reason=%@ auth_changed=yes",
               kPPNotificationV2ProAppID,
@@ -195,7 +194,12 @@ static NSString *PPNotificationV2ProEnvironment(void)
         return;
     }
 
-    FIRHTTPSCallable *callable = [[FIRFunctions functionsForRegion:@"us-central1"] HTTPSCallableWithName:@"deactivateNotificationDeviceV2"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!functions) {
+        if (completion) completion([NSError errorWithDomain:@"PPNotificationsManager" code:401 userInfo:nil]);
+        return;
+    }
+    FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"deactivateNotificationDeviceV2"];
     callable.timeoutInterval = 30.0;
 
     NSDictionary *payload = @{
@@ -488,7 +492,7 @@ static NSString *PPNotificationV2ProEnvironment(void)
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     request.HTTPBody = bodyData;
 
-    FIRUser *user = [FIRAuth auth].currentUser;
+    FIRUser *user = [PPProSessionCoordinator.shared currentUser];
     if (user) {
         [user getIDTokenWithCompletion:^(NSString * _Nullable idToken, NSError * _Nullable error) {
             if (error) {

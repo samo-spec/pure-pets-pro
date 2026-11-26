@@ -13,6 +13,8 @@
 #import "AdminDashboardViewController.h"
 #import "PPDeliveryCompanyService.h"
 #import "SceneDelegate.h"
+#import "PPProRememberedAccountStore.h"
+#import "PPProSessionCoordinator.h"
 #import <CommonCrypto/CommonCrypto.h>
 @import GoogleSignIn;
 
@@ -22,8 +24,16 @@ extern NSString * const LanguageDidChangeNotification;
 extern NSString * const UserManagerAuthStateDidChangeNotification;
 
 static NSString * const kPPFIRAuthDeserializedResponseKey = @"FIRAuthErrorUserInfoDeserializedResponseKey";
-static NSString * const kPPDefaultsVerificationIDKey = @"pro_authVerificationID";
+
 static NSUInteger const kPPMinPhoneDigits = 8;
+
+static BOOL PPProIdentityPortalPresentationTest(void) {
+#if DEBUG
+    return [NSProcessInfo.processInfo.arguments containsObject:@"-PPProIdentityPortalUITest"];
+#else
+    return NO;
+#endif
+}
 static NSInteger const kPPAppleRetryMax = 1;
 static NSTimeInterval const kPPSMSCooldownSeconds = 30.0;
 
@@ -94,6 +104,10 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 @property (nonatomic, strong, nullable) id<FIRListenerRegistration> combinedReg;
 @property (nonatomic, strong, nullable) NSDate *lastSMSSentDate;
 @property (nonatomic, copy, nullable) NSString *lastVerifiedFullPhone;
+@property (nonatomic, strong, nullable) NSUUID *stagedTransitionTicket;
+@property (nonatomic, strong, nullable) id<PPProSessionSlotHandle> stagedSessionSlot;
+@property (nonatomic, copy, nullable) NSString *stagedExpectedUID;
+@property (nonatomic, copy, nullable) NSString *stagedAuthMethod;
 
 @end
 
@@ -166,6 +180,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 - (void)pp_buildHostedSurface {
     self.surfaceController = [[PPProLoginSurfaceController alloc] init];
     self.surfaceController.delegate = self;
+    self.surfaceController.presentationTestMode = PPProIdentityPortalPresentationTest();
     self.surfaceController.phoneText = self.phoneText ?: @"";
     self.surfaceController.countryCode = self.countryCode ?: @"+974";
     self.surfaceController.showsAppleButton = YES;
@@ -191,10 +206,24 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                                              selector:@selector(pp_handleLanguageDidChange)
                                                  name:LanguageDidChangeNotification
                                                object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleSessionStateDidChange)
+                                                 name:PPProSessionTransitionRecoveryRequiredNotification
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleSessionStateDidChange)
+                                                 name:PPProSessionDidChangeActiveRuntimeNotification
+                                               object:nil];
 }
 
 - (void)pp_handleLanguageDidChange {
     [self pp_refreshSurfaceState];
+}
+
+- (void)pp_handleSessionStateDidChange {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self pp_refreshSurfaceState];
+    });
 }
 
 - (void)pp_refreshSurfaceState {
@@ -205,6 +234,19 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     self.surfaceController.phoneText = self.phoneText ?: @"";
     self.surfaceController.countryCode = self.countryCode ?: @"+974";
     self.surfaceController.isBusy = self.isAuthenticating;
+    self.surfaceController.requiresTransitionRecovery = [PPProSessionCoordinator.shared requiresTransitionRecovery];
+#if DEBUG
+    if (PPProIdentityPortalPresentationTest()) {
+        self.surfaceController.rememberedAccounts = [NSProcessInfo.processInfo.arguments containsObject:@"-PPProIdentityPortalFixtureAccounts"] ?
+            @[@{@"uid":@"fixture-A", @"label":@"a•••@example.invalid", @"method":@"google.com"},
+              @{@"uid":@"fixture-B", @"label":@"•••• 4321", @"method":@"phone"}] : @[];
+    } else
+#endif
+    if ([PPProRememberedAccountStore rolloutEnabled] && ![PPProSessionCoordinator.shared currentUser]) {
+        self.surfaceController.rememberedAccounts = [PPProRememberedAccountStore recordsWithError:nil] ?: @[];
+    } else {
+        self.surfaceController.rememberedAccounts = @[];
+    }
     if (@available(iOS 13.0, *)) {
         self.surfaceController.showsAppleButton = YES;
     } else {
@@ -222,12 +264,18 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     [self pp_updatePhoneContinueStateAnimated:YES];
 }
 
+- (void)proLoginSurface:(PPProLoginSurfaceController *)controller didChangeCountryCode:(NSString *)code {
+    (void)controller;
+    if (code.length) self.countryCode = code;
+}
+
 - (void)proLoginSurfaceDidRequestCountryCode:(PPProLoginSurfaceController *)controller {
     (void)controller;
     [self pp_pickCountryCode];
 }
 
 - (void)proLoginSurfaceDidTapPhoneContinue:(PPProLoginSurfaceController *)controller {
+    if (PPProIdentityPortalPresentationTest()) return;
     if (controller.countryCode.length > 0) {
         self.countryCode = controller.countryCode;
     }
@@ -235,11 +283,13 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 }
 
 - (void)proLoginSurfaceDidTapApple:(PPProLoginSurfaceController *)controller {
+    if (PPProIdentityPortalPresentationTest()) return;
     (void)controller;
     [self pp_handleAppleSignIn];
 }
 
 - (void)proLoginSurfaceDidTapGoogle:(PPProLoginSurfaceController *)controller {
+    if (PPProIdentityPortalPresentationTest()) return;
     (void)controller;
     [self pp_handleGoogleSignIn];
 }
@@ -250,6 +300,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 }
 
 - (void)proLoginSurfaceDidTapLanguage:(PPProLoginSurfaceController *)controller {
+    if (PPProIdentityPortalPresentationTest()) return;
     (void)controller;
     [self pp_onLanguageChange];
 }
@@ -257,6 +308,79 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 - (void)proLoginSurfaceDidTapProviderApplication:(PPProLoginSurfaceController *)controller {
     self.resumePartnerApplicationAfterAuth = YES;
     [controller focusLoginFormCard];
+}
+
+- (void)proLoginSurfaceDidTapRecoveryRetry:(PPProLoginSurfaceController *)controller {
+    (void)controller;
+    if (PPProIdentityPortalPresentationTest() || self.isAuthenticating) return;
+    self.isAuthenticating = YES;
+    [self pp_setInteractionEnabled:NO];
+    [PPHUD showIndeterminateIn:self.view title:kLang(@"Please wait") subtitle:nil];
+
+    __weak typeof(self) weakSelf = self;
+    [PPProSessionCoordinator.shared retryTransitionRecoverySignOutWithCompletion:^(BOOL cleared, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [PPHUD dismiss];
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) return;
+            self.isAuthenticating = NO;
+            [self pp_setInteractionEnabled:YES];
+            [self pp_refreshSurfaceState];
+            if (!cleared || error) {
+                [PPAlertHelper showErrorIn:self
+                                     title:kLang(@"Error")
+                                  subtitle:error.localizedDescription ?: kLang(@"ProIdentityRecoveryMessage")];
+            }
+        });
+    }];
+}
+
+- (void)proLoginSurface:(PPProLoginSurfaceController *)controller didRequestRemoveRememberedAccount:(NSString *)uid {
+    (void)controller;
+    if (PPProIdentityPortalPresentationTest() || self.isAuthenticating || !uid.length) return;
+    if (![PPProRememberedAccountStore rolloutEnabled]) return;
+
+    NSString *label = @"";
+    for (NSDictionary<NSString *, NSString *> *record in self.surfaceController.rememberedAccounts) {
+        if ([record[@"uid"] isEqualToString:uid]) {
+            label = record[@"label"] ?: @"";
+            break;
+        }
+    }
+    NSString *message = [NSString stringWithFormat:kLang(@"ProIdentityRemoveAccountMessage"),
+                         label.length > 0 ? label : uid];
+    __weak typeof(self) weakSelf = self;
+    [PPAlertHelper showConfirmationIn:self
+                                title:kLang(@"ProIdentityRemoveAccountTitle")
+                             subtitle:message
+                        confirmButton:kLang(@"ProIdentityRemoveAccount")
+                         cancelButton:kLang(@"Cancel")
+                                 icon:[UIImage systemImageNamed:@"trash"]
+                         confirmBlock:^(__unused NSString * _Nullable text, BOOL didConfirm) {
+        if (!didConfirm) return;
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || self.isAuthenticating) return;
+        self.isAuthenticating = YES;
+        [self pp_setInteractionEnabled:NO];
+        [PPHUD showIndeterminateIn:self.view title:kLang(@"Please wait") subtitle:nil];
+
+        [PPProSessionCoordinator.shared removeRememberedAccountWithUID:uid
+                                                            completion:^(BOOL removed, NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [PPHUD dismiss];
+                __strong typeof(weakSelf) innerSelf = weakSelf;
+                if (!innerSelf) return;
+                innerSelf.isAuthenticating = NO;
+                [innerSelf pp_setInteractionEnabled:YES];
+                [innerSelf pp_refreshSurfaceState];
+                if (!removed || error) {
+                    [PPAlertHelper showErrorIn:innerSelf
+                                         title:kLang(@"Error")
+                                      subtitle:error.localizedDescription ?: kLang(@"StatusLoginFailed")];
+                }
+            });
+        }];
+    } cancelBlock:nil];
 }
 
 #pragma mark - Input State
@@ -375,6 +499,79 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     [self pp_sendVerificationCodeToPhone:full isResend:NO];
 }
 
+- (void)pp_clearStagedAuthTransition {
+    self.stagedTransitionTicket = nil;
+    self.stagedSessionSlot = nil;
+    self.stagedExpectedUID = nil;
+    self.stagedAuthMethod = nil;
+}
+
+- (NSString *)pp_authMethodForCredential:(FIRAuthCredential *)credential {
+    NSString *provider = [credential.provider lowercaseString] ?: @"";
+    if ([provider containsString:@"apple"]) return @"apple.com";
+    if ([provider containsString:@"google"]) return @"google.com";
+    return @"phone";
+}
+
+- (void)pp_prepareAuthenticationForMethod:(NSString *)method
+                              expectedUID:(nullable NSString *)expectedUID
+                               completion:(void (^)(BOOL allowed,
+                                                    NSUUID * _Nullable ticket,
+                                                    id<PPProSessionSlotHandle> _Nullable slot,
+                                                    NSError * _Nullable error))completion {
+    NSString *safeExpected = [expectedUID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (safeExpected.length == 0) safeExpected = nil;
+    NSString *safeMethod = method.length > 0 ? method : @"phone";
+
+    BOOL sameExpected = (self.stagedExpectedUID == nil && safeExpected == nil) ||
+        (safeExpected && [self.stagedExpectedUID isEqualToString:safeExpected]);
+    if ((self.stagedTransitionTicket || self.stagedSessionSlot) &&
+        sameExpected &&
+        [self.stagedAuthMethod isEqualToString:safeMethod]) {
+        if (completion) completion(YES, self.stagedTransitionTicket, self.stagedSessionSlot, nil);
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    void (^startPrepare)(void) = ^{
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        NSString *sourceUID = [PPProSessionCoordinator.shared activeUID];
+        void (^handlePrepared)(BOOL, NSUUID * _Nullable, id<PPProSessionSlotHandle> _Nullable, NSError * _Nullable) =
+            ^(BOOL allowed, NSUUID * _Nullable ticket, id<PPProSessionSlotHandle> _Nullable slot, NSError * _Nullable error) {
+                __strong typeof(weakSelf) innerSelf = weakSelf;
+                if (!innerSelf) return;
+                if (allowed) {
+                    innerSelf.stagedTransitionTicket = ticket;
+                    innerSelf.stagedSessionSlot = slot;
+                    innerSelf.stagedExpectedUID = safeExpected;
+                    innerSelf.stagedAuthMethod = safeMethod;
+                } else {
+                    [innerSelf pp_clearStagedAuthTransition];
+                }
+                if (completion) completion(allowed, ticket, slot, error);
+            };
+        if (safeExpected.length > 0) {
+            [PPProSessionCoordinator.shared beginRememberedAccountSignInOrSwitchToUID:safeExpected
+                                                                             fromUID:sourceUID
+                                                                          completion:handlePrepared];
+        } else {
+            [PPProSessionCoordinator.shared beginProvisionalSignInFromUID:sourceUID
+                                                               completion:handlePrepared];
+        }
+    };
+
+    if (self.stagedTransitionTicket || self.stagedSessionSlot) {
+        NSUUID *oldTicket = self.stagedTransitionTicket;
+        [self pp_clearStagedAuthTransition];
+        [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:oldTicket completion:^(__unused BOOL cleared, __unused NSError *err) {
+            startPrepare();
+        }];
+    } else {
+        startPrepare();
+    }
+}
+
 - (void)pp_sendVerificationCodeToPhone:(NSString *)fullPhone isResend:(BOOL)isResend {
     self.isAuthenticating = YES;
     [self pp_setInteractionEnabled:NO];
@@ -382,41 +579,62 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     [PPHUD showIndeterminateIn:self.view title:hudTitle subtitle:nil];
     PPAdminSetLoginInProgress(YES);
 
+    NSString *expectedUID = [PPProRememberedAccountStore rolloutEnabled] ? [self.surfaceController.selectedRememberedAccountUID copy] : nil;
     __weak typeof(self) weakSelf = self;
-    [[FIRPhoneAuthProvider provider] verifyPhoneNumber:fullPhone
-                                            UIDelegate:nil
-                                            completion:^(NSString * _Nullable verificationID, NSError * _Nullable error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
+    [self pp_prepareAuthenticationForMethod:@"phone" expectedUID:expectedUID completion:^(BOOL allowed, NSUUID * _Nullable ticket, __unused id<PPProSessionSlotHandle> _Nullable slot, NSError * _Nullable prepError) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        if (!allowed) {
             [PPHUD dismiss];
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) {
-                return;
-            }
-
             self.isAuthenticating = NO;
             [self pp_setInteractionEnabled:YES];
+            PPAdminSetLoginInProgress(NO);
+            [self pp_refreshSurfaceState];
+            [PPAlertHelper showErrorIn:self
+                                 title:kLang(@"Error")
+                              subtitle:prepError.localizedDescription ?: kLang(@"ProLoginCodeSendFailed")];
+            return;
+        }
 
-            if (error) {
-                PPAdminSetLoginInProgress(NO);
-                NSString *friendlyMessage = [self pp_friendlyPhoneErrorMessage:error];
-                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:friendlyMessage];
-                return;
-            }
+        FIRPhoneAuthProvider *phoneProvider = [PPProSessionCoordinator.shared activePhoneProvider] ?: [FIRPhoneAuthProvider provider];
+        [phoneProvider verifyPhoneNumber:fullPhone
+                              UIDelegate:nil
+                              completion:^(NSString * _Nullable verificationID, NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [PPHUD dismiss];
+                __strong typeof(weakSelf) self = weakSelf;
+                if (!self) {
+                    return;
+                }
 
-            if (verificationID.length == 0) {
-                PPAdminSetLoginInProgress(NO);
-                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"ProLoginCodeSendFailed")];
-                return;
-            }
+                self.isAuthenticating = NO;
+                [self pp_setInteractionEnabled:YES];
 
-            self.verificationID = verificationID;
-            self.lastSMSSentDate = [NSDate date];
-            [[NSUserDefaults standardUserDefaults] setObject:verificationID forKey:kPPDefaultsVerificationIDKey];
+                if (error) {
+                    PPAdminSetLoginInProgress(NO);
+                    [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:ticket completion:nil];
+                    [self pp_clearStagedAuthTransition];
+                    [self pp_refreshSurfaceState];
+                    NSString *friendlyMessage = [self pp_friendlyPhoneErrorMessage:error];
+                    [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:friendlyMessage];
+                    return;
+                }
 
-            if (!isResend) {
+                if (verificationID.length == 0) {
+                    PPAdminSetLoginInProgress(NO);
+                    [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:ticket completion:nil];
+                    [self pp_clearStagedAuthTransition];
+                    [self pp_refreshSurfaceState];
+                    [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"ProLoginCodeSendFailed")];
+                    return;
+                }
+
+                self.verificationID = verificationID;
+                self.lastSMSSentDate = [NSDate date];
+                // The challenge belongs only to this login attempt, never a previous account.
                 [self pp_promptForVerificationCode:fullPhone];
-            }
-        });
+            });
+        }];
     }];
 }
 
@@ -457,7 +675,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     }];
 
     __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:kLang(@"ProLoginVerify")
+    UIAlertAction *verifyAction = [UIAlertAction actionWithTitle:kLang(@"ProLoginVerify")
                                               style:UIAlertActionStyleDefault
                                             handler:^(__unused UIAlertAction *action) {
         __strong typeof(weakSelf) self = weakSelf;
@@ -466,13 +684,22 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
         }
 
         NSString *code = [alert.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-        if (code.length < 4) {
-            [PPAlertHelper showWarningIn:self title:kLang(@"Warning") subtitle:kLang(@"ProLoginCodeTooShort")];
-            return;
-        }
-
+        if (code.length != 6) return;
         [self pp_signInWithPhoneVerificationCode:code];
-    }]];
+    }];
+    verifyAction.enabled = NO;
+    [alert addAction:verifyAction];
+    UITextField *codeField = alert.textFields.firstObject;
+    __weak UIAlertAction *weakVerifyAction = verifyAction;
+    __weak UITextField *weakCodeField = codeField;
+    [codeField addAction:[UIAction actionWithHandler:^(__kindof UIAction * _Nonnull action) {
+        (void)action;
+        UITextField *field = weakCodeField;
+        NSString *code = field.text ?: @"";
+        NSCharacterSet *notASCII = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789"] invertedSet];
+        NSString *digits = [[code componentsSeparatedByCharactersInSet:notASCII] componentsJoinedByString:@""];
+        weakVerifyAction.enabled = digits.length == 6 && [digits isEqualToString:code];
+    }] forControlEvents:UIControlEventEditingChanged];
 
     [alert addAction:[UIAlertAction actionWithTitle:kLang(@"ProLoginResendCode")
                                               style:UIAlertActionStyleDefault
@@ -498,34 +725,35 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
         }
 
         [self pp_sendVerificationCodeToPhone:phone isResend:YES];
-        // Re-show the verification prompt after resend completes
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) self = weakSelf;
-            if (self && !self.isAuthenticating) {
-                [self pp_promptForVerificationCode:phone];
-            }
-        });
+        // Successful resend completion opens the new challenge.
     }]];
 
     [alert addAction:[UIAlertAction actionWithTitle:kLang(@"Cancel")
                                               style:UIAlertActionStyleCancel
                                             handler:^(__unused UIAlertAction *action) {
+        __strong typeof(weakSelf) self = weakSelf;
         PPAdminSetLoginInProgress(NO);
+        if (self) {
+            [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:self.stagedTransitionTicket completion:nil];
+            [self pp_clearStagedAuthTransition];
+            [self pp_refreshSurfaceState];
+        }
     }]];
 
     [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)pp_signInWithPhoneVerificationCode:(NSString *)code {
-    NSString *verificationID = self.verificationID ?: [[NSUserDefaults standardUserDefaults] stringForKey:kPPDefaultsVerificationIDKey];
+    NSString *verificationID = self.verificationID;
     if (!verificationID.length) {
         [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"ProLoginCodeExpired")];
         PPAdminSetLoginInProgress(NO);
         return;
     }
 
-    FIRAuthCredential *credential = [[FIRPhoneAuthProvider provider] credentialWithVerificationID:verificationID
-                                                                                  verificationCode:code];
+    FIRPhoneAuthProvider *phoneProvider = [PPProSessionCoordinator.shared activePhoneProvider] ?: [FIRPhoneAuthProvider provider];
+    FIRAuthCredential *credential = [phoneProvider credentialWithVerificationID:verificationID
+                                                               verificationCode:code];
     [PPHUD showIndeterminateIn:self.view title:kLang(@"ProLoginVerifyingCode") subtitle:nil];
     [self pp_signInWithCredential:credential displayName:nil];
 }
@@ -767,59 +995,159 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 #pragma mark - Shared Credential Sign-In
 
 - (void)pp_signInWithCredential:(FIRAuthCredential *)credential displayName:(NSString *_Nullable)name {
+    NSString *expectedUID = [PPProRememberedAccountStore rolloutEnabled] ? [self.surfaceController.selectedRememberedAccountUID copy] : nil;
+    NSString *authMethod = [self pp_authMethodForCredential:credential];
     __weak typeof(self) weakSelf = self;
-    [[FIRAuth auth] signInWithCredential:credential
-                              completion:^(FIRAuthDataResult * _Nullable result, NSError * _Nullable error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
+    [self pp_prepareAuthenticationForMethod:authMethod
+                                expectedUID:expectedUID
+                                 completion:^(BOOL allowed,
+                                              NSUUID * _Nullable ticket,
+                                              id<PPProSessionSlotHandle> _Nullable slot,
+                                              NSError * _Nullable prepError) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) return;
+        if (!allowed) {
             [PPHUD dismiss];
-            __strong typeof(weakSelf) self = weakSelf;
-            if (!self) {
-                return;
-            }
-
+            PPAdminSetLoginInProgress(NO);
             self.isAuthenticating = NO;
             [self pp_setInteractionEnabled:YES];
+            [self pp_clearStagedAuthTransition];
+            [self pp_refreshSurfaceState];
+            [PPAlertHelper showErrorIn:self
+                                 title:kLang(@"Error")
+                              subtitle:prepError.localizedDescription ?: kLang(@"StatusLoginFailed")];
+            return;
+        }
 
-            FIRUser *user = result.user ?: [FIRAuth auth].currentUser;
-            if (error || !user) {
-                PPAdminSetLoginInProgress(NO);
-                NSString *subtitle = [self pp_friendlyFirebaseAuthErrorMessage:error];
-                [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:subtitle];
-                return;
-            }
-            if (![[FIRAuth auth].currentUser.uid isEqualToString:user.uid]) return;
+        FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+        [activeAuth signInWithCredential:credential
+                              completion:^(FIRAuthDataResult * _Nullable result, NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [PPHUD dismiss];
+                __strong typeof(weakSelf) self = weakSelf;
+                if (!self) {
+                    return;
+                }
 
-            // Update Firebase Auth display name if provided and not already set
-            NSString *trimmedName = [name stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-            if (trimmedName.length > 0 && (user.displayName.length == 0 || [user.displayName hasPrefix:@"user"])) {
-                FIRUserProfileChangeRequest *changeRequest = [user profileChangeRequest];
-                changeRequest.displayName = trimmedName;
-                [changeRequest commitChangesWithCompletion:^(NSError * _Nullable profileError) {
-                    if (profileError) {
-                        DLog(@"[Auth] Failed to update displayName: %@", profileError.localizedDescription);
+                self.isAuthenticating = NO;
+                [self pp_setInteractionEnabled:YES];
+
+                FIRUser *user = result.user ?: activeAuth.currentUser;
+                if (error || !user || ![activeAuth.currentUser.uid isEqualToString:user.uid]) {
+                    PPAdminSetLoginInProgress(NO);
+                    [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
+                                                                         provisionalSlot:slot
+                                                                                   error:error
+                                                                     mismatchExpectedUID:nil
+                                                                              completion:^(__unused BOOL recoveryRequired, NSError * _Nullable finalError) {
+                        __strong typeof(weakSelf) innerSelf = weakSelf;
+                        if (!innerSelf) return;
+                        [innerSelf pp_clearStagedAuthTransition];
+                        [innerSelf pp_refreshSurfaceState];
+                        NSString *subtitle = [innerSelf pp_friendlyFirebaseAuthErrorMessage:error ?: finalError];
+                        [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:subtitle];
+                    }];
+                    return;
+                }
+                if (expectedUID.length && ![user.uid isEqualToString:expectedUID]) {
+                    // Never bootstrap a different identity chosen by the authentication provider.
+                    PPAdminSetLoginInProgress(YES);
+                    [self pp_setInteractionEnabled:NO];
+                    self.isAuthenticating = YES;
+                    void (^finishMismatch)(BOOL, NSError * _Nullable) = ^(BOOL recoveryRequired, NSError * _Nullable finalError) {
+                        __strong typeof(weakSelf) innerSelf = weakSelf;
+                        if (!innerSelf) return;
+                        PPAdminSetLoginInProgress(NO);
+                        innerSelf.isAuthenticating = NO;
+                        [innerSelf pp_setInteractionEnabled:YES];
+                        [innerSelf pp_clearStagedAuthTransition];
+                        [innerSelf pp_refreshSurfaceState];
+                        if (recoveryRequired) {
+                            [PPAlertHelper showErrorIn:innerSelf
+                                                 title:kLang(@"Error")
+                                              subtitle:finalError.localizedDescription ?: kLang(@"ProIdentityWrongAccount")];
+                        } else {
+                            [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:kLang(@"ProIdentityWrongAccount")];
+                        }
+                    };
+                    if (ticket || slot || [PPProRememberedAccountStore rolloutEnabled]) {
+                        [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
+                                                                             provisionalSlot:slot
+                                                                                       error:nil
+                                                                         mismatchExpectedUID:expectedUID
+                                                                                  completion:finishMismatch];
+                    } else {
+                        [UserManager.shared signOutWithCompletion:^(NSError *logoutError) {
+                            if (logoutError) {
+                                [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
+                                                                                     provisionalSlot:slot
+                                                                                               error:logoutError
+                                                                                 mismatchExpectedUID:expectedUID
+                                                                                          completion:finishMismatch];
+                                return;
+                            }
+                            finishMismatch(NO, nil);
+                        }];
                     }
-                }];
-            }
+                    return;
+                }
 
-            NSDictionary *extra = nil;
-            if (trimmedName.length > 0) {
-                extra = @{@"UserName": trimmedName};
-            }
-
-            [[FUManager shared] ensureUserDocumentExistsForCurrentUserWithExtra:extra
-                                                                     completion:^(NSError *documentError) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    __strong typeof(weakSelf) self = weakSelf;
-                    if (!self || ![[FIRAuth auth].currentUser.uid isEqualToString:user.uid]) {
+                NSString *maskedLabel = [PPProRememberedAccountStore maskedLabelForPhone:user.phoneNumber email:user.email];
+                [PPProSessionCoordinator.shared completeAuthenticationForTicket:ticket
+                                                                provisionalSlot:slot
+                                                               authenticatedUID:user.uid
+                                                                    expectedUID:expectedUID
+                                                                    maskedLabel:maskedLabel
+                                                                         method:authMethod
+                                                                     completion:^(BOOL installed, NSError * _Nullable installError) {
+                    __strong typeof(weakSelf) innerSelf = weakSelf;
+                    if (!innerSelf) return;
+                    [innerSelf pp_clearStagedAuthTransition];
+                    if (!installed || ![[PPProSessionCoordinator.shared activeUID] isEqualToString:user.uid]) {
+                        PPAdminSetLoginInProgress(NO);
+                        innerSelf.isAuthenticating = NO;
+                        [innerSelf pp_setInteractionEnabled:YES];
+                        [innerSelf pp_refreshSurfaceState];
+                        [PPAlertHelper showErrorIn:innerSelf
+                                             title:kLang(@"Error")
+                                          subtitle:installError.localizedDescription ?: kLang(@"StatusLoginFailed")];
                         return;
                     }
-                    if (documentError) {
-                        DLog(@"[Auth] ensureUserDocument error: %@", documentError.localizedDescription);
+
+                    FIRUser *installedUser = [PPProSessionCoordinator.shared currentUser] ?: user;
+                    // Update Firebase Auth display name if provided and not already set
+                    NSString *trimmedName = [name stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+                    if (trimmedName.length > 0 && (installedUser.displayName.length == 0 || [installedUser.displayName hasPrefix:@"user"])) {
+                        FIRUserProfileChangeRequest *changeRequest = [installedUser profileChangeRequest];
+                        changeRequest.displayName = trimmedName;
+                        [changeRequest commitChangesWithCompletion:^(NSError * _Nullable profileError) {
+                            if (profileError) {
+                                DLog(@"[Auth] Failed to update displayName: %@", profileError.localizedDescription);
+                            }
+                        }];
                     }
-                    [self pp_gatekeepServiceProviderForUID:user.uid];
-                });
-            }];
-        });
+
+                    NSDictionary *extra = nil;
+                    if (trimmedName.length > 0) {
+                        extra = @{@"UserName": trimmedName};
+                    }
+
+                    [[FUManager shared] ensureUserDocumentExistsForCurrentUserWithExtra:extra
+                                                                             completion:^(NSError *documentError) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            __strong typeof(weakSelf) readySelf = weakSelf;
+                            if (!readySelf || ![[PPProSessionCoordinator.shared activeUID] isEqualToString:user.uid]) {
+                                return;
+                            }
+                            if (documentError) {
+                                DLog(@"[Auth] ensureUserDocument error: %@", documentError.localizedDescription);
+                            }
+                            [readySelf pp_gatekeepServiceProviderForUID:user.uid];
+                        });
+                    }];
+                }];
+            });
+        }];
     }];
 }
 
@@ -879,7 +1207,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
             return;
         }
 
-        NSString *activeUID = [FIRAuth auth].currentUser.uid ?: @"";
+        NSString *activeUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
         if (![activeUID isEqualToString:uid]) {
             PPAdminSetLoginInProgress(NO);
             return;
@@ -925,16 +1253,16 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                                 tertiaryStyle:UIAlertActionStyleDefault
                                  primaryBlock:^{
                 __strong typeof(weakSelf) retrySelf = weakSelf;
-                if (!retrySelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                if (!retrySelf || ![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) return;
                 PPAdminSetLoginInProgress(YES);
                 [retrySelf pp_gatekeepServiceProviderForUID:uid];
             } secondaryBlock:^{
                 __strong typeof(weakSelf) onboardingSelf = weakSelf;
-                if (!onboardingSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+                if (!onboardingSelf || ![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) return;
                 onboardingSelf.resumePartnerApplicationAfterAuth = YES;
                 [onboardingSelf pp_continueToProviderOnboarding];
             } tertiaryBlock:^{
-                if ([[FIRAuth auth].currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+                if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
             }];
             return;
         }
@@ -950,11 +1278,11 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                   secondaryButton:kLang(@"ProAccess_UseAnotherAccount")
                      primaryBlock:^{
             __strong typeof(weakSelf) onboardingSelf = weakSelf;
-            if (!onboardingSelf || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+            if (!onboardingSelf || ![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) return;
             onboardingSelf.resumePartnerApplicationAfterAuth = YES;
             [onboardingSelf pp_continueToProviderOnboarding];
         } secondaryBlock:^{
-            if ([[FIRAuth auth].currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+            if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
         }];
     }];
 }
@@ -974,7 +1302,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     [AppMgr checkIfUserWithUID:uid canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) self = weakSelf;
-            if (!self || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) {
+            if (!self || ![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) {
                 return;
             }
             [PPHUD dismiss];
@@ -1066,7 +1394,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                 return;
             }
 
-            [UsrMgr p_writeUserToDisk:user forUID:user.uid];
+            [UsrMgr p_cacheUser:user];
             [PPHUD dismiss];
             PPAdminSetLoginInProgress(NO);
             [[NSNotificationCenter defaultCenter] postNotificationName:UserManagerAuthStateDidChangeNotification object:nil];

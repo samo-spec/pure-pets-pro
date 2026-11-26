@@ -1393,7 +1393,8 @@ public struct PPBecomePartnerStudioSheet: View {
     }
 
     private func uploadDocumentImage(_ image: UIImage, tag: Int) {
-        guard let user = Auth.auth().currentUser else {
+        guard let user = PPProSessionCoordinator.shared().currentUser(),
+              let activeStorage = PPProSessionCoordinator.shared().activeStorage() else {
             errorMessage = Language.isRTL() ? "يرجى تسجيل الدخول مجدداً لإرفاق المستندات" : "Please re-authenticate to upload credentials."
             return
         }
@@ -1429,7 +1430,7 @@ public struct PPBecomePartnerStudioSheet: View {
             let suffix = isLicense ? "license" : "commercial_reg"
             let path = "provider_applications/\(user.uid)/\(suffix)_\(Int64(Date().timeIntervalSince1970 * 1000)).jpg"
 
-            let storageRef = Storage.storage().reference().child(path)
+            let storageRef = activeStorage.reference().child(path)
             let meta = StorageMetadata()
             meta.contentType = "image/jpeg"
 

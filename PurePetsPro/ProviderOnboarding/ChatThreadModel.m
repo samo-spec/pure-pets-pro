@@ -208,7 +208,7 @@ NSString *PPChatParticipantTypeForProfile(NSDictionary *profile, NSString *sourc
     }
     
     // Check if current user reported this thread
-    NSString *currentUserID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUserID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if ([self.reportedBy containsObject:currentUserID]) {
         self.isReportedByMe = YES;
     }

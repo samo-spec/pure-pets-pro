@@ -322,6 +322,14 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         _branchNameCache = [NSMutableDictionary dictionary];
         _providerNameCache = [NSMutableDictionary dictionary];
         _providerUserCache = [NSMutableDictionary dictionary];
+        __weak typeof(self) weakSelf = self;
+        [PPProSessionCoordinator.shared registerSessionTeardownHandler:^(__unused NSString *reason) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf stopListening];
+            [strongSelf.providerNameCache removeAllObjects];
+            [strongSelf.providerUserCache removeAllObjects];
+        } forKey:@"PPDeliveryManager"];
     }
     return self;
 }
@@ -330,7 +338,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
 - (void)startListeningForDeliveryOrders {
     [self stopListening];
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (!uid.length) {
         [self postOrdersChangeWithError:[NSError errorWithDomain:@"PPDeliveryManager"
                                                              code:401
@@ -341,7 +349,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     __weak typeof(self) weakSelf = self;
     [PPDeliveryCompanyService.shared resolveDriverCockpitRequirementWithCompletion:^(BOOL requiresDriverCockpit, NSError * _Nullable error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || generation != self.staffListenerGeneration || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+        if (!self || generation != self.staffListenerGeneration || ![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid]) return;
         if (error) { [self postOrdersChangeWithError:error]; return; }
         if (requiresDriverCockpit) {
             // Driver queues belong to the canonical cockpit. Never fill the
@@ -364,7 +372,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         if (listenerGeneration != strongSelf.staffListenerGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
         if (error) {
             DLog(@"[PPDeliveryManager] Staff authorization listener error: %@", error.localizedDescription);
             [strongSelf updateOrderListenersForStaff:nil uid:uid];
@@ -456,7 +464,9 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
                        [staff hasPermission:@"delivery.manage"];
     if (!canDelivery) return;
 
-    FIRCollectionReference *ordersRef = [[FIRFirestore firestore] collectionWithPath:@"Orders"];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return;
+    FIRCollectionReference *ordersRef = [db collectionWithPath:@"Orders"];
     BOOL canSeeAllDeliveryOrders = staff.isActive &&
         ([PPStaffAuth isAdminRole:staff.role] || [staff.role isEqualToString:PPStaffRoleOperationsManager]);
 
@@ -466,7 +476,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
                                                                               BOOL serverConfirmed) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || listenerGeneration != strongSelf.orderListenerGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
 
         NSMutableArray<PPDeliveryOrderModel *> *orders = [NSMutableArray arrayWithCapacity:documents.count];
         NSMutableSet<NSString *> *providerIDs = [NSMutableSet set];
@@ -501,7 +511,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         self.primaryListener = [query addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf || listenerGeneration != strongSelf.orderListenerGeneration) return;
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
             if (error) {
                 DLog(@"[PPDeliveryManager] ❌ All-order delivery listener error: %@", error.localizedDescription);
                 [strongSelf postOrdersChangeWithError:error];
@@ -513,7 +523,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     }
 
     FIRQuery *openQuery = [[ordersRef queryWhereField:@"deliveryStatus" isEqualTo:PPDeliveryStatusRequested] queryOrderedByField:@"createdAt" descending:YES];
-    FIRCollectionReference *fulfillmentsRef = [[FIRFirestore firestore] collectionWithPath:@"FulfillmentOrders"];
+    FIRCollectionReference *fulfillmentsRef = [db collectionWithPath:@"FulfillmentOrders"];
     NSArray<NSString *> *activeStatuses = PPAssignedFulfillmentActiveStatuses();
     FIRQuery *(^assignedQueryForField)(NSString *) = ^FIRQuery *(NSString *field) {
         FIRQuery *query = [[fulfillmentsRef queryWhereField:field isEqualTo:uid]
@@ -525,7 +535,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     self.primaryListener = [openQuery addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || listenerGeneration != strongSelf.orderListenerGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
         if (error) {
             DLog(@"[PPDeliveryManager] ❌ Open delivery listener error: %@", error.localizedDescription);
             [strongSelf postOrdersChangeWithError:error];
@@ -537,7 +547,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     self.secondaryListener = [assignedQueryForField(@"deliveryUserId") addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || listenerGeneration != strongSelf.orderListenerGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
         if (error) {
             DLog(@"[PPDeliveryManager] ❌ Canonical deliveryUserId child listener error: %@", error.localizedDescription);
             strongSelf.deliveryUserAssignedSourceServerReady = NO;
@@ -562,7 +572,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     self.tertiaryListener = [assignedQueryForField(@"deliveryAssignedDriverUid") addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || listenerGeneration != strongSelf.orderListenerGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
         if (error) {
             DLog(@"[PPDeliveryManager] ❌ Canonical deliveryAssignedDriverUid child listener error: %@", error.localizedDescription);
             strongSelf.driverAliasAssignedSourceServerReady = NO;
@@ -593,7 +603,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     self.legacyAssignedListener = [legacyAssignedQuery addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || listenerGeneration != strongSelf.orderListenerGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
         if (error) {
             strongSelf.legacyAssignedOrders = @[];
             [strongSelf mergeAndPublishOrders];
@@ -617,7 +627,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
                                           uid:(NSString *)uid
                                    generation:(NSUInteger)generation {
     if (generation != self.orderListenerGeneration ||
-        ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) {
+        ![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) {
         return;
     }
 
@@ -667,7 +677,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
 - (void)pp_refreshAssignedOrdersForUID:(NSString *)uid generation:(NSUInteger)generation {
     if (generation != self.orderListenerGeneration ||
-        ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) {
+        ![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) {
         return;
     }
 
@@ -711,14 +721,16 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     dispatch_group_t hydrationGroup = dispatch_group_create();
     NSMutableArray<PPDeliveryOrderModel *> *hydratedOrders = [NSMutableArray arrayWithCapacity:statusesByParent.count];
     __block NSError *firstError = nil;
-    FIRCollectionReference *ordersRef = [[FIRFirestore firestore] collectionWithPath:@"Orders"];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return;
+    FIRCollectionReference *ordersRef = [db collectionWithPath:@"Orders"];
     [statusesByParent enumerateKeysAndObjectsUsingBlock:^(NSString *parentOrderID, NSMutableDictionary<NSString *, NSString *> *statuses, BOOL *stop) {
         (void)stop;
         dispatch_group_enter(hydrationGroup);
         [[ordersRef documentWithPath:parentOrderID] getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
             if (generation == self.orderListenerGeneration &&
                 hydrationGeneration == self.assignedHydrationGeneration &&
-                [[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) {
+                [[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) {
                 if (error || !snapshot.exists || ![snapshot.data isKindOfClass:NSDictionary.class]) {
                     @synchronized (hydratedOrders) {
                         if (!firstError) {
@@ -765,7 +777,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         if (!strongSelf ||
             generation != strongSelf.orderListenerGeneration ||
             hydrationGeneration != strongSelf.assignedHydrationGeneration ||
-            ![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) {
+            ![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) {
             return;
         }
         strongSelf.secondaryOrders = hydratedOrders.copy;
@@ -830,18 +842,18 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
 - (void)startBranchesListener {
     if (self.branchesListener || self.consumerStockConfigListener) return;
-    NSString *uid = [FIRAuth auth].currentUser.uid;
-    if (uid.length == 0) return;
+    NSString *uid = [PPProSessionCoordinator.shared activeUID];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (uid.length == 0 || !db) return;
     NSUInteger generation = ++self.branchListenerGeneration;
 
-    FIRFirestore *db = [FIRFirestore firestore];
     FIRCollectionReference *branchesRef = [db collectionWithPath:@"branches"];
 
     __weak typeof(self) weakSelf = self;
     self.branchesListener = [branchesRef addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || generation != strongSelf.branchListenerGeneration ||
-            ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+            ![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid]) return;
         if (error || !snapshot) {
             [strongSelf.branchNameCache removeAllObjects];
             strongSelf.branchPickupCache = @{};
@@ -881,7 +893,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     self.consumerStockConfigListener = [configRef addSnapshotListener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || generation != strongSelf.branchListenerGeneration ||
-            ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+            ![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid]) return;
         strongSelf.hasConsumerStockConfigSnapshot = !error && snapshot != nil;
         strongSelf.consumerStockConfig = strongSelf.hasConsumerStockConfigSnapshot ? (snapshot.data ?: @{}) : @{};
         [strongSelf refreshConsumerStockBranch];
@@ -976,24 +988,25 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 
 - (void)fetchDeliveryOrderWithID:(NSString *)orderID completion:(PPDeliveryOrderBlock)completion {
     NSString *resolvedOrderID = [orderID stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    NSString *authUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *authUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
     if (resolvedOrderID.length == 0) {
         if (completion) {
             completion(nil, [NSError errorWithDomain:@"PPDeliveryManager" code:400 userInfo:nil]);
         }
         return;
     }
-    if (authUID.length == 0) {
+    if (authUID.length == 0 || !db) {
         if (completion) {
             completion(nil, [NSError errorWithDomain:@"PPDeliveryManager" code:401 userInfo:nil]);
         }
         return;
     }
 
-    FIRDocumentReference *reference = [[[FIRFirestore firestore] collectionWithPath:@"Orders"] documentWithPath:resolvedOrderID];
+    FIRDocumentReference *reference = [[db collectionWithPath:@"Orders"] documentWithPath:resolvedOrderID];
     [reference getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:authUID]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:authUID]) return;
             if (error || !snapshot.exists || ![snapshot.data isKindOfClass:NSDictionary.class]) {
                 if (completion) completion(nil, error);
                 return;
@@ -1058,8 +1071,9 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     [resolvedIDs sortUsingSelector:@selector(compare:)];
 
     NSSet<NSString *> *sourceStatuses = PPDeliveryV1SourceStatusesForAction(action);
-    NSString *actorUID = [FIRAuth auth].currentUser.uid ?: @"";
-    if (sourceStatuses.count == 0 || actorUID.length == 0) {
+    NSString *actorUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    FIRFirestore *firestore = [PPProSessionCoordinator.shared activeFirestore];
+    if (sourceStatuses.count == 0 || actorUID.length == 0 || !firestore) {
         NSError *error = [NSError errorWithDomain:@"PPDeliveryManager"
                                              code:403
                                          userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryOrderUnavailable")}];
@@ -1067,12 +1081,11 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         return;
     }
 
-    FIRFirestore *firestore = [FIRFirestore firestore];
     if ([action isEqualToString:@"order_accept_delivery"]) {
         FIRDocumentReference *parentReference = [[firestore collectionWithPath:@"Orders"] documentWithPath:orderID ?: @""];
         [parentReference getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:actorUID]) return;
+                if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:actorUID]) return;
                 if (error || !snapshot.exists || ![snapshot.data isKindOfClass:NSDictionary.class]) {
                     NSError *resolvedError = error ?: [NSError errorWithDomain:@"PPDeliveryManager"
                                                                           code:404
@@ -1138,7 +1151,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         FIRDocumentReference *reference = [[firestore collectionWithPath:@"FulfillmentOrders"] documentWithPath:fulfillmentID];
         [reference getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
             @synchronized (eligibleIDs) {
-                if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:actorUID]) {
+                if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:actorUID]) {
                     selectionError = [NSError errorWithDomain:@"PPDeliveryManager"
                                                          code:401
                                                      userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryOrderUnavailable")}];
@@ -1207,9 +1220,15 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
                    fulfillmentIDs:(NSArray<NSString *> *)fulfillmentIDs
                        completion:(PPDeliveryActionBlock)completion {
     NSArray<NSString *> *sortedIDs = [fulfillmentIDs sortedArrayUsingSelector:@selector(compare:)];
-    NSString *actorUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *actorUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     NSString *commandID = PPDeliveryV1CommandID(actorUID, orderID, sortedIDs, action, note);
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    if (!actorUID.length || !functions) {
+        NSError *error = [NSError errorWithDomain:@"com.firebase.functions" code:FIRFunctionsErrorCodeUnauthenticated
+                                         userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}];
+        if (completion) completion(NO, error.localizedDescription, error);
+        return;
+    }
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"deliveryTransitionFulfillment"];
     callable.timeoutInterval = 30;
     NSDictionary *payload = @{
@@ -1229,7 +1248,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
         (void)result;
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:actorUID]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:actorUID]) return;
             if (error) {
                 DLog(@"[PPDeliveryManager] Pro delivery v1 failed orderId=%@ action=%@ fulfillmentCount=%lu code=%ld", orderID, action, (unsigned long)sortedIDs.count, (long)error.code);
                 NSString *message = error.localizedDescription;
@@ -1255,7 +1274,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
 }
 
 - (void)performDeliveryAction:(NSString *)action orderId:(NSString *)orderId note:(NSString *)note completion:(PPDeliveryActionBlock)completion {
-    NSString *actorUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *actorUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (!actorUID.length) {
         NSError *error = [NSError errorWithDomain:@"com.firebase.functions" code:FIRFunctionsErrorCodeUnauthenticated
                                          userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}];
@@ -1263,7 +1282,7 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
         return;
     }
     [PPDeliveryCompanyService.shared resolveDriverCockpitRequirementWithCompletion:^(BOOL requiresDriverCockpit, NSError * _Nullable error) {
-        if (![[FIRAuth auth].currentUser.uid isEqualToString:actorUID]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:actorUID]) return;
         if (error || requiresDriverCockpit) {
             NSError *entryError = error ?: [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany" code:403
                                                          userInfo:@{NSLocalizedDescriptionKey: kLang(@"DriverCockpit_UseDriverWorkspace")}];
@@ -1290,7 +1309,14 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     }
 
     DLog(@"[PPDeliveryManager] Pro delivery route=legacy-parent orderId=%@ action=%@", orderId, action);
-    FIRFunctions *functions = [FIRFunctions functionsForRegion:@"us-central1"];
+    FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    NSString *actorUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    if (!actorUID.length || !functions) {
+        NSError *error = [NSError errorWithDomain:@"com.firebase.functions" code:FIRFunctionsErrorCodeUnauthenticated
+                                         userInfo:@{NSLocalizedDescriptionKey: kLang(@"DeliveryCompany_Error_Unauthenticated")}];
+        if (completion) completion(NO, error.localizedDescription, error);
+        return;
+    }
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"deliveryTransitionOrderStatus"];
     callable.timeoutInterval = 30;
 
@@ -1299,10 +1325,9 @@ static NSSet<NSString *> *PPCancelledStatuses(void) {
     data[@"orderId"] = orderId ?: @"";
     data[@"note"]    = (note.length > 0) ? note : kLang(@"DeliveryDefaultActionNote");
 
-    NSString *actorUID = [FIRAuth auth].currentUser.uid ?: @"";
     [callable callWithObject:[data copy] completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (![[FIRAuth auth].currentUser.uid isEqualToString:actorUID]) return;
+            if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:actorUID]) return;
             if (error) {
                 NSString *msg = error.localizedDescription;
                 NSDictionary *details = error.userInfo[@"details"];

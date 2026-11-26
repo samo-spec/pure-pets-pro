@@ -20,7 +20,12 @@
 }
 
 - (void)fetchAdoptPetsStatus:(NSString *)status completion:(void(^)(NSArray<PPAdoptPetModel *> *, NSError *))completion {
-    FIRCollectionReference *col = [FIRFirestore.firestore collectionWithPath:self.adoptPetsCollection];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion(@[], nil);
+        return;
+    }
+    FIRCollectionReference *col = [db collectionWithPath:self.adoptPetsCollection];
     FIRQuery *query = col;
     if (status.length) {
         query = [query queryWhereField:@"status" isEqualTo:status];
@@ -42,7 +47,7 @@
 }
 
 - (void)createAdoptRequest:(PPAdoptPetModel *)pet completion:(void(^)(BOOL, NSError *))completion {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (uid.length == 0) {
         NSError *error = [NSError errorWithDomain:@"PurePetsPro.AdoptPets"
                                              code:FIRFirestoreErrorCodeUnauthenticated
@@ -69,7 +74,12 @@
     }
     pet.updatedAt = now;
 
-    FIRCollectionReference *col = [FIRFirestore.firestore collectionWithPath:self.adoptPetsCollection];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion(NO, [NSError errorWithDomain:@"PurePetsPro.AdoptPets" code:FIRFirestoreErrorCodeUnauthenticated userInfo:nil]);
+        return;
+    }
+    FIRCollectionReference *col = [db collectionWithPath:self.adoptPetsCollection];
     FIRDocumentReference *doc = pet.petID.length > 0 ? [col documentWithPath:pet.petID] : [col documentWithAutoID];
     pet.petID = doc.documentID;
     [doc setData:[pet toDictionary] merge:YES completion:^(NSError * _Nullable error) {
@@ -87,7 +97,12 @@
     NSString *normalized = status.length > 0 ? status : @"available";
     BOOL adopted = [normalized isEqualToString:@"adopted"];
     BOOL hidden = [normalized isEqualToString:@"hidden"];
-    FIRDocumentReference *doc = [[FIRFirestore.firestore collectionWithPath:self.adoptPetsCollection] documentWithPath:petID];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion(NO, [NSError errorWithDomain:@"PurePetsPro.AdoptPets" code:FIRFirestoreErrorCodeUnauthenticated userInfo:nil]);
+        return;
+    }
+    FIRDocumentReference *doc = [[db collectionWithPath:self.adoptPetsCollection] documentWithPath:petID];
     [doc setData:@{
         @"status": normalized,
         @"isAdopted": @(adopted),
@@ -105,14 +120,21 @@
                                                        userInfo:@{NSLocalizedDescriptionKey: kLang(@"AdoptPro_Error_MissingListing")}]);
         return;
     }
-    FIRDocumentReference *doc = [[FIRFirestore.firestore collectionWithPath:self.adoptPetsCollection] documentWithPath:petID];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion(NO, [NSError errorWithDomain:@"PurePetsPro.AdoptPets" code:FIRFirestoreErrorCodeUnauthenticated userInfo:nil]);
+        return;
+    }
+    FIRDocumentReference *doc = [[db collectionWithPath:self.adoptPetsCollection] documentWithPath:petID];
     [doc deleteDocumentWithCompletion:^(NSError * _Nullable error) {
         if (completion) completion(error == nil, error);
     }];
 }
 
 - (id<FIRListenerRegistration>)observeAllAdoptPets:(void(^)(NSArray<PPAdoptPetModel *> * _Nullable pets, NSError * _Nullable error))onChange {
-    FIRCollectionReference *col = [FIRFirestore.firestore collectionWithPath:self.adoptPetsCollection];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return nil;
+    FIRCollectionReference *col = [db collectionWithPath:self.adoptPetsCollection];
     return [col addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         if (!onChange) return;
         dispatch_async(dispatch_get_main_queue(), ^{

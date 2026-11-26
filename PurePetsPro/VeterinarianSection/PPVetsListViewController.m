@@ -227,7 +227,7 @@ typedef NS_ENUM(NSInteger, PPVetListFilter) {
     UserModel *user = [self pp_currentUser];
     if (user.uid.length > 0) return user.uid;
     if (user.ID.length > 0) return user.ID;
-    return [FIRAuth auth].currentUser.uid ?: @"";
+    return [PPProSessionCoordinator.shared activeUID] ?: @"";
 }
 
 - (BOOL)pp_canManageVetWorkspace {

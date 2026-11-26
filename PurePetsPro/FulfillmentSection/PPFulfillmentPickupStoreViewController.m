@@ -48,6 +48,7 @@ static UILabel *PPPickupLabel(CGFloat size, BOOL bold, UIColor *color) {
 @property (nonatomic) BOOL blocked;
 @property (nonatomic) NSUInteger generation;
 @property (nonatomic, strong) FIRAuthStateDidChangeListenerHandle authHandle;
+@property (nonatomic, strong) FIRAuth *authHandleOwner;
 @end
 
 @implementation PPFulfillmentPickupStoreViewController
@@ -61,7 +62,7 @@ static UILabel *PPPickupLabel(CGFloat size, BOOL bold, UIColor *color) {
         _fulfillment.ownerID = [fulfillment.ownerID copy];
         _fulfillment.ownerType = [fulfillment.ownerType copy];
         _fulfillment.parentOrderNumber = [fulfillment.parentOrderNumber copy];
-        _sessionUID = PPPickupText(FIRAuth.auth.currentUser.uid);
+        _sessionUID = PPPickupText(PPProSessionCoordinator.shared.activeUID);
         _completion = [completion copy];
         _stores = NSMutableArray.new;
         _seenCursors = NSMutableSet.new;
@@ -70,7 +71,7 @@ static UILabel *PPPickupLabel(CGFloat size, BOOL bold, UIColor *color) {
 }
 
 - (BOOL)sessionCurrent {
-    return self.sessionUID.length && [PPPickupText(FIRAuth.auth.currentUser.uid) isEqualToString:self.sessionUID];
+    return self.sessionUID.length && [PPPickupText(PPProSessionCoordinator.shared.activeUID) isEqualToString:self.sessionUID];
 }
 
 - (void)viewDidLoad {
@@ -142,7 +143,9 @@ static UILabel *PPPickupLabel(CGFloat size, BOOL bold, UIColor *color) {
     [self buildHeader];
     [self buildFooter];
     __weak typeof(self) weakSelf = self;
-    self.authHandle = [FIRAuth.auth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
+    FIRAuth *activeAuth = PPProSessionCoordinator.shared.activeAuth ?: FIRAuth.auth;
+    self.authHandleOwner = activeAuth;
+    self.authHandle = [activeAuth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || self.closed || [self sessionCurrent]) return;
         self.generation++;
@@ -421,5 +424,9 @@ static UILabel *PPPickupLabel(CGFloat size, BOOL bold, UIColor *color) {
     [super viewDidDisappear:animated];
     if (self.isBeingDismissed || self.navigationController.isBeingDismissed) { self.closed = YES; self.generation++; }
 }
-- (void)dealloc { if (self.authHandle) [FIRAuth.auth removeAuthStateDidChangeListener:self.authHandle]; }
+- (void)dealloc {
+    if (self.authHandle) [(self.authHandleOwner ?: FIRAuth.auth) removeAuthStateDidChangeListener:self.authHandle];
+    self.authHandle = nil;
+    self.authHandleOwner = nil;
+}
 @end

@@ -54,16 +54,39 @@ public final class PPAdoptProStore: ObservableObject {
 
     // MARK: - Internal Dependencies
 
-    private let db = Firestore.firestore()
-    private let functions = Functions.functions(region: "us-central1")
+    private var db: Firestore? { PPProSessionCoordinator.shared().activeFirestore() }
+    private var functions: Functions? { PPProSessionCoordinator.shared().activeFunctions() }
     private var listingsListener: ListenerRegistration?
     private var legacyListener: ListenerRegistration?
     private var applicationsListener: ListenerRegistration?
+    private var suspendObserver: NSObjectProtocol?
     private var hasStarted = false
 
-    public init() {}
+    public init() {
+        suspendObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name.PPProSessionDidSuspend,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                self.listingsListener?.remove()
+                self.listingsListener = nil
+                self.legacyListener?.remove()
+                self.legacyListener = nil
+                self.applicationsListener?.remove()
+                self.applicationsListener = nil
+                self.hasStarted = false
+                self.listings = []
+                self.applications = []
+            }
+        }
+    }
 
     isolated deinit {
+        if let suspendObserver {
+            NotificationCenter.default.removeObserver(suspendObserver)
+        }
         listingsListener?.remove()
         legacyListener?.remove()
         applicationsListener?.remove()
@@ -133,6 +156,10 @@ public final class PPAdoptProStore: ObservableObject {
     }
 
     private func setupLiveSubscriptions() {
+        guard let db else {
+            isLoading = false
+            return
+        }
         isLoading = listings.isEmpty
 
         // 1. Primary canonical collection: adoptionListings
@@ -170,7 +197,7 @@ public final class PPAdoptProStore: ObservableObject {
     }
 
     private func setupLegacyListenerIfNeeded() {
-        guard legacyListener == nil else { return }
+        guard legacyListener == nil, let db else { return }
         legacyListener = db.collection("adopt_pets")
             .limit(to: 100)
             .addSnapshotListener { [weak self] snapshot, _ in
@@ -191,6 +218,7 @@ public final class PPAdoptProStore: ObservableObject {
     }
 
     private func fetchViaAdminCallableIfNeeded() {
+        guard let functions else { return }
         Task {
             do {
                 let callable = functions.httpsCallable("communityAdminRead")
@@ -215,6 +243,7 @@ public final class PPAdoptProStore: ObservableObject {
     }
 
     private func fetchOverviewMetrics() async {
+        guard let functions else { return }
         do {
             let callable = functions.httpsCallable("communityAdminRead")
             let result = try await callable.call(["action": "overview"])
@@ -231,6 +260,7 @@ public final class PPAdoptProStore: ObservableObject {
 
     public func observeApplications(for listingId: String) {
         applicationsListener?.remove()
+        guard let db else { return }
         applicationsListener = db.collection("adoptionApplications")
             .whereField("listingId", isEqualTo: listingId)
             .addSnapshotListener { [weak self] snapshot, error in
@@ -257,7 +287,8 @@ public final class PPAdoptProStore: ObservableObject {
 
     /// Creates a brand new adoption listing using canonical `createAdoptionListing` callable
     public func createListing(draft: PPAdoptListingDraft) async -> Bool {
-        guard let uid = Auth.auth().currentUser?.uid, !uid.isEmpty else {
+        guard let uid = PPProSessionCoordinator.shared().activeUID, !uid.isEmpty,
+              let functions else {
             self.errorMessage = Language.isRTL() ? "يرجى تسجيل الدخول أولاً." : "Please sign in first."
             return false
         }
@@ -325,6 +356,11 @@ public final class PPAdoptProStore: ObservableObject {
     }
 
     private func fallbackDirectCreate(draft: PPAdoptListingDraft, uid: String) async -> Bool {
+        guard let db else {
+            isMutating = false
+            self.errorMessage = Language.isRTL() ? "يرجى تسجيل الدخول أولاً." : "Please sign in first."
+            return false
+        }
         do {
             let col = db.collection("adoptionListings")
             let doc = col.document()
@@ -374,6 +410,10 @@ public final class PPAdoptProStore: ObservableObject {
 
     /// Updates existing listing details
     public func updateListing(id: String, draft: PPAdoptListingDraft, expectedVersion: Int) async -> Bool {
+        guard let functions else {
+            self.errorMessage = Language.isRTL() ? "يرجى تسجيل الدخول أولاً." : "Please sign in first."
+            return false
+        }
         isMutating = true
         errorMessage = nil
 
@@ -419,6 +459,12 @@ public final class PPAdoptProStore: ObservableObject {
             return true
         } catch {
             // Direct Firestore fallback
+            guard let db else {
+                isMutating = false
+                self.errorMessage = error.localizedDescription
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                return false
+            }
             do {
                 let doc = db.collection("adoptionListings").document(id)
                 try await doc.updateData([
@@ -460,6 +506,10 @@ public final class PPAdoptProStore: ObservableObject {
 
     /// Transitions listing status (published, paused, applications_closed, adopted, archived, etc.)
     public func transitionListing(id: String, action: String, reason: String = "", expectedVersion: Int) async -> Bool {
+        guard let functions else {
+            self.errorMessage = Language.isRTL() ? "يرجى تسجيل الدخول أولاً." : "Please sign in first."
+            return false
+        }
         isMutating = true
         errorMessage = nil
 
@@ -481,6 +531,12 @@ public final class PPAdoptProStore: ObservableObject {
             return true
         } catch {
             // Direct Firestore fallback
+            guard let db else {
+                isMutating = false
+                self.errorMessage = error.localizedDescription
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                return false
+            }
             do {
                 let doc = db.collection("adoptionListings").document(id)
                 let mappedStatus: String = {
@@ -516,6 +572,10 @@ public final class PPAdoptProStore: ObservableObject {
 
     /// Transitions application status (under_review, approved, rejected, handover, completed)
     public func transitionApplication(id: String, action: String, reason: String = "", expectedVersion: Int) async -> Bool {
+        guard let functions else {
+            self.errorMessage = Language.isRTL() ? "يرجى تسجيل الدخول أولاً." : "Please sign in first."
+            return false
+        }
         isMutating = true
         errorMessage = nil
 
@@ -537,6 +597,12 @@ public final class PPAdoptProStore: ObservableObject {
             return true
         } catch {
             // Direct fallback
+            guard let db else {
+                isMutating = false
+                self.errorMessage = error.localizedDescription
+                UINotificationFeedbackGenerator().notificationOccurred(.error)
+                return false
+            }
             do {
                 let doc = db.collection("adoptionApplications").document(id)
                 let nextStatus: String = {
@@ -575,6 +641,10 @@ public final class PPAdoptProStore: ObservableObject {
         if archived { return true }
 
         // Hard delete fallback
+        guard let db else {
+            self.errorMessage = Language.isRTL() ? "يرجى تسجيل الدخول أولاً." : "Please sign in first."
+            return false
+        }
         do {
             try await db.collection("adoptionListings").document(id).delete()
             self.successMessage = Language.isRTL() ? "تم حذف القائمة بنجاح." : "Listing deleted successfully."

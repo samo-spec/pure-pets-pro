@@ -452,7 +452,7 @@ static NSString *PPAdminChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDict
 - (XLFormDescriptor *)buildLoginForm {
 
     if (!UsrMgr.currentUser) {
-        NSString *uid = [FIRAuth auth].currentUser.uid;
+        NSString *uid = [PPProSessionCoordinator.shared activeUID];
         if (uid.length) {
             UsrMgr.currentUser = [UsrMgr p_readUserFromDisk:uid];
         }
@@ -711,7 +711,7 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
 
 - (nullable UserModel *)pp_activeDashboardUser {
     if (UsrMgr.currentUser) return UsrMgr.currentUser;
-    NSString *uid = [FIRAuth auth].currentUser.uid;
+    NSString *uid = [PPProSessionCoordinator.shared activeUID];
     if (!uid.length) return nil;
     return [UsrMgr p_readUserFromDisk:uid];
 }
@@ -1024,7 +1024,7 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
 }
 
 - (void)pp_refreshDeliveryCompanyMembership {
-    NSString *requestedUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *requestedUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (!requestedUID.length) return;
     if ([self.refreshingDeliveryHomeUID isEqualToString:requestedUID]) return;
     self.refreshingDeliveryHomeUID = requestedUID;
@@ -1038,7 +1038,7 @@ if (PPAdminDashboardActivateDeliveryProviders && canManageDelivery) {
         if (!strongSelf) return;
         if (strongSelf.deliveryHomeMembershipGeneration != generation) return;
         strongSelf.refreshingDeliveryHomeUID = nil;
-        if (![[FIRAuth auth].currentUser.uid isEqualToString:requestedUID]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:requestedUID]) return;
         if (!strongSelf.isViewLoaded) return;
         NSPredicate *allowed = [NSPredicate predicateWithBlock:^BOOL(PPDeliveryCompanyProfile *profile, __unused NSDictionary *bindings) {
             return profile.hasDriverWorkspace || profile.hasDispatchWorkspace;
@@ -1664,7 +1664,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 
 - (void)pp_startProviderSubscriptionObserver {
     [self pp_stopProviderSubscriptionObserver];
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (!uid.length) return;
     NSUInteger generation = self.providerSubscriptionObservationGeneration;
     self.isProviderSubscriptionLoading = YES;
@@ -1679,7 +1679,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.providerSubscriptionStateListener = [[PPProviderApplicationManager shared] observeProviderStateForCurrentUser:^(PPProviderOnboardingState * _Nullable state, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || generation != strongSelf.providerSubscriptionObservationGeneration ||
-            ![[FIRAuth auth].currentUser.uid isEqualToString:uid] ||
+            ![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid] ||
             (state && ![state.uid isEqualToString:uid])) return;
         strongSelf.isProviderSubscriptionLoading = !error && (!state || !state.initialDataAuthoritative);
         strongSelf.providerSubscriptionState = state;
@@ -1693,7 +1693,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || generation != self.providerSubscriptionObservationGeneration || !self.isProviderSubscriptionLoading ||
-            ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+            ![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid]) return;
         self.isProviderSubscriptionLoading = NO;
         self.providerSubscriptionError = [NSError errorWithDomain:@"PurePetsPro.ProviderSubscription" code:1
                                                         userInfo:@{NSLocalizedDescriptionKey:kLang(@"ProSubscription_LoadFailed")}];
@@ -1713,7 +1713,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_refreshOwnedSubscriptions {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (!uid.length) return;
     if (self.isLoadingOwnedSubscriptions && [self.loadingOwnedSubscriptionsUID isEqualToString:uid]) {
         self.ownedSubscriptionsNeedRefresh = YES;
@@ -1736,7 +1736,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     __weak typeof(self) weakSelf = self;
     [[PPProviderApplicationManager shared] fetchOwnedSubscriptionsWithCompletion:^(NSArray<PPProviderOwnedSubscription *> *records, NSError *error) {
         __strong typeof(weakSelf) self = weakSelf;
-        if (!self || generation != self.ownedSubscriptionsGeneration || ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+        if (!self || generation != self.ownedSubscriptionsGeneration || ![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid]) return;
         self.isLoadingOwnedSubscriptions = NO;
         self.loadingOwnedSubscriptionsUID = nil;
         self.ownedSubscriptionsUID = uid;
@@ -1767,7 +1767,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     }
 
     PPProCommandDataSource sources = PPProCommandDataSourceNone;
-    NSString *uid = user.uid.length ? user.uid : ([FIRAuth auth].currentUser.uid ?: @"");
+    NSString *uid = user.uid.length ? user.uid : ([PPProSessionCoordinator.shared activeUID] ?: @"");
     if (uid.length > 0) {
         sources |= PPProCommandDataSourceInbox;
     }
@@ -1852,7 +1852,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 - (void)pp_startInboxUnreadObserverForUser:(UserModel *)user {
     [self pp_stopInboxUnreadObserver];
     (void)user;
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (!uid.length) {
         [self pp_clearCommandDataSources:PPProCommandDataSourceInbox];
         return;
@@ -1901,8 +1901,9 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 - (void)pp_startSupportChatsUnreadObserverForUser:(UserModel *)user {
     [self pp_stopSupportChatsUnreadObserver];
     NSUInteger observationGeneration = self.supportObservationGeneration;
-    NSString *providerUID = user.uid.length > 0 ? user.uid : ([FIRAuth auth].currentUser.uid ?: @"");
-    if (providerUID.length == 0) return;
+    NSString *providerUID = user.uid.length > 0 ? user.uid : ([PPProSessionCoordinator.shared activeUID] ?: @"");
+    FIRFirestore *chatDB = [PPProSessionCoordinator.shared activeFirestore];
+    if (providerUID.length == 0 || !chatDB) return;
 
     PPProCommandDataSource supportSources = PPProCommandDataSourceSupportThreads | PPProCommandDataSourceSupportMessages;
     [self pp_beginCommandDataSources:supportSources];
@@ -1919,7 +1920,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     [self pp_updateSupportChatsRowBadge];
 
     FIRQuery *threadsQuery =
-    [[[[[[FIRFirestore firestore] collectionWithPath:@"Chats"]
+    [[[[[chatDB collectionWithPath:@"Chats"]
         queryWhereField:@"members" arrayContains:providerUID]
        queryWhereField:@"conversationType" isEqualTo:@"provider_chat"]
       queryWhereField:@"supportUserId" isEqualTo:providerUID]
@@ -1956,7 +1957,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     }];
 
     FIRQuery *messagesQuery =
-    [[[[FIRFirestore firestore] collectionGroupWithID:@"Messages"]
+    [[[chatDB collectionGroupWithID:@"Messages"]
       queryWhereField:@"receiverID" isEqualTo:providerUID]
      queryWhereField:@"status" isLessThan:@(PPAdminChatMessageStatusRead)];
 
@@ -3304,7 +3305,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (void)pp_startQuickActionSignalObserversForUser:(UserModel *)user {
-    NSString *uid = user.uid.length ? user.uid : ([FIRAuth auth].currentUser.uid ?: @"");
+    NSString *uid = user.uid.length ? user.uid : ([PPProSessionCoordinator.shared activeUID] ?: @"");
     if ([self pp_isDeliveryCompanyOnlyDashboardForUser:user] && self.isDeliveryCompanyMode) {
         NSString *signature = [NSString stringWithFormat:@"%@|company:%@|role:%@",
                                uid ?: @"",
@@ -3388,7 +3389,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.quickActionFulfillmentSignalListener = [[PPFulfillmentManager sharedManager] observeFulfillmentsForOwnerID:uid stateHandler:^(NSArray<PPFulfillmentModel *> *fulfillments, NSError *error, BOOL fromCache) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || strongSelf.quickActionObservationGeneration != observationGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
 
         if (error) {
             NSLog(@"[DashboardQuickActions] Fulfillment signal listener error: %@", error.localizedDescription);
@@ -3445,7 +3446,14 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
         return;
     }
 
-    FIRCollectionReference *ordersRef = [[FIRFirestore firestore] collectionWithPath:@"Orders"];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        self.pendingOrders = @[];
+        [self pp_refreshQuickActions];
+        return;
+    }
+
+    FIRCollectionReference *ordersRef = [db collectionWithPath:@"Orders"];
     NSUInteger observationGeneration = self.quickActionObservationGeneration;
     __weak typeof(self) weakSelf = self;
 
@@ -3456,7 +3464,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.pendingOrdersListener = [pendingQuery addSnapshotListener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || strongSelf.quickActionObservationGeneration != observationGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
 
         if (error) {
             NSLog(@"[DashboardQuickActions] Pending orders listener error: %@", error.localizedDescription);
@@ -3480,7 +3488,16 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 - (void)pp_startDeliveryQuickActionSignalObserversForUID:(NSString *)uid {
     [self pp_beginCommandDataSources:(PPProCommandDataSourceDeliveryOpen |
                                       PPProCommandDataSourceDeliveryAssigned)];
-    FIRCollectionReference *ordersRef = [[FIRFirestore firestore] collectionWithPath:@"Orders"];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        NSError *unauthErr = [NSError errorWithDomain:PPProSessionCoordinatorErrorDomain
+                                                 code:PPProSessionCoordinatorErrorTransitionRequired
+                                             userInfo:nil];
+        [self pp_finishCommandDataSource:PPProCommandDataSourceDeliveryOpen error:unauthErr];
+        [self pp_finishCommandDataSource:PPProCommandDataSourceDeliveryAssigned error:unauthErr];
+        return;
+    }
+    FIRCollectionReference *ordersRef = [db collectionWithPath:@"Orders"];
     NSUInteger observationGeneration = self.quickActionObservationGeneration;
     __weak typeof(self) weakSelf = self;
 
@@ -3490,7 +3507,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     self.quickActionDeliveryOpenSignalListener = [openQuery addSnapshotListenerWithIncludeMetadataChanges:YES listener:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || strongSelf.quickActionObservationGeneration != observationGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
 
         if (error || !snapshot) {
             NSLog(@"[DashboardQuickActions] Open delivery signal listener error: %@", error.localizedDescription);
@@ -3513,7 +3530,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
     void (^applyCanonicalAssignedOrders)(NSError * _Nullable) = ^(NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || strongSelf.quickActionObservationGeneration != observationGeneration) return;
-        if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:uid]) return;
+        if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:uid]) return;
 
         if (error) {
             NSLog(@"[DashboardQuickActions] Canonical assigned-child delivery listener error: %@", error.localizedDescription);
@@ -3673,7 +3690,6 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 
     NSArray<NSString *> *sortedSignals = [[signals allObjects] sortedArrayUsingSelector:@selector(compare:)];
     [[NSUserDefaults standardUserDefaults] setObject:sortedSignals forKey:[self pp_quickActionSeenDefaultsKeyForKind:kind]];
-    [[NSUserDefaults standardUserDefaults] synchronize];
 
     if ([kind isEqualToString:PPAdminQuickActionSignalDelivery]) {
         self.hasUnseenDeliveryQuickAction = NO;
@@ -3685,7 +3701,7 @@ BOOL canAccessAdmin = PPIsAllowedAdminRole(incomingUser.role) || incomingUser.is
 }
 
 - (NSString *)pp_quickActionSeenDefaultsKeyForKind:(NSString *)kind {
-    NSString *uid = UsrMgr.currentUser.uid.length ? UsrMgr.currentUser.uid : ([FIRAuth auth].currentUser.uid ?: @"unknown");
+    NSString *uid = UsrMgr.currentUser.uid.length ? UsrMgr.currentUser.uid : ([PPProSessionCoordinator.shared activeUID] ?: @"unknown");
     return [NSString stringWithFormat:@"PPProDashboardQuickActionSeen.%@.%@", uid, kind ?: @"unknown"];
 }
 
@@ -4354,7 +4370,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
                                    order.pp_visibleCustomerLocationSummary,
                                    @"location.fill"),
             ];
-            NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+            NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
             if (order.canCancel && currentUID.length > 0 && [order.deliveryUserId isEqualToString:currentUID]) {
                 target.quickActions = @[
                     PPProCommandQuickAction(@"delivery.cancel", kLang(@"Cancel"), @"trash.fill", YES),
@@ -4447,7 +4463,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
 }
 
 - (BOOL)pp_deliveryOrderBelongsToCurrentDeliveryUser:(PPDeliveryOrderModel *)order {
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (currentUID.length == 0) {
         return NO;
     }
@@ -4532,7 +4548,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     }
 
     if (profile.isDriver) {
-        NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+        NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
         if (request.assignedDriverUID.length > 0 && ![request.assignedDriverUID isEqualToString:currentUID]) {
             return nil;
         }
@@ -4644,7 +4660,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
             NSString *currentActionKind = [strongSelf pp_fulfillmentActionKindForModel:model];
-            NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+            NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
             BOOL isOfficialPlatform = [PPFulfillmentManager isOfficialPlatformFulfillment:model forUID:currentUID];
             BOOL ownsFulfillment = (currentUID.length > 0 && [model.ownerID isEqualToString:currentUID] &&
                 [model.ownerType isEqualToString:@"partner"]) || isOfficialPlatform;
@@ -4743,7 +4759,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
             if (!self) return;
             NSString *rawAction = [target.actionKind substringFromIndex:@"fulfillment.".length];
             BOOL isSupportedQuickAction = [rawAction isEqualToString:@"reject"] || [rawAction isEqualToString:@"cancel_request"];
-            NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+            NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
             BOOL isOfficialPlatform = [PPFulfillmentManager isOfficialPlatformFulfillment:model forUID:currentUID];
             BOOL ownsFulfillment = (currentUID.length > 0 && [model.ownerID isEqualToString:currentUID] &&
                 [model.ownerType isEqualToString:@"partner"]) || isOfficialPlatform;
@@ -4795,7 +4811,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
         [[PPDeliveryManager shared] fetchDeliveryOrderWithID:target.orderID completion:^(PPDeliveryOrderModel * _Nullable order, NSError * _Nullable error) {
             __strong typeof(weakSelf) self = weakSelf;
             if (!self) return;
-            NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+            NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
             BOOL ownsAssignedOrder = currentUID.length > 0 && [order.deliveryUserId isEqualToString:currentUID];
             BOOL statusRemainsCurrent = target.expectedStatus.length == 0 || [order.deliveryStatus isEqualToString:target.expectedStatus];
             if (error || !order || ![self pp_canManageDelivery] || !ownsAssignedOrder || !order.canCancel || !statusRemainsCurrent) {
@@ -4942,7 +4958,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     card.actionTitle = kLang(@"ProSubscriptions_ViewAll");
     card.isLoading = YES;
     BOOL isOfficialPurePets = [user.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
-                              [[FIRAuth auth].currentUser.uid isEqualToString:PPFulfillmentOfficialOwnerUID] ||
+                              [[PPProSessionCoordinator.shared activeUID] isEqualToString:PPFulfillmentOfficialOwnerUID] ||
                               [user.email.lowercaseString isEqualToString:@"admin@pure-pets.net"];
     if (isOfficialPurePets) {
         card.isLoading = NO;
@@ -5336,12 +5352,32 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
 
     NSString *resolvedName = user.displayName.length ? user.displayName : [user PPBestDisplayName];
     NSString *businessTradeName = @"";
+    NSString *profileAvatarFallback = @"";
     for (PPProviderProfile *profile in self.providerSubscriptionState.profilesByType.allValues ?: @[]) {
-        NSString *trade = PPSafeString(profile.form[@"tradeName"]);
-        if (trade.length == 0) trade = PPSafeString(profile.form[@"businessName"]);
-        if (trade.length > 0) {
-            businessTradeName = trade;
-            break;
+        if (profileAvatarFallback.length == 0) {
+            NSString *summaryPhoto = PPSafeString(profile.userSummary[@"photoURL"]);
+            if (summaryPhoto.length == 0) summaryPhoto = PPSafeString(profile.publicProfile[@"logoUrl"]);
+            if (summaryPhoto.length > 0) {
+                profileAvatarFallback = summaryPhoto;
+            }
+        }
+        if (businessTradeName.length == 0) {
+            NSString *trade = PPSafeString(profile.publicProfile[@"businessTradeName"]);
+            if (trade.length == 0) trade = PPSafeString(profile.form[@"tradeName"]);
+            if (trade.length == 0) {
+                NSString *formFullName = PPSafeString(profile.form[@"fullName"]);
+                NSString *summaryDisplayName = PPSafeString(profile.userSummary[@"displayName"]);
+                NSString *businessName = PPSafeString(profile.form[@"businessName"]);
+                if (formFullName.length > 0 && ([formFullName isEqualToString:summaryDisplayName] || businessName.length == 0)) {
+                    trade = formFullName;
+                } else {
+                    trade = businessName.length > 0 ? businessName : formFullName;
+                }
+            }
+            if (trade.length == 0) trade = PPSafeString(profile.userSummary[@"displayName"]);
+            if (trade.length > 0) {
+                businessTradeName = trade;
+            }
         }
     }
     if (businessTradeName.length == 0) {
@@ -5402,7 +5438,13 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
         avatarURL = (NSString *)user.UserImageUrl;
     }
     if (avatarURL.length == 0) {
-        avatarURL = [FIRAuth auth].currentUser.photoURL.absoluteString ?: @"";
+        avatarURL = PPSafeString(user.photoURL);
+    }
+    if (avatarURL.length == 0) {
+        avatarURL = [PPProSessionCoordinator.shared currentUser].photoURL.absoluteString ?: @"";
+    }
+    if (avatarURL.length == 0 && profileAvatarFallback.length > 0) {
+        avatarURL = profileAvatarFallback;
     }
     snapshot.avatarURLString = avatarURL;
 
@@ -5632,52 +5674,73 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
     [super viewDidLoad];
     [self pp_configureDashboardAppearance];
     [self pp_installCommandCenterSurfaceIfNeeded];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleUserProfileDidUpdateNotification:)
+                                                 name:@"PPProUserProfileDidUpdateNotification"
+                                               object:nil];
     [self pp_refreshDeliveryCompanyDashboardSummary];
     [self pp_refreshDeliveryCompanyMembership];
 
-    NSString *currentUID = [FIRAuth auth].currentUser.uid;
-    UserModel *curUser = UsrMgr.currentUser ?: (currentUID.length ? [UsrMgr p_readUserFromDisk:currentUID] : nil);
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID];
+    UserModel *curUser = UsrMgr.currentUser;
+    __weak typeof(self) weakSelf = self;
+    void (^applyDashboardUser)(UserModel *) = ^(UserModel *user) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        UsrMgr.currentUser = user;
+        [strongSelf setupHeaderUIWithUser:user];
+        [strongSelf pp_rebuildDashboardFormPreservingOffset:NO];
+        [strongSelf pp_startProviderSubscriptionObserver];
+        [strongSelf pp_startDashboardAccessObserversForUser:user];
+        [strongSelf pp_startInboxUnreadObserverForUser:user];
+        [strongSelf pp_reconcileSupportChatsObserverForUser:user];
+        strongSelf.didCompleteInitialDashboardLoad = YES;
+    };
     if (curUser) {
-        UsrMgr.currentUser = curUser;
         PPLOG(@"[FUM] viewDidLoad cached dashboard user: uid=%@ email=%@ name=%@",
               curUser.uid, curUser.UserEmail, curUser.displayName);
-        [self setupHeaderUIWithUser:curUser];
-        [self pp_rebuildDashboardFormPreservingOffset:NO];
-        [self pp_startProviderSubscriptionObserver];
-        [self pp_startDashboardAccessObserversForUser:curUser];
-        [self pp_startInboxUnreadObserverForUser:curUser];
-        [self pp_reconcileSupportChatsObserverForUser:curUser];
-        self.didCompleteInitialDashboardLoad = YES;
+        applyDashboardUser(curUser);
     } else {
-        __weak typeof(self) weakSelf = self;
-        [FUM reloadCurrentUserWithCompletion:^(UserModel * _Nullable user, NSError * _Nullable error) {
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
+        void (^reloadFromServer)(void) = ^{
+            [FUM reloadCurrentUserWithCompletion:^(UserModel * _Nullable user, NSError * _Nullable error) {
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
 
-            if (error || !user) {
-                [strongSelf showLogin];
-                return;
-            }
+                if (error || !user) {
+                    [strongSelf showLogin];
+                    return;
+                }
 
-            PPLOG(@"[FUM] viewDidLoad reloaded dashboard user: uid=%@ email=%@ name=%@",
-                  user.uid, user.UserEmail, user.displayName);
+                PPLOG(@"[FUM] viewDidLoad reloaded dashboard user: uid=%@ email=%@ name=%@",
+                      user.uid, user.UserEmail, user.displayName);
 
-            UsrMgr.currentUser = user;
-            [UsrMgr p_cacheUser:user];
-            if (currentUID.length) {
-                [UsrMgr p_writeUserToDisk:user forUID:currentUID];
-            }
+                UsrMgr.currentUser = user;
+                [UsrMgr p_cacheUser:user];
+                NSString *cachedUID = (user.ID.length ? user.ID : user.uid);
+                if (currentUID.length && ![currentUID isEqualToString:cachedUID]) {
+                    [UsrMgr p_writeUserToDiskAsync:user forUID:currentUID];
+                }
 
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [strongSelf setupHeaderUIWithUser:user];
-                [strongSelf pp_rebuildDashboardFormPreservingOffset:NO];
-                [strongSelf pp_startProviderSubscriptionObserver];
-                [strongSelf pp_startDashboardAccessObserversForUser:user];
-                [strongSelf pp_startInboxUnreadObserverForUser:user];
-                [strongSelf pp_reconcileSupportChatsObserverForUser:user];
-                strongSelf.didCompleteInitialDashboardLoad = YES;
-            });
-        }];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    applyDashboardUser(user);
+                });
+            }];
+        };
+        if (currentUID.length) {
+            [UsrMgr p_readUserFromDiskAsync:currentUID completion:^(UserModel * _Nullable diskUser) {
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                if (diskUser) {
+                    PPLOG(@"[FUM] viewDidLoad cached dashboard user: uid=%@ email=%@ name=%@",
+                          diskUser.uid, diskUser.UserEmail, diskUser.displayName);
+                    applyDashboardUser(diskUser);
+                    return;
+                }
+                reloadFromServer();
+            }];
+        } else {
+            reloadFromServer();
+        }
         return;
     }
 }
@@ -5697,7 +5760,7 @@ NSArray<UIView *> *headerViews = @[self.headerCard ?: [UIView new], self.priorit
 
 - (void)didTapAddProfilePhoto {
     [PPFunc pp_playTapEffect];
-    if (![FIRAuth auth].currentUser) {
+    if (![PPProSessionCoordinator.shared currentUser]) {
         NSLog(@"⚠️ [ProfilePhoto] User not logged in");
         [PPToast toast:kLang(@"Please login first")];
         return;
@@ -5905,6 +5968,7 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
         [UsrMgr p_cacheUser:UsrMgr.currentUser];
 
         [self updateHeaderWithUser:UsrMgr.currentUser];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"PPProUserProfileDidUpdateNotification" object:nil];
         [PPToast toast:kLang(@"Saved") style:PPToastStyleSuccess haptic:YES duration:1.6];
     }];
 }
@@ -5965,8 +6029,8 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
         url = [NSURL URLWithString:(NSString *)u.UserImageUrl];
     }
 
-    if (!url.absoluteString.length && [FIRAuth auth].currentUser.photoURL.absoluteString.length) {
-        url = [FIRAuth auth].currentUser.photoURL;
+    if (!url.absoluteString.length && [PPProSessionCoordinator.shared currentUser].photoURL.absoluteString.length) {
+        url = [PPProSessionCoordinator.shared currentUser].photoURL;
     }
 
     [self pp_applyAvatarURL:url];
@@ -6267,6 +6331,17 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
 }
 
 
+- (void)pp_handleUserProfileDidUpdateNotification:(__unused NSNotification *)note {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        UserModel *activeUser = [self pp_activeDashboardUser];
+        if (activeUser) {
+            [self updateHeaderWithUser:activeUser];
+        } else {
+            [self pp_refreshCommandCenterSnapshot];
+        }
+    });
+}
+
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self pp_installCommandCenterSurfaceIfNeeded];
@@ -6424,7 +6499,6 @@ didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *
  DLog(@"[Biometric] saved creds are NOT admin → disabling Face ID auto");
  [BiometricHelper clearCredentials];
  [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kBiometricDisabledUntilManualLogin];
- [[NSUserDefaults standardUserDefaults] synchronize];
 
  [PPAlertHelper showErrorIn:weakSelf title:kLang(@"Error") subtitle:kLang(@"StatusNoAccess")];
  [UserManager.shared signOut];

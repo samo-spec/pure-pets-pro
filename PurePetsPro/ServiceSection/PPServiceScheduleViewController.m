@@ -19,6 +19,10 @@
 static NSString * const kScheduleMatrixKey = @"pp_provider_schedule_matrix_v1";
 static NSString * const kVacationModeKey = @"pp_provider_vacation_mode_v1";
 
+static NSString *PPServiceScheduleScopedKey(NSString *baseKey) {
+    return [PPProSessionCoordinator scopedDefaultsKey:baseKey forUID:[PPProSessionCoordinator.shared activeUID]];
+}
+
 @interface PPDayScheduleItem : NSObject <NSCopying>
 @property (nonatomic, copy) NSString *dayName;
 @property (nonatomic, assign) BOOL isWorking;
@@ -83,7 +87,7 @@ static NSString * const kVacationModeKey = @"pp_provider_vacation_mode_v1";
 
 - (void)loadScheduleData {
     self.scheduleDays = [NSMutableArray array];
-    NSArray *raw = [[NSUserDefaults standardUserDefaults] objectForKey:kScheduleMatrixKey];
+    NSArray *raw = [[NSUserDefaults standardUserDefaults] objectForKey:PPServiceScheduleScopedKey(kScheduleMatrixKey)];
     if ([raw isKindOfClass:[NSArray class]] && raw.count == 7) {
         for (NSDictionary *d in raw) {
             if ([d isKindOfClass:[NSDictionary class]]) {
@@ -162,7 +166,7 @@ static NSString * const kVacationModeKey = @"pp_provider_vacation_mode_v1";
     _vacationStatusLabel.textAlignment = Language.alignmentForCurrentLanguage;
     [_vacationCard addSubview:_vacationStatusLabel];
 
-    BOOL isVacationOn = [[NSUserDefaults standardUserDefaults] boolForKey:kVacationModeKey];
+    BOOL isVacationOn = [[NSUserDefaults standardUserDefaults] boolForKey:PPServiceScheduleScopedKey(kVacationModeKey)];
     _vacationSwitch = [UISwitch new];
     _vacationSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     _vacationSwitch.onTintColor = [UIColor ppWarning];
@@ -240,8 +244,7 @@ static NSString * const kVacationModeKey = @"pp_provider_vacation_mode_v1";
 
 - (void)vacationToggled:(UISwitch *)sender {
     [PPFunc pp_playTapEffect];
-    [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:kVacationModeKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    [[NSUserDefaults standardUserDefaults] setBool:sender.isOn forKey:PPServiceScheduleScopedKey(kVacationModeKey)];
 
     if (sender.isOn) {
         _vacationCard.layer.borderColor = [UIColor ppWarning].CGColor;
@@ -271,8 +274,7 @@ static NSString * const kVacationModeKey = @"pp_provider_vacation_mode_v1";
     for (PPDayScheduleItem *item in self.scheduleDays) {
         [raw addObject:[item toDictionary]];
     }
-    [[NSUserDefaults standardUserDefaults] setObject:[raw copy] forKey:kScheduleMatrixKey];
-    [[NSUserDefaults standardUserDefaults] synchronize];
+    [[NSUserDefaults standardUserDefaults] setObject:[raw copy] forKey:PPServiceScheduleScopedKey(kScheduleMatrixKey)];
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.4 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [PPHUD dismiss];

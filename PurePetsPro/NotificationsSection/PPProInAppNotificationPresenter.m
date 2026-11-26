@@ -54,11 +54,12 @@ static NSString *PPProNoticeLocalizedValue(NSString *key, NSString *fallback)
 
 static BOOL PPProNoticeBoolPreference(NSString *key, BOOL defaultValue)
 {
-    id value = [[NSUserDefaults standardUserDefaults] objectForKey:key];
+    NSString *scopedKey = [PPProSessionCoordinator scopedDefaultsKey:key forUID:[PPProSessionCoordinator.shared activeUID]];
+    id value = [[NSUserDefaults standardUserDefaults] objectForKey:scopedKey];
     if (value == nil) {
         return defaultValue;
     }
-    return [[NSUserDefaults standardUserDefaults] boolForKey:key];
+    return [[NSUserDefaults standardUserDefaults] boolForKey:scopedKey];
 }
 
 static SceneDelegate *PPProNoticeActiveSceneDelegate(void)

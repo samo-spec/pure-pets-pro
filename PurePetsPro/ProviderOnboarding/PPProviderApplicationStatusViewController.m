@@ -106,7 +106,7 @@
 #pragma mark - Transitions & Navigation
 
 - (void)pp_presentBecomeProviderWithType:(PPProviderType)type {
-    NSString *uid = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (!uid.length || self.isResolvingApplicationIntent || self.presentedViewController) return;
     SceneDelegate *sceneDelegate = (SceneDelegate *)self.view.window.windowScene.delegate;
     if ([sceneDelegate isKindOfClass:SceneDelegate.class]) [sceneDelegate cancelPendingProAccessRouting];
@@ -120,7 +120,7 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) self = weakSelf;
             if (!self || generation != self.applicationIntentGeneration) return;
-            if (![[FIRAuth auth].currentUser.uid isEqualToString:uid] || !self.view.window ||
+            if (![PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid] || !self.view.window ||
                 (state && ![state.uid isEqualToString:uid])) {
                 [self pp_cancelApplicationIntent];
                 return;
@@ -149,7 +149,7 @@
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(15 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || generation != self.applicationIntentGeneration || !self.isResolvingApplicationIntent ||
-            ![[FIRAuth auth].currentUser.uid isEqualToString:uid]) return;
+            ![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid]) return;
         [self pp_cancelApplicationIntent];
         [PPAlertHelper showErrorIn:self title:kLang(@"ProviderHeroErrorBadge") subtitle:kLang(@"ProSubscription_LoadFailed")];
     });
@@ -168,7 +168,7 @@
 
     SceneDelegate *sceneDelegate = (SceneDelegate *)self.view.window.windowScene.delegate;
     if ([sceneDelegate isKindOfClass:SceneDelegate.class]) {
-        [sceneDelegate updateRootForUser:[FIRAuth auth].currentUser animated:YES];
+        [sceneDelegate updateRootForUser:[PPProSessionCoordinator.shared currentUser] animated:YES];
     }
 }
 

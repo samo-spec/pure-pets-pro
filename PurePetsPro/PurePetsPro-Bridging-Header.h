@@ -16,6 +16,7 @@
 #import "MarketSection/PPProviderMarketItem.h"
 #import "MarketSection/PPProviderMarketItemEditorViewController.h"
 #import "AdminCore/Security/PPStaffAuth.h"
+#import "AdminCore/Security/PPProSessionCoordinator.h"
 #import "AdminCore/Models/UserManager.h"
 #import "AdminCore/Models/UserModel.h"
 #import "DeliverySection/PPDeliveryManager.h"

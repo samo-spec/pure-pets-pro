@@ -973,8 +973,10 @@ static BOOL PPNotificationDetailIsProviderOrderCancellation(NSDictionary *payloa
         NSString *threadID = PPNotificationDetailFirstStringForKeys(payload, @[@"conversationId", @"threadId", @"threadID"]);
 
         if (threadID.length > 0) {
+            FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+            if (!db) { [self pp_openSupportChatsListGracefully]; return; }
             [PPHUD showIndeterminateIn:self.view title:kLang(@"Loading") subtitle:nil];
-            FIRDocumentReference *threadRef = [[[FIRFirestore firestore] collectionWithPath:@"Chats"] documentWithPath:threadID];
+            FIRDocumentReference *threadRef = [[db collectionWithPath:@"Chats"] documentWithPath:threadID];
             __weak typeof(self) weakSelf = self;
             [threadRef getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
@@ -1005,8 +1007,10 @@ static BOOL PPNotificationDetailIsProviderOrderCancellation(NSDictionary *payloa
     if (targetKind == PPProNotificationTargetKindFulfillment || isProviderOrderCancellation) {
         NSString *fulfillmentID = PPNotificationDetailFirstStringForKeys(payload, @[@"fulfillmentId", @"fulfillmentID"]);
         if (fulfillmentID.length > 0) {
+            FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+            if (!db) return;
             [PPHUD showIndeterminateIn:self.view title:kLang(@"Loading") subtitle:nil];
-            FIRDocumentReference *ref = [[[FIRFirestore firestore] collectionWithPath:@"FulfillmentOrders"] documentWithPath:fulfillmentID];
+            FIRDocumentReference *ref = [[db collectionWithPath:@"FulfillmentOrders"] documentWithPath:fulfillmentID];
             __weak typeof(self) weakSelf = self;
             [ref getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
@@ -1034,8 +1038,10 @@ static BOOL PPNotificationDetailIsProviderOrderCancellation(NSDictionary *payloa
     if (targetKind == PPProNotificationTargetKindDeliveryOrder) {
         NSString *orderID = PPNotificationDetailFirstStringForKeys(payload, @[@"orderId", @"orderID", @"parentOrderId", @"parentOrderID"]);
         if (orderID.length > 0) {
+            FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+            if (!db) return;
             [PPHUD showIndeterminateIn:self.view title:kLang(@"Loading") subtitle:nil];
-            FIRDocumentReference *ref = [[[FIRFirestore firestore] collectionWithPath:@"Orders"] documentWithPath:orderID];
+            FIRDocumentReference *ref = [[db collectionWithPath:@"Orders"] documentWithPath:orderID];
             __weak typeof(self) weakSelf = self;
             [ref getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
@@ -1158,7 +1164,9 @@ static BOOL PPNotificationDetailIsProviderOrderCancellation(NSDictionary *payloa
     NSString *orderID = PPNotificationDetailFirstStringForKeys(meta, @[@"orderId", @"orderID", @"parentOrderId", @"parentOrderID"]);
     if (orderID.length == 0 || self.summaryOrderListener) return;
 
-    FIRDocumentReference *ref = [[[FIRFirestore firestore] collectionWithPath:@"Orders"] documentWithPath:orderID];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) return;
+    FIRDocumentReference *ref = [[db collectionWithPath:@"Orders"] documentWithPath:orderID];
     __weak typeof(self) weakSelf = self;
     self.summaryOrderListener = [ref addSnapshotListener:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;

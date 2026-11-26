@@ -30,8 +30,15 @@ public final class PPProviderProfileEditorSnapshot: NSObject {
     @objc public let coverURLs: [String]
     @objc public let hasActiveProfile: Bool
     @objc public let statusTitle: String
+    @objc public let persistedDisplayName: String
+    @objc public let persistedPhone: String
+    @objc public let persistedCityID: String
+    @objc public let persistedAvatarURL: String?
+    @objc public let persistedCoverURLs: [String]
+    @objc public let isUploadingAvatar: Bool
+    @objc public let isUploadingCovers: Bool
 
-    @objc public init(
+    @objc public convenience init(
         displayName: String,
         phone: String,
         cityID: String,
@@ -42,6 +49,44 @@ public final class PPProviderProfileEditorSnapshot: NSObject {
         hasActiveProfile: Bool,
         statusTitle: String
     ) {
+        self.init(
+            displayName: displayName,
+            phone: phone,
+            cityID: cityID,
+            cityTitle: cityTitle,
+            providerTypeTitle: providerTypeTitle,
+            avatarURL: avatarURL,
+            coverURLs: coverURLs,
+            hasActiveProfile: hasActiveProfile,
+            statusTitle: statusTitle,
+            persistedDisplayName: displayName,
+            persistedPhone: phone,
+            persistedCityID: cityID,
+            persistedAvatarURL: avatarURL,
+            persistedCoverURLs: coverURLs,
+            isUploadingAvatar: false,
+            isUploadingCovers: false
+        )
+    }
+
+    @objc public init(
+        displayName: String,
+        phone: String,
+        cityID: String,
+        cityTitle: String,
+        providerTypeTitle: String,
+        avatarURL: String?,
+        coverURLs: [String],
+        hasActiveProfile: Bool,
+        statusTitle: String,
+        persistedDisplayName: String,
+        persistedPhone: String,
+        persistedCityID: String,
+        persistedAvatarURL: String?,
+        persistedCoverURLs: [String],
+        isUploadingAvatar: Bool,
+        isUploadingCovers: Bool
+    ) {
         self.displayName = displayName
         self.phone = phone
         self.cityID = cityID
@@ -51,6 +96,13 @@ public final class PPProviderProfileEditorSnapshot: NSObject {
         self.coverURLs = coverURLs
         self.hasActiveProfile = hasActiveProfile
         self.statusTitle = statusTitle
+        self.persistedDisplayName = persistedDisplayName
+        self.persistedPhone = persistedPhone
+        self.persistedCityID = persistedCityID
+        self.persistedAvatarURL = persistedAvatarURL
+        self.persistedCoverURLs = persistedCoverURLs
+        self.isUploadingAvatar = isUploadingAvatar
+        self.isUploadingCovers = isUploadingCovers
         super.init()
     }
 }
@@ -84,26 +136,43 @@ final class PPProviderProfileEditorViewModel: ObservableObject {
     }
 
     func updateSnapshot(_ newSnapshot: PPProviderProfileEditorSnapshot) {
-        let wasEditing = hasEdits
+        let nameEdited = editedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines) != snapshot.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phoneEdited = editedPhone.trimmingCharacters(in: .whitespacesAndNewlines) != snapshot.phone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cityEdited = editedCityID != snapshot.cityID
+        let cityChangedInNewSnapshot = newSnapshot.cityID != snapshot.cityID
+
         self.snapshot = newSnapshot
-        if !wasEditing {
+        if !nameEdited {
             self.editedDisplayName = newSnapshot.displayName
+        }
+        if !phoneEdited {
             self.editedPhone = newSnapshot.phone
+        }
+        if !cityEdited || cityChangedInNewSnapshot {
             self.editedCityID = newSnapshot.cityID
             self.editedCityTitle = newSnapshot.cityTitle
-        } else {
-            // Keep updated city title if changed via picker sheet
-            if newSnapshot.cityID == self.editedCityID {
-                self.editedCityTitle = newSnapshot.cityTitle
-            }
+        } else if newSnapshot.cityID == self.editedCityID {
+            self.editedCityTitle = newSnapshot.cityTitle
+        }
+
+        if newSnapshot.coverURLs.isEmpty {
+            self.selectedCoverIndex = 0
+        } else if self.selectedCoverIndex >= newSnapshot.coverURLs.count {
+            self.selectedCoverIndex = newSnapshot.coverURLs.count - 1
         }
     }
 
+    var isUploadingMedia: Bool {
+        snapshot.isUploadingAvatar || snapshot.isUploadingCovers
+    }
+
     var hasEdits: Bool {
-        let nameChanged = editedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines) != snapshot.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let phoneChanged = editedPhone.trimmingCharacters(in: .whitespacesAndNewlines) != snapshot.phone.trimmingCharacters(in: .whitespacesAndNewlines)
-        let cityChanged = editedCityID != snapshot.cityID
-        return nameChanged || phoneChanged || cityChanged
+        let nameChanged = editedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines) != snapshot.persistedDisplayName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phoneChanged = editedPhone.trimmingCharacters(in: .whitespacesAndNewlines) != snapshot.persistedPhone.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cityChanged = editedCityID != snapshot.persistedCityID
+        let avatarChanged = (snapshot.avatarURL ?? "") != (snapshot.persistedAvatarURL ?? "")
+        let coversChanged = snapshot.coverURLs != snapshot.persistedCoverURLs
+        return nameChanged || phoneChanged || cityChanged || avatarChanged || coversChanged
     }
 
     var canSave: Bool {
@@ -111,7 +180,7 @@ final class PPProviderProfileEditorViewModel: ObservableObject {
     }
 
     func saveTriggered() {
-        guard canSave, !isSaving else { return }
+        guard canSave, !isSaving, !isUploadingMedia else { return }
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         isSaving = true
         onSave?(
@@ -370,7 +439,7 @@ public struct PPProviderProfileEditorView: View {
                     .shadow(color: Color(uiColor: .ppPrimary).opacity(0.35), radius: 4, y: 1.5)
                 }
                 .buttonStyle(PlainButtonStyle())
-                .disabled(viewModel.isSaving)
+                .disabled(viewModel.isSaving || viewModel.isUploadingMedia)
             } else if !viewModel.snapshot.providerTypeTitle.isEmpty {
                 // Controlled Non-Clipping Facility Badge
                 HStack(spacing: 4) {
@@ -451,10 +520,16 @@ public struct PPProviderProfileEditorView: View {
                             switch phase {
                             case .success(let image):
                                 image.resizable().scaledToFill()
+                            case .empty:
+                                ZStack {
+                                    simulatorCoverArtisticPlaceholder
+                                    ProgressView()
+                                }
                             default:
                                 simulatorCoverArtisticPlaceholder
                             }
                         }
+                        .id(activeCover)
                         .frame(maxWidth: .infinity)
                         .frame(height: 175)
                         .clipped()
@@ -523,10 +598,16 @@ public struct PPProviderProfileEditorView: View {
                                     switch phase {
                                     case .success(let img):
                                         img.resizable().scaledToFill()
+                                    case .empty:
+                                        ZStack {
+                                            facilityAvatarFallback
+                                            ProgressView().scaleEffect(0.75)
+                                        }
                                     default:
                                         facilityAvatarFallback
                                     }
                                 }
+                                .id(avatarStr)
                                 .frame(width: 48, height: 48)
                                 .clipShape(Circle())
                             } else {
@@ -709,15 +790,30 @@ public struct PPProviderProfileEditorView: View {
                                     switch phase {
                                     case .success(let img):
                                         img.resizable().scaledToFill()
+                                    case .empty:
+                                        ZStack {
+                                            facilityAvatarFallback
+                                            ProgressView().scaleEffect(0.8)
+                                        }
                                     default:
                                         facilityAvatarFallback
                                     }
                                 }
+                                .id(avatarStr)
                                 .frame(width: 62, height: 62)
                                 .clipShape(Circle())
                             } else {
                                 facilityAvatarFallback
                                     .frame(width: 62, height: 62)
+                            }
+
+                            if viewModel.snapshot.isUploadingAvatar {
+                                Circle()
+                                    .fill(Color.black.opacity(0.45))
+                                    .frame(width: 62, height: 62)
+                                ProgressView()
+                                    .progressViewStyle(CircularProgressViewStyle(tint: .white))
+                                    .scaleEffect(0.85)
                             }
                         }
 
@@ -734,6 +830,7 @@ public struct PPProviderProfileEditorView: View {
                     }
                 }
                 .buttonStyle(PlainButtonStyle())
+                .disabled(viewModel.snapshot.isUploadingAvatar)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(Language.isRTL() ? "الشعار التجاري الرسمي للمنشأة" : "Official Commercial Logo")
@@ -764,6 +861,7 @@ public struct PPProviderProfileEditorView: View {
                         .background(Color(uiColor: .ppPrimary).opacity(0.10), in: Capsule())
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .disabled(viewModel.snapshot.isUploadingAvatar)
                     .padding(.top, 2)
                 }
 
@@ -783,6 +881,11 @@ public struct PPProviderProfileEditorView: View {
                         .font(PPFont.bold(13, relativeTo: .subheadline))
                         .foregroundColor(Color(uiColor: .ppTextPrimary))
 
+                    if viewModel.snapshot.isUploadingCovers {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    }
+
                     Spacer()
 
                     Text(String(format: Language.isRTL() ? "(%d / 5 صور)" : "(%d / 5 photos)", viewModel.snapshot.coverURLs.count))
@@ -800,10 +903,16 @@ public struct PPProviderProfileEditorView: View {
                                             switch phase {
                                             case .success(let image):
                                                 image.resizable().scaledToFill()
+                                            case .empty:
+                                                ZStack {
+                                                    coverThumbnailFallback
+                                                    ProgressView().scaleEffect(0.8)
+                                                }
                                             default:
                                                 coverThumbnailFallback
                                             }
                                         }
+                                        .id(urlStr)
                                         .frame(width: 140, height: 86)
                                         .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
                                     } else {
@@ -875,6 +984,7 @@ public struct PPProviderProfileEditorView: View {
                                     )
                                 }
                                 .buttonStyle(PlainButtonStyle())
+                                .disabled(viewModel.snapshot.isUploadingCovers)
                             }
                         }
                         .padding(.vertical, 2)
@@ -890,13 +1000,20 @@ public struct PPProviderProfileEditorView: View {
                                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                                     .fill(Color(uiColor: .ppPrimary).opacity(0.12))
                                     .frame(width: 44, height: 44)
-                                Image(systemName: "photo.badge.plus")
-                                    .font(.system(size: 20))
-                                    .foregroundColor(Color(uiColor: .ppPrimary))
+                                if viewModel.snapshot.isUploadingCovers {
+                                    ProgressView()
+                                } else {
+                                    Image(systemName: "photo.badge.plus")
+                                        .font(.system(size: 20))
+                                        .foregroundColor(Color(uiColor: .ppPrimary))
+                                }
                             }
 
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(Language.isRTL() ? "إضافة أول صورة غلاف للمنشأة" : "Add First Storefront Cover")
+                                Text(viewModel.snapshot.isUploadingCovers
+                                     ? Language.get("ProviderProfileEditor_UploadingCovers", alter: Language.isRTL() ? "جارٍ رفع صور الغلاف" : "Uploading cover photos")
+                                     : (Language.isRTL() ? "إضافة أول صورة غلاف للمنشأة" : "Add First Storefront Cover")
+                                )
                                     .font(PPFont.bold(13.5, relativeTo: .subheadline))
                                     .foregroundColor(Color(uiColor: .ppTextPrimary))
 
@@ -925,6 +1042,7 @@ public struct PPProviderProfileEditorView: View {
                         )
                     }
                     .buttonStyle(PlainButtonStyle())
+                    .disabled(viewModel.snapshot.isUploadingCovers)
                 }
             }
         }
@@ -1250,7 +1368,7 @@ public struct PPProviderProfileEditorView: View {
                     )
                 }
                 .buttonStyle(PlainButtonStyle())
-                .disabled(viewModel.isSaving)
+                .disabled(viewModel.isSaving || viewModel.isUploadingMedia)
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
                 .padding(.bottom, 12)
@@ -1327,6 +1445,18 @@ public final class PPProviderProfileEditorHostController: UIViewController {
 
     @objc public func didFinishSaving() {
         viewModel.isSaving = false
+    }
+
+    @objc public var currentEditedDisplayName: String {
+        viewModel.editedDisplayName
+    }
+
+    @objc public var currentEditedPhone: String {
+        viewModel.editedPhone
+    }
+
+    @objc public var currentEditedCityID: String {
+        viewModel.editedCityID
     }
 }
 

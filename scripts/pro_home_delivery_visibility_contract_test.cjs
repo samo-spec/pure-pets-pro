@@ -52,7 +52,7 @@ check('only server driver and fleet workspace kinds qualify; restricted and lega
 check('Home resolves all memberships, including a driver in a different company, once per account refresh', () => {
   assert(refresh.includes('if ([self.refreshingDeliveryHomeUID isEqualToString:requestedUID]) return;'));
   assert(refresh.includes('discoverCompanyMembershipsWithCompletion:'));
-  assert(refresh.includes('if (![[FIRAuth auth].currentUser.uid isEqualToString:requestedUID]) return;'));
+  assert(refresh.includes('if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:requestedUID]) return;'));
   assert(refresh.includes('return profile.hasDriverWorkspace || profile.hasDispatchWorkspace;'));
   assert(refresh.includes('error ? @[]'));
   assert(!/verifyAndStoreCompanyID|setConfiguredCompanyID|setData:|updateData:/.test(refresh));

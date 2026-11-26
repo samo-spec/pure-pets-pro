@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'); const fs=require('node:fs'); const path=require('node:path');
+const s=fs.readFileSync(path.join(__dirname,'../PurePetsPro/AdminCore/Models/UserManager.m'),'utf8');
+const block=(a,b)=>s.slice(s.indexOf(a),s.indexOf(b,s.indexOf(a)+a.length));
+assert(block('- (void)p_cacheUser:', '- (NSString *)p_userCacheDir').includes('pp_captureSessionForUID:uid'), 'private disk cache only accepts its active owner');
+assert(block('- (nullable UserModel *)p_readUserFromDisk:', '- (void)p_readUserFromDiskAsync:').includes('pp_captureSessionForUID:uid'), 'disk read requires active owner');
+assert(block('- (void)p_queryUsersColField:(NSString *)field\n                    equalTo:', '- (void)fetchUserWithUID:').includes('FIRFirestoreSourceServer'), 'privileged lookups use server');
+assert(!block('- (void)p_queryUsersColField:(NSString *)field\n                    equalTo:', '- (void)fetchUserWithUID:').includes('FIRFirestoreSourceCache'), 'no permission-denial fallback to shared cache');
+assert(block('- (void)fetchAllUsersForceRefresh:', '- (void)setUser:').includes('pp_captureSessionForUID:'), 'directory query fenced');
+assert(!block('- (void)fetchAllUsersForceRefresh:', '- (void)setUser:').includes('completion(self.cachedUsers'), 'no unscoped directory reuse');
+console.log('PASS owner-only cache and server-authorized directory contracts');

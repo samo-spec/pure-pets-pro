@@ -416,17 +416,24 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
 
 - (instancetype)init {
     if (self = [super init]) {
-        _db = [FIRFirestore firestore];
     }
     return self;
 }
 
+- (FIRFirestore *)db {
+    return [PPProSessionCoordinator.shared activeFirestore];
+}
+
 - (FIRCollectionReference *)col {
-    return [self.db collectionWithPath:kColVets];
+    FIRFirestore *db = self.db;
+    if (!db) return nil;
+    return [db collectionWithPath:kColVets];
 }
 
 - (FIRCollectionReference *)medicineCol {
-    return [self.db collectionWithPath:kColPetAccessories];
+    FIRFirestore *db = self.db;
+    if (!db) return nil;
+    return [db collectionWithPath:kColPetAccessories];
 }
 
 #pragma mark - Mapping
@@ -448,15 +455,37 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
 - (void)fetchAllVetsWithCompletion:(PPVetArrayBlock)completion {
     [[self col] getDocumentsWithCompletion:^(FIRQuerySnapshot * _Nullable snap, NSError * _Nullable error) {
         if (!completion) return;
-        completion(error ? nil : [self _mapDocs:snap.documents], error);
+        if (error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil, error);
+            });
+            return;
+        }
+        NSArray<FIRDocumentSnapshot *> *docs = snap.documents ?: @[];
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            NSArray<PPVetModel *> *vets = [self _mapDocs:docs];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(vets, nil);
+            });
+        });
     }];
 }
 
 - (id<FIRListenerRegistration>)observeAllVets:(PPVetArrayBlock)onChange {
     return [[self col] addSnapshotListener:^(FIRQuerySnapshot * _Nullable snap, NSError * _Nullable error) {
         if (!onChange) return;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            onChange(error ? nil : [self _mapDocs:snap.documents], error);
+        if (error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                onChange(nil, error);
+            });
+            return;
+        }
+        NSArray<FIRDocumentSnapshot *> *docs = snap.documents ?: @[];
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+            NSArray<PPVetModel *> *vets = [self _mapDocs:docs];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                onChange(vets, nil);
+            });
         });
     }];
 }
@@ -526,7 +555,7 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
     }
 
     if (vet.userID.length == 0) {
-        vet.userID = [FIRAuth auth].currentUser.uid ?: @"";
+        vet.userID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     }
 
     void (^saveBlock)(NSString *) = ^(NSString *logoURL) {
@@ -622,12 +651,17 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         if (completion) completion(@"");
         return;
     }
+    FIRStorage *storage = [PPProSessionCoordinator.shared activeStorage];
+    if (!storage) {
+        if (completion) completion(@"");
+        return;
+    }
     NSString *path = [NSString stringWithFormat:@"vets/%@.png", vetID];
-    FIRStorageReference *ref = [[[FIRStorage storage] reference] child:path];
+    FIRStorageReference *ref = [[storage reference] child:path];
     FIRStorageMetadata *meta = [[FIRStorageMetadata alloc] init];
     meta.contentType = @"image/png";
     meta.customMetadata = @{
-        @"uploaded_by": [FIRAuth auth].currentUser.uid ?: @"",
+        @"uploaded_by": [PPProSessionCoordinator.shared activeUID] ?: @"",
         @"entity_type": @"veterinarian",
         @"entity_id": vetID ?: @""
     };
@@ -650,12 +684,17 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         if (completion) completion(@"");
         return;
     }
+    FIRStorage *storage = [PPProSessionCoordinator.shared activeStorage];
+    if (!storage) {
+        if (completion) completion(@"");
+        return;
+    }
     NSString *path = [NSString stringWithFormat:@"petAccessories/%@.png", medicineID ?: @""];
-    FIRStorageReference *ref = [[[FIRStorage storage] reference] child:path];
+    FIRStorageReference *ref = [[storage reference] child:path];
     FIRStorageMetadata *meta = [[FIRStorageMetadata alloc] init];
     meta.contentType = @"image/png";
     meta.customMetadata = @{
-        @"uploaded_by": [FIRAuth auth].currentUser.uid ?: @"",
+        @"uploaded_by": [PPProSessionCoordinator.shared activeUID] ?: @"",
         @"entity_type": @"medicine",
         @"entity_id": medicineID ?: @""
     };
@@ -744,7 +783,7 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         return;
     }
     NSString *uploadID = NSUUID.UUID.UUIDString;
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (currentUID.length == 0) {
         if (completion) completion(PPVetError(401, @"Sign in before adding medicine."));
         return;
@@ -787,7 +826,7 @@ static NSError *PPVetError(NSInteger code, NSString *message) {
         if (completion) completion(PPVetError(400, @"Valid medicine model with ID is required."));
         return;
     }
-    NSString *currentUID = [FIRAuth auth].currentUser.uid ?: @"";
+    NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
     if (currentUID.length == 0) {
         if (completion) completion(PPVetError(401, @"Sign in before updating medicine."));
         return;

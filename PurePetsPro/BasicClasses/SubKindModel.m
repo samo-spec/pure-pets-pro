@@ -133,7 +133,11 @@
         return;
     }
 
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion([NSError errorWithDomain:@"Input" code:401 userInfo:@{NSLocalizedDescriptionKey: @"Session unavailable"}]);
+        return;
+    }
     FIRDocumentReference *doc = [[db collectionWithPath:@"MainKindsCollection"] documentWithPath:mainID];
 
     // Optional: ensure subKind has required keys / sane defaults
@@ -284,7 +288,11 @@
 
     self.subKindIconBlurHash = hash;
 
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) {
+        if (completion) completion([NSError errorWithDomain:@"Input" code:401 userInfo:@{NSLocalizedDescriptionKey: @"Session unavailable"}]);
+        return;
+    }
 
     NSString *mainKindID = [NSString stringWithFormat:@"%ld", (long)self.MainKindID];
     FIRDocumentReference *doc =

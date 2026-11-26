@@ -912,12 +912,35 @@ final class PPDriverCockpitStore: ObservableObject {
     private var acceptanceObservation: NSObject?
     private var acceptanceObservationGeneration = 0
     private var acceptanceObservationNeedsRetry = false
+    private let sessionCoordinatorKey = "PPDriverCockpitStore.\(UUID().uuidString)"
     @Published private var liveSelfAcceptance: Bool?
 
     init(loadsTaskQueue: Bool = true, loadsOffers: Bool = true) {
         boundUID = PPDeliveryCompanyService.currentAccountUID()
         self.loadsTaskQueue = loadsTaskQueue
         self.loadsOffers = loadsOffers
+        let coordinator = PPProSessionCoordinator.shared()
+        coordinator.registerActiveWorkBlocker({ [weak self] outReason in
+            MainActor.assumeIsolated {
+                guard let self, self.isSameAccount() else { return false }
+                let busy = self.isSubmitting || self.isVerifying || self.uncertainCommand != nil || !self.activeTasks.isEmpty
+                if busy, let outReason {
+                    outReason.pointee = ppDriverText("DriverCockpit_ActiveWork_SwitchBlocked") as NSString
+                }
+                return ObjCBool(busy)
+            }
+        }, forKey: sessionCoordinatorKey)
+        coordinator.registerSessionTeardownHandler({ [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.handleSessionTeardown()
+            }
+        }, forKey: sessionCoordinatorKey)
+    }
+
+    deinit {
+        let coordinator = PPProSessionCoordinator.shared()
+        coordinator.unregisterActiveWorkBlocker(forKey: sessionCoordinatorKey)
+        coordinator.unregisterSessionTeardownHandler(forKey: sessionCoordinatorKey)
     }
 
     // MARK: Derived state
@@ -1769,7 +1792,11 @@ final class PPDriverCockpitStore: ObservableObject {
         stopTimer()
         let timer = Timer(timeInterval: 30, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshAll()
+                guard let self,
+                      self.isVisible,
+                      !self.isRefreshing,
+                      UIApplication.shared.applicationState == .active else { return }
+                self.refreshAll()
             }
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -1809,10 +1836,27 @@ final class PPDriverCockpitStore: ObservableObject {
     private func installObservers() {
         guard observerTokens.isEmpty else { return }
         let center = NotificationCenter.default
+        observerTokens.append(center.addObserver(forName: UIApplication.didEnterBackgroundNotification,
+                                                 object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.stopTimer()
+            }
+        })
+        observerTokens.append(center.addObserver(forName: UIApplication.willEnterForegroundNotification,
+                                                 object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isVisible, self.refreshTimer == nil else { return }
+                self.startTimer()
+            }
+        })
         observerTokens.append(center.addObserver(forName: UIApplication.didBecomeActiveNotification,
                                                  object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
-                self?.resolveContexts()
+                guard let self else { return }
+                if self.isVisible && self.refreshTimer == nil {
+                    self.startTimer()
+                }
+                self.resolveContexts()
             }
         })
         observerTokens.append(center.addObserver(forName: .ppDriverCockpitShouldRefresh,
@@ -1826,5 +1870,21 @@ final class PPDriverCockpitStore: ObservableObject {
     private func removeObservers() {
         for token in observerTokens { NotificationCenter.default.removeObserver(token) }
         observerTokens.removeAll()
+    }
+
+    private func handleSessionTeardown() {
+        isVisible = false
+        started = false
+        contextGeneration += 1
+        listGeneration += 1
+        acceptanceObservationGeneration += 1
+        stopTimer()
+        acceptanceObservation = nil
+        liveSelfAcceptance = nil
+        removeObservers()
+        clearTasks()
+        contexts = []
+        selectedContext = nil
+        phase = .signedOut
     }
 }

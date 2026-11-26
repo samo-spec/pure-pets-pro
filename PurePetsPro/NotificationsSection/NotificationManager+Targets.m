@@ -107,7 +107,8 @@ static void PPProNotificationTargetsComplete(BOOL handled, void (^completion)(BO
     }
 
     // PPAudienceAppUsers -> fetch all app users (adjust filters if you need)
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) { if (completion) completion([NSError errorWithDomain:@"NotificationManager" code:401 userInfo:nil]); return; }
     [[[db collectionWithPath:kUsersCollection] queryLimitedTo:1000] // adjust paging if huge
      getDocumentsWithCompletion:^(FIRQuerySnapshot * _Nullable snapshot, NSError * _Nullable error) {
         if (error) { if (completion) completion(error); return; }
@@ -127,7 +128,8 @@ static void PPProNotificationTargetsComplete(BOOL handled, void (^completion)(BO
 {
     if (roles.count == 0) { if (completion) completion(nil); return; }
 
-    FIRFirestore *db = [FIRFirestore firestore];
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!db) { if (completion) completion([NSError errorWithDomain:@"NotificationManager" code:401 userInfo:nil]); return; }
 
     // Firestore "in" supports up to 10 values; chunk if needed
     NSArray<NSArray<NSNumber *> *> *chunks = [self pp_chunkArray:roles size:10];
@@ -330,8 +332,9 @@ fromNavigationController:(UINavigationController *)navigationController
         PPProNotificationTargetsComplete(NO, completion);
         return;
     }
-    NSString *routeUID = [FIRAuth auth].currentUser.uid ?: @"";
-    if (!navigationController || safePayload.count == 0 || routeUID.length == 0) {
+    NSString *routeUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    if (!navigationController || safePayload.count == 0 || routeUID.length == 0 || !db) {
         NSLog(@"[NotificationRoute] Missing navigation controller or payload.");
         PPProNotificationTargetsComplete(NO, completion);
         return;
@@ -347,7 +350,7 @@ fromNavigationController:(UINavigationController *)navigationController
                 return;
             }
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:routeUID]) {
+                if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:routeUID]) {
                     PPProNotificationTargetsComplete(NO, completion);
                     return;
                 }
@@ -366,10 +369,10 @@ fromNavigationController:(UINavigationController *)navigationController
                 PPProNotificationTargetsComplete(NO, completion);
                 return;
             }
-            FIRDocumentReference *reference = [[[FIRFirestore firestore] collectionWithPath:@"FulfillmentOrders"] documentWithPath:fulfillmentID];
+            FIRDocumentReference *reference = [[db collectionWithPath:@"FulfillmentOrders"] documentWithPath:fulfillmentID];
             [reference getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:routeUID]) {
+                    if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:routeUID]) {
                         PPProNotificationTargetsComplete(NO, completion);
                         return;
                     }
@@ -401,10 +404,10 @@ fromNavigationController:(UINavigationController *)navigationController
                 PPProNotificationTargetsComplete(NO, completion);
                 return;
             }
-            FIRDocumentReference *reference = [[[FIRFirestore firestore] collectionWithPath:@"Orders"] documentWithPath:orderID];
+            FIRDocumentReference *reference = [[db collectionWithPath:@"Orders"] documentWithPath:orderID];
             [reference getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:routeUID]) {
+                    if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:routeUID]) {
                         PPProNotificationTargetsComplete(NO, completion);
                         return;
                     }
@@ -436,10 +439,10 @@ fromNavigationController:(UINavigationController *)navigationController
                 PPProNotificationTargetsComplete(NO, completion);
                 return;
             }
-            FIRDocumentReference *reference = [[[FIRFirestore firestore] collectionWithPath:@"Chats"] documentWithPath:threadID];
+            FIRDocumentReference *reference = [[db collectionWithPath:@"Chats"] documentWithPath:threadID];
             [reference getDocumentWithCompletion:^(FIRDocumentSnapshot * _Nullable snapshot, NSError * _Nullable error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:routeUID]) {
+                    if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:routeUID]) {
                         PPProNotificationTargetsComplete(NO, completion);
                         return;
                     }
@@ -463,7 +466,7 @@ fromNavigationController:(UINavigationController *)navigationController
 
         case PPProNotificationTargetKindPartnerLifecycle: {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (![[FIRAuth auth].currentUser.uid ?: @"" isEqualToString:routeUID]) {
+                if (![[PPProSessionCoordinator.shared activeUID] ?: @"" isEqualToString:routeUID]) {
                     PPProNotificationTargetsComplete(NO, completion);
                     return;
                 }

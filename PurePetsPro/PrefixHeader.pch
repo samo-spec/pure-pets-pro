@@ -40,10 +40,15 @@ static NSString * const PPProThemePreferenceDark = @"dark";
 // Keep notification headers file-local to avoid heavy module chains in PCH.
 
 // ===== Third-party =====
- 
+
 #import "Language.h"
+#if __has_include(<YYKit/YYKit.h>)
+#import <YYKit/YYKit.h>
+#elif __has_include("YYKit.h")
 #import "YYKit.h"
-#import "SSZipArchive.h"
+#endif
+
+
 #import <objc/runtime.h>
 // FCAlertView removed — replaced by PPAlertHelper
 #import "JGProgressHUD.h"

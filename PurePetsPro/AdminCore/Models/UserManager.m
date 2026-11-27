@@ -761,7 +761,46 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
     }
     self.signOutInProgress = YES;
 
+    __weak typeof(self) weakSelf = self;
+    [PPProSessionCoordinator.shared preflightAccountTransitionForTargetUID:nil
+                                                                    reason:@"logout"
+                                                                completion:^(BOOL allowed,
+                                                                             NSString * _Nullable blockReason,
+                                                                             NSError * _Nullable preflightErr) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (!allowed) {
+            strongSelf.signOutInProgress = NO;
+            NSError *err = preflightErr ?: [NSError errorWithDomain:@"UserManager"
+                                                               code:PPProSessionCoordinatorErrorActiveWorkBlocked
+                                                           userInfo:@{NSLocalizedDescriptionKey: blockReason ?: @"Active work in progress"}];
+            UIViewController *presenter = PPProUserManagerTopViewController();
+            if (presenter) {
+                [PPAlertHelper showErrorIn:presenter
+                                     title:kLang(@"Error")
+                                  subtitle:err.localizedDescription];
+            }
+            if (completion) completion(err);
+            return;
+        }
+        [strongSelf pp_performSignOutPipelineWithCompletion:completion];
+    }];
+}
+
+- (void)forceSecuritySignOutWithCompletion:(void (^ _Nullable)(NSError * _Nullable))completion {
+    if (self.signOutInProgress) {
+        if (completion) completion([NSError errorWithDomain:@"UserManager" code:409 userInfo:nil]);
+        return;
+    }
+    self.signOutInProgress = YES;
+    [self pp_performSignOutPipelineWithCompletion:completion];
+}
+
+- (void)pp_performSignOutPipelineWithCompletion:(void (^ _Nullable)(NSError * _Nullable))completion {
     NSString *userID = PPSafeString([PPProSessionCoordinator.shared activeUID]);
+    if (userID.length == 0) {
+        userID = PPSafeString([PPProSessionCoordinator.shared stagedAuthenticatedUID]);
+    }
     if (userID.length == 0) {
         userID = PPSafeString(self.currentUser.uid.length ? self.currentUser.uid : self.currentUser.ID);
     }

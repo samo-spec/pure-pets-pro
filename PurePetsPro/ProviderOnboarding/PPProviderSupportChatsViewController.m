@@ -939,7 +939,7 @@ static NSString *PPChatThreadIDFromMessage(FIRDocumentSnapshot *doc, NSDictionar
     // that matches the consumer iOS app's ChManager global unread listener.
     // status < 3 means Sending(0), Sent(1), or Delivered(2) — all unread.
     FIRQuery *query =
-    [[[[db
+    [[[db
        collectionGroupWithID:@"Messages"]
       queryWhereField:@"receiverID" isEqualTo:currentUID]
      queryWhereField:@"status" isLessThan:@(3)];

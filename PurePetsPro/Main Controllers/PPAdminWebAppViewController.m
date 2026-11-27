@@ -34,7 +34,12 @@ static NSString * const kPPAdminWebAppURLString = @"https://pure-pets-49199.web.
     self.view.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
 
     WKWebViewConfiguration *configuration = [WKWebViewConfiguration new];
-    configuration.websiteDataStore = [WKWebsiteDataStore defaultDataStore];
+    configuration.websiteDataStore = [WKWebsiteDataStore nonPersistentDataStore];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_teardownWebSession)
+                                                 name:PPProSessionDidSuspendNotification
+                                               object:nil];
 
     WKWebView *webView = [[WKWebView alloc] initWithFrame:CGRectZero configuration:configuration];
     webView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -143,7 +148,33 @@ static NSString * const kPPAdminWebAppURLString = @"https://pure-pets-49199.web.
                              tap:nil];
 }
 
+- (void)pp_teardownWebSession {
+    void (^cleanup)(void) = ^{
+        [self.webView stopLoading];
+        [self.webView loadHTMLString:@"" baseURL:nil];
+        WKWebsiteDataStore *store = self.webView.configuration.websiteDataStore;
+        if (store) {
+            [store removeDataOfTypes:[WKWebsiteDataStore allWebsiteDataTypes]
+                       modifiedSince:[NSDate distantPast]
+                   completionHandler:^{}];
+        }
+    };
+    if ([NSThread isMainThread]) {
+        cleanup();
+    } else {
+        dispatch_async(dispatch_get_main_queue(), cleanup);
+    }
+}
+
 - (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [_webView stopLoading];
+    WKWebsiteDataStore *store = _webView.configuration.websiteDataStore;
+    if (store) {
+        [store removeDataOfTypes:[WKWebsiteDataStore allWebsiteDataTypes]
+                   modifiedSince:[NSDate distantPast]
+               completionHandler:^{}];
+    }
     _webView.navigationDelegate = nil;
     _webView.UIDelegate = nil;
 }

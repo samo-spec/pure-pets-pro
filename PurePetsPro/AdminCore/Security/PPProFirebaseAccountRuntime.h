@@ -7,8 +7,10 @@ NS_ASSUME_NONNULL_BEGIN
 /// before installing it. This type never mutates the default Firebase identity.
 @interface PPProFirebaseAccountRuntime : NSObject
 @property(nonatomic,readonly) NSUUID *slotID;
+@property(nonatomic,readonly) NSUInteger slotGeneration;
 @property(nonatomic,copy,readonly,nullable) NSString *expectedUID;
 @property(nonatomic,copy,readonly,nullable) NSString *currentUID;
+@property(nonatomic,readonly) BOOL isAuthenticatedSession;
 @property(nonatomic,readonly) BOOL isAuthorizedSession;
 @property(nonatomic,readonly) BOOL isInvalidated;
 @property(nonatomic,readonly) BOOL hasMismatchedSignedInUser;
@@ -16,11 +18,16 @@ NS_ASSUME_NONNULL_BEGIN
 @property(nonatomic,readonly,nullable) FIRFirestore *firestore;
 @property(nonatomic,readonly,nullable) FIRFunctions *functions;
 @property(nonatomic,readonly,nullable) FIRStorage *storage;
+/// Restricted bootstrap service access during staging before full Pro authorization install.
+@property(nonatomic,readonly,nullable) FIRFirestore *bootstrapFirestore;
+@property(nonatomic,readonly,nullable) FIRFunctions *bootstrapFunctions;
+
 + (nullable instancetype)openSlot:(NSUUID *)slotID expectedUID:(nullable NSString *)expectedUID error:(NSError **)error;
 + (nullable instancetype)openRememberedUID:(NSString *)uid error:(NSError **)error;
 + (nullable instancetype)createProvisionalSlotWithError:(NSError **)error;
 - (instancetype)init NS_UNAVAILABLE;
 - (FIRPhoneAuthProvider *)phoneProvider;
+- (void)markProAccessVerified:(BOOL)verified forUID:(nullable NSString *)uid;
 - (void)authenticateCredential:(FIRAuthCredential *)credential completion:(void (^)(FIRUser * _Nullable user, NSError * _Nullable error))completion;
 - (void)validateSessionWithCompletion:(void (^)(FIRUser * _Nullable user, NSError * _Nullable error))completion;
 - (void)waitForPendingWritesWithCompletion:(void (^)(NSError * _Nullable error))completion;

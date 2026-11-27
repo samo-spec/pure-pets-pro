@@ -1,5 +1,6 @@
 #import "SceneDelegate.h"
 #import "AppDelegate.h"
+#import "YYKit.h"
 #import "PPFirebaseCompat.h"
 #import "PPProviderApplicationStatusViewController.h"
 #import "PPDeliveryCompanyDetailViewController.h"
@@ -14,6 +15,7 @@
 #import "AppManager.h"
 #import "AdminDashboardViewController.h"
 #import "PurePetsPro-Swift.h"
+#import "PPFunc.h"
 #import <QuartzCore/QuartzCore.h>
 @import GoogleSignIn;
 
@@ -50,6 +52,12 @@ void PPAdminSetLoginInProgress(BOOL inProgress) { _pp_adminLoginInProgress = inP
 @property (nonatomic) BOOL pp_isResolvingCompanyDeliveryNotification;
 @property (nonatomic) NSUInteger pp_proAccessRoutingGeneration;
 @property (nonatomic) NSUInteger pp_rootTransitionGeneration;
+@property (nonatomic, copy, nullable) NSString *pp_currentRootOwnershipKey;
+@property (nonatomic, strong, nullable) UIView *pp_transitionPrivacyCurtain;
+@property (nonatomic, strong, nullable) UILabel *pp_transitionCurtainStatusLabel;
+@property (nonatomic, copy, nullable) NSString *pp_pendingReauthUID;
+@property (nonatomic, assign) BOOL pp_pendingAddAccountMode;
+@property (nonatomic, assign) BOOL pp_coldRestoreAttempted;
 - (void)setRoot:(AppRoot)target animated:(BOOL)animated completion:(void (^ _Nullable)(void))completion;
 - (void)pp_installRoot:(AppRoot)target animated:(BOOL)animated generation:(NSUInteger)generation completion:(void (^ _Nullable)(void))completion;
 - (void)pp_routeAfterDeliveryCompanyPreflightForUID:(NSString *)uid
@@ -241,7 +249,31 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                __strong typeof(weakSelf) strongSelf = weakSelf;
                if (!strongSelf) return;
                if (recoveryRequired && !cleared) {
+                    [strongSelf pp_hideTransitionPrivacyCurtain];
                     [strongSelf pp_applyAdminRoutingForAuthUser:nil animated:NO];
+                    return;
+               }
+               if ([PPProRememberedAccountStore rolloutEnabled] && !strongSelf.pp_coldRestoreAttempted) {
+                    strongSelf.pp_coldRestoreAttempted = YES;
+                    [strongSelf pp_showTransitionPrivacyCurtainWithStatusKey:@"restore"];
+                    [PPProSessionCoordinator.shared restoreLastActiveSessionOnColdLaunchWithCompletion:^(BOOL restored,
+                                                                                                           BOOL requiresReauth,
+                                                                                                           NSString * _Nullable uid,
+                                                                                                           __unused NSError * _Nullable restoreErr) {
+                         dispatch_async(dispatch_get_main_queue(), ^{
+                              __strong typeof(weakSelf) innerSelf = weakSelf;
+                              if (!innerSelf) return;
+                              [innerSelf pp_hideTransitionPrivacyCurtain];
+                              if (restored) {
+                                   [innerSelf pp_applyAdminRoutingForAuthUser:[PPProSessionCoordinator.shared currentUser] animated:YES];
+                              } else {
+                                   if (requiresReauth && uid.length > 0) {
+                                        innerSelf.pp_pendingReauthUID = uid;
+                                   }
+                                   [innerSelf pp_applyAdminRoutingForAuthUser:nil animated:NO];
+                              }
+                         });
+                    }];
                }
           });
      }];
@@ -266,6 +298,26 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      [[NSNotificationCenter defaultCenter] addObserver:self
                                               selector:@selector(pp_handleTransitionRecoveryRequired)
                                                   name:PPProSessionTransitionRecoveryRequiredNotification
+                                                object:nil];
+     [[NSNotificationCenter defaultCenter] addObserver:self
+                                              selector:@selector(pp_handleTransitionWillBegin:)
+                                                  name:PPProSessionTransitionWillBeginNotification
+                                                object:nil];
+     [[NSNotificationCenter defaultCenter] addObserver:self
+                                              selector:@selector(pp_handleTransitionPhaseDidChange:)
+                                                  name:PPProSessionTransitionPhaseDidChangeNotification
+                                                object:nil];
+     [[NSNotificationCenter defaultCenter] addObserver:self
+                                              selector:@selector(pp_handleSessionDidSuspend:)
+                                                  name:PPProSessionDidSuspendNotification
+                                                object:nil];
+     [[NSNotificationCenter defaultCenter] addObserver:self
+                                              selector:@selector(pp_handleSessionDidCommitOrRollback:)
+                                                  name:PPProSessionDidCommitNotification
+                                                object:nil];
+     [[NSNotificationCenter defaultCenter] addObserver:self
+                                              selector:@selector(pp_handleSessionDidCommitOrRollback:)
+                                                  name:PPProSessionTransitionDidRollbackNotification
                                                 object:nil];
      
      [[NSNotificationCenter defaultCenter] addObserver:self
@@ -366,7 +418,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                      [weakSelf pp_hideLockOverlay];
 
                      if (PPSceneUserDocIsBlocked(userDoc ?: @{})) {
-                          [UserManager.shared signOut];
+                          [UserManager.shared forceSecuritySignOutWithCompletion:nil];
                           [weakSelf setRoot:AppRootLogin animated:animated];
                           return;
                      }
@@ -464,7 +516,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                     weakSelf.pp_autoPresentProviderStatusOnNextRoot = YES;
                     [weakSelf setRoot:AppRootProviderStatus animated:YES];
                } tertiaryBlock:^{
-                    if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+                    if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared forceSecuritySignOutWithCompletion:nil];
                }];
                }];
                return;
@@ -485,7 +537,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                     weakSelf.pp_autoPresentProviderStatusOnNextRoot = YES;
                     [weakSelf setRoot:AppRootProviderStatus animated:YES];
                } secondaryBlock:^{
-                    if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+                    if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared forceSecuritySignOutWithCompletion:nil];
                }];
                }];
                return;
@@ -515,6 +567,16 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                                         error:nil];
 }
 
+- (NSString *)pp_rootOwnershipKeyForTarget:(AppRoot)target companyProfile:(nullable PPDeliveryCompanyProfile *)profile {
+     NSString *uid = [PPProSessionCoordinator.shared activeUID] ?: @"";
+     NSUInteger generation = PPProSessionCoordinator.shared.sessionGeneration;
+     BOOL recovery = PPProSessionCoordinator.shared.requiresTransitionRecovery;
+     NSString *companyID = profile.companyID ?: @"";
+     NSString *role = profile.role ?: @"";
+     return [NSString stringWithFormat:@"%ld|%@|%lu|%d|%@|%@",
+             (long)target, uid, (unsigned long)generation, recovery ? 1 : 0, companyID, role];
+}
+
 - (void)showDashboardWithDeliveryCompanyProfile:(PPDeliveryCompanyProfile *)profile animated:(BOOL)animated {
      if (!profile.companyID.length) {
           [self setRoot:AppRootProviderStatus animated:animated];
@@ -523,6 +585,13 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
      [self cancelPendingProAccessRouting];
      [self pp_rememberAuthorizedIdentity];
+     NSString *ownershipKey = [self pp_rootOwnershipKeyForTarget:AppRootDashboard companyProfile:profile];
+     if (self.currentRoot == AppRootDashboard &&
+         [self.pp_currentRootOwnershipKey isEqualToString:ownershipKey] &&
+         self.window.rootViewController) {
+          return;
+     }
+     self.pp_currentRootOwnershipKey = ownershipKey;
      self.currentRoot = AppRootDashboard;
      // Official root UITabBarController (replaces single UINavigationController)
      PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
@@ -536,12 +605,15 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           }
      }
      UIViewController *oldRoot = self.window.rootViewController;
+     if (oldRoot.presentedViewController) {
+          [oldRoot.presentedViewController dismissViewControllerAnimated:NO completion:nil];
+     }
      self.window.rootViewController = tabBar;
      PPProApplyThemeToWindow(self.window);
      [self.window makeKeyAndVisible];
+     [self pp_bringTransitionPrivacyCurtainToFrontIfVisible];
 
      if (animated && oldRoot) {
-          [oldRoot.presentedViewController dismissViewControllerAnimated:NO completion:nil];
           [UIView transitionWithView:self.window
                             duration:0.25
                              options:UIViewAnimationOptionTransitionCrossDissolve | UIViewAnimationOptionAllowAnimatedContent
@@ -934,7 +1006,10 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 }
 
 - (void)pp_setRoot:(AppRoot)target userModel:(UserModel * _Nullable)userModel animated:(BOOL)animated {
-     if (target == self.currentRoot && self.window.rootViewController) return;
+     NSString *ownershipKey = [self pp_rootOwnershipKeyForTarget:target companyProfile:nil];
+     if (target == self.currentRoot &&
+         [self.pp_currentRootOwnershipKey isEqualToString:ownershipKey] &&
+         self.window.rootViewController) return;
 
      // If transitioning away from splash, respect minimum display time
      if (self.currentRoot == AppRootSplash && target != AppRootSplash && self.pp_splashAppearDate) {
@@ -952,20 +1027,34 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           }
      }
 
+     self.pp_currentRootOwnershipKey = ownershipKey;
      self.currentRoot = target;
      
      if (target == AppRootDashboard) {
           PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
+          UIViewController *old = self.window.rootViewController;
+          if (old.presentedViewController) {
+               [old.presentedViewController dismissViewControllerAnimated:NO completion:nil];
+          }
           self.window.rootViewController = tabBar;
           PPProApplyThemeToWindow(self.window);
           [self.window makeKeyAndVisible];
+          [self pp_bringTransitionPrivacyCurtainToFrontIfVisible];
           [self pp_consumePendingNotificationRouteIfPossible];
           return;
      }
      UIViewController *root;
      switch (target) {
           case AppRootSplash:    root = [SplashViewController new]; break;
-          case AppRootLogin:     root = [AdminLoginViewController new]; break;
+          case AppRootLogin: {
+               AdminLoginViewController *loginVC = [AdminLoginViewController new];
+               loginVC.initialSelectedRememberedUID = self.pp_pendingReauthUID;
+               loginVC.isAddAccountFlow = self.pp_pendingAddAccountMode;
+               self.pp_pendingReauthUID = nil;
+               self.pp_pendingAddAccountMode = NO;
+               root = loginVC;
+               break;
+          }
           case AppRootDashboard: root = [[AdminDashboardViewController alloc] init]; break;
           case AppRootProviderStatus: {
                PPProviderApplicationStatusViewController *statusController = [[PPProviderApplicationStatusViewController alloc] init];
@@ -979,9 +1068,14 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      }
      
      PPNavigationController *nav = [[PPNavigationController alloc] initWithRootViewController:root];
+     UIViewController *old = self.window.rootViewController;
+     if (old.presentedViewController) {
+          [old.presentedViewController dismissViewControllerAnimated:NO completion:nil];
+     }
      self.window.rootViewController = nav;
      PPProApplyThemeToWindow(self.window);
      [self.window makeKeyAndVisible];
+     [self pp_bringTransitionPrivacyCurtainToFrontIfVisible];
      [self pp_consumePendingNotificationRouteIfPossible];
      
      return;
@@ -990,14 +1084,21 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
 
 - (void)pp_setRootDashboardWithUser:(UserModel *)model animated:(BOOL)animated {
+     (void)model;
+     NSString *ownershipKey = [self pp_rootOwnershipKeyForTarget:AppRootDashboard companyProfile:nil];
+     self.pp_currentRootOwnershipKey = ownershipKey;
+     self.currentRoot = AppRootDashboard;
      PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
      
      UIViewController *old = self.window.rootViewController;
+     if (old.presentedViewController) {
+          [old.presentedViewController dismissViewControllerAnimated:NO completion:nil];
+     }
      self.window.rootViewController = tabBar;
      PPProApplyThemeToWindow(self.window);
      [self.window makeKeyAndVisible];
+     [self pp_bringTransitionPrivacyCurtainToFrontIfVisible];
      if (animated && old) {
-          [old.presentedViewController dismissViewControllerAnimated:NO completion:nil];
           [UIView transitionWithView:self.window duration:0.25
                              options:UIViewAnimationOptionTransitionCrossDissolve|UIViewAnimationOptionAllowAnimatedContent
                           animations:nil completion:nil];
@@ -1046,7 +1147,7 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
                          }
                          if (!allowed) {
                               if (PPSceneUserDocIsBlocked(userDoc ?: @{})) {
-                                   [UserManager.shared signOut];
+                                   [UserManager.shared forceSecuritySignOutWithCompletion:nil];
                                    [weakSelf setRoot:AppRootLogin animated:YES];
                                    return;
                               }
@@ -1090,7 +1191,10 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 
 - (void)pp_installRoot:(AppRoot)target animated:(BOOL)animated generation:(NSUInteger)generation completion:(void (^ _Nullable)(void))completion {
      if (generation != self.pp_rootTransitionGeneration) return;
-     if (target == self.currentRoot && self.window.rootViewController) {
+     NSString *ownershipKey = [self pp_rootOwnershipKeyForTarget:target companyProfile:nil];
+     if (target == self.currentRoot &&
+         [self.pp_currentRootOwnershipKey isEqualToString:ownershipKey] &&
+         self.window.rootViewController) {
           if (completion) completion();
           return;
      }
@@ -1110,17 +1214,21 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
           }
      }
 
+     self.pp_currentRootOwnershipKey = ownershipKey;
      self.currentRoot = target;
      
      if (target == AppRootDashboard) {
           [self pp_rememberAuthorizedIdentity];
           PPProRootTabBarController *tabBar = [[PPProRootTabBarController alloc] init];
           UIViewController *old = self.window.rootViewController;
+          if (old.presentedViewController) {
+               [old.presentedViewController dismissViewControllerAnimated:NO completion:nil];
+          }
           self.window.rootViewController = tabBar;
           PPProApplyThemeToWindow(self.window);
           [self.window makeKeyAndVisible];
+          [self pp_bringTransitionPrivacyCurtainToFrontIfVisible];
           if (animated && old) {
-               [old.presentedViewController dismissViewControllerAnimated:NO completion:nil];
                [UIView transitionWithView:self.window
                                  duration:0.25
                                   options:UIViewAnimationOptionTransitionCrossDissolve|UIViewAnimationOptionAllowAnimatedContent
@@ -1136,7 +1244,15 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      UIViewController *root;
      switch (target) {
           case AppRootSplash:    root = [SplashViewController new]; break;
-          case AppRootLogin:     root = [AdminLoginViewController new]; break;
+          case AppRootLogin: {
+               AdminLoginViewController *loginVC = [AdminLoginViewController new];
+               loginVC.initialSelectedRememberedUID = self.pp_pendingReauthUID;
+               loginVC.isAddAccountFlow = self.pp_pendingAddAccountMode;
+               self.pp_pendingReauthUID = nil;
+               self.pp_pendingAddAccountMode = NO;
+               root = loginVC;
+               break;
+          }
           case AppRootDashboard: root = [[AdminDashboardViewController alloc] init]; break;
           case AppRootProviderStatus: {
                PPProviderApplicationStatusViewController *statusController = [[PPProviderApplicationStatusViewController alloc] init];
@@ -1151,10 +1267,15 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
      PPNavigationController *nav = [[PPNavigationController alloc] initWithRootViewController:root];
      
      UIViewController *old = self.window.rootViewController;
+     if (old.presentedViewController) {
+          [old.presentedViewController dismissViewControllerAnimated:NO completion:nil];
+     }
      self.window.rootViewController = nav;
+     PPProApplyThemeToWindow(self.window);
+     [self.window makeKeyAndVisible];
+     [self pp_bringTransitionPrivacyCurtainToFrontIfVisible];
      
      if (animated && old) {
-          [old.presentedViewController dismissViewControllerAnimated:NO completion:nil];
           [UIView transitionWithView:self.window
                             duration:0.25
                              options:UIViewAnimationOptionTransitionCrossDissolve|UIViewAnimationOptionAllowAnimatedContent
@@ -1239,25 +1360,292 @@ static void PPProApplyThemeToWindow(UIWindow *window) {
 }
 
 - (void)pp_clearAllYYCacheNamed:(NSString *)name {
-     YYCache *cache = [YYCache cacheWithName:name];
-     [cache removeAllObjectsWithBlock:^{
-          dispatch_async(dispatch_get_main_queue(), ^{
-               [PPToast toast:kLang(@"Cache cleared") style:PPToastStyleSuccess haptic:YES duration:2.0];
-          });
-     }];
+     [PPFunc pp_clearAllYYCacheNamed:name];
 }
 
 
 
 - (void)handleAuthChange {
+     if (self.currentRoot == AppRootLogin &&
+         [PPProSessionCoordinator.shared activeTransitionTicket] &&
+         ![PPProSessionCoordinator.shared currentUser] &&
+         ![PPProSessionCoordinator.shared requiresTransitionRecovery]) {
+          return;
+     }
      [self pp_applyAdminRoutingForAuthUser:[PPProSessionCoordinator.shared currentUser] animated:YES];
-     
 }
 
 - (void)pp_handleTransitionRecoveryRequired {
      dispatch_async(dispatch_get_main_queue(), ^{
+          [self pp_hideTransitionPrivacyCurtain];
           [self pp_applyAdminRoutingForAuthUser:nil animated:YES];
      });
+}
+
+#pragma mark - Transition Privacy Curtain & Workspace Switching
+
+- (NSString *)pp_localizedTransitionStatusTextForKey:(nullable NSString *)statusKey {
+     NSString *key = @"ProIdentityTransition_Default";
+     if ([statusKey isEqualToString:@"preflight"]) key = @"ProIdentityTransition_Preflight";
+     else if ([statusKey isEqualToString:@"drain"]) key = @"ProIdentityTransition_Drain";
+     else if ([statusKey isEqualToString:@"freeze"]) key = @"ProIdentityTransition_Freeze";
+     else if ([statusKey isEqualToString:@"detach_notifications"]) key = @"ProIdentityTransition_Notifications";
+     else if ([statusKey isEqualToString:@"suspended"]) key = @"ProIdentityTransition_Suspended";
+     else if ([statusKey isEqualToString:@"authenticating"]) key = @"ProIdentityTransition_Authenticating";
+     else if ([statusKey isEqualToString:@"installed"]) key = @"ProIdentityTransition_Installed";
+     else if ([statusKey isEqualToString:@"restore"]) key = @"ProIdentityTransition_Restore";
+     else if ([statusKey isEqualToString:@"add_account"]) key = @"ProIdentityTransition_AddAccount";
+     else if ([statusKey isEqualToString:@"sign_out_all"]) key = @"ProIdentityTransition_SignOutAll";
+     NSString *resolved = kLang(key);
+     return (resolved.length > 0 && ![resolved isEqualToString:key]) ? resolved : kLang(@"Please wait");
+}
+
+- (void)pp_showTransitionPrivacyCurtainWithStatusKey:(nullable NSString *)statusKey {
+     if (!self.window) return;
+     if (!self.pp_transitionPrivacyCurtain) {
+          UIView *curtain = [[UIView alloc] initWithFrame:self.window.bounds];
+          curtain.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+          curtain.userInteractionEnabled = YES;
+          curtain.accessibilityViewIsModal = YES;
+          curtain.accessibilityIdentifier = @"pro.transition.privacyCurtain";
+          curtain.semanticContentAttribute = [Language semanticAttributeForCurrentLanguage];
+
+          if (UIAccessibilityIsReduceTransparencyEnabled()) {
+               curtain.backgroundColor = [UIColor ppBackground];
+          } else {
+               curtain.backgroundColor = UIColor.clearColor;
+               UIVisualEffectView *blur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial]];
+               blur.frame = curtain.bounds;
+               blur.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+               [curtain addSubview:blur];
+          }
+
+          UIView *badge = [[UIView alloc] init];
+          badge.translatesAutoresizingMaskIntoConstraints = NO;
+          badge.backgroundColor = [UIColor ppSurface];
+          badge.layer.cornerRadius = 22.0;
+          if (@available(iOS 13.0, *)) {
+               badge.layer.cornerCurve = kCACornerCurveContinuous;
+          }
+          badge.layer.borderWidth = 1.0;
+          badge.layer.borderColor = [UIColor ppSurfaceBorder].CGColor;
+          badge.layer.shadowColor = [UIColor ppShadow].CGColor;
+          badge.layer.shadowOpacity = 0.14;
+          badge.layer.shadowRadius = 20.0;
+          badge.layer.shadowOffset = CGSizeMake(0.0, 10.0);
+
+          UIImageView *shield = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"lock.shield.fill"]];
+          shield.translatesAutoresizingMaskIntoConstraints = NO;
+          shield.tintColor = [UIColor ppPrimary];
+          shield.contentMode = UIViewContentModeScaleAspectFit;
+
+          UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+          spinner.translatesAutoresizingMaskIntoConstraints = NO;
+          spinner.color = [UIColor ppPrimary];
+          [spinner startAnimating];
+
+          UILabel *label = [[UILabel alloc] init];
+          label.translatesAutoresizingMaskIntoConstraints = NO;
+          label.font = [UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];
+          label.adjustsFontForContentSizeCategory = YES;
+          label.textColor = [UIColor ppTextPrimary];
+          label.textAlignment = NSTextAlignmentCenter;
+          label.numberOfLines = 0;
+
+          UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[shield, label, spinner]];
+          stack.translatesAutoresizingMaskIntoConstraints = NO;
+          stack.axis = UILayoutConstraintAxisVertical;
+          stack.alignment = UIStackViewAlignmentCenter;
+          stack.spacing = 12.0;
+          [badge addSubview:stack];
+          [curtain addSubview:badge];
+
+          [NSLayoutConstraint activateConstraints:@[
+               [shield.widthAnchor constraintEqualToConstant:34.0],
+               [shield.heightAnchor constraintEqualToConstant:34.0],
+               [badge.centerXAnchor constraintEqualToAnchor:curtain.centerXAnchor],
+               [badge.centerYAnchor constraintEqualToAnchor:curtain.centerYAnchor],
+               [badge.leadingAnchor constraintGreaterThanOrEqualToAnchor:curtain.safeAreaLayoutGuide.leadingAnchor constant:24.0],
+               [badge.trailingAnchor constraintLessThanOrEqualToAnchor:curtain.safeAreaLayoutGuide.trailingAnchor constant:-24.0],
+               [badge.widthAnchor constraintLessThanOrEqualToConstant:360.0],
+               [stack.topAnchor constraintEqualToAnchor:badge.topAnchor constant:22.0],
+               [stack.bottomAnchor constraintEqualToAnchor:badge.bottomAnchor constant:-22.0],
+               [stack.leadingAnchor constraintEqualToAnchor:badge.leadingAnchor constant:22.0],
+               [stack.trailingAnchor constraintEqualToAnchor:badge.trailingAnchor constant:-22.0],
+          ]];
+
+          self.pp_transitionPrivacyCurtain = curtain;
+          self.pp_transitionCurtainStatusLabel = label;
+          curtain.alpha = 0.0;
+          [self.window addSubview:curtain];
+          if (UIAccessibilityIsReduceMotionEnabled()) {
+               curtain.alpha = 1.0;
+          } else {
+               [UIView animateWithDuration:0.16 animations:^{
+                    curtain.alpha = 1.0;
+               }];
+          }
+     }
+     self.pp_transitionCurtainStatusLabel.text = [self pp_localizedTransitionStatusTextForKey:statusKey];
+     self.pp_transitionPrivacyCurtain.accessibilityLabel = self.pp_transitionCurtainStatusLabel.text;
+     [self.window bringSubviewToFront:self.pp_transitionPrivacyCurtain];
+}
+
+- (void)pp_bringTransitionPrivacyCurtainToFrontIfVisible {
+     if (self.pp_transitionPrivacyCurtain && self.pp_transitionPrivacyCurtain.superview == self.window) {
+          [self.window bringSubviewToFront:self.pp_transitionPrivacyCurtain];
+     }
+}
+
+- (void)pp_hideTransitionPrivacyCurtain {
+     UIView *curtain = self.pp_transitionPrivacyCurtain;
+     if (!curtain) return;
+     self.pp_transitionPrivacyCurtain = nil;
+     self.pp_transitionCurtainStatusLabel = nil;
+     if (UIAccessibilityIsReduceMotionEnabled()) {
+          [curtain removeFromSuperview];
+     } else {
+          [UIView animateWithDuration:0.18 animations:^{
+               curtain.alpha = 0.0;
+          } completion:^(__unused BOOL finished) {
+               [curtain removeFromSuperview];
+          }];
+     }
+}
+
+- (void)pp_handleTransitionWillBegin:(NSNotification *)note {
+     dispatch_async(dispatch_get_main_queue(), ^{
+          NSString *statusKey = [note.userInfo[@"statusKey"] isKindOfClass:NSString.class] ? note.userInfo[@"statusKey"] : @"preflight";
+          [self pp_showTransitionPrivacyCurtainWithStatusKey:statusKey];
+     });
+}
+
+- (void)pp_handleTransitionPhaseDidChange:(NSNotification *)note {
+     dispatch_async(dispatch_get_main_queue(), ^{
+          NSString *statusKey = [note.userInfo[@"statusKey"] isKindOfClass:NSString.class] ? note.userInfo[@"statusKey"] : nil;
+          if (self.pp_transitionPrivacyCurtain) {
+               [self pp_showTransitionPrivacyCurtainWithStatusKey:statusKey];
+          }
+     });
+}
+
+- (void)pp_handleSessionDidSuspend:(__unused NSNotification *)note {
+     dispatch_async(dispatch_get_main_queue(), ^{
+          self.pp_currentRootOwnershipKey = nil;
+          self.pp_pendingNotificationRoutePayload = nil;
+          self.pp_pendingNotificationEpoch = nil;
+          self.pp_pendingCompanyDeliveryPayload = nil;
+          self.pp_pendingCompanyDeliveryEpoch = nil;
+          self.pp_companyResolutionID = nil;
+          self.pp_isResolvingCompanyDeliveryNotification = NO;
+          self.pp_proAccessRoutingGeneration += 1;
+          UIViewController *root = self.window.rootViewController;
+          if (root.presentedViewController && !root.presentedViewController.isBeingDismissed) {
+               [root.presentedViewController dismissViewControllerAnimated:NO completion:nil];
+          }
+          [self pp_showTransitionPrivacyCurtainWithStatusKey:@"suspended"];
+     });
+}
+
+- (void)pp_handleSessionDidCommitOrRollback:(__unused NSNotification *)note {
+     dispatch_async(dispatch_get_main_queue(), ^{
+          [self pp_hideTransitionPrivacyCurtain];
+     });
+}
+
+- (void)beginAddAccountTransitionAnimated:(BOOL)animated {
+     NSString *activeUID = [PPProSessionCoordinator.shared activeUID];
+     [self pp_showTransitionPrivacyCurtainWithStatusKey:@"add_account"];
+     __weak typeof(self) weakSelf = self;
+     [PPProSessionCoordinator.shared beginProvisionalAddAccountFromUID:activeUID
+                                                            completion:^(BOOL allowed,
+                                                                         __unused NSUUID * _Nullable ticket,
+                                                                         __unused id<PPProSessionSlotHandle> _Nullable provisionalSlot,
+                                                                         NSError * _Nullable error) {
+          dispatch_async(dispatch_get_main_queue(), ^{
+               __strong typeof(weakSelf) strongSelf = weakSelf;
+               if (!strongSelf) return;
+               [strongSelf pp_hideTransitionPrivacyCurtain];
+               if (!allowed) {
+                    UIViewController *presenter = [strongSelf pp_topViewController];
+                    if (presenter) {
+                         [PPAlertHelper showErrorIn:presenter
+                                              title:kLang(@"Error")
+                                           subtitle:error.localizedDescription ?: kLang(@"StatusLoginFailed")];
+                    }
+                    return;
+               }
+               strongSelf.pp_pendingAddAccountMode = YES;
+               strongSelf.pp_pendingReauthUID = nil;
+               strongSelf.pp_currentRootOwnershipKey = nil;
+               [strongSelf setRoot:AppRootLogin animated:animated];
+          });
+     }];
+}
+
+- (void)switchToRememberedAccountUID:(NSString *)uid animated:(BOOL)animated {
+     NSString *safeUID = PPSceneTrimmed(uid);
+     if (!safeUID.length) return;
+     NSString *activeUID = [PPProSessionCoordinator.shared activeUID];
+     [self pp_showTransitionPrivacyCurtainWithStatusKey:@"preflight"];
+     __weak typeof(self) weakSelf = self;
+     [PPProSessionCoordinator.shared fastSwitchToRememberedUID:safeUID
+                                                        fromUID:activeUID
+                                                     completion:^(BOOL switched,
+                                                                  BOOL requiresReauth,
+                                                                  __unused NSUUID * _Nullable ticket,
+                                                                  __unused id<PPProSessionSlotHandle> _Nullable stagedSlot,
+                                                                  NSError * _Nullable error) {
+          dispatch_async(dispatch_get_main_queue(), ^{
+               __strong typeof(weakSelf) strongSelf = weakSelf;
+               if (!strongSelf) return;
+               [strongSelf pp_hideTransitionPrivacyCurtain];
+               if (switched) {
+                    strongSelf.pp_currentRootOwnershipKey = nil;
+                    [strongSelf pp_applyAdminRoutingForAuthUser:[PPProSessionCoordinator.shared currentUser] animated:animated];
+                    return;
+               }
+               if (requiresReauth) {
+                    strongSelf.pp_pendingReauthUID = safeUID;
+                    strongSelf.pp_pendingAddAccountMode = NO;
+                    strongSelf.pp_currentRootOwnershipKey = nil;
+                    [strongSelf setRoot:AppRootLogin animated:animated];
+                    return;
+               }
+               UIViewController *presenter = [strongSelf pp_topViewController];
+               if (presenter) {
+                    [PPAlertHelper showErrorIn:presenter
+                                         title:kLang(@"Error")
+                                      subtitle:error.localizedDescription ?: kLang(@"StatusLoginFailed")];
+               }
+          });
+     }];
+}
+
+- (void)signOutAllAccountsAnimated:(BOOL)animated {
+     [self pp_showTransitionPrivacyCurtainWithStatusKey:@"sign_out_all"];
+     __weak typeof(self) weakSelf = self;
+     [PPProSessionCoordinator.shared signOutAllAccountsWithReason:@"sign_out_all"
+                                                       completion:^(BOOL signedOutAll, NSError * _Nullable error) {
+          dispatch_async(dispatch_get_main_queue(), ^{
+               __strong typeof(weakSelf) strongSelf = weakSelf;
+               if (!strongSelf) return;
+               [strongSelf pp_hideTransitionPrivacyCurtain];
+               if (!signedOutAll) {
+                    UIViewController *presenter = [strongSelf pp_topViewController];
+                    if (presenter) {
+                         [PPAlertHelper showErrorIn:presenter
+                                              title:kLang(@"Error")
+                                           subtitle:error.localizedDescription ?: kLang(@"StatusLoginFailed")];
+                    }
+                    return;
+               }
+               strongSelf.pp_pendingReauthUID = nil;
+               strongSelf.pp_pendingAddAccountMode = NO;
+               strongSelf.pp_currentRootOwnershipKey = nil;
+               [strongSelf setRoot:AppRootLogin animated:animated];
+          });
+     }];
 }
 
 #pragma mark - Public: called by [Language userSelectedLanguage:]

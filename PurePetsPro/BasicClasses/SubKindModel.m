@@ -135,7 +135,6 @@
 
     FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
     if (!db) {
-        if (completion) completion([NSError errorWithDomain:@"Input" code:401 userInfo:@{NSLocalizedDescriptionKey: @"Session unavailable"}]);
         return;
     }
     FIRDocumentReference *doc = [[db collectionWithPath:@"MainKindsCollection"] documentWithPath:mainID];
@@ -290,7 +289,6 @@
 
     FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
     if (!db) {
-        if (completion) completion([NSError errorWithDomain:@"Input" code:401 userInfo:@{NSLocalizedDescriptionKey: @"Session unavailable"}]);
         return;
     }
 

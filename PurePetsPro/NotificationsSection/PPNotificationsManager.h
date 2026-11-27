@@ -10,6 +10,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+FOUNDATION_EXPORT NSString * const kPPNotificationDeactivationReasonLogout;
+FOUNDATION_EXPORT NSString * const kPPNotificationDeactivationReasonAccountSwitch;
+
 typedef NS_ENUM(NSInteger, PPNotificationAudience) {
     PPNotificationAudienceSpecificUsers = 0,
     PPNotificationAudienceAllUsers,

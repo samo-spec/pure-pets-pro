@@ -9,6 +9,7 @@
 
 #import "MainKindsModel.h"
 #import "PPFirebaseCompat.h"
+#import "YYKit.h"
 @implementation MainKindsModel
 
 + (NSString *)kindNameForID:(NSInteger)kindID inArray:(NSArray<MainKindsModel *> *)kindsArray {

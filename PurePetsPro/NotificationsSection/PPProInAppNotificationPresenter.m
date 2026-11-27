@@ -54,12 +54,40 @@ static NSString *PPProNoticeLocalizedValue(NSString *key, NSString *fallback)
 
 static BOOL PPProNoticeBoolPreference(NSString *key, BOOL defaultValue)
 {
-    NSString *scopedKey = [PPProSessionCoordinator scopedDefaultsKey:key forUID:[PPProSessionCoordinator.shared activeUID]];
+    NSString *activeUID = [PPProSessionCoordinator.shared activeUID];
+    if (activeUID.length == 0) {
+        return defaultValue;
+    }
+    NSString *scopedKey = [PPProSessionCoordinator scopedDefaultsKey:key forUID:activeUID];
     id value = [[NSUserDefaults standardUserDefaults] objectForKey:scopedKey];
     if (value == nil) {
         return defaultValue;
     }
     return [[NSUserDefaults standardUserDefaults] boolForKey:scopedKey];
+}
+
+static NSString * _Nullable PPProNoticePayloadRecipientUID(NSDictionary * _Nullable payload)
+{
+    if (![payload isKindOfClass:NSDictionary.class]) return nil;
+    NSArray<NSString *> *keys = @[@"targetUid", @"targetUID", @"targetUserID", @"recipientUid", @"recipientUID", @"uid", @"userId", @"userID"];
+    for (NSString *key in keys) {
+        id val = payload[key];
+        if ([val isKindOfClass:NSString.class]) {
+            NSString *trimmed = [(NSString *)val stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+            if (trimmed.length > 0) return trimmed;
+        }
+    }
+    NSDictionary *nested = [payload[@"data"] isKindOfClass:NSDictionary.class] ? payload[@"data"] : nil;
+    if (nested) {
+        for (NSString *key in keys) {
+            id val = nested[key];
+            if ([val isKindOfClass:NSString.class]) {
+                NSString *trimmed = [(NSString *)val stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                if (trimmed.length > 0) return trimmed;
+            }
+        }
+    }
+    return nil;
 }
 
 static SceneDelegate *PPProNoticeActiveSceneDelegate(void)
@@ -785,8 +813,35 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         presenter = [[PPProInAppNotificationPresenter alloc] init];
+        [presenter pp_registerSessionLifecycleHandlers];
     });
     return presenter;
+}
+
+- (void)pp_registerSessionLifecycleHandlers
+{
+    __weak typeof(self) weakSelf = self;
+    [[NSNotificationCenter defaultCenter] addObserverForName:PPProSessionDidSuspendNotification
+                                                      object:nil
+                                                       queue:[NSOperationQueue mainQueue]
+                                                  usingBlock:^(__unused NSNotification *note) {
+        [weakSelf pp_teardownForSessionSuspend];
+    }];
+    [[PPProSessionCoordinator shared] registerSessionTeardownHandler:^(__unused NSString *reason) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf pp_teardownForSessionSuspend];
+        });
+    } forKey:@"PPProInAppNotificationPresenter"];
+}
+
+- (void)pp_teardownForSessionSuspend
+{
+    self.soundRequestGeneration += 1;
+    [self.notificationSoundPlayer stop];
+    self.notificationSoundPlayer = nil;
+    self.currentPayload = nil;
+    [self pp_cancelDismissWork];
+    [self pp_hideBannerAnimated:NO completion:nil];
 }
 
 + (BOOL)notificationPreferencesAllowPayload:(NSDictionary<NSString *, id> *)payload
@@ -808,7 +863,17 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
 
 - (void)playNotificationSound
 {
+    if ([PPProSessionCoordinator.shared isSuspendedOrLocked] ||
+        [PPProSessionCoordinator.shared requiresTransitionRecovery] ||
+        [PPProSessionCoordinator.shared activeUID].length == 0) {
+        return;
+    }
     dispatch_async(dispatch_get_main_queue(), ^{
+        if ([PPProSessionCoordinator.shared isSuspendedOrLocked] ||
+            [PPProSessionCoordinator.shared requiresTransitionRecovery] ||
+            [PPProSessionCoordinator.shared activeUID].length == 0) {
+            return;
+        }
         if (!PPProNoticeBoolPreference(kPPProNotifMasterPreferenceKey, YES) ||
             !PPProNoticeBoolPreference(kPPProNotifSoundPreferenceKey, YES)) {
             return;
@@ -955,12 +1020,29 @@ static NSString *PPProNoticeCategoryPreferenceKeyForPayload(NSDictionary<NSStrin
     if (title.length == 0 && subtitle.length == 0) {
         return;
     }
+    NSString *activeUID = [PPProSessionCoordinator.shared activeUID];
+    if ([PPProSessionCoordinator.shared isSuspendedOrLocked] ||
+        [PPProSessionCoordinator.shared requiresTransitionRecovery] ||
+        activeUID.length == 0) {
+        return;
+    }
+    NSString *recipientUID = PPProNoticePayloadRecipientUID(payload);
+    if (recipientUID.length > 0 && ![recipientUID isEqualToString:activeUID]) {
+        return;
+    }
     if (![PPProInAppNotificationPresenter notificationPreferencesAllowPayload:payload]) {
         return;
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
         if (UIApplication.sharedApplication.applicationState == UIApplicationStateBackground) {
+            return;
+        }
+        NSString *currentActiveUID = [PPProSessionCoordinator.shared activeUID];
+        if ([PPProSessionCoordinator.shared isSuspendedOrLocked] ||
+            [PPProSessionCoordinator.shared requiresTransitionRecovery] ||
+            currentActiveUID.length == 0 ||
+            ![currentActiveUID isEqualToString:activeUID]) {
             return;
         }
 

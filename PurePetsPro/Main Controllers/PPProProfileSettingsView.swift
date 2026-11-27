@@ -75,6 +75,11 @@ final class PPProProfileSettingsViewModel: ObservableObject {
     @Published var showAppearanceSheet: Bool = false
     @Published var showLanguageAlert: Bool = false
     @Published var showLogoutAlert: Bool = false
+    @Published var multiAccountEnabled: Bool = false
+    @Published var activeUID: String = ""
+    @Published var rememberedAccounts: [[String: String]] = []
+    @Published var showSignOutAllAlert: Bool = false
+    @Published var accountPendingRemoval: [String: String]? = nil
 
     var onSave: ((String, String, String) -> Void)?
     var onChangeAvatar: (() -> Void)?
@@ -84,6 +89,10 @@ final class PPProProfileSettingsViewModel: ObservableObject {
     var onSelectLanguage: ((String) -> Void)?
     var onLogout: (() -> Void)?
     var onDismiss: (() -> Void)?
+    var onSwitchAccount: ((String) -> Void)?
+    var onAddAccount: (() -> Void)?
+    var onSignOutAll: (() -> Void)?
+    var onRemoveRememberedAccount: ((String) -> Void)?
 
     init(snapshot: PPProProfileSnapshot) {
         self.snapshot = snapshot
@@ -171,6 +180,39 @@ public struct PPProProfileSettingsView: View {
             Text(Language.isRTL()
                  ? "هل أنت متأكد من تسجيل الخروج من جلسة المشغل الحالية في بيور بتس برو؟"
                  : "Are you sure you want to sign out from your active PurePets Pro operator session?")
+        }
+        .confirmationDialog(
+            Language.get("ProIdentitySignOutAllTitle", alter: nil),
+            isPresented: $viewModel.showSignOutAllAlert,
+            titleVisibility: .visible
+        ) {
+            Button(Language.get("ProIdentitySignOutAll", alter: nil), role: .destructive) {
+                viewModel.onSignOutAll?()
+            }
+            Button(Language.get("Cancel", alter: nil), role: .cancel) {}
+        } message: {
+            Text(Language.get("ProIdentitySignOutAllMessage", alter: nil))
+        }
+        .confirmationDialog(
+            Language.get("ProIdentityRemoveAccountTitle", alter: nil),
+            isPresented: Binding(
+                get: { viewModel.accountPendingRemoval != nil },
+                set: { if !$0 { viewModel.accountPendingRemoval = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button(Language.get("ProIdentityRemoveAccount", alter: nil), role: .destructive) {
+                if let uid = viewModel.accountPendingRemoval?["uid"], !uid.isEmpty {
+                    viewModel.onRemoveRememberedAccount?(uid)
+                }
+                viewModel.accountPendingRemoval = nil
+            }
+            Button(Language.get("Cancel", alter: nil), role: .cancel) {
+                viewModel.accountPendingRemoval = nil
+            }
+        } message: {
+            let label = viewModel.accountPendingRemoval?["label"] ?? ""
+            Text(String(format: Language.get("ProIdentityRemoveAccountMessage", alter: nil), label))
         }
     }
 
@@ -1038,6 +1080,10 @@ public struct PPProProfileSettingsView: View {
                     .background(Color.green.opacity(0.12), in: Capsule())
             }
 
+            if viewModel.multiAccountEnabled {
+                multiAccountGovernanceSection
+            }
+
             // Sign Out Button
             Button {
                 UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -1063,6 +1109,139 @@ public struct PPProProfileSettingsView: View {
         .background(Color(uiColor: .ppSurface), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(uiColor: .ppSurfaceBorder).opacity(0.8), lineWidth: 1))
         .shadow(color: Color.black.opacity(colorScheme == .dark ? 0.35 : 0.04), radius: 10, y: 3)
+    }
+
+    private func ppProAccountMethodSymbol(_ method: String?) -> String {
+        switch method ?? "" {
+        case "phone":
+            return "phone.fill"
+        case "apple.com":
+            return "applelogo"
+        default:
+            return "person.crop.circle.fill"
+        }
+    }
+
+    @ViewBuilder
+    private var multiAccountGovernanceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Divider().padding(.vertical, 2)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(Language.get("ProIdentityMultiAccountTitle", alter: nil))
+                    .font(PPFont.bold(13, relativeTo: .subheadline))
+                    .foregroundColor(Color(uiColor: .ppTextPrimary))
+                Text(Language.get("ProIdentityMultiAccountSubtitle", alter: nil))
+                    .font(PPFont.regular(11.5, relativeTo: .caption))
+                    .foregroundColor(Color(uiColor: .ppTextSecondary))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            ForEach(viewModel.rememberedAccounts.compactMap { $0["uid"] }, id: \.self) { uid in
+                if let account = viewModel.rememberedAccounts.first(where: { $0["uid"] == uid }) {
+                    let isCurrent = !viewModel.activeUID.isEmpty && uid == viewModel.activeUID
+                    let status = account["sessionStatus"] ?? ""
+                    let isReady = isCurrent || status == "active" || status == "available"
+
+                    HStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill(Color(uiColor: .ppPrimary).opacity(0.12))
+                                .frame(width: 34, height: 34)
+                            Image(systemName: ppProAccountMethodSymbol(account["method"]))
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(Color(uiColor: .ppPrimary))
+                        }
+                        .accessibilityHidden(true)
+
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(account["label"] ?? "")
+                                .font(PPFont.medium(13, relativeTo: .subheadline))
+                                .foregroundColor(Color(uiColor: .ppTextPrimary))
+                                .environment(\.layoutDirection, .leftToRight)
+                                .lineLimit(1)
+
+                            if isCurrent {
+                                Text(Language.get("ProIdentityCurrentAccountBadge", alter: nil))
+                                    .font(PPFont.bold(10, relativeTo: .caption2))
+                                    .foregroundColor(.green)
+                            } else {
+                                Text(Language.get(isReady ? "ProIdentityStatusActive" : "ProIdentityStatusReauth", alter: nil))
+                                    .font(PPFont.bold(10, relativeTo: .caption2))
+                                    .foregroundColor(isReady ? .green : .orange)
+                            }
+                        }
+
+                        Spacer(minLength: 6)
+
+                        if !isCurrent {
+                            Button {
+                                UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                                viewModel.onSwitchAccount?(uid)
+                            } label: {
+                                Text(Language.get(isReady ? "ProIdentitySwitchAction" : "ProIdentityVerifyAction", alter: nil))
+                                    .font(PPFont.bold(11.5, relativeTo: .caption))
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 12)
+                                    .frame(minHeight: 36)
+                                    .background(Color(uiColor: .ppPrimary), in: Capsule())
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .accessibilityIdentifier("pro.profile.switchAccount")
+
+                            Button {
+                                viewModel.accountPendingRemoval = account
+                            } label: {
+                                Image(systemName: "trash")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .foregroundColor(Color(uiColor: .ppTextSecondary))
+                                    .frame(minWidth: 36, minHeight: 36)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                            .accessibilityLabel(Language.get("ProIdentityRemoveAccount", alter: nil))
+                            .accessibilityIdentifier("pro.profile.removeAccount")
+                        }
+                    }
+                    .padding(10)
+                    .background(Color(uiColor: .ppBackground).opacity(0.65), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(isCurrent ? Color.green.opacity(0.45) : Color(uiColor: .ppSurfaceBorder).opacity(0.7), lineWidth: isCurrent ? 1.2 : 0.8)
+                    )
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    viewModel.onAddAccount?()
+                } label: {
+                    Label(Language.get("ProIdentityAddAccountTitle", alter: nil), systemImage: "person.badge.plus")
+                        .font(PPFont.bold(13, relativeTo: .subheadline))
+                        .foregroundColor(Color(uiColor: .ppPrimary))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                        .background(Color(uiColor: .ppPrimary).opacity(0.10), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityIdentifier("pro.profile.addAccount")
+
+                if viewModel.rememberedAccounts.count > 1 {
+                    Button {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        viewModel.showSignOutAllAlert = true
+                    } label: {
+                        Text(Language.get("ProIdentitySignOutAll", alter: nil))
+                            .font(PPFont.bold(12.5, relativeTo: .caption))
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 44)
+                            .background(Color.red.opacity(0.09), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .accessibilityIdentifier("pro.profile.signOutAll")
+                }
+            }
+        }
     }
 
     // MARK: - Reusable Section Header
@@ -1139,6 +1318,32 @@ public final class PPProProfileSettingsHostController: UIViewController {
 
     @objc public func setUploadingAvatar(_ uploading: Bool) {
         viewModel.isUploadingAvatar = uploading
+    }
+
+    @objc public func configureMultiAccountEnabled(
+        _ enabled: Bool,
+        activeUID: String,
+        rememberedAccounts: [[String: String]],
+        onSwitchAccount: @escaping (String) -> Void,
+        onAddAccount: @escaping () -> Void,
+        onSignOutAll: @escaping () -> Void,
+        onRemoveRememberedAccount: @escaping (String) -> Void
+    ) {
+        viewModel.onSwitchAccount = onSwitchAccount
+        viewModel.onAddAccount = onAddAccount
+        viewModel.onSignOutAll = onSignOutAll
+        viewModel.onRemoveRememberedAccount = onRemoveRememberedAccount
+        updateRememberedAccounts(rememberedAccounts, activeUID: activeUID, multiAccountEnabled: enabled)
+    }
+
+    @objc public func updateRememberedAccounts(
+        _ accounts: [[String: String]],
+        activeUID: String,
+        multiAccountEnabled: Bool
+    ) {
+        viewModel.multiAccountEnabled = multiAccountEnabled
+        viewModel.activeUID = activeUID
+        viewModel.rememberedAccounts = accounts.filter { !($0["uid"] ?? "").isEmpty && !($0["label"] ?? "").isEmpty }
     }
 }
 

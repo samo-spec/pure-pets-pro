@@ -194,23 +194,57 @@ static NSError *PPServiceError(NSInteger code, NSString *message) {
     NSString *path = [NSString stringWithFormat:@"services/%@.jpg", serviceID];
     FIRStorageReference *ref = [[storage reference] child:path];
 
+    NSString *uploadUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    if (uploadUID.length == 0 || [PPProSessionCoordinator.shared isSuspendedOrLocked]) {
+        if (completion) completion(@"");
+        return;
+    }
+
     // Explicit JPEG contentType for Storage security rules
     FIRStorageMetadata *meta = [[FIRStorageMetadata alloc] init];
     meta.contentType = @"image/jpeg";
     meta.customMetadata = @{
-        @"uploaded_by": [PPProSessionCoordinator.shared activeUID] ?: @"",
+        @"uploaded_by": uploadUID,
         @"entity_type": @"service",
         @"entity_id": serviceID ?: @""
     };
 
-    [ref putData:imageData metadata:meta completion:^(FIRStorageMetadata * _Nullable metadata, NSError * _Nullable error) {
-        if (error) {
-            DLog(@"[PPServiceManager] image upload error: %@", error.localizedDescription);
-            if (completion) completion(@"");
+    __block BOOL didComplete = NO;
+    __block id suspendObserver = nil;
+    FIRStorageUploadTask *task = [ref putData:imageData metadata:meta];
+    suspendObserver = [[NSNotificationCenter defaultCenter] addObserverForName:PPProSessionDidSuspendNotification
+                                                                        object:nil
+                                                                         queue:[NSOperationQueue mainQueue]
+                                                                    usingBlock:^(__unused NSNotification *note) {
+        [task cancel];
+    }];
+    void (^finishWithURL)(NSString *) = ^(NSString *urlString) {
+        if (didComplete) return;
+        didComplete = YES;
+        if (suspendObserver) {
+            [[NSNotificationCenter defaultCenter] removeObserver:suspendObserver];
+            suspendObserver = nil;
+        }
+        if (completion) completion(urlString ?: @"");
+    };
+    [task observeStatus:FIRStorageTaskStatusFailure handler:^(FIRStorageTaskSnapshot *snapshot) {
+        DLog(@"[PPServiceManager] image upload error: %@", snapshot.error.localizedDescription);
+        finishWithURL(@"");
+    }];
+    [task observeStatus:FIRStorageTaskStatusSuccess handler:^(__unused FIRStorageTaskSnapshot *snapshot) {
+        if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:uploadUID] ||
+            [PPProSessionCoordinator.shared isSuspendedOrLocked]) {
+            finishWithURL(@"");
             return;
         }
         [ref downloadURLWithCompletion:^(NSURL * _Nullable URL, NSError * _Nullable error) {
-            if (completion) completion(URL.absoluteString ?: @"");
+            (void)error;
+            if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:uploadUID] ||
+                [PPProSessionCoordinator.shared isSuspendedOrLocked]) {
+                finishWithURL(@"");
+                return;
+            }
+            finishWithURL(URL.absoluteString ?: @"");
         }];
     }];
 }
@@ -219,12 +253,16 @@ static NSError *PPServiceError(NSInteger code, NSString *message) {
 
 static NSString * const kBookingsStoragePrefix = @"pp_provider_service_bookings_v1_";
 
-- (NSString *)_bookingsStorageKeyForOwner:(NSString *)ownerID {
-    return [NSString stringWithFormat:@"%@%@", kBookingsStoragePrefix, ownerID ?: @"default"];
+- (nullable NSString *)_bookingsStorageKeyForOwner:(NSString *)ownerID {
+    NSString *trimmed = [ownerID stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (trimmed.length == 0) return nil;
+    return [NSString stringWithFormat:@"%@%@", kBookingsStoragePrefix, trimmed];
 }
 
 - (NSArray<PPServiceBookingItem *> *)_loadCachedBookingsForOwner:(NSString *)ownerID {
+    if ([PPProSessionCoordinator.shared isSuspendedOrLocked]) return @[];
     NSString *key = [self _bookingsStorageKeyForOwner:ownerID];
+    if (key.length == 0) return @[];
     NSArray *raw = [[NSUserDefaults standardUserDefaults] objectForKey:key];
     if ([raw isKindOfClass:[NSArray class]] && raw.count > 0) {
         NSMutableArray<PPServiceBookingItem *> *items = [NSMutableArray arrayWithCapacity:raw.count];
@@ -334,7 +372,9 @@ static NSString * const kBookingsStoragePrefix = @"pp_provider_service_bookings_
 }
 
 - (void)_saveBookingsToCache:(NSArray<PPServiceBookingItem *> *)bookings forOwner:(NSString *)ownerID {
+    if ([PPProSessionCoordinator.shared isSuspendedOrLocked]) return;
     NSString *key = [self _bookingsStorageKeyForOwner:ownerID];
+    if (key.length == 0) return;
     NSMutableArray *raw = [NSMutableArray arrayWithCapacity:bookings.count];
     for (PPServiceBookingItem *item in bookings) {
         [raw addObject:[item toDictionary]];

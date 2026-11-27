@@ -144,6 +144,12 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
           completion:(PPDeliveryCompanyActionCompletion)completion {
     FIRUser *currentUser = [PPProSessionCoordinator.shared currentUser];
     FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
+    BOOL stagedDiscovery = (!currentUser && [name isEqualToString:PPDCFunctionGetMyCompanies] &&
+                            [PPProSessionCoordinator.shared stagedAuthenticatedUID].length > 0);
+    if (stagedDiscovery) {
+        currentUser = [PPProSessionCoordinator.shared stagedAuthenticatedUser];
+        functions = [PPProSessionCoordinator.shared bootstrapFunctionsForStagedSlot];
+    }
     if (!currentUser || !functions) {
         dispatch_async(dispatch_get_main_queue(), ^{
             NSError *authError = [NSError errorWithDomain:@"PurePetsPro.DeliveryCompany"
@@ -257,6 +263,9 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
 
 - (void)discoverCompanyMembershipsWithCompletion:(void(^)(NSArray<PPDeliveryCompanyProfile *> * _Nullable profiles, NSError * _Nullable error))completion {
     NSString *currentUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    if (currentUID.length == 0) {
+        currentUID = [PPProSessionCoordinator.shared stagedAuthenticatedUID] ?: @"";
+    }
     if (self.verifiedUID.length && ![self.verifiedUID isEqualToString:currentUID]) {
         self.verifiedProfile = nil;
         self.discoveredProfiles = @[];
@@ -264,6 +273,9 @@ static NSString * const PPDCConfiguredCompanyDefaultsPrefix = @"PPDeliveryCompan
     }
     [self callFunction:PPDCFunctionGetMyCompanies payload:@{} completion:^(NSDictionary * _Nullable result, NSError * _Nullable error) {
         NSString *activeUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+        if (activeUID.length == 0) {
+            activeUID = [PPProSessionCoordinator.shared stagedAuthenticatedUID] ?: @"";
+        }
         if (![activeUID isEqualToString:currentUID]) {
             if (completion) completion(@[], nil);
             return;

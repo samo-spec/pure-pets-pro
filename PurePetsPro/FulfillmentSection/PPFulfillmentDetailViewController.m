@@ -334,32 +334,34 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(stopJourneyMotion:) name:UIApplicationWillResignActiveNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(stopJourneyMotion:) name:UIApplicationDidEnterBackgroundNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(resumeJourneyMotion:) name:UIApplicationDidBecomeActiveNotification object:nil];
-    FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+    FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth];
     NSString *entryUID = activeAuth.currentUser.uid ?: @"";
     __weak typeof(self) weakSelf = self;
     self.authListenerOwner = activeAuth;
-    self.authListener = [activeAuth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self || [entryUID isEqualToString:user.uid ?: @""]) return;
-        self.operationGeneration++;
-        self.submitting = NO;
-        self.hasLiveFulfillmentState = NO;
-        self.mayDisplayDossier = NO;
-        self.operationMessage = nil;
-        [self clearPendingIntent];
-        [self.fulfillmentListener remove];
-        [self.eventsListener remove];
-        self.fulfillmentListenerGeneration++;
-        self.eventsListenerGeneration++;
-        [self.stack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
-        self.currentEvents = @[];
-        self.eventsContainer = nil;
-        [self.journeyView stopAnimations];
-        self.journeyView = nil;
-        self.lastPresentedJourneyStatus = nil;
-        self.liveMessage = kLang(@"ProFulfillment_OrderUnavailable");
-        [self refreshActionBarFromLiveFulfillment];
-    }];
+    if (activeAuth) {
+        self.authListener = [activeAuth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self || [entryUID isEqualToString:user.uid ?: @""]) return;
+            self.operationGeneration++;
+            self.submitting = NO;
+            self.hasLiveFulfillmentState = NO;
+            self.mayDisplayDossier = NO;
+            self.operationMessage = nil;
+            [self clearPendingIntent];
+            [self.fulfillmentListener remove];
+            [self.eventsListener remove];
+            self.fulfillmentListenerGeneration++;
+            self.eventsListenerGeneration++;
+            [self.stack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
+            self.currentEvents = @[];
+            self.eventsContainer = nil;
+            [self.journeyView stopAnimations];
+            self.journeyView = nil;
+            self.lastPresentedJourneyStatus = nil;
+            self.liveMessage = kLang(@"ProFulfillment_OrderUnavailable");
+            [self refreshActionBarFromLiveFulfillment];
+        }];
+    }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -1506,7 +1508,9 @@ static UILabel *PPFulfillmentGrowingLabel(UIFont *font, UIColor *color) {
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [self.journeyView stopAnimations];
-    if (self.authListener) [(self.authListenerOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authListener];
+    if (self.authListener && self.authListenerOwner) {
+        [self.authListenerOwner removeAuthStateDidChangeListener:self.authListener];
+    }
     self.authListener = nil;
     self.authListenerOwner = nil;
     self.operationGeneration++;

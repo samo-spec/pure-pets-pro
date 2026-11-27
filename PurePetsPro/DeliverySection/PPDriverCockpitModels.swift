@@ -927,7 +927,7 @@ final class PPDriverCockpitStore: ObservableObject {
                 if busy, let outReason {
                     outReason.pointee = ppDriverText("DriverCockpit_ActiveWork_SwitchBlocked") as NSString
                 }
-                return ObjCBool(busy)
+                return busy
             }
         }, forKey: sessionCoordinatorKey)
         coordinator.registerSessionTeardownHandler({ [weak self] _ in
@@ -1072,7 +1072,9 @@ final class PPDriverCockpitStore: ObservableObject {
         selectedContext = context
         liveSelfAcceptance = nil
         observeAcceptancePolicy()
-        UserDefaults.standard.set(context.id, forKey: selectionKey)
+        if !boundUID.isEmpty {
+            UserDefaults.standard.set(context.id, forKey: selectionKey)
+        }
         persistDashboardCompany(context)
         clearTasks()
         // Reads still in flight for the previous workspace are dropped.
@@ -1088,7 +1090,9 @@ final class PPDriverCockpitStore: ObservableObject {
         phase = .choosingContext
     }
 
-    private var selectionKey: String { "PPDriverCockpit.selectedContext.\(boundUID)" }
+    private var selectionKey: String {
+        PPProSessionCoordinator.scopedDefaultsKey("driver_cockpit_selected_context", forUID: boundUID)
+    }
 
     private func applyContexts(_ resolution: PPDriverContextResolution) {
         contexts = resolution.contexts
@@ -1121,7 +1125,8 @@ final class PPDriverCockpitStore: ObservableObject {
             select(match)
             return
         }
-        if let saved = UserDefaults.standard.string(forKey: selectionKey),
+        if !boundUID.isEmpty,
+           let saved = UserDefaults.standard.string(forKey: selectionKey),
            let match = contexts.first(where: { $0.id == saved }) {
             select(match)
             return
@@ -1146,7 +1151,9 @@ final class PPDriverCockpitStore: ObservableObject {
         selectedContext = nil
         acceptanceObservation = nil
         liveSelfAcceptance = nil
-        UserDefaults.standard.removeObject(forKey: selectionKey)
+        if !boundUID.isEmpty {
+            UserDefaults.standard.removeObject(forKey: selectionKey)
+        }
         phase = .accessEnded
     }
 

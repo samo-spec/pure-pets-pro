@@ -390,6 +390,9 @@ private struct PPPhoneNumberTextField: UIViewRepresentable {
     func proLoginSurfaceDidTapProviderApplication(_ controller: PPProLoginSurfaceController)
     func proLoginSurfaceDidTapRecoveryRetry(_ controller: PPProLoginSurfaceController)
     func proLoginSurface(_ controller: PPProLoginSurfaceController, didRequestRemoveRememberedAccount uid: String)
+    @objc optional func proLoginSurface(_ controller: PPProLoginSurfaceController, didRequestQuickSwitchToUID uid: String)
+    @objc optional func proLoginSurfaceDidTapCancelAddAccount(_ controller: PPProLoginSurfaceController)
+    @objc optional func proLoginSurfaceDidTapSignOutAll(_ controller: PPProLoginSurfaceController)
 }
 
 @MainActor
@@ -397,6 +400,7 @@ private final class PPProLoginSurfaceModel: ObservableObject {
     var presentationTestMode = false
     @Published var rememberedAccounts: [[String: String]] = []
     @Published var selectedRememberedAccountUID: String?
+    @Published var isAddAccountFlow = false
     @Published var requiresTransitionRecovery = false
     @Published var phoneText = ""
     @Published var countryCode = "+974"
@@ -427,7 +431,18 @@ public final class PPProLoginSurfaceController: UIViewController {
         }
     }
 
-    public var selectedRememberedAccountUID: String? { model.selectedRememberedAccountUID }
+    public var selectedRememberedAccountUID: String? {
+        get { model.selectedRememberedAccountUID }
+        set { model.selectedRememberedAccountUID = newValue }
+    }
+
+    public var isAddAccountFlow: Bool = false {
+        didSet {
+            if model.isAddAccountFlow != isAddAccountFlow {
+                model.isAddAccountFlow = isAddAccountFlow
+            }
+        }
+    }
 
     public var requiresTransitionRecovery: Bool = false {
         didSet {
@@ -482,6 +497,7 @@ public final class PPProLoginSurfaceController: UIViewController {
         model.phoneText = phoneText
         model.countryCode = countryCode
         model.isBusy = isBusy
+        model.isAddAccountFlow = isAddAccountFlow
         model.requiresTransitionRecovery = requiresTransitionRecovery
         model.isPhoneContinueEnabled = isPhoneContinueEnabled
         model.showsAppleButton = showsAppleButton
@@ -532,6 +548,18 @@ public final class PPProLoginSurfaceController: UIViewController {
             onRemoveRememberedAccount: { [weak self] uid in
                 guard let self else { return }
                 self.delegate?.proLoginSurface(self, didRequestRemoveRememberedAccount: uid)
+            },
+            onQuickSwitchAccount: { [weak self] uid in
+                guard let self else { return }
+                self.delegate?.proLoginSurface?(self, didRequestQuickSwitchToUID: uid)
+            },
+            onCancelAddAccount: { [weak self] in
+                guard let self else { return }
+                self.delegate?.proLoginSurfaceDidTapCancelAddAccount?(self)
+            },
+            onSignOutAll: { [weak self] in
+                guard let self else { return }
+                self.delegate?.proLoginSurfaceDidTapSignOutAll?(self)
             }
         )
 
@@ -573,6 +601,9 @@ private struct PPProIdentityGateView: View {
     let onProviderApplication: () -> Void
     let onRecoveryRetry: () -> Void
     let onRemoveRememberedAccount: (String) -> Void
+    let onQuickSwitchAccount: (String) -> Void
+    let onCancelAddAccount: () -> Void
+    let onSignOutAll: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -593,6 +624,9 @@ private struct PPProIdentityGateView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     utilityBar
                     brandStage
+                    if model.isAddAccountFlow {
+                        addAccountBanner
+                    }
                     if model.requiresTransitionRecovery {
                         transitionRecoveryBanner
                     }
@@ -700,12 +734,92 @@ private struct PPProIdentityGateView: View {
         .accessibilityIdentifier("pro.login.recoveryBanner")
     }
 
-    private var rememberedAccountSection: some View {
+    private var addAccountBanner: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text(localized("ProIdentityRememberedAccounts"))
-                .font(PPProType.bold(21, relativeTo: .title3))
-                .foregroundStyle(palette.text)
-                .accessibilityAddTraits(.isHeader)
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "person.badge.plus")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(palette.accent)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(localized("ProIdentityAddAccountTitle"))
+                        .font(PPProType.bold(17, relativeTo: .headline))
+                        .foregroundStyle(palette.text)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(localized("ProIdentityAddAccountSubtitle"))
+                        .font(PPProType.regular(15))
+                        .foregroundStyle(palette.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Button(action: onCancelAddAccount) {
+                HStack(spacing: 8) {
+                    Image(systemName: isRTL ? "arrow.right" : "arrow.left")
+                        .font(.system(size: 13, weight: .semibold))
+                        .accessibilityHidden(true)
+                    Text(localized("ProIdentityCancelAddAccount"))
+                        .font(PPProType.bold(15))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(palette.accent)
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .padding(.horizontal, 14)
+                .background(palette.surface, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(palette.accent.opacity(0.35), lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .disabled(model.isBusy)
+            .accessibilityIdentifier("pro.login.cancelAddAccount")
+        }
+        .padding(14)
+        .background(palette.accentSoft, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(palette.accent.opacity(0.28), lineWidth: 1)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("pro.login.addAccountBanner")
+    }
+
+    private func isQuickSwitchEligible(_ account: [String: String]) -> Bool {
+        let status = account["sessionStatus"] ?? ""
+        return status == "active" || status == "available"
+    }
+
+    private func methodSymbol(for account: [String: String]) -> String {
+        switch account["method"] ?? "" {
+        case "phone":
+            return "phone.fill"
+        case "apple.com":
+            return "applelogo"
+        default:
+            return "person.crop.circle.fill"
+        }
+    }
+
+    private var rememberedAccountSection: some View {
+        let hasQuickSwitchable = model.rememberedAccounts.contains(where: isQuickSwitchEligible)
+        let showSignOutAll = model.rememberedAccounts.count > 1 || hasQuickSwitchable
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .center, spacing: 8) {
+                Text(localized("ProIdentityRememberedAccounts"))
+                    .font(PPProType.bold(21, relativeTo: .title3))
+                    .foregroundStyle(palette.text)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer(minLength: 4)
+                Text("\(model.rememberedAccounts.count)")
+                    .font(PPProType.bold(12, relativeTo: .caption))
+                    .monospacedDigit()
+                    .foregroundStyle(palette.accent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(palette.accentSoft, in: Capsule())
+                    .accessibilityHidden(true)
+            }
             Text(localized("ProIdentityReauthenticationHint"))
                 .font(PPProType.regular(15))
                 .foregroundStyle(palette.secondary)
@@ -713,37 +827,48 @@ private struct PPProIdentityGateView: View {
             ForEach(model.rememberedAccounts.compactMap { item -> String? in item["uid"] }, id: \.self) { uid in
                 if let account = model.rememberedAccounts.first(where: { $0["uid"] == uid }) {
                     let selected = model.selectedRememberedAccountUID == uid
+                    let canSwitch = isQuickSwitchEligible(account)
+                    let sessionStatus = account["sessionStatus"] ?? ""
+                    let needsReauthBadge = !sessionStatus.isEmpty && !canSwitch
+                    let successColor = Color(uiColor: .ppSuccess)
+                    let warningColor = Color(uiColor: .ppWarning)
+
                     HStack(spacing: 8) {
                         Button {
-                            model.selectedRememberedAccountUID = uid
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                            if canSwitch {
+                                onQuickSwitchAccount(uid)
+                            } else {
+                                model.selectedRememberedAccountUID = uid
+                                UIAccessibility.post(notification: .announcement, argument: localized("ProIdentityReauthSelectedAnnouncement"))
+                            }
                         } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: "person.crop.circle")
-                                    .font(.system(size: 28, weight: .regular))
-                                    .foregroundStyle(palette.accent)
-                                    .accessibilityHidden(true)
-                                Text(account["label"] ?? "")
-                                    .font(PPProType.medium(17))
-                                    .foregroundStyle(palette.text)
-                                    .environment(\.layoutDirection, .leftToRight)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Spacer(minLength: 4)
-                                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                                    .foregroundStyle(selected ? palette.accent : palette.secondary)
-                                    .accessibilityHidden(true)
+                            Group {
+                                if sizeCategory.isAccessibilityCategory {
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        rememberedAccountInfo(account: account, canSwitch: canSwitch, needsReauthBadge: needsReauthBadge, successColor: successColor, warningColor: warningColor)
+                                        rememberedAccountTrailingControl(selected: selected, canSwitch: canSwitch, successColor: successColor)
+                                    }
+                                } else {
+                                    HStack(spacing: 12) {
+                                        rememberedAccountInfo(account: account, canSwitch: canSwitch, needsReauthBadge: needsReauthBadge, successColor: successColor, warningColor: warningColor)
+                                        Spacer(minLength: 4)
+                                        rememberedAccountTrailingControl(selected: selected, canSwitch: canSwitch, successColor: successColor)
+                                    }
+                                }
                             }
                             .padding(12)
                             .frame(minHeight: 54)
-                            .background(palette.surface, in: RoundedRectangle(cornerRadius: 14))
+                            .background(palette.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                             .overlay {
-                                RoundedRectangle(cornerRadius: 14)
-                                    .strokeBorder(selected ? palette.accent : palette.hairline, lineWidth: selected ? 2 : 1)
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .strokeBorder(selected ? palette.accent : (canSwitch ? successColor.opacity(0.35) : palette.hairline), lineWidth: selected ? 2 : 1)
                             }
                         }
                         .buttonStyle(.plain)
                         .disabled(interactionsDisabled)
                         .accessibilityAddTraits(selected ? .isSelected : [])
-                        .accessibilityIdentifier("pro.login.rememberedAccount")
+                        .accessibilityIdentifier(canSwitch ? "pro.login.quickSwitchAccount" : "pro.login.rememberedAccount")
 
                         Button {
                             onRemoveRememberedAccount(uid)
@@ -752,9 +877,9 @@ private struct PPProIdentityGateView: View {
                                 .font(.system(size: 16, weight: .medium))
                                 .foregroundStyle(palette.secondary)
                                 .frame(minWidth: 44, minHeight: 54)
-                                .background(palette.surface, in: RoundedRectangle(cornerRadius: 14))
+                                .background(palette.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
                                 .overlay {
-                                    RoundedRectangle(cornerRadius: 14)
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
                                         .strokeBorder(palette.hairline, lineWidth: 1)
                                 }
                         }
@@ -765,17 +890,101 @@ private struct PPProIdentityGateView: View {
                     }
                 }
             }
-            Button {
-                model.selectedRememberedAccountUID = nil
-            } label: {
-                Label(localized("ProIdentityUseAnotherAccount"), systemImage: "person.badge.plus")
-                    .font(PPProType.medium(16))
-                    .foregroundStyle(palette.accent)
-                    .frame(minHeight: 44, alignment: .leading)
+            HStack(spacing: 12) {
+                Button {
+                    model.selectedRememberedAccountUID = nil
+                    model.loginFormFocusToken &+= 1
+                } label: {
+                    Label(localized("ProIdentityUseAnotherAccount"), systemImage: "person.badge.plus")
+                        .font(PPProType.medium(16))
+                        .foregroundStyle(palette.accent)
+                        .frame(minHeight: 44, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .disabled(interactionsDisabled)
+                .accessibilityIdentifier("pro.login.anotherAccount")
+
+                Spacer(minLength: 8)
+
+                if showSignOutAll {
+                    Button {
+                        onSignOutAll()
+                    } label: {
+                        Text(localized("ProIdentitySignOutAll"))
+                            .font(PPProType.medium(14))
+                            .foregroundStyle(Color.red)
+                            .frame(minHeight: 44)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(interactionsDisabled)
+                    .accessibilityIdentifier("pro.login.signOutAll")
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(interactionsDisabled)
-            .accessibilityIdentifier("pro.login.anotherAccount")
+        }
+    }
+
+    @ViewBuilder
+    private func rememberedAccountInfo(
+        account: [String: String],
+        canSwitch: Bool,
+        needsReauthBadge: Bool,
+        successColor: Color,
+        warningColor: Color
+    ) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(palette.accentSoft)
+                    .frame(width: 38, height: 38)
+                Image(systemName: methodSymbol(for: account))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(palette.accent)
+            }
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(account["label"] ?? "")
+                    .font(PPProType.medium(17))
+                    .foregroundStyle(palette.text)
+                    .environment(\.layoutDirection, .leftToRight)
+                    .fixedSize(horizontal: false, vertical: true)
+                if canSwitch {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(successColor)
+                            .frame(width: 6, height: 6)
+                        Text(localized("ProIdentityStatusActive"))
+                            .font(PPProType.bold(11, relativeTo: .caption))
+                            .foregroundStyle(successColor)
+                    }
+                } else if needsReauthBadge {
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(warningColor)
+                            .frame(width: 6, height: 6)
+                        Text(localized("ProIdentityStatusReauth"))
+                            .font(PPProType.bold(11, relativeTo: .caption))
+                            .foregroundStyle(warningColor)
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func rememberedAccountTrailingControl(selected: Bool, canSwitch: Bool, successColor: Color) -> some View {
+        if canSwitch {
+            Text(localized("ProIdentitySwitchAction"))
+                .font(PPProType.bold(12, relativeTo: .caption))
+                .foregroundStyle(Color.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(successColor, in: Capsule())
+                .accessibilityHidden(true)
+        } else {
+            Image(systemName: selected ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(selected ? palette.accent : palette.secondary)
+                .accessibilityHidden(true)
         }
     }
 

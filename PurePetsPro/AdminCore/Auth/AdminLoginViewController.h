@@ -13,6 +13,8 @@ static NSString * const kBiometricDisabledUntilManualLogin = @"biometricDisabled
 @interface AdminLoginViewController : UIViewController
     <ASAuthorizationControllerDelegate,
      ASAuthorizationControllerPresentationContextProviding>
+@property (nonatomic, copy, nullable) NSString *initialSelectedRememberedUID;
+@property (nonatomic, assign) BOOL isAddAccountFlow;
 @end
 
 NS_ASSUME_NONNULL_END

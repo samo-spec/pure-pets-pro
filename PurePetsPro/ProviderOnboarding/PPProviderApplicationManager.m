@@ -539,6 +539,7 @@ static BOOL PPProviderBool(id value) {
         _operationalState = @"";
         _setupState = @"";
         _activationChecklist = @{};
+        _userSummary = @{};
     }
     return self;
 }
@@ -562,6 +563,7 @@ static BOOL PPProviderBool(id value) {
     self.activationChecklist = [dictionary[@"activationChecklist"] isKindOfClass:NSDictionary.class] ? dictionary[@"activationChecklist"] : @{};
     self.documents = [dictionary[@"documents"] isKindOfClass:NSDictionary.class] ? dictionary[@"documents"] : @{};
     self.profileDomains = [dictionary[@"profileDomains"] isKindOfClass:NSDictionary.class] ? dictionary[@"profileDomains"] : @{};
+    self.userSummary = [dictionary[@"userSummary"] isKindOfClass:NSDictionary.class] ? dictionary[@"userSummary"] : @{};
     self.maskedIban = PPSafeString(dictionary[@"maskedIban"]);
     self.restrictions = [dictionary[@"restrictions"] isKindOfClass:NSArray.class] ? dictionary[@"restrictions"] : @[];
     self.activeRestrictions = [dictionary[@"activeRestrictions"] isKindOfClass:NSArray.class] ? dictionary[@"activeRestrictions"] : @[];
@@ -1199,21 +1201,27 @@ static BOOL PPProviderBool(id value) {
     return [PPProviderApplicationManager shared];
 }
 
-static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
-    return [NSString stringWithFormat:@"PPProviderApplicationDraft_%@_%ld", uid.length ? uid : @"anon", (long)type];
+static NSString * _Nullable PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
+    NSString *cleanUID = [uid stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (cleanUID.length == 0) return nil;
+    return [NSString stringWithFormat:@"PPProviderApplicationDraft_%@_%ld", cleanUID, (long)type];
 }
 
 - (void)saveDraft:(PPProviderApplicationDraft *)draft forProviderType:(PPProviderType)providerType {
     if (!draft) return;
+    if ([PPProSessionCoordinator.shared isSuspendedOrLocked]) return;
     NSString *uid = [PPProSessionCoordinator.shared activeUID];
     NSString *key = PPProviderDraftStorageKey(uid, providerType);
+    if (key.length == 0) return;
     NSDictionary *dict = [draft dictionaryRepresentation];
     [[NSUserDefaults standardUserDefaults] setObject:dict forKey:key];
 }
 
 - (nullable PPProviderApplicationDraft *)savedDraftForProviderType:(PPProviderType)providerType {
+    if ([PPProSessionCoordinator.shared isSuspendedOrLocked]) return nil;
     NSString *uid = [PPProSessionCoordinator.shared activeUID];
     NSString *key = PPProviderDraftStorageKey(uid, providerType);
+    if (key.length == 0) return nil;
     NSDictionary *dict = [[NSUserDefaults standardUserDefaults] objectForKey:key];
     if ([dict isKindOfClass:[NSDictionary class]]) {
         return [[PPProviderApplicationDraft alloc] initWithDictionary:dict];
@@ -1223,7 +1231,8 @@ static NSString *PPProviderDraftStorageKey(NSString *uid, PPProviderType type) {
 
 - (void)clearDraftForProviderType:(PPProviderType)providerType {
     NSString *uid = [PPProSessionCoordinator.shared activeUID];
-    NSString *key = PPProviderDraftStorageKey(authUser.uid, providerType);
+    NSString *key = PPProviderDraftStorageKey(uid, providerType);
+    if (key.length == 0) return;
     [[NSUserDefaults standardUserDefaults] removeObjectForKey:key];
 }
 

@@ -122,7 +122,8 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
     [self clearQueries];
     [self.accountListener remove]; self.accountListener = nil;
     [self.profilesListener remove]; self.profilesListener = nil;
-    if (self.authHandle) [(self.authOwner ?: [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authHandle];
+    FIRAuth *authOwner = self.authOwner ?: [PPProSessionCoordinator.shared activeAuth];
+    if (self.authHandle && authOwner) [authOwner removeAuthStateDidChangeListener:self.authHandle];
     self.authHandle = nil;
     self.authOwner = nil;
     if (self.suspendObserver) {
@@ -259,17 +260,26 @@ static NSString *PPOfficialFulfillmentCommandID(NSString *uid,
 - (void)start {
     self.limit = 50;
     [self clearQueries];
-    if (self.authHandle) {
-        [(self.authOwner ?: [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authHandle];
+    FIRAuth *previousAuth = self.authOwner ?: [PPProSessionCoordinator.shared activeAuth];
+    if (self.authHandle && previousAuth) {
+        [previousAuth removeAuthStateDidChangeListener:self.authHandle];
         self.authHandle = nil;
     }
+    self.authOwner = nil;
     if (self.suspendObserver) {
         [[NSNotificationCenter defaultCenter] removeObserver:self.suspendObserver];
         self.suspendObserver = nil;
     }
     __weak typeof(self) weakSelf = self;
-    FIRAuth *auth = [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+    FIRAuth *auth = [PPProSessionCoordinator.shared activeAuth];
     self.authOwner = auth;
+    if (!auth) {
+        NSError *err = [NSError errorWithDomain:@"PPFulfillmentManager"
+                                           code:401
+                                       userInfo:@{NSLocalizedDescriptionKey: @"No active authenticated session"}];
+        if (self.handler) self.handler(@[], NO, err);
+        return;
+    }
     self.authHandle = [auth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
         __strong typeof(weakSelf) self = weakSelf;
         if (!self || self.removed || [self sessionCurrent]) return;

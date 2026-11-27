@@ -111,7 +111,9 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 @implementation FUCompositeRegistration
 - (void)remove {
     if (self.authHandle) {
-        [(self.authOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authHandle];
+        if (self.authOwner) {
+            [self.authOwner removeAuthStateDidChangeListener:self.authHandle];
+        }
         self.authHandle = 0;
         self.authOwner = nil;
     }
@@ -141,7 +143,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 }
 
 - (FIRAuth *)activeAuth {
-    return [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+    return [PPProSessionCoordinator.shared activeAuth];
 }
 
 - (FIRFirestore *)db {
@@ -165,12 +167,16 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
             strongSelf.currentUserDoc = nil;
             strongSelf.ref = nil;
             if (strongSelf.bootstrapAuthHandle) {
-                [(strongSelf.bootstrapAuthOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:strongSelf.bootstrapAuthHandle];
+                if (strongSelf.bootstrapAuthOwner) {
+                    [strongSelf.bootstrapAuthOwner removeAuthStateDidChangeListener:strongSelf.bootstrapAuthHandle];
+                }
                 strongSelf.bootstrapAuthHandle = 0;
                 strongSelf.bootstrapAuthOwner = nil;
             }
             if (strongSelf.authHandle) {
-                [(strongSelf.authHandleOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:strongSelf.authHandle];
+                if (strongSelf.authHandleOwner) {
+                    [strongSelf.authHandleOwner removeAuthStateDidChangeListener:strongSelf.authHandle];
+                }
                 strongSelf.authHandle = 0;
                 strongSelf.authHandleOwner = nil;
             }
@@ -194,7 +200,9 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 
 - (void)pp_attachBootstrapAuthListener {
     if (self.bootstrapAuthHandle) {
-        [(self.bootstrapAuthOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.bootstrapAuthHandle];
+        if (self.bootstrapAuthOwner) {
+            [self.bootstrapAuthOwner removeAuthStateDidChangeListener:self.bootstrapAuthHandle];
+        }
         self.bootstrapAuthHandle = 0;
         self.bootstrapAuthOwner = nil;
     }
@@ -499,6 +507,14 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     return [[self.db collectionWithPath:kFUUsersCollection] documentWithPath:uid];
 }
 
+- (nullable FIRUser *)pp_bootstrapOrActiveUser {
+    return [PPProSessionCoordinator.shared currentUser] ?: [PPProSessionCoordinator.shared stagedAuthenticatedUser];
+}
+
+- (nullable FIRFirestore *)pp_bootstrapOrActiveDB {
+    return self.db ?: [PPProSessionCoordinator.shared bootstrapFirestoreForStagedSlot];
+}
+
 - (void)p_createOrMergeUserDocFor:(FIRUser *)user
                             extra:(NSDictionary * _Nullable)extra
                        completion:(FUErrorBlock)completion
@@ -507,14 +523,15 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     // `ref` can change while a previous account's sign-in is still completing.
     NSString *uid = user.uid;
     PPProSessionFence *fence = [PPProSessionFence shared];
-    FIRUser *active = [PPProSessionCoordinator.shared currentUser];
+    FIRUser *active = [self pp_bootstrapOrActiveUser];
     NSUUID *bootstrapTransactionGeneration = [fence captureForUID:uid activeUID:active.uid identity:active];
     BOOL (^isCurrent)(void) = ^BOOL {
-        FIRUser *current = [PPProSessionCoordinator.shared currentUser];
+        FIRUser *current = [self pp_bootstrapOrActiveUser];
         return [fence accepts:bootstrapTransactionGeneration requestedUID:uid activeUID:current.uid identity:current];
     };
-    if (!isCurrent()) { if (completion) completion([self p_err:@"Session changed" code:1301]); return; }
-    FIRDocumentReference *ref = [self userDocumentRefForUID:uid];
+    FIRFirestore *db = [self pp_bootstrapOrActiveDB];
+    if (!isCurrent() || !db) { if (completion) completion([self p_err:@"Session changed" code:1301]); return; }
+    FIRDocumentReference *ref = [[db collectionWithPath:kFUUsersCollection] documentWithPath:uid];
     NSMutableDictionary *profile = [@{
         @"uid": uid,
         @"updatedAt": [FIRFieldValue fieldValueForServerTimestamp],
@@ -534,7 +551,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
     }
 
     __weak typeof(self) weakSelf = self;
-    [self.db runTransactionWithBlock:^id(FIRTransaction *transaction, NSError **errorPointer) {
+    [db runTransactionWithBlock:^id(FIRTransaction *transaction, NSError **errorPointer) {
         if (!isCurrent()) {
             *errorPointer = [NSError errorWithDomain:FUErrorDomain code:1301 userInfo:nil];
             return nil;
@@ -576,7 +593,7 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 - (void)ensureUserDocumentExistsForCurrentUserWithExtra:(NSDictionary *)extra
                                              completion:(FUErrorBlock)completion
 {
-    FIRUser *u = self.currentUser; if (!u) { if (completion) completion([self p_err:@"No current user" code:105]); return; }
+    FIRUser *u = [self pp_bootstrapOrActiveUser]; if (!u) { if (completion) completion([self p_err:@"No current user" code:105]); return; }
     [self p_createOrMergeUserDocFor:u extra:extra completion:completion];
 }
 
@@ -944,7 +961,9 @@ static inline BOOL FUShouldTreatAuthErrorAsTransient(NSError * _Nullable error) 
 {
     self.authChangeBlock = block;
     if (self.authHandle) {
-        [(self.authHandleOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authHandle];
+        if (self.authHandleOwner) {
+            [self.authHandleOwner removeAuthStateDidChangeListener:self.authHandle];
+        }
         self.authHandle = 0;
         self.authHandleOwner = nil;
     }

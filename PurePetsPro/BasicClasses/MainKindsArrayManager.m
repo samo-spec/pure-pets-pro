@@ -97,7 +97,12 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
  NSLog(@"===========================================");
  NSLog(@"PPMainKindsManager: 🔄 loadMainData (prefer cache, fallback server)");
  
- FIRQuery *q = [[[FIRFirestore firestore] collectionWithPath:@"MainKindsCollection"]
+ FIRFirestore *catalogDB = [PPProSessionCoordinator.shared catalogFirestore];
+ if (!catalogDB) {
+ if (completionHandler) completionHandler(-1);
+ return;
+ }
+ FIRQuery *q = [[catalogDB collectionWithPath:@"MainKindsCollection"]
  queryOrderedByField:@"ID" descending:NO];
  
  // ---- 1) Try CACHE ----
@@ -377,7 +382,7 @@ static NSString * const kCachedMainKindsKey = @"cachedMainKinds";
         if (completionHandler) completionHandler(0);
         return;
     }
-    
+
     // Build the Firestore query (sorted by ID ascending)
     FIRQuery *query = [[db collectionWithPath:@"MainKindsCollection"] queryOrderedByField:@"sortingKey" descending:NO];
     

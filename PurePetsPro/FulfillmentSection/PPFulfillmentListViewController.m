@@ -65,19 +65,21 @@ static const CGFloat PPBottomSearchParkedInset = 16.0;
     [self buildBottomSearchBar];
     [self startListening];
     __weak typeof(self) weakSelf = self;
-    FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+    FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth];
     self.authListenerOwner = activeAuth;
-    self.authListener = [activeAuth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self || [self.listenerUID isEqualToString:user.uid ?: @""]) return;
-        self.fulfillments = @[];
-        self.filteredFulfillments = @[];
-        self.hasLoaded = NO;
-        self.queueError = nil;
-        self.queueFromCache = NO;
-        [self updateUIAnimated:NO];
-        [self startListening];
-    }];
+    if (activeAuth) {
+        self.authListener = [activeAuth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self || [self.listenerUID isEqualToString:user.uid ?: @""]) return;
+            self.fulfillments = @[];
+            self.filteredFulfillments = @[];
+            self.hasLoaded = NO;
+            self.queueError = nil;
+            self.queueFromCache = NO;
+            [self updateUIAnimated:NO];
+            [self startListening];
+        }];
+    }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -593,7 +595,9 @@ static const CGFloat PPBottomSearchParkedInset = 16.0;
 
 - (void)dealloc {
     [NSNotificationCenter.defaultCenter removeObserver:self];
-    if (self.authListener) [(self.authListenerOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authListener];
+    if (self.authListener && self.authListenerOwner) {
+        [self.authListenerOwner removeAuthStateDidChangeListener:self.authListener];
+    }
     self.authListener = nil;
     self.authListenerOwner = nil;
     self.listenerGeneration += 1;

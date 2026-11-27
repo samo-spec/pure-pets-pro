@@ -14,6 +14,7 @@
 //
 
 #import "PPImageCacheHelper.h"
+#import "YYKit.h"
 
 @interface PPImageCacheHelper ()
 @property (nonatomic, strong) YYCache *cache;

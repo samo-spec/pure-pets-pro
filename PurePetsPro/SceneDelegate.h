@@ -44,4 +44,12 @@ typedef NS_ENUM(NSInteger, AppRoot) {
                           authority:(nullable NSString *)authority
                           companyID:(nullable NSString *)companyID
                            animated:(BOOL)animated;
+
+/// Begins an atomic provisional add-account flow from the active workspace.
+- (void)beginAddAccountTransitionAnimated:(BOOL)animated;
+/// Atomically switches to a remembered account (fast-switching when its slot session validates,
+/// or routing to pre-selected re-authentication when credentials are required).
+- (void)switchToRememberedAccountUID:(nonnull NSString *)uid animated:(BOOL)animated;
+/// Atomically signs out all remembered accounts on this device after active-work preflight.
+- (void)signOutAllAccountsAnimated:(BOOL)animated;
 @end

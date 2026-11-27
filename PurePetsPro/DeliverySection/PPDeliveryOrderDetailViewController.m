@@ -85,6 +85,10 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
                                              selector:@selector(pp_deliveryOrdersDidChange:)
                                                  name:PPDeliveryOrdersDidChangeNotification
                                                object:[PPDeliveryManager shared]];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleSessionDidSuspend:)
+                                                 name:PPProSessionDidSuspendNotification
+                                               object:nil];
 
     [self setupScrollView];
     [self setupLocationManager];
@@ -106,6 +110,14 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
     if (self.isMovingFromParentViewController) {
         [self stopOrderListener];
     }
+}
+
+- (void)pp_handleSessionDidSuspend:(NSNotification *)note {
+    [self stopOrderListener];
+    [self.marketplaceProviderListener remove];
+    self.marketplaceProviderListener = nil;
+    self.locationManager.delegate = nil;
+    [self.locationManager stopUpdatingLocation];
 }
 
 - (void)dealloc {
@@ -810,10 +822,13 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
         if (CLLocationCoordinate2DIsValid(coordinate)) {
             self.deliveryDestinationCoordinate = coordinate;
             [self applyDeliveryCoordinateToCurrentMap];
-            if ([self.locationManager respondsToSelector:@selector(requestWhenInUseAuthorization)]) {
-                [self.locationManager requestWhenInUseAuthorization];
+            if (![PPProSessionCoordinator.shared isSuspendedOrLocked] &&
+                [PPProSessionCoordinator.shared activeUID].length > 0) {
+                if ([self.locationManager respondsToSelector:@selector(requestWhenInUseAuthorization)]) {
+                    [self.locationManager requestWhenInUseAuthorization];
+                }
+                [self.locationManager startUpdatingLocation];
             }
-            [self.locationManager startUpdatingLocation];
         } else {
             [self geocodeDeliveryAddress:address];
         }
@@ -2240,6 +2255,11 @@ static NSString * const PPDeliveryOfficialSupportUserID = @"PUIDPOFFICILAL202622
 
 - (void)calculateDeliveryDistance {
     [PPFunc pp_playTapEffect];
+    if ([PPProSessionCoordinator.shared isSuspendedOrLocked] ||
+        [PPProSessionCoordinator.shared activeUID].length == 0) {
+        self.deliveryDistanceLabel.text = kLang(@"Deliv_DistanceUnavailable");
+        return;
+    }
     if (!CLLocationCoordinate2DIsValid(self.deliveryDestinationCoordinate)) {
         self.deliveryDistanceLabel.text = kLang(@"Deliv_DistanceUnavailable");
         return;

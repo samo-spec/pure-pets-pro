@@ -86,6 +86,7 @@ public struct PPInAppGoogleMapView: UIViewRepresentable {
 
     public func makeUIView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
+        config.websiteDataStore = .nonPersistent()
         config.defaultWebpagePreferences.allowsContentJavaScript = true
         let userContentController = WKUserContentController()
         userContentController.add(context.coordinator, name: "mapReady")

@@ -12,6 +12,7 @@
 #import <PhotosUI/PhotosUI.h>
 #import "NotificationSettingsViewController.h"
 #import "PPProviderProfileEditorViewController.h"
+#import "PPProRememberedAccountStore.h"
 #import "FUManager.h"
 #import "PPFirebaseCompat.h"
 #import "PPProviderApplicationManager.h"
@@ -60,6 +61,7 @@ static void PPProApplyThemePreference(NSString *preference) {
 @property (nonatomic, strong) PPProviderOnboardingState *providerState;
 @property (nonatomic, strong) NSError *providerStateError;
 @property (nonatomic, strong) id<FIRListenerRegistration> providerStateListener;
+@property (nonatomic, strong, nullable) FIRStorageUploadTask *activeAvatarUploadTask;
 @property (nonatomic, assign) BOOL isUploadingAvatar;
 @end
 
@@ -143,7 +145,21 @@ static void PPProApplyThemePreference(NSString *preference) {
 
     [self pp_loadCoverImageURLs];
     [self pp_startProviderStateObservation];
+    [self pp_configureMultiAccountSurface];
     [self pp_refreshAllContent];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleSessionDidSuspend:)
+                                                 name:PPProSessionDidSuspendNotification
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleSessionDidCommit:)
+                                                 name:PPProSessionDidCommitNotification
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleAccountListDidChange:)
+                                                 name:PPProSessionAccountListDidChangeNotification
+                                               object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -158,7 +174,20 @@ static void PPProApplyThemePreference(NSString *preference) {
     [self pp_refreshAllContent];
 }
 
+- (void)pp_handleSessionDidSuspend:(NSNotification *)note {
+    [self.activeAvatarUploadTask cancel];
+    self.activeAvatarUploadTask = nil;
+    self.isUploadingAvatar = NO;
+    [self.hostingController setUploadingAvatar:NO];
+    [self.providerStateListener remove];
+    self.providerStateListener = nil;
+    [PPHUD dismiss];
+}
+
 - (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [self.activeAvatarUploadTask cancel];
+    self.activeAvatarUploadTask = nil;
     [self.providerStateListener remove];
     self.providerStateListener = nil;
 }
@@ -407,11 +436,31 @@ static void PPProApplyThemePreference(NSString *preference) {
         FIRStorageUploadTask *task = [ref putData:jpegData metadata:metadata];
         __block BOOL didFinish = NO;
 
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            strongSelf.activeAvatarUploadTask = task;
+        });
+
         void (^finishUpload)(NSString * _Nullable, NSError * _Nullable) = ^(NSString * _Nullable urlString, NSError * _Nullable error) {
             @synchronized (ref) {
                 if (didFinish) return;
                 didFinish = YES;
             }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                if (strongSelf.activeAvatarUploadTask == task) {
+                    strongSelf.activeAvatarUploadTask = nil;
+                }
+                if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid] ||
+                    [PPProSessionCoordinator.shared isSuspendedOrLocked]) {
+                    strongSelf.isUploadingAvatar = NO;
+                    [strongSelf.hostingController setUploadingAvatar:NO];
+                    [PPHUD dismiss];
+                    return;
+                }
+            });
             if (urlString.length == 0 || error) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -541,6 +590,74 @@ static void PPProApplyThemePreference(NSString *preference) {
                           cancelBlock:nil];
 }
 
+- (nullable SceneDelegate *)pp_sceneDelegate {
+    id<UIWindowSceneDelegate> sceneDelegate = self.view.window.windowScene.delegate;
+    if ([sceneDelegate isKindOfClass:SceneDelegate.class]) {
+        return (SceneDelegate *)sceneDelegate;
+    }
+    for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+        if (![scene isKindOfClass:UIWindowScene.class]) continue;
+        id<UIWindowSceneDelegate> candidate = ((UIWindowScene *)scene).delegate;
+        if ([candidate isKindOfClass:SceneDelegate.class]) {
+            return (SceneDelegate *)candidate;
+        }
+    }
+    return nil;
+}
+
+- (void)pp_handleSessionDidCommit:(__unused NSNotification *)note {
+    [self pp_loadCoverImageURLs];
+    [self pp_startProviderStateObservation];
+    [self pp_refreshAllContent];
+}
+
+- (void)pp_handleAccountListDidChange:(__unused NSNotification *)note {
+    [self pp_refreshAllContent];
+}
+
+- (void)pp_configureMultiAccountSurface {
+    __weak typeof(self) weakSelf = self;
+    NSArray<NSDictionary<NSString *, NSString *> *> *accounts = [PPProRememberedAccountStore rolloutEnabled]
+        ? ([PPProRememberedAccountStore recordsWithError:nil] ?: @[])
+        : @[];
+    NSString *activeUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    [self.hostingController configureMultiAccountEnabled:[PPProRememberedAccountStore rolloutEnabled]
+                                               activeUID:activeUID
+                                      rememberedAccounts:accounts
+                                         onSwitchAccount:^(NSString *uid) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || ![PPProRememberedAccountStore rolloutEnabled]) return;
+        SceneDelegate *sd = [strongSelf pp_sceneDelegate];
+        [sd switchToRememberedAccountUID:uid animated:YES];
+    }
+                                            onAddAccount:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || ![PPProRememberedAccountStore rolloutEnabled]) return;
+        SceneDelegate *sd = [strongSelf pp_sceneDelegate];
+        [sd beginAddAccountTransitionAnimated:YES];
+    }
+                                            onSignOutAll:^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || ![PPProRememberedAccountStore rolloutEnabled]) return;
+        SceneDelegate *sd = [strongSelf pp_sceneDelegate];
+        [sd signOutAllAccountsAnimated:YES];
+    }
+                               onRemoveRememberedAccount:^(NSString *uid) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || ![PPProRememberedAccountStore rolloutEnabled] || uid.length == 0) return;
+        [PPProSessionCoordinator.shared removeRememberedAccountWithUID:uid completion:^(__unused BOOL removed, NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) innerSelf = weakSelf;
+                if (!innerSelf) return;
+                if (error) {
+                    [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:error.localizedDescription];
+                }
+                [innerSelf pp_refreshAllContent];
+            });
+        }];
+    }];
+}
+
 - (void)pp_logoutAction {
     [PPAlertHelper showConfirmationIn:self
                                 title:kLang(@"LogOut")
@@ -584,6 +701,13 @@ static void PPProApplyThemePreference(NSString *preference) {
 - (void)pp_refreshAllContent {
     PPProProfileSnapshot *snapshot = [self pp_currentProfileSnapshot];
     [self.hostingController updateSnapshot:snapshot];
+    NSArray<NSDictionary<NSString *, NSString *> *> *accounts = [PPProRememberedAccountStore rolloutEnabled]
+        ? ([PPProRememberedAccountStore recordsWithError:nil] ?: @[])
+        : @[];
+    NSString *activeUID = [PPProSessionCoordinator.shared activeUID] ?: @"";
+    [self.hostingController updateRememberedAccounts:accounts
+                                           activeUID:activeUID
+                                 multiAccountEnabled:[PPProRememberedAccountStore rolloutEnabled]];
 }
 
 - (void)pp_startProviderStateObservation {

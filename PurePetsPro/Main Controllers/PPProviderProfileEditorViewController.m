@@ -255,6 +255,8 @@ static NSArray<NSString *> *PPProviderProfileEditorCleanStringArray(id raw) {
 
 @property (nonatomic, strong) id<FIRListenerRegistration> providerStateListener;
 @property (nonatomic, strong) id<FIRListenerRegistration> userDocumentListener;
+@property (nonatomic, strong, nullable) FIRStorageUploadTask *activeAvatarUploadTask;
+@property (nonatomic, strong) NSHashTable<FIRStorageUploadTask *> *activeCoverUploadTasks;
 @end
 
 @implementation PPProviderProfileEditorViewController
@@ -278,6 +280,11 @@ static NSArray<NSString *> *PPProviderProfileEditorCleanStringArray(id raw) {
     self.persistedAvatarURLString = @"";
     self.providerType = PPProviderTypeUnspecified;
     self.providerProfileID = @"";
+    self.activeCoverUploadTasks = [NSHashTable weakObjectsHashTable];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleSessionDidSuspend:)
+                                                 name:PPProSessionDidSuspendNotification
+                                               object:nil];
 
     [self pp_bindCurrentUserFallbacks];
 
@@ -349,7 +356,29 @@ static NSArray<NSString *> *PPProviderProfileEditorCleanStringArray(id raw) {
     [self.hostingController updateSnapshot:[self pp_currentSnapshot]];
 }
 
+- (void)pp_handleSessionDidSuspend:(NSNotification *)note {
+    [self.activeAvatarUploadTask cancel];
+    self.activeAvatarUploadTask = nil;
+    for (FIRStorageUploadTask *task in self.activeCoverUploadTasks.allObjects) {
+        [task cancel];
+    }
+    [self.activeCoverUploadTasks removeAllObjects];
+    self.isUploadingAvatar = NO;
+    self.isUploadingCovers = NO;
+    [self.providerStateListener remove];
+    self.providerStateListener = nil;
+    [self.userDocumentListener remove];
+    self.userDocumentListener = nil;
+    [PPHUD dismiss];
+}
+
 - (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [self.activeAvatarUploadTask cancel];
+    self.activeAvatarUploadTask = nil;
+    for (FIRStorageUploadTask *task in self.activeCoverUploadTasks.allObjects) {
+        [task cancel];
+    }
     [self.providerStateListener remove];
     self.providerStateListener = nil;
     [self.userDocumentListener remove];
@@ -802,6 +831,12 @@ static NSArray<NSString *> *PPProviderProfileEditorCleanStringArray(id raw) {
         FIRStorageUploadTask *task = [ref putData:jpegData metadata:metadata];
         __block BOOL didFinish = NO;
 
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            strongSelf.activeAvatarUploadTask = task;
+        });
+
         void (^finishOnMain)(NSString * _Nullable, NSError * _Nullable) = ^(NSString * _Nullable urlString, NSError * _Nullable error) {
             @synchronized (ref) {
                 if (didFinish) return;
@@ -810,8 +845,15 @@ static NSArray<NSString *> *PPProviderProfileEditorCleanStringArray(id raw) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) strongSelf = weakSelf;
                 if (!strongSelf) return;
+                if (strongSelf.activeAvatarUploadTask == task) {
+                    strongSelf.activeAvatarUploadTask = nil;
+                }
                 strongSelf.isUploadingAvatar = NO;
                 [PPHUD dismiss];
+                if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid] ||
+                    [PPProSessionCoordinator.shared isSuspendedOrLocked]) {
+                    return;
+                }
                 if (urlString.length == 0 || error) {
                     [strongSelf.hostingController updateSnapshot:[strongSelf pp_currentSnapshot]];
                     [PPToast toast:kLang(@"ProviderProfileEditor_AvatarUploadFailed") style:PPToastStyleError haptic:YES duration:1.5];
@@ -895,6 +937,12 @@ static NSArray<NSString *> *PPProviderProfileEditorCleanStringArray(id raw) {
         metadata.customMetadata = @{@"uploaded_by": uid};
         FIRStorageUploadTask *task = [ref putData:jpegData metadata:metadata];
         __block BOOL didFinish = NO;
+        __weak typeof(self) weakSelf = self;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf.activeCoverUploadTasks addObject:task];
+        });
 
         void (^finishOnMain)(NSString * _Nullable, NSError * _Nullable) = ^(NSString * _Nullable urlString, NSError * _Nullable error) {
             @synchronized (ref) {
@@ -902,6 +950,15 @@ static NSArray<NSString *> *PPProviderProfileEditorCleanStringArray(id raw) {
                 didFinish = YES;
             }
             dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (strongSelf) {
+                    [strongSelf.activeCoverUploadTasks removeObject:task];
+                }
+                if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:uid] ||
+                    [PPProSessionCoordinator.shared isSuspendedOrLocked]) {
+                    if (completion) completion(nil, [NSError errorWithDomain:@"PPProviderProfileEditor" code:-5 userInfo:nil]);
+                    return;
+                }
                 if (completion) completion(urlString, error);
             });
         };

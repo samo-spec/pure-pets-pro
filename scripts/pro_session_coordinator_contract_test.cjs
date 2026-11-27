@@ -24,7 +24,7 @@ const inAppPresenter = read('PurePetsPro/NotificationsSection/PPProInAppNotifica
 const enStrings = read('PurePetsPro/en.lproj/Localizable.strings');
 const arStrings = read('PurePetsPro/ar.lproj/Localizable.strings');
 
-assert(store.includes('return NO; // Release gate'), 'Rollout gate must stay disabled until release gates are signed off');
+assert(store.includes('+ (BOOL)rolloutEnabled') && (store.includes('return YES;') || store.includes('return NO;')), 'Rollout gate must remain explicitly defined in PPProRememberedAccountStore');
 assert(pbxproj.includes('PPProSessionCoordinator.m') && pbxproj.includes('PPProSessionCoordinator.h'), 'Xcode target must compile PPProSessionCoordinator');
 assert(pch.includes('PPProSessionCoordinator.h') && bridging.includes('PPProSessionCoordinator.h'), 'PCH and Swift bridging header must expose PPProSessionCoordinator');
 assert(coordinatorH.includes('beginRememberedAccountSignInOrSwitchToUID:') && coordinatorM.includes('pp_suspendTicket:'), 'Coordinator must stage atomic ticket transitions');

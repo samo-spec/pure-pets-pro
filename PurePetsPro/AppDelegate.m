@@ -10,6 +10,8 @@
 #import "SceneDelegate.h"
 #import "PPFirebaseCompat.h"
 #import "PPProInAppNotificationPresenter.h"
+#import "PPProRememberedAccountStore.h"
+#import "PPNotificationsManager.h"
 #import "SDImageCache.h"
 #import "SDImageCacheConfig.h"
 #import <sys/utsname.h>
@@ -266,6 +268,9 @@ static BOOL PPProIsDriverTaskPayload(NSDictionary *payload)
 @property (nonatomic, assign) FIRAuthStateDidChangeListenerHandle authStateHandle;
 @property (nonatomic, strong, nullable) FIRAuth *authStateOwner;
 @property (nonatomic, strong, nullable) id<NSObject> activeRuntimeObserver;
+@property (nonatomic, strong, nullable) id<NSObject> sessionSuspendObserver;
+@property (nonatomic, strong, nullable) id<NSObject> sessionCommitObserver;
+@property (nonatomic, strong, nullable) id<NSObject> sessionRollbackObserver;
 @property (nonatomic, copy) NSString *apnsTokenHexString;
 @property (nonatomic, assign) BOOL notificationV2RegistrationInFlight;
 @property (nonatomic, assign) BOOL notificationV2RegistrationNeedsForegroundRetry;
@@ -538,11 +543,17 @@ extern BOOL PP_TouchDotsEnabled;
 
 - (void)pp_attachAuthStateListenerToActiveAuth {
     if (self.authStateHandle) {
-        [(self.authStateOwner ?: [FIRAuth auth]) removeAuthStateDidChangeListener:self.authStateHandle];
+        if (self.authStateOwner) {
+            [self.authStateOwner removeAuthStateDidChangeListener:self.authStateHandle];
+        }
         self.authStateHandle = nil;
         self.authStateOwner = nil;
     }
-    FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
+    FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth];
+    if (!activeAuth && ![PPProRememberedAccountStore rolloutEnabled]) {
+        activeAuth = [FIRAuth auth];
+    }
+    if (!activeAuth) return;
     self.authStateOwner = activeAuth;
     __weak typeof(self) weakSelf = self;
     self.authStateHandle = [activeAuth addAuthStateDidChangeListener:^(FIRAuth * _Nonnull auth, FIRUser * _Nullable user) {
@@ -597,9 +608,9 @@ extern BOOL PP_TouchDotsEnabled;
                 ? kPPNotificationDeactivationReasonLogout
                 : kPPNotificationDeactivationReasonAccountSwitch;
             void (^finishBarrier)(NSError * _Nullable) = ^(NSError * _Nullable deactivateError) {
-                [PPNotifications invalidateLocalDeviceTokenWithCompletion:^(__unused NSError * _Nullable rotErr) {
-                    [strongSelf pp_endNotificationV2LogoutBarrier];
-                    if (done) done(deactivateError);
+                [PPNotifications invalidateLocalDeviceTokenWithCompletion:^(NSError * _Nullable rotErr) {
+                    NSError *barrierError = deactivateError ?: rotErr;
+                    if (done) done(barrierError);
                 }];
             };
             if ([PPProSessionCoordinator.shared activeFunctions] && [PPProSessionCoordinator.shared activeUID].length > 0) {
@@ -609,6 +620,43 @@ extern BOOL PP_TouchDotsEnabled;
             }
         }];
     }];
+
+    // Clear Notification Center, pending requests, badge and driver catch-up timers immediately on suspend.
+    if (!self.sessionSuspendObserver) {
+        self.sessionSuspendObserver = [[NSNotificationCenter defaultCenter] addObserverForName:PPProSessionDidSuspendNotification
+                                                                                        object:nil
+                                                                                         queue:NSOperationQueue.mainQueue
+                                                                                    usingBlock:^(__unused NSNotification * _Nonnull note) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            strongSelf.notificationV2DriverCatchUpUID = @"";
+            strongSelf.notificationV2DriverCatchUpAt = nil;
+            UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+            [center removeAllDeliveredNotifications];
+            [center removeAllPendingNotificationRequests];
+            if (@available(iOS 16.0, *)) {
+                [center setBadgeCount:0 withCompletionHandler:nil];
+            }
+        }];
+    }
+
+    // Only lower the Notification V2 logout barrier once coordinator commit or rollback completes.
+    if (!self.sessionCommitObserver) {
+        self.sessionCommitObserver = [[NSNotificationCenter defaultCenter] addObserverForName:PPProSessionDidCommitNotification
+                                                                                       object:nil
+                                                                                        queue:NSOperationQueue.mainQueue
+                                                                                   usingBlock:^(__unused NSNotification * _Nonnull note) {
+            [weakSelf pp_endNotificationV2LogoutBarrier];
+        }];
+    }
+    if (!self.sessionRollbackObserver) {
+        self.sessionRollbackObserver = [[NSNotificationCenter defaultCenter] addObserverForName:PPProSessionTransitionDidRollbackNotification
+                                                                                         object:nil
+                                                                                          queue:NSOperationQueue.mainQueue
+                                                                                     usingBlock:^(__unused NSNotification * _Nonnull note) {
+            [weakSelf pp_endNotificationV2LogoutBarrier];
+        }];
+    }
 
     // 1. Resolve the current token and register the V2 device binding.
     [self pp_resolveCurrentFCMTokenWithCompletion:^(NSString * _Nullable token) {

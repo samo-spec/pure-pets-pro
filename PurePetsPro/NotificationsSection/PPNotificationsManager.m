@@ -11,8 +11,8 @@ static NSString * const kPPNotificationTokenDefaultsKey = @"SavedDeviceToken";
 static NSString * const kPPNotificationFunctionsBaseURLDefault = @"https://us-central1-pure-pets-49199.cloudfunctions.net";
 
 static NSString * _Nullable sFunctionsBaseURLOverride = nil;
-static NSString * const kPPNotificationDeactivationReasonLogout = @"logout";
-static NSString * const kPPNotificationDeactivationReasonAccountSwitch = @"account_switch";
+NSString * const kPPNotificationDeactivationReasonLogout = @"logout";
+NSString * const kPPNotificationDeactivationReasonAccountSwitch = @"account_switch";
 static NSString * const kPPNotificationDeactivationReasonTokenDeleted = @"token_deleted";
 static NSString * const kPPNotificationDeactivationReasonManual = @"manual";
 static NSString * const kPPNotificationV2ProAppID = @"pro_ios";

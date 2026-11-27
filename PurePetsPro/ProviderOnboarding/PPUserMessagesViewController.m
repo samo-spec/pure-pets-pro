@@ -542,6 +542,8 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 @property (nonatomic, copy) NSString *playingAudioMessageID;
 @property (nonatomic, copy) NSString *loadingAudioMessageID;
 @property (nonatomic, strong) FIRStorageUploadTask *audioUploadTask;
+@property (nonatomic, strong, nullable) NSURL *activeVoiceUploadURL;
+@property (nonatomic, copy) NSString *sessionCoordinatorKey;
 @property (nonatomic, assign) BOOL didAnimateMessages;
 @property (nonatomic, assign) BOOL didPrepareEntranceAnimation;
 @property (nonatomic, assign) BOOL didRunEntranceAnimation;
@@ -595,6 +597,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     [self pp_startObservingMessages];
     [self pp_startObservingThread];
     [self pp_updateEmptyState];
+    [self pp_registerSessionLifecycleHandlers];
 }
 
 - (void)viewWillAppear:(BOOL)animated
@@ -633,10 +636,67 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     self.threadListener = nil;
 }
 
+- (void)pp_registerSessionLifecycleHandlers
+{
+    self.sessionCoordinatorKey = [NSString stringWithFormat:@"PPUserMessagesViewController.%p", self];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleSessionDidSuspend:)
+                                                 name:PPProSessionDidSuspendNotification
+                                               object:nil];
+    __weak typeof(self) weakSelf = self;
+    [[PPProSessionCoordinator shared] registerActiveWorkBlocker:^BOOL(NSString * _Nullable * _Nullable outReason) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return NO;
+        if (strongSelf.isSendingMessage || strongSelf.audioUploadTask != nil) {
+            if (outReason) *outReason = @"active_chat_send_in_progress";
+            return YES;
+        }
+        return NO;
+    } forKey:self.sessionCoordinatorKey];
+    [[PPProSessionCoordinator shared] registerAsyncSessionTeardownHandler:^(__unused NSString *reason, void (^done)(void)) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf pp_cancelActiveWorkForSessionReset];
+            if (done) done();
+        });
+    } forKey:self.sessionCoordinatorKey];
+}
+
+- (void)pp_handleSessionDidSuspend:(NSNotification *)note
+{
+    [self pp_cancelActiveWorkForSessionReset];
+}
+
+- (void)pp_cancelActiveWorkForSessionReset
+{
+    [self.audioUploadTask cancel];
+    self.audioUploadTask = nil;
+    if (self.activeVoiceUploadURL) {
+        [NSFileManager.defaultManager removeItemAtURL:self.activeVoiceUploadURL error:nil];
+        self.activeVoiceUploadURL = nil;
+    }
+    [self pp_setSendInFlight:NO];
+    [self.chatInputBar cancelRecording];
+    [self pp_stopAudioPlaybackAndRefresh:NO];
+    [self pp_setTypingActive:NO];
+    [self.typingDebounceTimer invalidate];
+    [self.messagesListener remove];
+    self.messagesListener = nil;
+    [self.threadListener remove];
+    self.threadListener = nil;
+}
+
 - (void)dealloc
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    if (self.sessionCoordinatorKey.length > 0) {
+        [[PPProSessionCoordinator shared] unregisterActiveWorkBlockerForKey:self.sessionCoordinatorKey];
+        [[PPProSessionCoordinator shared] unregisterAsyncSessionTeardownHandlerForKey:self.sessionCoordinatorKey];
+    }
     [self.audioUploadTask cancel];
+    if (self.activeVoiceUploadURL) {
+        [NSFileManager.defaultManager removeItemAtURL:self.activeVoiceUploadURL error:nil];
+        self.activeVoiceUploadURL = nil;
+    }
     [self.chatInputBar cancelRecording];
     [self pp_stopAudioPlaybackAndRefresh:NO];
     [self pp_setTypingActive:NO];
@@ -1341,6 +1401,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     };
     FIRStorageUploadTask *task = [ref putData:audioData metadata:metadata];
     self.audioUploadTask = task;
+    self.activeVoiceUploadURL = fileURL;
 
     __weak typeof(self) weakSelf = self;
     [task observeStatus:FIRStorageTaskStatusFailure handler:^(__unused FIRStorageTaskSnapshot *snapshot) {
@@ -1348,6 +1409,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
             strongSelf.audioUploadTask = nil;
+            strongSelf.activeVoiceUploadURL = nil;
             [strongSelf pp_setSendInFlight:NO];
             [NSFileManager.defaultManager removeItemAtURL:fileURL error:nil];
             [PPToast toast:kLang(@"ch_provider_voice_send_error")];
@@ -1357,12 +1419,31 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
     [task observeStatus:FIRStorageTaskStatusSuccess handler:^(__unused FIRStorageTaskSnapshot *snapshot) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
+        if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:senderID] ||
+            [PPProSessionCoordinator.shared isSuspendedOrLocked]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                strongSelf.audioUploadTask = nil;
+                strongSelf.activeVoiceUploadURL = nil;
+                [strongSelf pp_setSendInFlight:NO];
+                [NSFileManager.defaultManager removeItemAtURL:fileURL error:nil];
+            });
+            return;
+        }
         [ref downloadURLWithCompletion:^(NSURL *downloadURL, NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) innerSelf = weakSelf;
                 if (!innerSelf) return;
+                if (![[PPProSessionCoordinator.shared activeUID] isEqualToString:senderID] ||
+                    [PPProSessionCoordinator.shared isSuspendedOrLocked]) {
+                    innerSelf.audioUploadTask = nil;
+                    innerSelf.activeVoiceUploadURL = nil;
+                    [innerSelf pp_setSendInFlight:NO];
+                    [NSFileManager.defaultManager removeItemAtURL:fileURL error:nil];
+                    return;
+                }
                 if (!downloadURL || error) {
                     innerSelf.audioUploadTask = nil;
+                    innerSelf.activeVoiceUploadURL = nil;
                     [innerSelf pp_setSendInFlight:NO];
                     [NSFileManager.defaultManager removeItemAtURL:fileURL error:nil];
                     [PPToast toast:kLang(@"ch_provider_voice_send_error")];
@@ -1413,7 +1494,15 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
 
     __weak typeof(self) weakSelf = self;
     FIRFunctions *functions = [PPProSessionCoordinator.shared activeFunctions];
-    if (!functions) { [self pp_setSendInFlight:NO]; return; }
+    if (!functions ||
+        ![[PPProSessionCoordinator.shared activeUID] isEqualToString:senderID] ||
+        [PPProSessionCoordinator.shared isSuspendedOrLocked]) {
+        self.audioUploadTask = nil;
+        self.activeVoiceUploadURL = nil;
+        [self pp_setSendInFlight:NO];
+        [NSFileManager.defaultManager removeItemAtURL:localFileURL error:nil];
+        return;
+    }
     FIRHTTPSCallable *callable = [functions HTTPSCallableWithName:@"chatMessageCommand"];
     callable.timeoutInterval = 30.0;
     [callable callWithObject:payload completion:^(FIRHTTPSCallableResult * _Nullable result, NSError * _Nullable error) {
@@ -1422,6 +1511,7 @@ static UIColor *PPMessageParticipantTypeColor(NSString *participantType)
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
             strongSelf.audioUploadTask = nil;
+            strongSelf.activeVoiceUploadURL = nil;
             [strongSelf pp_setSendInFlight:NO];
             if (error) {
                 [PPToast toast:kLang(@"ch_provider_voice_send_error")];

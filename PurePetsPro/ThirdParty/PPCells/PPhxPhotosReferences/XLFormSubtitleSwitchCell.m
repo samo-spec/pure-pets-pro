@@ -1,6 +1,7 @@
 #import "XLFormSubtitleSwitchCell.h"
 #import "Styling.h"
 #import "Language.h"
+@import YYKit;
 
 @implementation XLFormSubtitleSwitchCell
 

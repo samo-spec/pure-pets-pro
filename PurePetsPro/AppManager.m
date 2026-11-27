@@ -617,18 +617,28 @@ static BOOL PPShouldUseAppAttestAppCheckProvider(void) {
               canAccessPro:(void(^)(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable error))completion
 {
     NSString *safeUID = PPSafeString(uid);
-    if (safeUID.length == 0 || ![PPProSessionCoordinator.shared.activeUID isEqualToString:safeUID]) {
+    NSString *activeUID = PPSafeString([PPProSessionCoordinator.shared activeUID]);
+    NSString *stagedUID = PPSafeString([PPProSessionCoordinator.shared stagedAuthenticatedUID]);
+    BOOL isStagedPending = (activeUID.length == 0 && stagedUID.length > 0);
+    NSString *effectiveUID = isStagedPending ? stagedUID : activeUID;
+    if (safeUID.length == 0 || ![effectiveUID isEqualToString:safeUID]) {
         if (completion) completion(NO, nil, nil);
         return;
     }
 
-    FIRFirestore *db = [PPProSessionCoordinator.shared activeFirestore];
+    FIRFirestore *db = isStagedPending
+        ? [PPProSessionCoordinator.shared bootstrapFirestoreForStagedSlot]
+        : [PPProSessionCoordinator.shared activeFirestore];
     if (!db) {
         if (completion) completion(NO, nil, nil);
         return;
     }
     PPFetchUsersColRootForAuthIdentity(db, safeUID, ^(NSDictionary * _Nullable root, NSError * _Nullable error) {
-        if (![PPProSessionCoordinator.shared.activeUID isEqualToString:safeUID]) {
+        NSString *nowUID = PPSafeString([PPProSessionCoordinator.shared activeUID]);
+        if (nowUID.length == 0) {
+            nowUID = PPSafeString([PPProSessionCoordinator.shared stagedAuthenticatedUID]);
+        }
+        if (![nowUID isEqualToString:safeUID]) {
             if (completion) completion(NO, nil, nil);
             return;
         }

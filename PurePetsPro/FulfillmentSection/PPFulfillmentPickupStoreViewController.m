@@ -143,21 +143,23 @@ static UILabel *PPPickupLabel(CGFloat size, BOOL bold, UIColor *color) {
     [self buildHeader];
     [self buildFooter];
     __weak typeof(self) weakSelf = self;
-    FIRAuth *activeAuth = PPProSessionCoordinator.shared.activeAuth ?: FIRAuth.auth;
+    FIRAuth *activeAuth = PPProSessionCoordinator.shared.activeAuth;
     self.authHandleOwner = activeAuth;
-    self.authHandle = [activeAuth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
-        __strong typeof(weakSelf) self = weakSelf;
-        if (!self || self.closed || [self sessionCurrent]) return;
-        self.generation++;
-        self.loading = NO;
-        self.blocked = YES;
-        self.selectedChoice = nil;
-        self.currentChoice = nil;
-        [self.stores removeAllObjects];
-        self.nextCursor = nil;
-        self.loadError = kLang(@"ProPickup_SessionChanged");
-        [self render];
-    }];
+    if (activeAuth) {
+        self.authHandle = [activeAuth addAuthStateDidChangeListener:^(FIRAuth *auth, FIRUser *user) {
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self || self.closed || [self sessionCurrent]) return;
+            self.generation++;
+            self.loading = NO;
+            self.blocked = YES;
+            self.selectedChoice = nil;
+            self.currentChoice = nil;
+            [self.stores removeAllObjects];
+            self.nextCursor = nil;
+            self.loadError = kLang(@"ProPickup_SessionChanged");
+            [self render];
+        }];
+    }
     [self loadPage:nil];
 }
 
@@ -425,7 +427,10 @@ static UILabel *PPPickupLabel(CGFloat size, BOOL bold, UIColor *color) {
     if (self.isBeingDismissed || self.navigationController.isBeingDismissed) { self.closed = YES; self.generation++; }
 }
 - (void)dealloc {
-    if (self.authHandle) [(self.authHandleOwner ?: FIRAuth.auth) removeAuthStateDidChangeListener:self.authHandle];
+    [NSNotificationCenter.defaultCenter removeObserver:self];
+    if (self.authHandle && self.authHandleOwner) {
+        [self.authHandleOwner removeAuthStateDidChangeListener:self.authHandle];
+    }
     self.authHandle = nil;
     self.authHandleOwner = nil;
 }

@@ -7,6 +7,12 @@
 #import "Lottie.h"
 #import "AppManager.h" // for kAppPrimaryColor, etc.
 #import "PPFirebaseCompat.h"
+#import "YYKit.h"
+#if __has_include(<SSZipArchive/SSZipArchive.h>)
+#import <SSZipArchive/SSZipArchive.h>
+#elif __has_include("SSZipArchive.h")
+#import "SSZipArchive.h"
+#endif
 
 @implementation Styling
 
@@ -312,7 +318,17 @@
     }
 
     // 🔹 Download from Firebase
-    FIRStorage *storage = [PPProSessionCoordinator.shared activeStorage] ?: [FIRStorage storage];
+    FIRStorage *storage = [PPProSessionCoordinator.shared activeStorage];
+    if (!storage) {
+        if (completion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                completion(nil, [NSError errorWithDomain:@"LottieFetch"
+                                                    code:401
+                                                userInfo:@{NSLocalizedDescriptionKey: @"Active session required"}]);
+            });
+        }
+        return;
+    }
     FIRStorageReference *ref = [storage referenceWithPath:storagePath];
 
     int64_t maxDownloadSize = 20 * 1024 * 1024; // 20 MB

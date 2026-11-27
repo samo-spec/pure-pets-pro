@@ -111,6 +111,7 @@ FOUNDATION_EXPORT BOOL PPProviderTypeIsEnabledInProApp(PPProviderType type);
 @property (nonatomic, copy, nullable) NSString *setupState;
 @property (nonatomic, strong, nullable) NSDictionary *activationChecklist;
 @property (nonatomic, strong, nullable) NSDictionary *documents;
+@property (nonatomic, copy, nullable) NSDictionary *userSummary;
 @property (nonatomic, strong, nullable) NSDictionary *profileDomains;
 @property (nonatomic, copy, nullable) NSString *maskedIban;
 

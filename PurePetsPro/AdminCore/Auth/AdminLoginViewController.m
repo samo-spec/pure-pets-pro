@@ -130,6 +130,14 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     self.extendedLayoutIncludesOpaqueBars = YES;
     self.additionalSafeAreaInsets = UIEdgeInsetsZero;
     self.view.backgroundColor = [self pp_loginBaseBackgroundColor];
+    if (PPProSessionCoordinator.shared.activeTransitionTicket &&
+        PPProSessionCoordinator.shared.pendingSlot &&
+        !self.stagedTransitionTicket) {
+        self.stagedTransitionTicket = PPProSessionCoordinator.shared.activeTransitionTicket;
+        self.stagedSessionSlot = PPProSessionCoordinator.shared.pendingSlot;
+        self.stagedExpectedUID = self.initialSelectedRememberedUID;
+        self.stagedAuthMethod = @"provisional";
+    }
     [self pp_buildHostedSurface];
     [self pp_registerObservers];
     [self pp_refreshSurfaceState];
@@ -184,6 +192,10 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     self.surfaceController.phoneText = self.phoneText ?: @"";
     self.surfaceController.countryCode = self.countryCode ?: @"+974";
     self.surfaceController.showsAppleButton = YES;
+    if (self.initialSelectedRememberedUID.length > 0) {
+        self.surfaceController.selectedRememberedAccountUID = self.initialSelectedRememberedUID;
+    }
+    self.surfaceController.isAddAccountFlow = self.isAddAccountFlow;
 
     [self addChildViewController:self.surfaceController];
     self.surfaceController.view.translatesAutoresizingMaskIntoConstraints = NO;
@@ -214,6 +226,10 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                                              selector:@selector(pp_handleSessionStateDidChange)
                                                  name:PPProSessionDidChangeActiveRuntimeNotification
                                                object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(pp_handleSessionStateDidChange)
+                                                 name:PPProSessionAccountListDidChangeNotification
+                                               object:nil];
 }
 
 - (void)pp_handleLanguageDidChange {
@@ -235,6 +251,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     self.surfaceController.countryCode = self.countryCode ?: @"+974";
     self.surfaceController.isBusy = self.isAuthenticating;
     self.surfaceController.requiresTransitionRecovery = [PPProSessionCoordinator.shared requiresTransitionRecovery];
+    self.surfaceController.isAddAccountFlow = self.isAddAccountFlow;
 #if DEBUG
     if (PPProIdentityPortalPresentationTest()) {
         self.surfaceController.rememberedAccounts = [NSProcessInfo.processInfo.arguments containsObject:@"-PPProIdentityPortalFixtureAccounts"] ?
@@ -242,7 +259,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
               @{@"uid":@"fixture-B", @"label":@"•••• 4321", @"method":@"phone"}] : @[];
     } else
 #endif
-    if ([PPProRememberedAccountStore rolloutEnabled] && ![PPProSessionCoordinator.shared currentUser]) {
+    if ([PPProRememberedAccountStore rolloutEnabled] && (![PPProSessionCoordinator.shared currentUser] || self.isAddAccountFlow)) {
         self.surfaceController.rememberedAccounts = [PPProRememberedAccountStore recordsWithError:nil] ?: @[];
     } else {
         self.surfaceController.rememberedAccounts = @[];
@@ -380,6 +397,158 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                 }
             });
         }];
+    } cancelBlock:nil];
+}
+
+- (void)proLoginSurface:(PPProLoginSurfaceController *)controller didRequestQuickSwitchToUID:(NSString *)uid {
+    (void)controller;
+    if (PPProIdentityPortalPresentationTest() || self.isAuthenticating || !uid.length) return;
+    if (![PPProRememberedAccountStore rolloutEnabled]) return;
+
+    self.isAuthenticating = YES;
+    [self pp_setInteractionEnabled:NO];
+    [PPHUD showIndeterminateIn:self.view title:kLang(@"Please wait") subtitle:kLang(@"ProIdentityVerifying")];
+    PPAdminSetLoginInProgress(YES);
+
+    __weak typeof(self) weakSelf = self;
+    void (^runFastSwitch)(void) = ^{
+        [PPProSessionCoordinator.shared fastSwitchToRememberedUID:uid
+                                                           fromUID:[PPProSessionCoordinator.shared activeUID]
+                                                        completion:^(BOOL switched,
+                                                                     BOOL requiresReauth,
+                                                                     NSUUID * _Nullable ticket,
+                                                                     id<PPProSessionSlotHandle> _Nullable stagedSlot,
+                                                                     NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) innerSelf = weakSelf;
+                if (!innerSelf) return;
+                if (switched) {
+                    [innerSelf pp_clearStagedAuthTransition];
+                    innerSelf.isAuthenticating = NO;
+                    [innerSelf pp_setInteractionEnabled:YES];
+                    [innerSelf pp_gatekeepServiceProviderForUID:uid];
+                    return;
+                }
+                [PPHUD dismiss];
+                PPAdminSetLoginInProgress(NO);
+                innerSelf.isAuthenticating = NO;
+                [innerSelf pp_setInteractionEnabled:YES];
+                if (requiresReauth) {
+                    if (ticket || stagedSlot) {
+                        innerSelf.stagedTransitionTicket = ticket;
+                        innerSelf.stagedSessionSlot = stagedSlot;
+                        innerSelf.stagedExpectedUID = uid;
+                        innerSelf.stagedAuthMethod = @"provisional";
+                    } else {
+                        [innerSelf pp_clearStagedAuthTransition];
+                    }
+                    innerSelf.surfaceController.selectedRememberedAccountUID = uid;
+                    [innerSelf pp_refreshSurfaceState];
+                    [innerSelf.surfaceController focusLoginFormCard];
+                    [PPToast toast:kLang(@"ProIdentityReauthenticationHint")
+                             style:PPToastStyleInfo
+                            haptic:YES
+                          duration:2.4];
+                    return;
+                }
+                [innerSelf pp_refreshSurfaceState];
+                if (error) {
+                    [PPAlertHelper showErrorIn:innerSelf
+                                         title:kLang(@"Error")
+                                      subtitle:error.localizedDescription ?: kLang(@"StatusLoginFailed")];
+                }
+            });
+        }];
+    };
+
+    if (self.stagedTransitionTicket || self.stagedSessionSlot) {
+        NSUUID *oldTicket = self.stagedTransitionTicket;
+        [self pp_clearStagedAuthTransition];
+        [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:oldTicket
+                                                                  completion:^(__unused BOOL cleared, __unused NSError *err) {
+            runFastSwitch();
+        }];
+    } else {
+        runFastSwitch();
+    }
+}
+
+- (void)proLoginSurfaceDidTapCancelAddAccount:(PPProLoginSurfaceController *)controller {
+    (void)controller;
+    if (PPProIdentityPortalPresentationTest() || self.isAuthenticating) return;
+    NSArray<NSDictionary<NSString *, NSString *> *> *records = [PPProRememberedAccountStore recordsWithError:nil] ?: @[];
+    NSString *fallbackUID = nil;
+    for (NSDictionary<NSString *, NSString *> *rec in records) {
+        NSString *status = rec[@"sessionStatus"] ?: @"";
+        if (rec[@"uid"].length > 0 &&
+            ![status isEqualToString:PPProSessionStatusRevoked] &&
+            ![status isEqualToString:PPProSessionStatusExpired]) {
+            fallbackUID = rec[@"uid"];
+            break;
+        }
+    }
+    if (fallbackUID.length > 0) {
+        [self proLoginSurface:self.surfaceController didRequestQuickSwitchToUID:fallbackUID];
+        return;
+    }
+    if (self.stagedTransitionTicket || self.stagedSessionSlot) {
+        NSUUID *oldTicket = self.stagedTransitionTicket;
+        [self pp_clearStagedAuthTransition];
+        [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:oldTicket completion:nil];
+    }
+    self.isAddAccountFlow = NO;
+    [self pp_refreshSurfaceState];
+}
+
+- (void)proLoginSurfaceDidTapSignOutAll:(PPProLoginSurfaceController *)controller {
+    (void)controller;
+    if (PPProIdentityPortalPresentationTest() || self.isAuthenticating) return;
+    if (![PPProRememberedAccountStore rolloutEnabled]) return;
+
+    __weak typeof(self) weakSelf = self;
+    [PPAlertHelper showConfirmationIn:self
+                                title:kLang(@"ProIdentitySignOutAllTitle")
+                             subtitle:kLang(@"ProIdentitySignOutAllMessage")
+                        confirmButton:kLang(@"ProIdentitySignOutAll")
+                         cancelButton:kLang(@"Cancel")
+                                 icon:[UIImage systemImageNamed:@"rectangle.portrait.and.arrow.right"]
+                         confirmBlock:^(__unused NSString * _Nullable text, BOOL didConfirm) {
+        if (!didConfirm) return;
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self || self.isAuthenticating) return;
+        self.isAuthenticating = YES;
+        [self pp_setInteractionEnabled:NO];
+        [PPHUD showIndeterminateIn:self.view title:kLang(@"Please wait") subtitle:nil];
+        void (^performSignOutAll)(void) = ^{
+            [PPProSessionCoordinator.shared signOutAllAccountsWithReason:@"sign_out_all"
+                                                              completion:^(BOOL signedOutAll, NSError * _Nullable error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [PPHUD dismiss];
+                    __strong typeof(weakSelf) innerSelf = weakSelf;
+                    if (!innerSelf) return;
+                    innerSelf.isAuthenticating = NO;
+                    [innerSelf pp_setInteractionEnabled:YES];
+                    [innerSelf pp_clearStagedAuthTransition];
+                    innerSelf.isAddAccountFlow = NO;
+                    [innerSelf pp_refreshSurfaceState];
+                    if (!signedOutAll || error) {
+                        [PPAlertHelper showErrorIn:innerSelf
+                                             title:kLang(@"Error")
+                                          subtitle:error.localizedDescription ?: kLang(@"StatusLoginFailed")];
+                    }
+                });
+            }];
+        };
+        if (self.stagedTransitionTicket || self.stagedSessionSlot) {
+            NSUUID *oldTicket = self.stagedTransitionTicket;
+            [self pp_clearStagedAuthTransition];
+            [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:oldTicket
+                                                                      completion:^(__unused BOOL cleared, __unused NSError *err) {
+                performSignOutAll();
+            }];
+        } else {
+            performSignOutAll();
+        }
     } cancelBlock:nil];
 }
 
@@ -527,7 +696,9 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
         (safeExpected && [self.stagedExpectedUID isEqualToString:safeExpected]);
     if ((self.stagedTransitionTicket || self.stagedSessionSlot) &&
         sameExpected &&
-        [self.stagedAuthMethod isEqualToString:safeMethod]) {
+        ([self.stagedAuthMethod isEqualToString:safeMethod] ||
+         [self.stagedAuthMethod isEqualToString:@"provisional"])) {
+        self.stagedAuthMethod = safeMethod;
         if (completion) completion(YES, self.stagedTransitionTicket, self.stagedSessionSlot, nil);
         return;
     }
@@ -1019,134 +1190,279 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
             return;
         }
 
-        FIRAuth *activeAuth = [PPProSessionCoordinator.shared activeAuth] ?: [FIRAuth auth];
-        [activeAuth signInWithCredential:credential
-                              completion:^(FIRAuthDataResult * _Nullable result, NSError * _Nullable error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [PPHUD dismiss];
-                __strong typeof(weakSelf) self = weakSelf;
-                if (!self) {
-                    return;
-                }
+        [PPProSessionCoordinator.shared authenticateStagedSlot:slot
+                                              withCredential:credential
+                                                 expectedUID:expectedUID
+                                                  completion:^(FIRUser * _Nullable user, NSString * _Nullable authenticatedUID, NSError * _Nullable error) {
+            [PPHUD dismiss];
+            __strong typeof(weakSelf) self = weakSelf;
+            if (!self) {
+                return;
+            }
 
-                self.isAuthenticating = NO;
-                [self pp_setInteractionEnabled:YES];
+            self.isAuthenticating = NO;
+            [self pp_setInteractionEnabled:YES];
 
-                FIRUser *user = result.user ?: activeAuth.currentUser;
-                if (error || !user || ![activeAuth.currentUser.uid isEqualToString:user.uid]) {
+            if (error && error.code == PPProSessionCoordinatorErrorIdentityMismatch) {
+                // Never bootstrap a different identity chosen by the authentication provider.
+                PPAdminSetLoginInProgress(YES);
+                [self pp_setInteractionEnabled:NO];
+                self.isAuthenticating = YES;
+                void (^finishMismatch)(BOOL, NSError * _Nullable) = ^(BOOL recoveryRequired, NSError * _Nullable finalError) {
+                    __strong typeof(weakSelf) innerSelf = weakSelf;
+                    if (!innerSelf) return;
                     PPAdminSetLoginInProgress(NO);
+                    innerSelf.isAuthenticating = NO;
+                    [innerSelf pp_setInteractionEnabled:YES];
+                    [innerSelf pp_clearStagedAuthTransition];
+                    [innerSelf pp_refreshSurfaceState];
+                    if (recoveryRequired) {
+                        [PPAlertHelper showErrorIn:innerSelf
+                                             title:kLang(@"Error")
+                                          subtitle:finalError.localizedDescription ?: kLang(@"ProIdentityWrongAccount")];
+                    } else {
+                        [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:kLang(@"ProIdentityWrongAccount")];
+                    }
+                };
+                if (ticket || slot || [PPProRememberedAccountStore rolloutEnabled]) {
                     [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
                                                                          provisionalSlot:slot
-                                                                                   error:error
-                                                                     mismatchExpectedUID:nil
-                                                                              completion:^(__unused BOOL recoveryRequired, NSError * _Nullable finalError) {
-                        __strong typeof(weakSelf) innerSelf = weakSelf;
-                        if (!innerSelf) return;
-                        [innerSelf pp_clearStagedAuthTransition];
-                        [innerSelf pp_refreshSurfaceState];
-                        NSString *subtitle = [innerSelf pp_friendlyFirebaseAuthErrorMessage:error ?: finalError];
-                        [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:subtitle];
-                    }];
-                    return;
-                }
-                if (expectedUID.length && ![user.uid isEqualToString:expectedUID]) {
-                    // Never bootstrap a different identity chosen by the authentication provider.
-                    PPAdminSetLoginInProgress(YES);
-                    [self pp_setInteractionEnabled:NO];
-                    self.isAuthenticating = YES;
-                    void (^finishMismatch)(BOOL, NSError * _Nullable) = ^(BOOL recoveryRequired, NSError * _Nullable finalError) {
-                        __strong typeof(weakSelf) innerSelf = weakSelf;
-                        if (!innerSelf) return;
-                        PPAdminSetLoginInProgress(NO);
-                        innerSelf.isAuthenticating = NO;
-                        [innerSelf pp_setInteractionEnabled:YES];
-                        [innerSelf pp_clearStagedAuthTransition];
-                        [innerSelf pp_refreshSurfaceState];
-                        if (recoveryRequired) {
-                            [PPAlertHelper showErrorIn:innerSelf
-                                                 title:kLang(@"Error")
-                                              subtitle:finalError.localizedDescription ?: kLang(@"ProIdentityWrongAccount")];
-                        } else {
-                            [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:kLang(@"ProIdentityWrongAccount")];
+                                                                                   error:nil
+                                                                     mismatchExpectedUID:expectedUID
+                                                                              completion:finishMismatch];
+                } else {
+                    [UserManager.shared forceSecuritySignOutWithCompletion:^(NSError *logoutError) {
+                        if (logoutError) {
+                            [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
+                                                                                 provisionalSlot:slot
+                                                                                           error:logoutError
+                                                                             mismatchExpectedUID:expectedUID
+                                                                                      completion:finishMismatch];
+                            return;
                         }
-                    };
-                    if (ticket || slot || [PPProRememberedAccountStore rolloutEnabled]) {
-                        [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
-                                                                             provisionalSlot:slot
-                                                                                       error:nil
-                                                                         mismatchExpectedUID:expectedUID
-                                                                                  completion:finishMismatch];
-                    } else {
-                        [UserManager.shared signOutWithCompletion:^(NSError *logoutError) {
-                            if (logoutError) {
-                                [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
-                                                                                     provisionalSlot:slot
-                                                                                               error:logoutError
-                                                                                 mismatchExpectedUID:expectedUID
-                                                                                          completion:finishMismatch];
-                                return;
-                            }
-                            finishMismatch(NO, nil);
-                        }];
-                    }
-                    return;
+                        finishMismatch(NO, nil);
+                    }];
                 }
+                return;
+            }
 
-                NSString *maskedLabel = [PPProRememberedAccountStore maskedLabelForPhone:user.phoneNumber email:user.email];
-                [PPProSessionCoordinator.shared completeAuthenticationForTicket:ticket
-                                                                provisionalSlot:slot
-                                                               authenticatedUID:user.uid
-                                                                    expectedUID:expectedUID
-                                                                    maskedLabel:maskedLabel
-                                                                         method:authMethod
-                                                                     completion:^(BOOL installed, NSError * _Nullable installError) {
+            if (error || !user || !authenticatedUID.length) {
+                PPAdminSetLoginInProgress(NO);
+                [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
+                                                                     provisionalSlot:slot
+                                                                               error:error
+                                                                 mismatchExpectedUID:nil
+                                                                          completion:^(__unused BOOL recoveryRequired, NSError * _Nullable finalError) {
                     __strong typeof(weakSelf) innerSelf = weakSelf;
                     if (!innerSelf) return;
                     [innerSelf pp_clearStagedAuthTransition];
-                    if (!installed || ![[PPProSessionCoordinator.shared activeUID] isEqualToString:user.uid]) {
+                    [innerSelf pp_refreshSurfaceState];
+                    NSString *subtitle = [innerSelf pp_friendlyFirebaseAuthErrorMessage:error ?: finalError];
+                    [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:subtitle];
+                }];
+                return;
+            }
+
+            if (expectedUID.length && ![user.uid isEqualToString:expectedUID]) {
+                PPAdminSetLoginInProgress(YES);
+                [self pp_setInteractionEnabled:NO];
+                self.isAuthenticating = YES;
+                [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
+                                                                     provisionalSlot:slot
+                                                                               error:nil
+                                                                 mismatchExpectedUID:expectedUID
+                                                                          completion:^(__unused BOOL recoveryRequired, NSError * _Nullable finalError) {
+                    __strong typeof(weakSelf) innerSelf = weakSelf;
+                    if (!innerSelf) return;
+                    PPAdminSetLoginInProgress(NO);
+                    innerSelf.isAuthenticating = NO;
+                    [innerSelf pp_setInteractionEnabled:YES];
+                    [innerSelf pp_clearStagedAuthTransition];
+                    [innerSelf pp_refreshSurfaceState];
+                    [PPAlertHelper showErrorIn:innerSelf
+                                         title:kLang(@"Error")
+                                      subtitle:finalError.localizedDescription ?: kLang(@"ProIdentityWrongAccount")];
+                }];
+                return;
+            }
+
+            NSString *trimmedName = [name stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+            if (trimmedName.length > 0 && (user.displayName.length == 0 || [user.displayName hasPrefix:@"user"])) {
+                FIRUserProfileChangeRequest *changeRequest = [user profileChangeRequest];
+                changeRequest.displayName = trimmedName;
+                [changeRequest commitChangesWithCompletion:^(NSError * _Nullable profileError) {
+                    if (profileError) {
+                        DLog(@"[Auth] Failed to update displayName: %@", profileError.localizedDescription);
+                    }
+                }];
+            }
+
+            NSDictionary *extra = trimmedName.length > 0 ? @{@"UserName": trimmedName} : nil;
+            NSString *maskedLabel = [PPProRememberedAccountStore maskedLabelForPhone:user.phoneNumber email:user.email];
+
+            [PPHUD showIndeterminateIn:self.view title:kLang(@"Please wait") subtitle:kLang(@"StatusLoggingIn")];
+            [user getIDTokenResultForcingRefresh:YES completion:^(__unused FIRAuthTokenResult * _Nullable tokenResult, NSError * _Nullable tokenError) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    __strong typeof(weakSelf) tokenSelf = weakSelf;
+                    if (!tokenSelf) return;
+                    if (tokenError) {
+                        [PPHUD dismiss];
                         PPAdminSetLoginInProgress(NO);
-                        innerSelf.isAuthenticating = NO;
-                        [innerSelf pp_setInteractionEnabled:YES];
-                        [innerSelf pp_refreshSurfaceState];
-                        [PPAlertHelper showErrorIn:innerSelf
-                                             title:kLang(@"Error")
-                                          subtitle:installError.localizedDescription ?: kLang(@"StatusLoginFailed")];
+                        [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
+                                                                             provisionalSlot:slot
+                                                                                       error:tokenError
+                                                                         mismatchExpectedUID:nil
+                                                                                  completion:^(__unused BOOL rec, NSError * _Nullable finalErr) {
+                            __strong typeof(weakSelf) innerSelf = weakSelf;
+                            if (!innerSelf) return;
+                            [innerSelf pp_clearStagedAuthTransition];
+                            [innerSelf pp_refreshSurfaceState];
+                            [PPAlertHelper showErrorIn:innerSelf
+                                                 title:kLang(@"Error")
+                                              subtitle:[innerSelf pp_friendlyFirebaseAuthErrorMessage:tokenError ?: finalErr]];
+                        }];
                         return;
                     }
 
-                    FIRUser *installedUser = [PPProSessionCoordinator.shared currentUser] ?: user;
-                    // Update Firebase Auth display name if provided and not already set
-                    NSString *trimmedName = [name stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-                    if (trimmedName.length > 0 && (installedUser.displayName.length == 0 || [installedUser.displayName hasPrefix:@"user"])) {
-                        FIRUserProfileChangeRequest *changeRequest = [installedUser profileChangeRequest];
-                        changeRequest.displayName = trimmedName;
-                        [changeRequest commitChangesWithCompletion:^(NSError * _Nullable profileError) {
-                            if (profileError) {
-                                DLog(@"[Auth] Failed to update displayName: %@", profileError.localizedDescription);
-                            }
-                        }];
-                    }
-
-                    NSDictionary *extra = nil;
-                    if (trimmedName.length > 0) {
-                        extra = @{@"UserName": trimmedName};
-                    }
-
+                    // P0-02: Separate Authenticated (staged bootstrap) from Authorized (Pro verified & installed).
                     [[FUManager shared] ensureUserDocumentExistsForCurrentUserWithExtra:extra
                                                                              completion:^(NSError *documentError) {
                         dispatch_async(dispatch_get_main_queue(), ^{
                             __strong typeof(weakSelf) readySelf = weakSelf;
-                            if (!readySelf || ![[PPProSessionCoordinator.shared activeUID] isEqualToString:user.uid]) {
-                                return;
-                            }
+                            if (!readySelf) return;
                             if (documentError) {
                                 DLog(@"[Auth] ensureUserDocument error: %@", documentError.localizedDescription);
                             }
-                            [readySelf pp_gatekeepServiceProviderForUID:user.uid];
+                            [AppMgr checkIfUserWithUID:user.uid canAccessPro:^(BOOL allowed, NSDictionary * _Nullable userDoc, NSError * _Nullable accessError) {
+                                dispatch_async(dispatch_get_main_queue(), ^{
+                                    __strong typeof(weakSelf) gateSelf = weakSelf;
+                                    if (!gateSelf) return;
+
+                                    void (^abortStagedSession)(NSError * _Nullable, NSString * _Nullable) = ^(NSError * _Nullable causeErr, NSString * _Nullable alertSubtitle) {
+                                        [PPHUD dismiss];
+                                        PPAdminSetLoginInProgress(NO);
+                                        [PPProSessionCoordinator.shared handleAuthenticationFailureForTicket:ticket
+                                                                                             provisionalSlot:slot
+                                                                                                       error:causeErr
+                                                                                         mismatchExpectedUID:nil
+                                                                                                  completion:^(__unused BOOL rec, __unused NSError * _Nullable fErr) {
+                                            __strong typeof(weakSelf) innerSelf = weakSelf;
+                                            if (!innerSelf) return;
+                                            [innerSelf pp_clearStagedAuthTransition];
+                                            [innerSelf pp_refreshSurfaceState];
+                                            if (alertSubtitle.length > 0) {
+                                                [PPAlertHelper showErrorIn:innerSelf title:kLang(@"Error") subtitle:alertSubtitle];
+                                            }
+                                        }];
+                                    };
+
+                                    void (^commitAuthorizedSessionAndRoute)(void) = ^{
+                                        [PPProSessionCoordinator.shared completeAuthenticationForTicket:ticket
+                                                                                        provisionalSlot:slot
+                                                                                       authenticatedUID:user.uid
+                                                                                            expectedUID:expectedUID
+                                                                                            maskedLabel:maskedLabel
+                                                                                                 method:authMethod
+                                                                                      proAccessVerified:YES
+                                                                                             completion:^(BOOL installed, NSError * _Nullable installError) {
+                                            __strong typeof(weakSelf) innerSelf = weakSelf;
+                                            if (!innerSelf) return;
+                                            [innerSelf pp_clearStagedAuthTransition];
+                                            if (!installed || ![[PPProSessionCoordinator.shared activeUID] isEqualToString:user.uid]) {
+                                                [PPHUD dismiss];
+                                                PPAdminSetLoginInProgress(NO);
+                                                innerSelf.isAuthenticating = NO;
+                                                [innerSelf pp_setInteractionEnabled:YES];
+                                                [innerSelf pp_refreshSurfaceState];
+                                                [PPAlertHelper showErrorIn:innerSelf
+                                                                     title:kLang(@"Error")
+                                                                  subtitle:installError.localizedDescription ?: kLang(@"StatusLoginFailed")];
+                                                return;
+                                            }
+                                            [innerSelf pp_gatekeepServiceProviderForUID:user.uid];
+                                        }];
+                                    };
+
+                                    if (accessError) {
+                                        NSString *msg = [gateSelf pp_errorLooksLikeAppCheckFailure:accessError]
+                                            ? kLang(@"StatusAppCheckInvalid")
+                                            : kLang(@"StatusUserDocError");
+                                        abortStagedSession(accessError, msg);
+                                        return;
+                                    }
+
+                                    if (PPProLoginUserDocIsBlocked(userDoc ?: @{})) {
+                                        gateSelf.noPermissionAttempts++;
+                                        abortStagedSession(nil, kLang(@"StatusNoPartnerAccess"));
+                                        return;
+                                    }
+
+                                    NSDictionary *onboarding = [userDoc[@"onboarding"] isKindOfClass:NSDictionary.class] ? userDoc[@"onboarding"] : @{};
+                                    NSDictionary *applicationRoot = onboarding.count > 0 ? onboarding : userDoc;
+                                    NSString *applicationStatus = [PPSafeString(applicationRoot[@"partnerApplicationStatus"]).lowercaseString
+                                                                  stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+                                    BOOL inReview = [@[@"pending", @"under_review"] containsObject:applicationStatus];
+                                    gateSelf.hasProviderApplicationInReview = inReview;
+
+                                    if (allowed || inReview || gateSelf.resumePartnerApplicationAfterAuth) {
+                                        commitAuthorizedSessionAndRoute();
+                                        return;
+                                    }
+
+                                    // Check staged delivery company membership before committing or rejecting.
+                                    [PPDeliveryCompanyService.shared discoverCompanyMembershipsWithCompletion:^(NSArray<PPDeliveryCompanyProfile *> * _Nullable profiles, NSError * _Nullable membershipErr) {
+                                        dispatch_async(dispatch_get_main_queue(), ^{
+                                            __strong typeof(weakSelf) memberSelf = weakSelf;
+                                            if (!memberSelf) return;
+                                            BOOL requiresSel = NO;
+                                            PPDeliveryCompanyProfile *profile = [PPDeliveryCompanyService.shared preferredProfileFromProfiles:profiles ?: @[] requiresSelection:&requiresSel];
+                                            if (profile.companyID.length > 0) {
+                                                commitAuthorizedSessionAndRoute();
+                                                return;
+                                            }
+                                            [PPHUD dismiss];
+                                            PPAdminSetLoginInProgress(NO);
+                                            [memberSelf pp_setInteractionEnabled:YES];
+                                            if (membershipErr) {
+                                                [PPAlertHelper showThreeActionConfirmationIn:memberSelf
+                                                                                       title:kLang(@"ProAccess_CheckFailedTitle")
+                                                                                    subtitle:kLang(@"ProAccess_CheckFailedBody")
+                                                                               primaryButton:kLang(@"TryAgain")
+                                                                                primaryStyle:UIAlertActionStyleDefault
+                                                                             secondaryButton:kLang(@"ProAccess_BecomePartner")
+                                                                              secondaryStyle:UIAlertActionStyleDefault
+                                                                              tertiaryButton:kLang(@"ProAccess_UseAnotherAccount")
+                                                                               tertiaryStyle:UIAlertActionStyleDefault
+                                                                                primaryBlock:^{
+                                                    PPAdminSetLoginInProgress(YES);
+                                                    [memberSelf pp_signInWithCredential:credential displayName:name];
+                                                } secondaryBlock:^{
+                                                    memberSelf.resumePartnerApplicationAfterAuth = YES;
+                                                    commitAuthorizedSessionAndRoute();
+                                                } tertiaryBlock:^{
+                                                    abortStagedSession(nil, nil);
+                                                }];
+                                                return;
+                                            }
+                                            [PPAlertHelper showInfoIn:memberSelf
+                                                                title:kLang(@"ProAccess_NotEnabledTitle")
+                                                             subtitle:kLang(@"ProAccess_NotEnabledBody")
+                                                        primaryButton:kLang(@"ProAccess_BecomePartner")
+                                                      secondaryButton:kLang(@"ProAccess_UseAnotherAccount")
+                                                         primaryBlock:^{
+                                                memberSelf.resumePartnerApplicationAfterAuth = YES;
+                                                commitAuthorizedSessionAndRoute();
+                                            } secondaryBlock:^{
+                                                abortStagedSession(nil, nil);
+                                            }];
+                                        });
+                                    }];
+                                });
+                            }];
                         });
                     }];
-                }];
-            });
+                });
+            }];
         }];
     }];
 }
@@ -1262,7 +1578,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                 onboardingSelf.resumePartnerApplicationAfterAuth = YES;
                 [onboardingSelf pp_continueToProviderOnboarding];
             } tertiaryBlock:^{
-                if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+                if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared forceSecuritySignOutWithCompletion:nil];
             }];
             return;
         }
@@ -1282,7 +1598,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
             onboardingSelf.resumePartnerApplicationAfterAuth = YES;
             [onboardingSelf pp_continueToProviderOnboarding];
         } secondaryBlock:^{
-            if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared signOut];
+            if ([PPProSessionCoordinator.shared.currentUser.uid isEqualToString:uid]) [UserManager.shared forceSecuritySignOutWithCompletion:nil];
         }];
     }];
 }
@@ -1292,7 +1608,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
         [PPHUD dismiss];
         PPAdminSetLoginInProgress(NO);
         [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"StatusUserDocError")];
-        [UserManager.shared signOut];
+        [UserManager.shared forceSecuritySignOutWithCompletion:nil];
         return;
     }
 
@@ -1316,7 +1632,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
 
                 PPAdminSetLoginInProgress(NO);
                 [PPAlertHelper showErrorIn:self title:kLang(@"Error") subtitle:kLang(@"StatusUserDocError")];
-                [UserManager.shared signOut];
+                [UserManager.shared forceSecuritySignOutWithCompletion:nil];
                 return;
             }
 
@@ -1324,7 +1640,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                 DLog(@"[ProGate] user authenticated but not yet approved for provider access uid=%@", uid);
 
                 if (PPProLoginUserDocIsBlocked(userDoc ?: @{})) {
-                    [UserManager.shared signOut];
+                    [UserManager.shared forceSecuritySignOutWithCompletion:nil];
                     PPAdminSetLoginInProgress(NO);
                     self.noPermissionAttempts++;
                     if (self.noPermissionAttempts == 1) {

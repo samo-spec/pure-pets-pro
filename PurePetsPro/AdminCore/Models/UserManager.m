@@ -9,6 +9,7 @@
 #import "UIImageView+WebCache.h"
 #import "AppDelegate.h"
 #import "PPProSessionFence.h"
+#import "PPProRememberedAccountStore.h"
 
 @interface AppDelegate (PPNotificationV2LogoutBarrier)
 - (void)pp_beginNotificationV2LogoutBarrierWithCompletion:(dispatch_block_t)completion;
@@ -821,11 +822,15 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
             }
 
             [strongSelf invalidateUserCacheForUID:userID];
-            [strongSelf clearUserCache];
+            if (![PPProRememberedAccountStore rolloutEnabled]) {
+                [strongSelf clearUserCache];
+            }
             [strongSelf stopListening];
 
             NSError *signOutError = nil;
-            [[FUManager shared] signOut:&signOutError];
+            if ([PPProSessionCoordinator.shared activeAuth].currentUser != nil) {
+                [[FUManager shared] signOut:&signOutError];
+            }
             if (signOutError) {
                 strongSelf.signOutInProgress = NO;
                 [notificationAppDelegate pp_abortNotificationV2LogoutBarrierAndRefreshForReason:@"auth_signout_failed"];
@@ -839,7 +844,39 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
 
             [strongSelf.sessionFence invalidate];
             strongSelf.currentUser = nil;
-            [PPProSessionCoordinator.shared completeExternalSignOutWithUID:userID];
+
+            __block BOOL coordFinished = NO;
+            __block BOOL tokenFinished = NO;
+            __block NSError *capturedCoordError = nil;
+            void (^tryFinalizeSignOut)(void) = ^{
+                if (!coordFinished || !tokenFinished) return;
+                [notificationAppDelegate pp_endNotificationV2LogoutBarrier];
+                strongSelf.signOutInProgress = NO;
+                dispatch_block_t publish = ^{
+                    if (capturedCoordError && !completion) {
+                        UIViewController *presenter = PPProUserManagerTopViewController();
+                        if (presenter) {
+                            [PPAlertHelper showErrorIn:presenter
+                                                 title:kLang(@"Error")
+                                              subtitle:capturedCoordError.localizedDescription ?: kLang(@"StatusLoginFailed")];
+                        }
+                    }
+                    if (completion) completion(capturedCoordError);
+                    [[NSNotificationCenter defaultCenter] postNotificationName:UserManagerAuthStateDidChangeNotification
+                                                                        object:nil];
+                };
+                if (NSThread.isMainThread) publish(); else dispatch_async(dispatch_get_main_queue(), publish);
+            };
+
+            [PPProSessionCoordinator.shared completeExternalSignOutWithUID:userID completion:^(NSError * _Nullable coordError) {
+                dispatch_block_t handleCoord = ^{
+                    capturedCoordError = coordError;
+                    coordFinished = YES;
+                    tryFinalizeSignOut();
+                };
+                if (NSThread.isMainThread) handleCoord();
+                else dispatch_async(dispatch_get_main_queue(), handleCoord);
+            }];
 
             __block BOOL didFinishLocalTokenInvalidation = NO;
             void (^finishSignOut)(NSError * _Nullable) = ^(NSError * _Nullable localTokenError) {
@@ -848,14 +885,8 @@ NSString * const LanguageDidChangeNotification = @"LanguageDidChangeNotification
                 if (localTokenError) {
                     DLog(@"⚠️ Local Pro token invalidation failed: %@", localTokenError.localizedDescription);
                 }
-                [notificationAppDelegate pp_endNotificationV2LogoutBarrier];
-                strongSelf.signOutInProgress = NO;
-                dispatch_block_t publish = ^{
-                    if (completion) completion(nil);
-                    [[NSNotificationCenter defaultCenter] postNotificationName:UserManagerAuthStateDidChangeNotification
-                                                                        object:nil];
-                };
-                if (NSThread.isMainThread) publish(); else dispatch_async(dispatch_get_main_queue(), publish);
+                tokenFinished = YES;
+                tryFinalizeSignOut();
             };
 
             // Keep the registration barrier active through token deletion so a

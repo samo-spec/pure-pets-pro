@@ -20,6 +20,7 @@ static void PPSlotAssignError(NSError **error, NSInteger code) {
 @property(nonatomic,strong) FIRApp *app;
 @property(nonatomic,strong,nullable) NSUUID *authAttempt;
 @property(nonatomic) BOOL invalidated;
+@property(nonatomic) BOOL appDeleted;
 @property(nonatomic) BOOL proAccessVerified;
 @property(nonatomic,copy,nullable) NSString *verifiedUID;
 - (instancetype)initWithApp:(FIRApp *)app
@@ -214,6 +215,13 @@ static void PPSlotAssignError(NSError **error, NSInteger code) {
             self.invalidated = YES;
             self.authAttempt = nil;
         }
+        NSString *appName = self.app.name;
+        BOOL appAlreadyGone = self.appDeleted || (self.app && appName.length > 0 && [FIRApp appNamed:appName] == nil);
+        if (appAlreadyGone) {
+            self.appDeleted = YES;
+            if (completion) completion(nil);
+            return;
+        }
         NSError *logoutError = nil;
         BOOL ok = YES;
         if (self.auth.currentUser != nil) {
@@ -236,10 +244,22 @@ static void PPSlotAssignError(NSError **error, NSInteger code) {
             finish(NO, PPSlotError(2));
             return;
         }
+        NSString *appName = self.app.name;
+        if (self.appDeleted || (appName.length > 0 && [FIRApp appNamed:appName] == nil)) {
+            [self signOutAndInvalidate:YES completion:^(NSError *signOutError) {
+                finish(signOutError == nil, signOutError);
+            }];
+            return;
+        }
         void (^terminateClearAndDelete)(void) = ^{
             [self signOutAndInvalidate:YES completion:^(NSError *signOutError) {
                 if (signOutError) {
                     finish(NO, signOutError);
+                    return;
+                }
+                if (self.appDeleted || (appName.length > 0 && [FIRApp appNamed:appName] == nil)) {
+                    self.appDeleted = YES;
+                    finish(YES, nil);
                     return;
                 }
                 FIRFirestore *db = [FIRFirestore firestoreForApp:self.app];
@@ -248,7 +268,15 @@ static void PPSlotAssignError(NSError **error, NSInteger code) {
                         finish(NO, persistenceError);
                         return;
                     }
+                    if (self.appDeleted || (appName.length > 0 && [FIRApp appNamed:appName] == nil)) {
+                        self.appDeleted = YES;
+                        finish(YES, nil);
+                        return;
+                    }
                     [self.app deleteApp:^(BOOL success) {
+                        if (success) {
+                            self.appDeleted = YES;
+                        }
                         finish(success, success ? nil : PPSlotError(8));
                     }];
                 };

@@ -118,7 +118,7 @@ static void PPProApplyThemePreference(NSString *preference) {
                                                                                      onLogout:^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
-        [strongSelf pp_logoutAction];
+        [strongSelf pp_performConfirmedLogout];
     }
                                                                                     onDismiss:^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -658,7 +658,24 @@ static void PPProApplyThemePreference(NSString *preference) {
     }];
 }
 
+- (void)pp_performConfirmedLogout {
+    [PPHUD showIndeterminateIn:self.view title:kLang(@"Please wait") subtitle:nil];
+    __weak typeof(self) weakSelf = self;
+    [UsrMgr signOutWithCompletion:^(NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [PPHUD dismiss];
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (error && strongSelf && strongSelf.view.window) {
+                [PPAlertHelper showErrorIn:strongSelf
+                                     title:kLang(@"Error")
+                                  subtitle:error.localizedDescription ?: kLang(@"StatusLoginFailed")];
+            }
+        });
+    }];
+}
+
 - (void)pp_logoutAction {
+    __weak typeof(self) weakSelf = self;
     [PPAlertHelper showConfirmationIn:self
                                 title:kLang(@"LogOut")
                              subtitle:kLang(@"LogOutConfirmation")
@@ -666,7 +683,9 @@ static void PPProApplyThemePreference(NSString *preference) {
                         confirmButton:kLang(@"LogOut")
                          cancelButton:kLang(@"Cancel")
                          confirmBlock:^{
-        [UsrMgr signOut];
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf pp_performConfirmedLogout];
     } cancelBlock:nil];
 }
 

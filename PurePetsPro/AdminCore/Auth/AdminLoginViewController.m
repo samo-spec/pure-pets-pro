@@ -400,6 +400,20 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
     } cancelBlock:nil];
 }
 
+- (void)pp_cancelStagedTransitionIfNeededWithCompletion:(nullable void (^)(void))completion {
+    NSUUID *pendingTicket = self.stagedTransitionTicket ?: (!PPProSessionCoordinator.shared.requiresTransitionRecovery ? PPProSessionCoordinator.shared.activeTransitionTicket : nil);
+    id<PPProSessionSlotHandle> pendingSlot = self.stagedSessionSlot ?: (!PPProSessionCoordinator.shared.requiresTransitionRecovery ? PPProSessionCoordinator.shared.pendingSlot : nil);
+    [self pp_clearStagedAuthTransition];
+    if (pendingTicket || pendingSlot) {
+        [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:pendingTicket
+                                                                  completion:^(__unused BOOL cleared, __unused NSError *err) {
+            if (completion) completion();
+        }];
+    } else if (completion) {
+        completion();
+    }
+}
+
 - (void)proLoginSurface:(PPProLoginSurfaceController *)controller didRequestQuickSwitchToUID:(NSString *)uid {
     (void)controller;
     if (PPProIdentityPortalPresentationTest() || self.isAuthenticating || !uid.length) return;
@@ -461,16 +475,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
         }];
     };
 
-    if (self.stagedTransitionTicket || self.stagedSessionSlot) {
-        NSUUID *oldTicket = self.stagedTransitionTicket;
-        [self pp_clearStagedAuthTransition];
-        [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:oldTicket
-                                                                  completion:^(__unused BOOL cleared, __unused NSError *err) {
-            runFastSwitch();
-        }];
-    } else {
-        runFastSwitch();
-    }
+    [self pp_cancelStagedTransitionIfNeededWithCompletion:runFastSwitch];
 }
 
 - (void)proLoginSurfaceDidTapCancelAddAccount:(PPProLoginSurfaceController *)controller {
@@ -491,11 +496,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
         [self proLoginSurface:self.surfaceController didRequestQuickSwitchToUID:fallbackUID];
         return;
     }
-    if (self.stagedTransitionTicket || self.stagedSessionSlot) {
-        NSUUID *oldTicket = self.stagedTransitionTicket;
-        [self pp_clearStagedAuthTransition];
-        [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:oldTicket completion:nil];
-    }
+    [self pp_cancelStagedTransitionIfNeededWithCompletion:nil];
     self.isAddAccountFlow = NO;
     [self pp_refreshSurfaceState];
 }
@@ -539,16 +540,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
                 });
             }];
         };
-        if (self.stagedTransitionTicket || self.stagedSessionSlot) {
-            NSUUID *oldTicket = self.stagedTransitionTicket;
-            [self pp_clearStagedAuthTransition];
-            [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:oldTicket
-                                                                      completion:^(__unused BOOL cleared, __unused NSError *err) {
-                performSignOutAll();
-            }];
-        } else {
-            performSignOutAll();
-        }
+        [self pp_cancelStagedTransitionIfNeededWithCompletion:performSignOutAll];
     } cancelBlock:nil];
 }
 
@@ -732,15 +724,7 @@ static BOOL PPProLoginUserDocIsBlocked(NSDictionary *root) {
         }
     };
 
-    if (self.stagedTransitionTicket || self.stagedSessionSlot) {
-        NSUUID *oldTicket = self.stagedTransitionTicket;
-        [self pp_clearStagedAuthTransition];
-        [PPProSessionCoordinator.shared cancelPendingAuthenticationForTicket:oldTicket completion:^(__unused BOOL cleared, __unused NSError *err) {
-            startPrepare();
-        }];
-    } else {
-        startPrepare();
-    }
+    [self pp_cancelStagedTransitionIfNeededWithCompletion:startPrepare];
 }
 
 - (void)pp_sendVerificationCodeToPhone:(NSString *)fullPhone isResend:(BOOL)isResend {

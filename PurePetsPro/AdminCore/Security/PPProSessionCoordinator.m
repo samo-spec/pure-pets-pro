@@ -812,27 +812,119 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
 }
 
 - (void)completeExternalSignOutWithUID:(nullable NSString *)uid {
+    [self completeExternalSignOutWithUID:uid completion:nil];
+}
+
+- (void)completeExternalSignOutWithUID:(nullable NSString *)uid
+                            completion:(void (^ _Nullable)(NSError * _Nullable))completion {
     [self pp_dispatchMain:^{
         id<PPProSessionSlotHandle> currentSlot = self.activeSlot;
         id<PPProSessionSlotHandle> stagedSlot = self.pendingSlot;
+        NSUUID *pendingTicket = self.activeTransitionTicket;
+        NSString *safeInputUID = [uid stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+
+        NSMutableSet<NSString *> *uidsToMarkVerificationRequired = [NSMutableSet set];
+        if (safeInputUID.length > 0) {
+            [uidsToMarkVerificationRequired addObject:safeInputUID];
+        }
+        BOOL signOutActiveSlot = currentSlot != nil &&
+            (safeInputUID.length == 0 ||
+             [currentSlot.expectedUID isEqualToString:safeInputUID] ||
+             [currentSlot.currentUID isEqualToString:safeInputUID]);
+        if (signOutActiveSlot) {
+            if (currentSlot.currentUID.length > 0) {
+                [uidsToMarkVerificationRequired addObject:currentSlot.currentUID];
+            }
+            if (currentSlot.expectedUID.length > 0) {
+                [uidsToMarkVerificationRequired addObject:currentSlot.expectedUID];
+            }
+        }
+        BOOL signOutStagedSlot = stagedSlot != nil && stagedSlot != currentSlot;
+        if (signOutStagedSlot && [self pp_slotIsAuthenticated:stagedSlot]) {
+            if (stagedSlot.currentUID.length > 0) {
+                [uidsToMarkVerificationRequired addObject:stagedSlot.currentUID];
+            }
+            if (stagedSlot.expectedUID.length > 0) {
+                [uidsToMarkVerificationRequired addObject:stagedSlot.expectedUID];
+            }
+        }
+
         self.activeSlot = nil;
         self.pendingSlot = nil;
-        if (currentSlot && (!uid.length || [currentSlot.expectedUID isEqualToString:uid] || [currentSlot.currentUID isEqualToString:uid])) {
-            [currentSlot signOutAndInvalidate:YES completion:nil];
-        }
-        if (stagedSlot && stagedSlot != currentSlot) {
-            [stagedSlot signOutAndInvalidate:YES completion:nil];
-        }
         if ([self.runtimeProvider respondsToSelector:@selector(clearActiveIdentityWithError:)]) {
             [self.runtimeProvider clearActiveIdentityWithError:nil];
         }
-        [self pp_runAsyncTeardownHandlersWithReason:@"external_signout" completion:^{
-            [self pp_runTeardownHandlersWithReason:@"external_signout"];
-            [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionDidChangeActiveRuntimeNotification
-                                                                object:self];
-            [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionTransitionDidRollbackNotification
-                                                                object:self];
+        if ([self.runtimeProvider respondsToSelector:@selector(updateSessionStatusHint:forUID:error:)]) {
+            for (NSString *signedOutUID in uidsToMarkVerificationRequired) {
+                [self.runtimeProvider updateSessionStatusHint:PPProSessionStatusVerificationRequired
+                                                       forUID:signedOutUID
+                                                        error:nil];
+            }
+        }
+
+        NSMutableArray<void (^)(void (^)(NSError * _Nullable))> *steps = [NSMutableArray array];
+        if (signOutActiveSlot) {
+            [steps addObject:^(void (^done)(NSError * _Nullable)) {
+                [currentSlot signOutAndInvalidate:YES completion:done];
+            }];
+        }
+        if (signOutStagedSlot) {
+            [steps addObject:^(void (^done)(NSError * _Nullable)) {
+                [stagedSlot signOutAndInvalidate:YES completion:done];
+            }];
+        }
+        [steps addObject:^(void (^done)(NSError * _Nullable)) {
+            [self.runtimeProvider signOutDefaultAuthWithCompletion:done];
         }];
+
+        __block NSUInteger remaining = steps.count;
+        __block NSError *firstSignOutError = nil;
+        void (^afterSignOuts)(void) = ^{
+            [self pp_runAsyncTeardownHandlersWithReason:@"external_signout" completion:^{
+                [self pp_runTeardownHandlersWithReason:@"external_signout"];
+                if (self.transitionCoordinator.phase != PPProTransitionIdle &&
+                    self.transitionCoordinator.phase != PPProTransitionRecoveryRequired) {
+                    if (firstSignOutError) {
+                        if (pendingTicket) {
+                            [self.transitionCoordinator requireRecoveryForTicket:pendingTicket];
+                        }
+                        [self pp_notifyRecoveryRequiredWithReason:@"external_signout_failed"];
+                    } else if (pendingTicket) {
+                        [self.transitionCoordinator requireRecoveryForTicket:pendingTicket];
+                        if ([self.transitionCoordinator clearAfterVerifiedSignOut:nil] &&
+                            [self.activeTransitionTicket isEqual:pendingTicket]) {
+                            self.activeTransitionTicket = nil;
+                        }
+                    }
+                } else if (!firstSignOutError && pendingTicket &&
+                           [self.activeTransitionTicket isEqual:pendingTicket] &&
+                           self.transitionCoordinator.phase == PPProTransitionIdle) {
+                    self.activeTransitionTicket = nil;
+                }
+                self.sessionGeneration += 1;
+                [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionDidChangeActiveRuntimeNotification
+                                                                    object:self];
+                [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionAccountListDidChangeNotification
+                                                                    object:self];
+                [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionTransitionDidRollbackNotification
+                                                                    object:self];
+                if (completion) completion(firstSignOutError);
+            }];
+        };
+
+        for (void (^step)(void (^)(NSError * _Nullable)) in steps) {
+            step(^(NSError * _Nullable stepErr) {
+                [self pp_dispatchMain:^{
+                    if (!firstSignOutError && stepErr) {
+                        firstSignOutError = stepErr;
+                    }
+                    remaining -= 1;
+                    if (remaining == 0) {
+                        afterSignOuts();
+                    }
+                }];
+            });
+        }
     }];
 }
 
@@ -1975,6 +2067,43 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
     }];
 }
 
+static NSString *PPProSlotTeardownKey(id<PPProSessionSlotHandle> _Nullable slot) {
+    if (!slot) return @"";
+    return slot.slotID.UUIDString ?: [NSString stringWithFormat:@"ptr_%p", slot];
+}
+
+- (void)pp_signOutRemainingSlots:(NSMutableArray<id<PPProSessionSlotHandle>> *)slots
+                tornDownSlotKeys:(NSMutableSet<NSString *> *)tornDownSlotKeys
+                accumulatedError:(nullable NSError *)accumulatedError
+                      completion:(void (^)(NSError * _Nullable firstError))completion {
+    if (slots.count == 0) {
+        if (completion) completion(accumulatedError);
+        return;
+    }
+    id<PPProSessionSlotHandle> slot = slots.firstObject;
+    [slots removeObjectAtIndex:0];
+    NSString *slotKey = PPProSlotTeardownKey(slot);
+    if (slotKey.length > 0 && [tornDownSlotKeys containsObject:slotKey]) {
+        [self pp_signOutRemainingSlots:slots
+                      tornDownSlotKeys:tornDownSlotKeys
+                      accumulatedError:accumulatedError
+                            completion:completion];
+        return;
+    }
+    [slot teardownSlotAppWithCompletion:^(BOOL deleted, NSError * _Nullable tearErr) {
+        NSError *nextErr = accumulatedError;
+        if (tearErr || !deleted) {
+            nextErr = nextErr ?: (tearErr ?: PPCoordinatorError(PPProSessionCoordinatorErrorSignOutFailed, nil));
+        } else if (slotKey.length > 0) {
+            [tornDownSlotKeys addObject:slotKey];
+        }
+        [self pp_signOutRemainingSlots:slots
+                      tornDownSlotKeys:tornDownSlotKeys
+                      accumulatedError:nextErr
+                            completion:completion];
+    }];
+}
+
 - (void)signOutActiveAccountWithReason:(NSString *)reason
                             completion:(void (^)(BOOL, NSError * _Nullable))completion {
     [self pp_dispatchMain:^{
@@ -1988,8 +2117,56 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
         }
         NSString *currentUID = [self.activeUID copy];
         if (!currentUID.length) {
+            id<PPProSessionSlotHandle> currentSlot = self.activeSlot;
+            id<PPProSessionSlotHandle> currentPending = self.pendingSlot;
             [self suspendAndResetAccountStateForReason:reason ?: @"sign_out" completion:^(NSError * _Nullable error) {
-                if (completion) completion(error == nil, error);
+                void (^finishNoUID)(NSError * _Nullable) = ^(NSError * _Nullable signOutErr) {
+                    if (signOutErr) {
+                        if (completion) completion(NO, signOutErr);
+                        return;
+                    }
+                    self.activeSlot = nil;
+                    self.pendingSlot = nil;
+                    if ([self.runtimeProvider respondsToSelector:@selector(clearActiveIdentityWithError:)]) {
+                        [self.runtimeProvider clearActiveIdentityWithError:nil];
+                    }
+                    self.sessionGeneration += 1;
+                    [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionDidCommitNotification object:self];
+                    [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionDidChangeActiveRuntimeNotification object:self];
+                    [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionAccountListDidChangeNotification object:self];
+                    if (completion) completion(YES, nil);
+                };
+                if (error) {
+                    finishNoUID(error);
+                    return;
+                }
+                NSMutableArray<void (^)(void (^)(NSError * _Nullable))> *steps = [NSMutableArray array];
+                if (currentSlot) {
+                    [steps addObject:^(void (^done)(NSError * _Nullable)) {
+                        [currentSlot signOutAndInvalidate:YES completion:done];
+                    }];
+                }
+                if (currentPending && currentPending != currentSlot) {
+                    [steps addObject:^(void (^done)(NSError * _Nullable)) {
+                        [currentPending signOutAndInvalidate:YES completion:done];
+                    }];
+                }
+                [steps addObject:^(void (^done)(NSError * _Nullable)) {
+                    [self.runtimeProvider signOutDefaultAuthWithCompletion:done];
+                }];
+                __block NSUInteger remaining = steps.count;
+                __block NSError *firstErr = nil;
+                for (void (^step)(void (^)(NSError * _Nullable)) in steps) {
+                    step(^(NSError * _Nullable stepErr) {
+                        [self pp_dispatchMain:^{
+                            if (!firstErr && stepErr) firstErr = stepErr;
+                            remaining -= 1;
+                            if (remaining == 0) {
+                                finishNoUID(firstErr);
+                            }
+                        }];
+                    });
+                }
             }];
             return;
         }
@@ -2023,6 +2200,44 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
                         return;
                     }
                     id<PPProSessionSlotHandle> currentSlot = self.activeSlot;
+                    id<PPProSessionSlotHandle> currentPending = self.pendingSlot;
+                    void (^finishVerified)(NSError * _Nullable) = ^(NSError * _Nullable defErr) {
+                        if (defErr) {
+                            [self.transitionCoordinator requireRecoveryForTicket:ticket];
+                            [self pp_notifyRecoveryRequiredWithReason:@"default_signout_failed"];
+                            if (completion) completion(NO, defErr);
+                            return;
+                        }
+                        if ([self.runtimeProvider respondsToSelector:@selector(clearActiveIdentityWithError:)]) {
+                            [self.runtimeProvider clearActiveIdentityWithError:nil];
+                        }
+                        if ([self.runtimeProvider respondsToSelector:@selector(updateSessionStatusHint:forUID:error:)]) {
+                            [self.runtimeProvider updateSessionStatusHint:PPProSessionStatusVerificationRequired forUID:currentUID error:nil];
+                        }
+                        [self.transitionCoordinator requireRecoveryForTicket:ticket];
+                        NSError *clearErr = nil;
+                        BOOL cleared = [self.transitionCoordinator clearAfterVerifiedSignOut:&clearErr];
+                        if (cleared) {
+                            self.activeTransitionTicket = nil;
+                            self.sessionGeneration += 1;
+                            [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionDidCommitNotification object:self];
+                            [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionDidChangeActiveRuntimeNotification object:self];
+                            [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionAccountListDidChangeNotification object:self];
+                        } else {
+                            [self pp_notifyRecoveryRequiredWithReason:@"signout_journal_clear_failed"];
+                        }
+                        if (completion) completion(cleared, clearErr);
+                    };
+                    void (^afterPendingSignOut)(NSError * _Nullable) = ^(NSError * _Nullable pendingErr) {
+                        if (pendingErr) {
+                            [self.transitionCoordinator requireRecoveryForTicket:ticket];
+                            [self pp_notifyRecoveryRequiredWithReason:@"active_signout_failed"];
+                            if (completion) completion(NO, pendingErr);
+                            return;
+                        }
+                        self.pendingSlot = nil;
+                        [self.runtimeProvider signOutDefaultAuthWithCompletion:finishVerified];
+                    };
                     void (^afterSlotSignOut)(NSError * _Nullable) = ^(NSError * _Nullable slotErr) {
                         if (slotErr) {
                             [self.transitionCoordinator requireRecoveryForTicket:ticket];
@@ -2031,33 +2246,11 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
                             return;
                         }
                         self.activeSlot = nil;
-                        [self.runtimeProvider signOutDefaultAuthWithCompletion:^(NSError * _Nullable defErr) {
-                            if (defErr) {
-                                [self.transitionCoordinator requireRecoveryForTicket:ticket];
-                                [self pp_notifyRecoveryRequiredWithReason:@"default_signout_failed"];
-                                if (completion) completion(NO, defErr);
-                                return;
-                            }
-                            if ([self.runtimeProvider respondsToSelector:@selector(clearActiveIdentityWithError:)]) {
-                                [self.runtimeProvider clearActiveIdentityWithError:nil];
-                            }
-                            if ([self.runtimeProvider respondsToSelector:@selector(updateSessionStatusHint:forUID:error:)]) {
-                                [self.runtimeProvider updateSessionStatusHint:PPProSessionStatusVerificationRequired forUID:currentUID error:nil];
-                            }
-                            [self.transitionCoordinator requireRecoveryForTicket:ticket];
-                            NSError *clearErr = nil;
-                            BOOL cleared = [self.transitionCoordinator clearAfterVerifiedSignOut:&clearErr];
-                            if (cleared) {
-                                self.activeTransitionTicket = nil;
-                                self.sessionGeneration += 1;
-                                [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionDidCommitNotification object:self];
-                                [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionDidChangeActiveRuntimeNotification object:self];
-                                [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionAccountListDidChangeNotification object:self];
-                            } else {
-                                [self pp_notifyRecoveryRequiredWithReason:@"signout_journal_clear_failed"];
-                            }
-                            if (completion) completion(cleared, clearErr);
-                        }];
+                        if (currentPending && currentPending != currentSlot) {
+                            [currentPending signOutAndInvalidate:YES completion:afterPendingSignOut];
+                        } else {
+                            afterPendingSignOut(nil);
+                        }
                     };
                     if (currentSlot) {
                         [currentSlot signOutAndInvalidate:YES completion:afterSlotSignOut];
@@ -2073,72 +2266,128 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
 - (void)signOutAllAccountsWithReason:(NSString *)reason
                           completion:(void (^)(BOOL, NSError * _Nullable))completion {
     [self pp_dispatchMain:^{
-        if (self.transitionCoordinator.phase == PPProTransitionRecoveryRequired) {
-            if (completion) completion(NO, PPCoordinatorError(PPProSessionCoordinatorErrorTransitionRequired, nil));
-            return;
-        }
-        if (self.transitionCoordinator.phase != PPProTransitionIdle) {
-            if (completion) completion(NO, PPCoordinatorError(PPProSessionCoordinatorErrorTransitionBusy, nil));
-            return;
-        }
-        NSString *currentUID = [self.activeUID copy];
-        [self preflightAccountTransitionForTargetUID:nil reason:reason ?: @"sign_out_all" completion:^(BOOL allowed, __unused NSString * _Nullable blockReason, NSError * _Nullable preflightErr) {
+        NSString *safeReason = reason ?: @"sign_out_all";
+        [self preflightAccountTransitionForTargetUID:nil reason:safeReason completion:^(BOOL allowed, __unused NSString * _Nullable blockReason, NSError * _Nullable preflightErr) {
             if (!allowed) {
                 if (completion) completion(NO, preflightErr ?: PPCoordinatorError(PPProSessionCoordinatorErrorActiveWorkBlocked, nil));
                 return;
             }
-            NSError *journalErr = nil;
-            NSUUID *ticket = [self.transitionCoordinator beginFromUID:currentUID
-                                                            targetUID:@"__signed_out_all__"
-                                                         sourceSlotID:self.activeSlot.slotID
-                                                         targetSlotID:nil
-                                                                 mode:@"sign_out_all"
-                                                                error:&journalErr];
-            if (!ticket) {
-                if (completion) completion(NO, journalErr ?: PPCoordinatorError(PPProSessionCoordinatorErrorJournalFailure, nil));
+            PPProTransitionPhase phase = self.transitionCoordinator.phase;
+            if (phase == PPProTransitionPreflight && self.activeTransitionTicket) {
+                if ([self.transitionCoordinator cancelPreflight:self.activeTransitionTicket error:nil]) {
+                    self.activeTransitionTicket = nil;
+                    phase = self.transitionCoordinator.phase;
+                }
+            }
+
+            if (phase == PPProTransitionIdle) {
+                NSString *currentUID = [self.activeUID copy];
+                NSError *journalErr = nil;
+                NSUUID *ticket = [self.transitionCoordinator beginFromUID:currentUID
+                                                                targetUID:@"__signed_out_all__"
+                                                             sourceSlotID:self.activeSlot.slotID
+                                                             targetSlotID:nil
+                                                                     mode:@"sign_out_all"
+                                                                    error:&journalErr];
+                if (!ticket) {
+                    if (completion) completion(NO, journalErr ?: PPCoordinatorError(PPProSessionCoordinatorErrorJournalFailure, nil));
+                    return;
+                }
+                self.activeTransitionTicket = ticket;
+
+                void (^afterPendingWrites)(NSError * _Nullable) = ^(NSError * _Nullable writeError) {
+                    if (writeError) {
+                        [self.transitionCoordinator cancelPreflight:ticket error:nil];
+                        if ([self.activeTransitionTicket isEqual:ticket]) self.activeTransitionTicket = nil;
+                        if (completion) completion(NO, writeError);
+                        return;
+                    }
+                    [self pp_suspendTicket:ticket reason:safeReason completion:^(NSError * _Nullable suspendErr) {
+                        if (suspendErr) {
+                            if (completion) completion(NO, suspendErr);
+                            return;
+                        }
+                        NSArray<NSDictionary<NSString *, NSString *> *> *records = [self.runtimeProvider rememberedRecordsWithError:nil] ?: @[];
+                        NSMutableArray<NSDictionary<NSString *, NSString *> *> *queue = [records mutableCopy];
+                        [self pp_tearDownQueuedAccounts:queue
+                                             extraSlots:nil
+                                       tornDownSlotKeys:[NSMutableSet set]
+                                             firstError:nil
+                                          currentActive:self.activeSlot
+                                         currentPending:self.pendingSlot
+                                                 ticket:ticket
+                                             completion:completion];
+                    }];
+                };
+
+                [self pp_waitForPendingWritesOnCurrentSessionWithCompletion:afterPendingWrites];
                 return;
             }
-            self.activeTransitionTicket = ticket;
 
-            void (^afterPendingWrites)(NSError * _Nullable) = ^(NSError * _Nullable writeError) {
+            // Staged transition (e.g. Add Account / Re-auth) or RecoveryRequired: run full slot/journal teardown safely.
+            NSUUID *existingTicket = self.activeTransitionTicket;
+            NSArray<id<PPProSessionSlotHandle>> *recoverySlots = [self pp_collectRecoverySlotsFromJournal];
+            [self pp_waitForPendingWritesOnCurrentSessionWithCompletion:^(NSError * _Nullable writeError) {
                 if (writeError) {
-                    [self.transitionCoordinator cancelPreflight:ticket error:nil];
-                    if ([self.activeTransitionTicket isEqual:ticket]) self.activeTransitionTicket = nil;
+                    if (existingTicket) {
+                        [self.transitionCoordinator requireRecoveryForTicket:existingTicket];
+                    }
+                    [self pp_notifyRecoveryRequiredWithReason:@"sign_out_all_pending_writes_failed"];
                     if (completion) completion(NO, writeError);
                     return;
                 }
-                [self pp_suspendTicket:ticket reason:reason ?: @"sign_out_all" completion:^(NSError * _Nullable suspendErr) {
-                    if (suspendErr) {
-                        if (completion) completion(NO, suspendErr);
+                [self suspendAndResetAccountStateForReason:safeReason completion:^(NSError * _Nullable barrierError) {
+                    if (barrierError) {
+                        if (existingTicket) {
+                            [self.transitionCoordinator requireRecoveryForTicket:existingTicket];
+                        }
+                        [self pp_notifyRecoveryRequiredWithReason:@"notification_barrier_failed"];
+                        [[NSNotificationCenter defaultCenter] postNotificationName:PPProSessionTransitionDidRollbackNotification
+                                                                            object:self
+                                                                          userInfo:@{@"reason": @"notification_barrier_failed"}];
+                        NSError *wrapped = PPWrapCoordinatorError(PPProSessionCoordinatorErrorNotificationBarrierFailed,
+                                                                  barrierError.localizedDescription ?: @"Notification deactivation failed",
+                                                                  barrierError);
+                        if (completion) completion(NO, wrapped);
                         return;
                     }
                     NSArray<NSDictionary<NSString *, NSString *> *> *records = [self.runtimeProvider rememberedRecordsWithError:nil] ?: @[];
                     NSMutableArray<NSDictionary<NSString *, NSString *> *> *queue = [records mutableCopy];
                     [self pp_tearDownQueuedAccounts:queue
+                                         extraSlots:recoverySlots
+                                   tornDownSlotKeys:[NSMutableSet set]
                                          firstError:nil
                                       currentActive:self.activeSlot
                                      currentPending:self.pendingSlot
-                                             ticket:ticket
+                                             ticket:existingTicket
                                          completion:completion];
                 }];
-            };
-
-            [self pp_waitForPendingWritesOnCurrentSessionWithCompletion:afterPendingWrites];
+            }];
         }];
     }];
 }
 
 - (void)pp_tearDownQueuedAccounts:(NSMutableArray<NSDictionary<NSString *, NSString *> *> *)queue
+                       extraSlots:(nullable NSArray<id<PPProSessionSlotHandle>> *)extraSlots
+                 tornDownSlotKeys:(NSMutableSet<NSString *> *)tornDownSlotKeys
                        firstError:(nullable NSError *)firstError
                     currentActive:(nullable id<PPProSessionSlotHandle>)currentActive
                    currentPending:(nullable id<PPProSessionSlotHandle>)currentPending
-                           ticket:(NSUUID *)ticket
+                           ticket:(nullable NSUUID *)ticket
                        completion:(void (^)(BOOL, NSError * _Nullable))completion {
     if (queue.count == 0) {
         void (^finishDefault)(NSError * _Nullable, NSError * _Nullable) = ^(NSError * _Nullable priorErr, NSError * _Nullable defErr) {
+            if (currentActive && [tornDownSlotKeys containsObject:PPProSlotTeardownKey(currentActive)]) {
+                if (self.activeSlot == currentActive) self.activeSlot = nil;
+            }
+            if (currentPending && [tornDownSlotKeys containsObject:PPProSlotTeardownKey(currentPending)]) {
+                if (self.pendingSlot == currentPending) self.pendingSlot = nil;
+            }
             NSError *finalErr = priorErr ?: defErr;
             if (finalErr) {
-                [self.transitionCoordinator requireRecoveryForTicket:ticket];
+                if (ticket) {
+                    [self.transitionCoordinator requireRecoveryForTicket:ticket];
+                }
                 [self pp_notifyRecoveryRequiredWithReason:@"sign_out_all_failed"];
                 if (completion) completion(NO, finalErr);
                 return;
@@ -2148,9 +2397,14 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
             if ([self.runtimeProvider respondsToSelector:@selector(clearActiveIdentityWithError:)]) {
                 [self.runtimeProvider clearActiveIdentityWithError:nil];
             }
-            [self.transitionCoordinator requireRecoveryForTicket:ticket];
+            if (ticket) {
+                [self.transitionCoordinator requireRecoveryForTicket:ticket];
+            }
             NSError *clearErr = nil;
-            BOOL cleared = [self.transitionCoordinator clearAfterVerifiedSignOut:&clearErr];
+            BOOL cleared = YES;
+            if (self.transitionCoordinator.phase != PPProTransitionIdle) {
+                cleared = [self.transitionCoordinator clearAfterVerifiedSignOut:&clearErr];
+            }
             if (cleared) {
                 self.activeTransitionTicket = nil;
                 self.sessionGeneration += 1;
@@ -2163,28 +2417,31 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
             if (completion) completion(cleared, clearErr);
         };
 
-        __block NSError *accumulatedErr = firstError;
-        if (currentActive) {
-            [currentActive teardownSlotAppWithCompletion:^(__unused BOOL d, NSError * _Nullable activeTearErr) {
-                if (!accumulatedErr && activeTearErr) accumulatedErr = activeTearErr;
-                if (currentPending && currentPending != currentActive) {
-                    [currentPending teardownSlotAppWithCompletion:^(__unused BOOL d2, NSError * _Nullable pErr) {
-                        if (!accumulatedErr && pErr) accumulatedErr = pErr;
-                        [self.runtimeProvider signOutDefaultAuthWithCompletion:^(NSError * _Nullable defErr) {
-                            finishDefault(accumulatedErr, defErr);
-                        }];
-                    }];
-                } else {
-                    [self.runtimeProvider signOutDefaultAuthWithCompletion:^(NSError * _Nullable defErr) {
-                        finishDefault(accumulatedErr, defErr);
-                    }];
-                }
-            }];
-        } else {
+        NSMutableArray<id<PPProSessionSlotHandle>> *remainingSlots = [NSMutableArray array];
+        NSMutableSet<NSString *> *scheduledKeys = [tornDownSlotKeys mutableCopy];
+        void (^enqueueRemaining)(id<PPProSessionSlotHandle> _Nullable) = ^(id<PPProSessionSlotHandle> _Nullable s) {
+            if (!s) return;
+            NSString *k = PPProSlotTeardownKey(s);
+            if (k.length > 0) {
+                if ([scheduledKeys containsObject:k]) return;
+                [scheduledKeys addObject:k];
+            }
+            [remainingSlots addObject:s];
+        };
+        enqueueRemaining(currentActive);
+        enqueueRemaining(currentPending);
+        for (id<PPProSessionSlotHandle> extra in extraSlots) {
+            enqueueRemaining(extra);
+        }
+
+        [self pp_signOutRemainingSlots:remainingSlots
+                      tornDownSlotKeys:tornDownSlotKeys
+                      accumulatedError:firstError
+                            completion:^(NSError * _Nullable accumulatedErr) {
             [self.runtimeProvider signOutDefaultAuthWithCompletion:^(NSError * _Nullable defErr) {
                 finishDefault(accumulatedErr, defErr);
             }];
-        }
+        }];
         return;
     }
 
@@ -2193,6 +2450,8 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
     NSString *recUID = rec[@"uid"];
     if (!recUID.length) {
         [self pp_tearDownQueuedAccounts:queue
+                             extraSlots:extraSlots
+                       tornDownSlotKeys:tornDownSlotKeys
                              firstError:firstError
                           currentActive:currentActive
                          currentPending:currentPending
@@ -2203,11 +2462,15 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
     id<PPProSessionSlotHandle> slot = [self pp_isMultiAccountRuntime]
         ? [self.runtimeProvider openSlotForRememberedUID:recUID error:nil]
         : nil;
+    NSString *slotKey = PPProSlotTeardownKey(slot);
     void (^afterSlotTear)(BOOL, NSError * _Nullable) = ^(BOOL deleted, NSError * _Nullable tearErr) {
         NSError *nextErr = firstError;
         if (tearErr || !deleted) {
             nextErr = nextErr ?: (tearErr ?: PPCoordinatorError(PPProSessionCoordinatorErrorSignOutFailed, nil));
         } else {
+            if (slotKey.length > 0) {
+                [tornDownSlotKeys addObject:slotKey];
+            }
             NSError *remErr = nil;
             if ([self.runtimeProvider removeRememberedUID:recUID error:&remErr]) {
                 [PPProSessionCoordinator purgeScopedDefaultsForUID:recUID];
@@ -2216,13 +2479,15 @@ static BOOL PPProErrorLooksPermanentRevocation(NSError * _Nullable error) {
             }
         }
         [self pp_tearDownQueuedAccounts:queue
+                             extraSlots:extraSlots
+                       tornDownSlotKeys:tornDownSlotKeys
                              firstError:nextErr
                           currentActive:currentActive
                          currentPending:currentPending
                                  ticket:ticket
                              completion:completion];
     };
-    if (slot) {
+    if (slot && !(slotKey.length > 0 && [tornDownSlotKeys containsObject:slotKey])) {
         [slot teardownSlotAppWithCompletion:afterSlotTear];
     } else {
         afterSlotTear(YES, nil);

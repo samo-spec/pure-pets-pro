@@ -156,6 +156,8 @@ typedef void (^PPProNotificationBarrierHandler)(NSString *reason, void (^done)(N
 - (void)suspendAndResetAccountStateForReason:(NSString *)reason
                                   completion:(nullable void (^)(NSError * _Nullable error))completion;
 - (void)completeExternalSignOutWithUID:(nullable NSString *)uid;
+- (void)completeExternalSignOutWithUID:(nullable NSString *)uid
+                            completion:(void (^ _Nullable)(NSError * _Nullable error))completion;
 
 - (void)beginRememberedAccountSignInOrSwitchToUID:(NSString *)targetUID
                                           fromUID:(nullable NSString *)sourceUID
